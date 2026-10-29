@@ -1,22 +1,29 @@
 # 進度
 
-工作單位是票（`.scratch/<里程碑>/issues/NN-slug.md`），狀態在票的 `Status:` 行。這裡只記各里程碑的閱讀指引、session 紀錄、偏差與決定。
+工作單位是票（`.scratch/<里程碑>/issues/NN-slug.md`），狀態在票的 `Status:` 行。這裡只記各里程碑的閱讀指引、進行中里程碑的 session 紀錄、偏差與決定。
 
-本檔只留目前與上一個里程碑的 session 紀錄和偏差；里程碑驗收後，更早的段落整段移到 `docs/progress-archive/<里程碑>.md`，這裡留一行連結。
+## 寫法與封存
+
+- session 紀錄一列、偏差一條，各不超過 200 字；細節在票的 `## Comments`、brief、plan 或 ADR，這裡只放指向它們的一句話。
+- session 紀錄的「票」欄與偏差每條的開頭都標里程碑（`M0 01`、`2026-10-30 M0 票 01：…`），封存時靠它分。
+- 里程碑驗收時，把它的 session 紀錄與偏差整段移到 `docs/progress-archive/<里程碑>.md`，里程碑表的備註換成那個檔的連結。本檔只留進行中的里程碑。
+- 以上由 M0 票 01 的閘門強制（plan §6）；閘門接上之前靠收尾時自查。
 
 ## 里程碑與閱讀指引
 
 | 里程碑 | 票目錄 | 拆票前讀 | 備註 |
 | --- | --- | --- | --- |
-| M0 | `.scratch/m0/issues/` | brief 全文；plan §1、§6、§7.1 | 未拆票。brief 與 plan 定稿後跑 `/to-tickets docs/plan.md` |
+| M0 | `.scratch/m0/issues/` | brief 全文；plan §1、§6、§7.1 | 進行中。未拆票，brief 與 plan 定稿後跑 `/to-tickets docs/plan.md` |
 
 ## Session 紀錄
 
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
-| 2026-10-30 | 框架 | 參照 Berth 的流程建立文件骨架：`CLAUDE.md`、brief 與 plan 骨架、本檔、`docs/agents/` | 新對話跑 `/grill-with-docs` 填 brief，再寫 plan |
+| 2026-10-30 | M0 框架 | 參照 Berth 建立文件骨架：`CLAUDE.md`、brief 與 plan 骨架、本檔、`docs/agents/` | 新對話跑 `/grill-with-docs` 填 brief，再寫 plan |
+| 2026-10-30 | M0 框架 | 加入 progress 的寫法與封存規則（Berth 的 progress.md 長到 884 KB，session 讀不完） | 同上 |
 
 ## 偏差與決定
 
-- 2026-10-30 框架：名詞表用 `GLOSSARY.md`（mattpocock skills 現行慣例），不沿用 Berth 的 `CONTEXT.md`。
-- 2026-10-30 框架：技術棧未定，lint、CI、commit-msg hook 等閘門延到 M0 票 01（plan §6）。
+- 2026-10-30 M0 框架：名詞表用 `GLOSSARY.md`（mattpocock skills 現行慣例），不沿用 Berth 的 `CONTEXT.md`。
+- 2026-10-30 M0 框架：技術棧未定，lint、CI、commit-msg hook 等閘門延到 M0 票 01（plan §6）。
+- 2026-10-30 M0 框架：progress 封存而不刪除。plan、測試、ADR 可能引用某條偏差當理由，刪掉就斷了；封存檔不在每個 session 的閱讀範圍內，不佔上下文。

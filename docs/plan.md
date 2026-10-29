@@ -45,6 +45,7 @@ M0 票 01 要交付：
 - 每個語言的 lint、format、typecheck，跑在 pre-commit 與 CI。
 - commit-msg hook：Conventional Commits、subject ≤ 72 字元，附雙向測試（違規會紅、無關改動不紅）。
 - §1.3 依賴規則的強制工具與它的測試。
+- `docs/progress.md` 的閘門，守它〈寫法與封存〉的規則：`##` 段固定是〈寫法與封存〉〈里程碑與閱讀指引〉〈Session 紀錄〉〈偏差與決定〉，各一次、依序（參考 Berth `tests/unit/test_progress_merge.py`，union 合併會安靜地抄重複）；session 紀錄是一整張表；每列 / 每條不超過 200 字；條目的里程碑都是里程碑表中標「進行中」的那一個。
 
 ## 7. 里程碑任務
 
