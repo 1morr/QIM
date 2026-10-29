@@ -1,0 +1,9 @@
+# 編輯器與作業系統
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 工具產物與本機實驗輸出
+.playwright-mcp/
+/.local/
