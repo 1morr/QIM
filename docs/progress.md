@@ -26,6 +26,7 @@
 | 2026-10-30 | M0 研究 | 階段 1–2：六份研究進 `docs/research/`，事實摘進 brief §12；三個 Rime 案例找到根因並可用 `scripts/experiments/rime-cases/` 重跑；寫 `ime-primer.md` | 使用者看過 primer 後跑階段 3，從 primer §6 的六題問起 |
 | 2026-10-30 | M0 brief | 階段 3 訪談三輪：brief §0–§11 填完、`GLOSSARY.md`、ADR 0001–0003（自寫 Rust 核心、prototype 共用核心、速成碼建置時推導） | 使用者確認 brief 後寫 plan（階段 4） |
 | 2026-10-30 | M0 plan | 寫 `docs/plan.md`：架構、目錄、依賴規則、測試策略（首選字基準）、M0–M1 任務與驗收；研究檔 email 脫敏並改寫本機歷史 | `/to-tickets docs/plan.md` 拆 M0 票 |
+| 2026-10-31 | M0 plan | 依使用者要求重排路線圖：網頁做完核心功能並經使用者驗收，才開工平台殼（plan §7、brief §3） | 開新 session 開工 M0：細化 spec 再拆票 |
 
 ## 偏差與決定
 
@@ -37,3 +38,4 @@
 - 2026-10-30 M0 plan：plan 加入功能里程碑 M4 智慧候選、M6 輸入增強、M7 同步與資料，平台順延為 M5 Android、M8 Windows、M9 Linux；M2 加 LLM 評估實驗（plan §7.4）。
 - 2026-10-30 M0 框架：里程碑規格改放 `.scratch/<里程碑>/spec.md`（學 Berth docs-diet），plan §7 只留路線圖。Berth 的票序寫在里程碑表備註，一格長成一段。
 - 2026-10-31 M0 框架：spec 只在里程碑開工時建立，由專門開工的新 session 寫完接著拆票；之後的里程碑留在 plan §7。預先寫好的 spec 會因重排里程碑要改目錄名，內容也會在開工前過時。
+- 2026-10-31 M0 plan：路線圖改為 M2 平台可行性實驗、M3 智慧候選、M4 輸入增強（含使用者驗收關卡）、M5 macOS、M6 iOS、M7 Android、M8 Windows、M9 Linux。同步與資料拆入 M3、M4 與各平台。理由：核心穩定後平台一次接上，避免半成品反覆改。

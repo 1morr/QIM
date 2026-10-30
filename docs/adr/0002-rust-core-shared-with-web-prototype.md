@@ -9,4 +9,4 @@
 
 ## Consequences
 
-- iOS 沒有 Rust 鍵盤殼的先例，記憶體上限要在 macOS 里程碑先實驗。
+- iOS 沒有 Rust 鍵盤殼的先例，記憶體上限要在平台可行性實驗（plan §7.3）先量。
