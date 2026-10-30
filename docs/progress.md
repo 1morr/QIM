@@ -32,3 +32,5 @@
 - 2026-10-30 M0 框架：技術棧未定，lint、CI、commit-msg hook 等閘門延到 M0 票 01（plan §6）。
 - 2026-10-30 M0 框架：progress 封存到 `docs/archive/` 而不刪除。plan、測試、ADR 可能引用某條偏差當理由，刪掉就斷了；封存檔不在每個 session 的閱讀範圍內，不佔上下文。
 - 2026-10-30 M0 plan：字級 bigram 改用中文 / 粵語維基自行訓練（plan §4.3），不用 LGPL 的 rime-octagram-data：可同時產生首選字基準的 test 切分，格式自己掌握；CC BY-SA 的影響列入 brief §11。
+- 2026-10-30 M0 plan：brief §8 由「預設不連網」改為網路是正式功能（使用者聯網接受度高），保留三條硬限制；連帶改 §1.2、§5.3（資料包可線上更新）。雲端 LLM 用使用者自帶 key；崩潰回報可選、預設關。
+- 2026-10-30 M0 plan：plan 加入功能里程碑 M4 智慧候選、M6 輸入增強、M7 同步與資料，平台順延為 M5 Android、M8 Windows、M9 Linux；M2 加 LLM 評估實驗（plan §7.4）。

@@ -19,7 +19,7 @@
 ### 1.2 本產品不負責【決定】
 
 - 初學者教學：只提供字根提示，不做教學模式。
-- 雲端服務：預設不連網；需要網路的功能（同步、雲端 LLM）都是使用者明確開啟的選項（§8）。
+- 自架雲端服務：雲端 LLM 由使用者自帶 API key，QIM 不架代理伺服器、不做帳號系統（§8）。
 - 多端檔案傳輸：待評估，即使做也放在主 App，不在輸入法引擎（`docs/research/ime-primer.md` §5）。
 
 ### 1.3 參考的成熟產品與採用的慣例
@@ -41,7 +41,7 @@ QIM（暫名）。
 依據 `docs/research/ime-primer.md` §5。
 
 - **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞加一份授權乾淨的小詞表）；簡繁切換；中文狀態下的英文候選；資料描述的矩形佈局（預設 Gboard 佈局、多頁、長按）；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
-- **之後**：聯想；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序；英文滑動輸入；任意形狀的按鍵；剪貼簿歷史與同步；萬用鍵；容錯；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（授權查清後）。
+- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序；英文滑動輸入；任意形狀的按鍵；剪貼簿歷史與同步；萬用鍵；容錯；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（授權查清後）。
 - **待評估**：LLM 候選優化；中文滑動輸入；多端檔案傳輸。
 
 ## 2. 使用者與情境【決定】
@@ -132,7 +132,7 @@ QIM（暫名）。
 
 ### 5.3 版本與更新【決定】
 
-- 資料包跟 App 一起發佈，版本號跟 App 走；不做線上更新（守 §8 的預設不連網）。
+- 資料包隨 App 發佈一份，之後可以線上更新、不必等 App 發版；設定可關閉線上更新。
 - 使用者詞庫檔案格式帶版本號，App 升級時先備份再自動轉換。
 
 ## 6. 核心引擎
@@ -152,12 +152,18 @@ QIM（暫名）。
 
 ## 8. 隱私與安全【決定】
 
-- 打字、排序、學習全部在裝置上，預設不連網。
-- 不收集使用資料，不嵌第三方分析或崩潰回報 SDK；崩潰只靠各平台商店內建、使用者同意分享的報告；除錯時由使用者自行匯出診斷檔。
-- 輸入框上下文只在裝置上使用，不上傳。
-- 雲端 LLM 是待評估功能；即使做，也要使用者明確開啟，候選上標示來源。
-- 密碼欄與帶「不要個人化學習」旗標的欄位：不學習、不讀上下文、不記剪貼簿。
-- iOS 不要求完整取用權限。沒開時鍵盤仍可寫自己的容器，學習照常；開了才有剪貼簿歷史、同步、雲端功能（§12.3）。
+網路是正式功能，不是例外；以下三條是硬限制：
+
+1. 核心打字永不依賴網路。打字、排序、學習在裝置上完成；雲端結果一律非同步，斷網或慢時打字與本地候選不受影響。
+2. 密碼欄與帶「不要個人化學習」旗標的欄位：不學習、不讀上下文、不記剪貼簿、不送雲端。
+3. iOS 不要求完整取用權限：沒開時打字與學習照常（鍵盤可寫自己的容器）；開了才有雲端、同步、剪貼簿歷史（App Review 4.4.1，§12.3）。
+
+其他：
+
+- 雲端功能預設開啟，但只有使用者在設定裡接上雲端服務（填入 API key）後才實際連線；雲端給的候選標示來源。
+- 雲端 LLM 由使用者自帶 API key，支援 OpenAI 相容介面與 Anthropic 介面；QIM 不架代理服務。
+- 送往雲端的內容：游標前最多 200 字、目前輸入碼、前 10 個候選；不送游標後的文字。QIM 不在任何伺服器保存；模型供應商的保存規則依其政策，在設定頁註明。200 字由 M2 的 LLM 評估實驗調整。
+- 不收集使用統計。崩潰回報可選、預設關閉，只送堆疊不送輸入內容。
 
 ## 9. 效能與品質指標
 
@@ -176,6 +182,7 @@ QIM（暫名）。
 
 ## 11. 待決
 
+- LLM 候選優化接入到什麼程度：M2 的 LLM 評估實驗（Apple Foundation Models、DeepSeek）後決定（plan §7.4）。
 - LGPL 資料、以 CC BY-SA 語料訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 沒有付費帳號時，iOS 鍵盤擴充能否用免費佈建在實機上跑、App Group 能否使用：iOS 里程碑開始前查證。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
@@ -232,6 +239,7 @@ QIM（暫名）。
 - Gboard 下一詞預測：CIFG-LSTM 1.4M 參數、量化後 1.4 MB、詞表 1 萬；英文靜態 LM 為 Katz 5-gram 125 萬條。[arXiv:1811.03604](https://arxiv.org/abs/1811.03604)。
 - Gboard 的神經 LM 皆以聯邦學習加差分隱私訓練；OOV 學詞取的是全體使用者的高頻詞。[arXiv:2305.18465](https://arxiv.org/abs/2305.18465)、[Google Research blog](https://research.google/blog/advances-in-private-training-for-production-on-device-language-models/)。
 - macOS 倉頡 / 速成可輸入英文字後從候選窗選，並有「Adjust word frequency」設定。[Apple 倉頡](https://support.apple.com/guide/chinese-input-method/cangjie-traditional-cimcjt11820/mac)、[Apple 設定](https://support.apple.com/guide/chinese-input-method/change-chinese-and-cantonese-settings-cim21aa5fa50/mac)。
+- DeepSeek API 相容 OpenAI 與 Anthropic 的介面格式，模型為 `deepseek-flash` 與 `deepseek-v4-pro`；思考模式預設開啟，可用 `thinking` 參數關閉；Responses API 為無狀態、不在伺服器保存對話。[DeepSeek API Docs](https://api-docs.deepseek.com)、[Responses API](https://api-docs.deepseek.com/api/create-response)，2026-10-30 查。
 - Apple 端上基礎模型約 3B 參數；iPhone 15 Pro 每個 prompt token 約 0.6 ms、生成 30 token/s。[Apple ML Research](https://machinelearning.apple.com/research/introducing-apple-foundation-models)。
 - llama.cpp 在 iPhone 15 Pro 的 Q4_0 實測：TinyLlama 1.1B prompt 646 token/s、生成 57 token/s。[llama.cpp #4508](https://github.com/ggml-org/llama.cpp/discussions/4508)。
 - libime：KenLM trie，beam 20，每按一鍵增量更新 lattice；使用者歷史 bigram 以三個 LRU 池（128 / 8192 / 65536 句）固定權重混入。`fcitx/libime` `src/libime/core/decoder.h`、`historybigram.cpp`。
