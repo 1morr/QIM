@@ -22,6 +22,7 @@
 | 2026-10-30 | M0 框架 | 參照 Berth 建立文件骨架：`CLAUDE.md`、brief 與 plan 骨架、本檔、`docs/agents/` | 新對話跑 `/grill-with-docs` 填 brief，再寫 plan |
 | 2026-10-30 | M0 框架 | 加入 progress 的寫法與封存規則（Berth 的 progress.md 長到 884 KB，session 讀不完）；brief、plan 只寫現況 | 同上 |
 | 2026-10-30 | M0 研究 | 階段 1–2：六份研究進 `docs/research/`，事實摘進 brief §12；三個 Rime 案例找到根因並可用 `scripts/experiments/rime-cases/` 重跑；寫 `ime-primer.md` | 使用者看過 primer 後跑階段 3 `/grill-with-docs`，從 primer §6 的六題問起 |
+| 2026-10-30 | M0 brief | 階段 3 訪談三輪：brief §0–§11 填完、`GLOSSARY.md`、ADR 0001–0003（自寫 Rust 核心、prototype 共用核心、速成碼建置時推導） | 使用者確認 brief 後寫 plan（階段 4） |
 
 ## 偏差與決定
 
