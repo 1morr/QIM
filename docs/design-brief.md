@@ -1,6 +1,6 @@
 # QIM 設計綱要（Design Brief）
 
-> 狀態：訪談完成，待使用者確認。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。標【決定】的段落是拍板過的，之後要推翻得在 `docs/progress.md`〈偏差與決定〉記一行。入門背景見 `docs/research/ime-primer.md`。
+> 狀態：使用者已確認（2026-10-30）。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。標【決定】的段落是拍板過的，之後要推翻得在 `docs/progress.md`〈偏差與決定〉記一行。入門背景見 `docs/research/ime-primer.md`。
 
 ## 0. 一句話【決定】
 
@@ -124,6 +124,7 @@ QIM（暫名）。
 | 碼表交叉驗證 | Unihan `kCangjie` | Unicode License v3 | 只用來抓錯碼，不打包 |
 | 詞頻 | rime-essay | LGPL-3.0 | 獨立資料包；建置時設最低詞頻門檻；之後可換成自建詞頻 |
 | 粵語口語小詞表 | 自行整理 | CC0 | 不從 rime-cantonese、粵典複製 |
+| 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
 | 英文詞表 | SCOWL | MIT 類寬鬆授權 | — |
 | 簡繁轉換 | OpenCC | Apache-2.0 | — |
 
@@ -175,7 +176,7 @@ QIM（暫名）。
 
 ## 11. 待決
 
-- LGPL 資料隨商店 App 發佈是否合規：使用者判斷（§5.1）。
+- LGPL 資料、以 CC BY-SA 語料訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 沒有付費帳號時，iOS 鍵盤擴充能否用免費佈建在實機上跑、App Group 能否使用：iOS 里程碑開始前查證。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
 
