@@ -40,7 +40,7 @@
 ## Skills
 
 - 需求與設計訪談：`/grill-with-docs`（邊問邊寫 `GLOSSARY.md` 與 ADR），結論寫回 brief。
-- 里程碑開工（同一個 session）：把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結；再 `/to-tickets` 這份 spec，每張票寫明「讀：plan §x、brief §y」與驗收條件；拆完把票序寫回 spec〈票序〉。只建正在開工的那個里程碑的 spec，之後的留在 plan。一張票一個 session：`/implement`；整批跑票：`/1morr:ticket-coordinator`。
+- 里程碑開工另開一個新 session，只做這件事：把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結；再 `/to-tickets` 這份 spec，每張票寫明「讀：plan §x、brief §y」與驗收條件；拆完把票序寫回 spec〈票序〉。只建正在開工的那個里程碑的 spec，之後的留在 plan。做訪談、寫 plan 的 session 停在「plan 已更新」，不寫 spec、不拆票：新 session 只靠文件寫得出 spec，才證明文件夠用。一張票一個 session：`/implement`；整批跑票：`/1morr:ticket-coordinator`。
 - 核心（碼表查詢、候選、排序）的新功能與修 bug：`mattpocock-skills:tdd`。
 - 設計核心與各平台殼的邊界：`mattpocock-skills:codebase-design`。
 - 用實驗回答設計問題（平台框架行為、按鍵延遲實測）：`mattpocock-skills:prototype`，結論寫回 brief。實驗腳本留在 `scripts/experiments/`，換版本時要重量。

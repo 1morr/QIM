@@ -5,7 +5,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 ## Conventions
 
 - One milestone per directory: `.scratch/<milestone>/` (`m0`, `m1`, …); an effort that is not a milestone (a docs cleanup, an audit) uses `.scratch/<effort-slug>/` with the same layout
-- The spec is `.scratch/<milestone>/spec.md`, with the sections 目標, 範圍（做 / 不做）, 共同規則, 驗收, 票序. It is written when the milestone opens, in the same session that splits it into tickets, by refining the milestone's section in `docs/plan.md` §7; that section then shrinks to one line linking here. Milestones not yet opened have no `.scratch/` directory and live only in plan §7
+- The spec is `.scratch/<milestone>/spec.md`, with the sections 目標, 範圍（做 / 不做）, 共同規則, 驗收, 票序. It is written when the milestone opens, in a fresh session dedicated to opening it (not the planning session), which then splits it into tickets, by refining the milestone's section in `docs/plan.md` §7; that section then shrinks to one line linking here. Milestones not yet opened have no `.scratch/` directory and live only in plan §7
 - Implementation issues are one file per ticket at `.scratch/<milestone>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file; a ticket inserted later takes the previous number plus a letter (`14b`)
 - Each ticket names what to read (`讀: plan §x、brief §y`) and lists its acceptance criteria as checkboxes
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings); a finished ticket is `Status: done`
