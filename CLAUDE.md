@@ -5,9 +5,9 @@
 ## 文件
 
 - `docs/design-brief.md`：需求、決定、查證過的事實（〈查證過的事實〉，附來源）。決定衝突時以它為準。
-- `docs/plan.md`：架構、依賴規則、測試策略；〈里程碑任務〉只列路線圖，每個里程碑一行連到它的 spec。
+- `docs/plan.md`：架構、依賴規則、測試策略；〈里程碑任務〉是路線圖，還沒開工的里程碑在這裡各有一小節（目標、範圍要點、已定的細節），開工後縮成一行連到它的 spec。
 - `docs/progress.md`：各里程碑的閱讀指引、session 紀錄、偏差與決定。每個 session 的起點與終點。
-- `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收與票序。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
+- `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收與票序；里程碑開工時才建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
 - `GLOSSARY.md`、`docs/adr/`：名詞表與架構決定，由 `/grill-with-docs` 按需建立；命名一律用名詞表的詞。
 
 ## 每個 session 的流程
@@ -40,7 +40,7 @@
 ## Skills
 
 - 需求與設計訪談：`/grill-with-docs`（邊問邊寫 `GLOSSARY.md` 與 ADR），結論寫回 brief。
-- 里程碑開頭：先寫 `.scratch/<里程碑>/spec.md`，再 `/to-tickets` 它拆票，每張票寫明「讀：plan §x、brief §y」與驗收條件；拆完把票序寫回 spec〈票序〉。一張票一個 session：`/implement`；整批跑票：`/1morr:ticket-coordinator`。
+- 里程碑開工（同一個 session）：把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結；再 `/to-tickets` 這份 spec，每張票寫明「讀：plan §x、brief §y」與驗收條件；拆完把票序寫回 spec〈票序〉。只建正在開工的那個里程碑的 spec，之後的留在 plan。一張票一個 session：`/implement`；整批跑票：`/1morr:ticket-coordinator`。
 - 核心（碼表查詢、候選、排序）的新功能與修 bug：`mattpocock-skills:tdd`。
 - 設計核心與各平台殼的邊界：`mattpocock-skills:codebase-design`。
 - 用實驗回答設計問題（平台框架行為、按鍵延遲實測）：`mattpocock-skills:prototype`，結論寫回 brief。實驗腳本留在 `scripts/experiments/`，換版本時要重量。
