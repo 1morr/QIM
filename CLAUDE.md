@@ -7,12 +7,12 @@
 - `docs/design-brief.md`：需求、決定、查證過的事實（〈查證過的事實〉，附來源）。決定衝突時以它為準。
 - `docs/plan.md`：架構、依賴規則、測試策略；〈里程碑任務〉是路線圖，還沒開工的里程碑在這裡各有一小節（目標、範圍要點、已定的細節），開工後縮成一行連到它的 spec。
 - `docs/progress.md`：各里程碑的閱讀指引、session 紀錄、偏差與決定。每個 session 的起點與終點。
-- `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收與票序；里程碑開工時才建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
+- `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
 - `GLOSSARY.md`、`docs/adr/`：名詞表與架構決定，由 `/grill-with-docs` 按需建立；命名一律用名詞表的詞。
 
 ## 每個 session 的流程
 
-工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由 `/to-tickets .scratch/<里程碑>/spec.md` 在每個里程碑開頭產生一次（使用者參與拆分）。一個 session 只做一張票。
+工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由使用者在新 session 下 `/to-tickets docs/plan.md 拆 <里程碑> 的票` 產生（見〈Skills〉）。一個 session 只做一張票。
 
 1. 讀 `docs/progress.md` 的 session 紀錄與偏差、該里程碑的 spec，再讀票；只讀票列出的 plan / brief 章節，其他按需讀。
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾 `/code-review <開工時的 commit>`、commit。
@@ -40,7 +40,12 @@
 ## Skills
 
 - 需求與設計訪談：`/grill-with-docs`（邊問邊寫 `GLOSSARY.md` 與 ADR），結論寫回 brief。
-- 里程碑開工另開一個新 session，只做這件事：把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結；再 `/to-tickets` 這份 spec，每張票寫明「讀：plan §x、brief §y」與驗收條件；拆完把票序寫回 spec〈票序〉。只建正在開工的那個里程碑的 spec，之後的留在 plan。做訪談、寫 plan 的 session 停在「plan 已更新」，不寫 spec、不拆票：新 session 只靠文件寫得出 spec，才證明文件夠用。一張票一個 session：`/implement`；整批跑票：`/1morr:ticket-coordinator`。
+- 里程碑開工：入口是使用者在新 session 下 `/to-tickets docs/plan.md 拆 <里程碑> 的票`。這個 session 依序做完三步，第 3 步 commit 後才算完成：
+  1. 把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結。文件不足以寫出 spec 時，問使用者並補進文件。
+  2. 照 skill 提出切法，使用者同意後寫票，每張票寫明「讀：plan §x、brief §y」與驗收條件。
+  3. 票序寫回 spec〈票序〉，progress.md 加一列 session 紀錄。
+- 訪談、寫 plan 的 session 收尾在「plan 已更新」，並告訴使用者下一步要在新 session 下的完整指令。之後的里程碑留在 plan，開工時才有 spec。
+- 做票：一張票一個 session，`/implement`；整批跑票：`/1morr:ticket-coordinator`。
 - 核心（碼表查詢、候選、排序）的新功能與修 bug：`mattpocock-skills:tdd`。
 - 設計核心與各平台殼的邊界：`mattpocock-skills:codebase-design`。
 - 用實驗回答設計問題（平台框架行為、按鍵延遲實測）：`mattpocock-skills:prototype`，結論寫回 brief。實驗腳本留在 `scripts/experiments/`，換版本時要重量。
