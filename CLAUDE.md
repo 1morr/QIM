@@ -18,9 +18,11 @@
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾 `/code-review <開工時的 commit>`、commit。
 3. 驗證：`docs/development.md`〈全部檢查〉加 test；貼指令輸出。
 4. 實作若推翻 plan、brief 或先前的決定，同一 commit 改文件，並在 progress.md「偏差與決定」記一行。只在票內的取捨記到票的 `## Comments`；影響架構的另寫 ADR。
-5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；progress.md 加一列 session 紀錄（做了什麼、下一步，細節留在票裡）；commit；提醒使用者開新 session。
+5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；progress.md 加一列 session 紀錄（做了什麼、下一步，細節留在票裡）；commit。
 
 完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、progress.md 已更新、已 commit。缺一就還沒完成。
+
+**所有 session 的結尾**（做票、訪談、寫 plan、里程碑開工都算）：告訴使用者下一步要在新 session 下的完整指令，並把同一句寫進 progress.md 那一列的「下一步」。下一張票是 `/implement <票路徑>`，里程碑做完是 `/to-tickets docs/plan.md 拆 <下一個里程碑> 的票`；要使用者先決定才能繼續時，寫 `等使用者：<要決定什麼>`。
 
 ## 事實與查證
 
@@ -44,7 +46,7 @@
   1. 把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結。文件不足以寫出 spec 時，問使用者並補進文件。
   2. 照 skill 提出切法，使用者同意後寫票，每張票寫明「讀：plan §x、brief §y」與驗收條件。
   3. 票序寫回 spec〈票序〉，progress.md 加一列 session 紀錄。
-- 訪談、寫 plan 的 session 收尾在「plan 已更新」，並告訴使用者下一步要在新 session 下的完整指令。之後的里程碑留在 plan，開工時才有 spec。
+- 訪談、寫 plan 的 session 收尾在「plan 已更新」。之後的里程碑留在 plan，開工時才有 spec。
 - 做票：一張票一個 session，`/implement`；整批跑票：`/1morr:ticket-coordinator`。
 - 核心（碼表查詢、候選、排序）的新功能與修 bug：`mattpocock-skills:tdd`。
 - 設計核心與各平台殼的邊界：`mattpocock-skills:codebase-design`。

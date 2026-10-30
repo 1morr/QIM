@@ -27,6 +27,7 @@
 | 2026-10-30 | M0 brief | 階段 3 訪談三輪：brief §0–§11 填完、`GLOSSARY.md`、ADR 0001–0003（自寫 Rust 核心、prototype 共用核心、速成碼建置時推導） | 使用者確認 brief 後寫 plan（階段 4） |
 | 2026-10-30 | M0 plan | 寫 `docs/plan.md`：架構、目錄、依賴規則、測試策略（首選字基準）、M0–M1 任務與驗收；研究檔 email 脫敏並改寫本機歷史 | `/to-tickets docs/plan.md` 拆 M0 票 |
 | 2026-10-31 | M0 plan | 依使用者要求重排路線圖：網頁做完核心功能並經使用者驗收，才開工平台殼（plan §7、brief §3） | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
+| 2026-10-31 | M0 框架 | 開工改成一個指令做完；所有 session 結尾都給下一步的完整指令（`CLAUDE.md`〈每個 session 的流程〉），閘門列入 plan §6 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 
 ## 偏差與決定
 
