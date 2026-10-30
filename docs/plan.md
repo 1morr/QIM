@@ -24,7 +24,7 @@
 
 ### 1.1 執行形態
 
-核心是 Rust 函式庫，各平台殼把它連進自己的程序（ADR 0002）：網頁經 WebAssembly，Apple 與 Android 經 uniffi 產生的 Swift / Kotlin 綁定，Windows 與 Linux 經 C ABI。Windows 依成熟做法把核心放在獨立程序，TSF DLL 只轉傳（`docs/research/platform-frameworks.md` §6），到 M8 再定。
+核心是 Rust 函式庫，各平台殼把它連進自己的程序（ADR 0002）：網頁經 WebAssembly，Apple 與 Android 經 uniffi 產生的 Swift / Kotlin 綁定，Windows 與 Linux 經 C ABI。Windows 依成熟做法把核心放在獨立程序，TSF DLL 只轉傳（`docs/research/platform-frameworks.md` §6），到 M9 再定。
 
 ```mermaid
 flowchart LR
@@ -41,7 +41,7 @@ flowchart LR
     Wasm["qim-wasm"]
     Ffi["qim-ffi（M2）"]
     Web["web/ 網頁 prototype"]
-    Mac["platforms/macos（M5）"]
+    Mac["platforms/macos（M6）"]
     Others["iOS、Android、<br/>Windows、Linux"]
   end
 
@@ -62,15 +62,15 @@ flowchart LR
 | 路徑 | 內容 |
 | --- | --- |
 | `crates/qim-core/` | 純邏輯：方案、資料包讀取、lattice、排序、學習、`Session` |
-| `crates/qim-layout/` | 佈局模型、JSON Schema 驗證、按鍵幾何計算 |
+| `crates/qim-layout/` | 佈局模型、JSON Schema 驗證、點擊判定、按鍵幾何計算 |
 | `crates/qim-databuild/` | CLI：取得來源、建資料包、訓練 bigram、產生基準語料 |
 | `crates/qim-bench/` | 首選字基準 runner，量正確率與每鍵延遲 |
 | `crates/qim-wasm/`、`crates/qim-ffi/` | 綁定層，不放邏輯；`qim-ffi` 在 M2 建 |
 | `xtask/` | 閘門與開發指令（`cargo xtask check`、`bench`、`commit-msg`） |
 | `data/` | 自己維護的方案檔、佈局檔、粵語詞表、來源清單 `sources.toml`；不放第三方原始檔與建置產物 |
 | `bench/` | `fixed.tsv`、`corpus/`（含授權與署名）、`baseline.json` |
-| `web/` | 網頁 prototype（Vite + TypeScript）與 Playwright 測試 |
-| `platforms/` | 各平台殼，M5 起逐一建立 |
+| `web/` | 網頁 prototype（Vite + TypeScript）、`web/editor/` 佈局編輯器、Playwright 測試 |
+| `platforms/` | 各平台殼，M6 起逐一建立 |
 
 建置產物不進 git：`target/`、`.cache/sources/`（下載的來源）、`build/packs/`、`web/public/packs/`。
 
@@ -82,7 +82,7 @@ flowchart LR
 | `qim-layout` | `serde`、`serde_json`、`jsonschema` | `qim-core`；同上的 I/O |
 | `qim-wasm`、`qim-ffi` | `qim-core`、`qim-layout`、各自的綁定工具 | 被 `qim-core` 或 `qim-layout` 依賴 |
 | `qim-databuild`、`qim-bench` | `qim-core`（資料包格式）、I/O 套件 | 被 `qim-core` 依賴 |
-| `web/`、`platforms/*` | 只透過綁定呼叫核心 | 重寫排序或查碼邏輯 |
+| `web/`、`platforms/*` | 只透過綁定呼叫核心與 `qim-layout` | 重寫排序、查碼或點擊判定邏輯 |
 
 強制：`cargo xtask check` 的 `deps` 步驟讀 `cargo metadata` 比對上表的白名單，並掃 `qim-core`、`qim-layout` 原始碼的禁用路徑。測試做雙向變異：在暫存副本加入違規依賴或 `use std::fs` 會紅；改無關的格式或命名不紅。M0 票 01 接上。
 
@@ -217,11 +217,55 @@ beam = 20
 
 核心只認方案檔與資料包；加入倉頡、粵拼時新增方案檔與對應資料包，不改核心的排序與學習。
 
+### 2.6 佈局：畫布模型（ADR 0004）
+
+佈局是一張畫布，每個按鍵各自記位置、大小、旋轉、形狀和上下層順序，不靠「第幾排」決定位置。Gboard 預設佈局也只是一份資料，由 `qim-databuild` 依排列算出來。
+
+參考的慣例：
+
+- Delta skin：設計尺寸（`mappingSize`）、每鍵 `frame`、可擴大的觸控範圍（`extendedEdges`）、依裝置與方向分開的版本（brief §12.4）。
+- Trime：組字中行為欄位、JSON Schema 驗證。
+- FlorisBoard keyboard3：長按清單、切頁鍵（`docs/research/open-source-imes.md` §4）。
+
+```jsonc
+{
+  "format": "qim-layout/1",
+  "canvas": { "width": 390, "height": 260 },   // 設計尺寸，等比例縮放到實際鍵盤寬度
+  "grid": { "columns": 40, "rows": 24, "snap": true },
+  "initialPage": "letters",
+  "pages": [{
+    "id": "letters",
+    "keys": [{
+      "id": "a",
+      "frame": { "x": 12, "y": 80, "w": 36, "h": 48 },
+      "rotate": 0,
+      "z": 0,
+      "shape": { "type": "rect", "radius": 6 },  // rect | ellipse | polygon（points 以 frame 為 0–1）
+      "touchInset": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+      "label": "日",
+      "hint": "a",
+      "style": { "fill": "#ffffff", "opacity": 1, "labelSize": 18, "labelOffset": [0, 0] },
+      "tap": { "letter": "a" },
+      "longPress": [{ "text": "a" }],
+      "composing": null
+    }]
+  }]
+}
+```
+
+- 動作（`tap`、`longPress` 的項目、`swipe`）：`letter`、`text`、`backspace`、`space`、`enter`、`switchPage`、`nextKeyboard`、`toggleAscii`。
+- 欄位在 M1 票定稿，之後改格式要加版本並提供轉換。
+- 點擊判定在 `qim-layout`：依 `z` 由上往下，落在形狀內（含 `touchInset`）的第一個按鍵；都沒有時取距離最近的按鍵。各平台共用同一份。
+- 容錯與滑動輸入用按鍵的實際位置算鄰近關係，不假設有「排」。佈局亂排時準確度下降但不會壞。
+- 驗證分兩級（brief §4.6）：
+  - 錯誤（不能存檔）：檔案壞掉；頁面之間切不回有字母的頁面；iOS 需要切換鍵盤鍵時卻沒有。
+  - 警告（可存檔）：按鍵重疊、完全被蓋住、超出畫布、缺字母。
+
 ## 3. 平台殼
 
 ### 3.1 網頁 prototype（M0–M4）
 
-- 目的：手感驗證核心與佈局，並在平台殼開工前驗完所有核心功能；核心是真的，網頁 UI 之後會丟（ADR 0002）。
+- 目的：手感驗證核心與佈局，並在平台殼開工前驗完所有核心功能；核心是真的，網頁 UI 之後會丟，只有 `web/editor/` 佈局編輯器隨產品發佈（ADR 0002、ADR 0004）。
 - 限制：只是測試頁，不能在其他 App 打字；手機上的手感用區網開在手機瀏覽器試，和真正的鍵盤仍有差距。
 - 兩種模式：
   - 實體鍵盤：照 brief §4.3 的鍵位。
@@ -231,13 +275,13 @@ beam = 20
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 接雲端 LLM。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。
 
-### 3.2 macOS（M5）
+### 3.2 macOS（M6）
 
 InputMethodKit，Swift，經 `qim-ffi`（uniffi）呼叫核心。使用者資料存在輸入法自己的 Application Support。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證（`CLAUDE.md`〈驗收輸入行為〉）。沒有付費帳號，先用本機簽章（brief §10）。
 
 ### 3.3 之後的平台
 
-iOS（M6）、Android（M7）、Windows（M8）、Linux（M9）各在里程碑開頭補一節：框架、安裝與註冊、怎麼接核心、怎麼實跑驗證。iOS 的硬限制見 brief §12.3。
+iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑開頭補一節：框架、安裝與註冊、怎麼接核心、怎麼實跑驗證。iOS 的硬限制見 brief §12.3。
 
 ## 4. 碼表與資料管線
 
@@ -301,8 +345,9 @@ iOS（M6）、Android（M7）、Windows（M8）、Linux（M9）各在里程碑�
 
 ### 5.3 佈局
 
-- `data/layouts/` 下每個檔案都要通過 JSON Schema 驗證。
-- 幾何測試：每排寬度總和等於可用寬度、按鍵不重疊、長按清單的鍵都存在。
+- 所有佈局：通過 JSON Schema 與 §2.6 的錯誤級驗證；測試雙向（造出每種錯誤會紅，只有警告不紅）。
+- 內建佈局（`data/layouts/`）另加嚴格檢查：按鍵不重疊、不超出畫布、字母齊全、長按清單的動作都有效。
+- 點擊判定的性質測試：上層優先、旋轉與多邊形內外判定正確、縮放後結果不變。
 
 ### 5.4 平台殼
 
@@ -333,14 +378,15 @@ M0 票 01 要交付：
 | M1 網頁 prototype | 速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | 未開始 |
 | M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度 | 未開始 |
 | M3 智慧候選 | 聯想、上下文、LLM、記住常打字串、詞庫擴充 | 未開始 |
-| M4 輸入增強 | 容錯、滑動輸入、手機編輯手勢、同步的合併規則；使用者驗收關卡 | 未開始 |
-| M5 macOS | 第一個平台殼，一次接上全部已完成的功能 | 未開始 |
-| M6 iOS | 鍵盤擴充與主 App；多端檔案傳輸評估 | 未開始 |
-| M7 Android | InputMethodService | 未開始 |
-| M8 Windows | TSF | 未開始 |
-| M9 Linux | Fcitx5 或 IBus | 未開始 |
+| M4 輸入增強 | 容錯、滑動輸入、手機編輯手勢、同步的合併規則 | 未開始 |
+| M5 佈局編輯器 | 畫布式視覺編輯器；使用者驗收關卡 | 未開始 |
+| M6 macOS | 第一個平台殼，一次接上全部已完成的功能 | 未開始 |
+| M7 iOS | 鍵盤擴充與主 App；多端檔案傳輸評估 | 未開始 |
+| M8 Android | InputMethodService | 未開始 |
+| M9 Windows | TSF | 未開始 |
+| M10 Linux | Fcitx5 或 IBus | 未開始 |
 
-排法：功能大多在共用核心裡，先在網頁把它們做完並確認可用（M1、M3、M4），平台殼開工時核心介面已穩定，每個平台一次接上全部功能（M5–M9），不必跟著核心反覆改。平台限制會影響核心設計的部分先量（M2），例如智慧候選要用多大的模型。網頁驗不到的部分（真實 App 內的行為、各平台讀上下文的差異、手機真實延遲）仍可能在平台里程碑修改。brief §1.5「之後」與「待評估」的每一項都落在 M3–M7 其中一個。
+排法：功能大多在共用核心裡，先在網頁把它們做完並確認可用（M1、M3、M4、M5），平台殼開工時核心介面已穩定，每個平台一次接上全部功能（M6–M10），不必跟著核心反覆改。平台限制會影響核心設計的部分先量（M2），例如智慧候選要用多大的模型。網頁驗不到的部分（真實 App 內的行為、各平台讀上下文的差異、手機真實延遲）仍可能在平台里程碑修改。brief §1.5「之後」與「待評估」的每一項都落在 M3–M7 其中一個。
 
 ### 7.1 M0 骨架
 
@@ -380,10 +426,10 @@ M0 票 01 要交付：
    - 簡體模式打 `anr` 首選為「门口」。
 6. **粵語口語詞表**：`yue-colloquial.tsv` 初版，使用者審過再進資料包；固定題加入 3–5 句粵語口語。驗收：使用者審過的詞表進資料包，新增的固定題全過。
 7. **佈局格式與觸控鍵盤**：
-   - 佈局 JSON 與 JSON Schema。慣例取自 FlorisBoard keyboard3 的每鍵 `width` / `gap` / 長按清單、Trime 的組字中行為欄位與 JSON Schema 驗證、HeliBoard JSON 的簡潔寫法（`docs/research/open-source-imes.md` §4）。
-   - `qim-layout` 的驗證與幾何計算。
-   - 預設 Gboard 速成佈局（字根主標籤、字母角標、長按出字母，第一排含數字）、符號頁（打完不跳回）、一個自訂頁面示範。
-   - 驗收：§5.3 測試綠燈；Playwright 在行動裝置 viewport 點按鍵打出「門口」，長按讀回彈出的英文字母。
+   - §2.6 的格式與 JSON Schema，定稿欄位；`qim-layout` 的驗證、點擊判定、幾何計算。
+   - M1 實作矩形、圓角、旋轉、上下層順序；橢圓與多邊形的欄位留好，M5 實作。
+   - 預設 Gboard 速成佈局由 `qim-databuild` 算出（字根主標籤、字母角標、長按出字母，第一排含數字）、符號頁（打完不跳回）、一個自訂頁面示範。
+   - 驗收：§5.3 測試綠燈；Playwright 在行動裝置 viewport 點按鍵打出「門口」，長按讀回彈出的英文字母；一個兩鍵重疊的測試佈局，點重疊處輸出上層按鍵。
 8. **prototype 整合與驗收**：實體鍵盤模式的 §4.3 鍵位、候選展開面板、組字中顯示字根、字根提示快捷鍵、重排介面的假實作。驗收（即使用者的階段 5 驗收）：
    - Playwright 實際打字並讀回畫面，貼上結果：
      - 三個 Rime 案例的首選；
@@ -407,7 +453,7 @@ M0 票 01 要交付：
 ### 7.4 M3 智慧候選
 
 - 聯想；輸入框上下文配合 n-gram；自動記住 email 這類字串；常用語（與觸發詞共用格式）；emoji 候選（CLDR 繁中 / 粵語標註）。
-- LLM 評估實驗（§7.7）先做，再依結果接入 LLM 候選優化與雲端聯想、補全：使用者自帶 API key，雲端結果非同步、標示來源（brief §8）。
+- LLM 評估實驗（§7.8）先做，再依結果接入 LLM 候選優化與雲端聯想、補全：使用者自帶 API key，雲端結果非同步、標示來源（brief §8）。
 - 詞庫匯入；完整粵語詞庫（授權查清後，查不清就留在之後）；資料包線上更新（可關；更新來源在開工時定，要建遠端先問使用者）。
 - 完成標準：
   - 上述功能在網頁可用，有 Playwright 實打紀錄。
@@ -416,28 +462,44 @@ M0 票 01 要交付：
 
 ### 7.5 M4 輸入增強
 
-- 容錯（鄰鍵、漏碼、多碼）；萬用鍵；撤銷學習；空白鍵滑動移游標；英文滑動輸入（參考 FlorisBoard v0.5.2、AnySoftKeyboard，brief §12.4）；任意形狀的按鍵（佈局格式與 `qim-layout` 擴充）。
+- 容錯（鄰鍵、漏碼、多碼）；萬用鍵；撤銷學習；空白鍵滑動移游標；英文滑動輸入（參考 FlorisBoard v0.5.2、AnySoftKeyboard，brief §12.4）。
 - 評估中文滑動輸入，結論寫回 brief。
 - 同步的合併規則與使用者詞庫格式（含刪除墓碑）定稿，放在核心；平台殼之後不改格式。實際傳輸方式跟平台里程碑。
 - 完成標準：
   - 上述功能在網頁可用，觸控功能也在手機瀏覽器試過。
   - 首選字基準加「含打錯碼」的集合並設 baseline。
   - 兩個瀏覽器設定檔互相同步一個新使用者詞與一筆刪除，讀回結果一致。
-- **使用者驗收關卡**：M5 開工前要同時滿足三件事，不滿意的項目先修再驗：
+
+### 7.6 M5 佈局編輯器
+
+畫布式視覺編輯器（ADR 0004、brief §4.6）。放在 `web/editor/`，用 `qim-layout` 的 WebAssembly 版做驗證與點擊判定；平台里程碑在主 App 內嵌同一份。
+
+- 編輯：拖動、縮放、旋轉、拖頂點改多邊形、橢圓、調上下層順序；多選、複製、刪除、新增按鍵；復原與重做；多頁面。
+- 按鍵設定：輸出、長按、滑動、切頁；顏色、透明度、文字大小與位置。
+- 對齊：格線與吸附預設開，欄數列數可調並存進佈局檔；一鍵切完全自由；按住修飾鍵（手機用雙指）暫時不吸附；拖動時顯示與其他按鍵對齊的參考線。
+- 邊編輯邊試打；匯入、匯出佈局檔；從預設佈局開新佈局；「恢復預設佈局」。
+- 錯誤級問題擋存檔並指出位置，警告級只提示（§2.6）。
+- 不做（之後）：曲線自由手繪、按鍵貼圖、整套外觀主題。
+- 完成標準：
+  - Playwright 在桌面與行動裝置 viewport 拖動、縮放、旋轉按鍵並讀回座標；開關吸附後座標符合格線或不符合。
+  - 匯出再匯入後，佈局完全相同。
+  - 做一份「搞怪佈局」（字母亂序、按鍵重疊、多邊形、旋轉），在觸控模式實際打出「門口」。
+  - 使用者在電腦和手機瀏覽器試過編輯手感。
+- **使用者驗收關卡**：M6 開工前要同時滿足三件事，不滿意的項目先修再驗：
   1. 首選字基準沒有退步。
-  2. M1、M3、M4 的功能都有 Playwright 實打紀錄。
+  2. M1、M3、M4、M5 的功能都有 Playwright 實打紀錄。
   3. 使用者在電腦和手機瀏覽器試用後回覆同意（progress〈偏差與決定〉記一條）。
 
-### 7.6 平台里程碑（M5–M9）
+### 7.7 平台里程碑（M6–M10）
 
-每個平台一次接上當時已完成的全部功能。開工時補 §3 對應小節，完成標準都是：在真的宿主程式裡實打 M1、M3、M4 的驗收項目全部通過（`CLAUDE.md`〈驗收輸入行為〉）。
+每個平台一次接上當時已完成的全部功能。開工時補 §3 對應小節，完成標準都是：在真的宿主程式裡實打 M1、M3、M4 的驗收項目全部通過，觸控平台的鍵盤原生繪製所有佈局功能（形狀、旋轉、透明度、重疊），M5 的搞怪佈局也能打字（`CLAUDE.md`〈驗收輸入行為〉）。
 
-- **M5 macOS**：`qim-ffi` 完整版、IMK 殼、使用者資料存檔、設定視窗（含學習資料管理與 API key）。依 §7.7 的結果接端上 LLM。定同步的傳輸方式（要能跨 Apple 與 Android）；接剪貼簿歷史與可選的崩潰回報（預設關，brief §8）。
-- **M6 iOS**：鍵盤擴充與主 App（設定、學習資料管理、使用者詞匯入匯出）。另外的完成標準：沒開完整取用權限時打字與學習照常；與 macOS 互相同步一個新使用者詞與一筆剪貼簿並讀回。做完後評估多端檔案傳輸，結論寫回 brief。
-- **M7 Android**：InputMethodService 殼與設定 App。開工先查證 Gemini Nano 能否在輸入法內使用。另外的完成標準：與 macOS、iOS 互相同步並讀回。
-- **M8 Windows**、**M9 Linux**：平台殼。
+- **M6 macOS**：`qim-ffi` 完整版、IMK 殼、使用者資料存檔、設定視窗（含學習資料管理、API key、內嵌佈局編輯器）。依 §7.8 的結果接端上 LLM。定同步的傳輸方式（要能跨 Apple 與 Android，內容含自訂佈局）；接剪貼簿歷史與可選的崩潰回報（預設關，brief §8）。
+- **M7 iOS**：鍵盤擴充與主 App（設定、學習資料管理、使用者詞匯入匯出、內嵌佈局編輯器，開工時實測內嵌的手感）。另外的完成標準：沒開完整取用權限時打字與學習照常；與 macOS 互相同步一個新使用者詞與一筆剪貼簿並讀回。做完後評估多端檔案傳輸，結論寫回 brief。
+- **M8 Android**：InputMethodService 殼與設定 App（內嵌佈局編輯器）。開工先查證 Gemini Nano 能否在輸入法內使用。另外的完成標準：與 macOS、iOS 互相同步並讀回。
+- **M9 Windows**、**M10 Linux**：平台殼。
 
-### 7.7 M3 的 LLM 評估實驗
+### 7.8 M3 的 LLM 評估實驗
 
 要回答：用 LLM 重排候選，首選正確率能提升多少，延遲與費用是否可接受；結果決定 M3 接入雲端 LLM 的範圍，以及平台里程碑要不要接端上 LLM（brief §11）。
 
@@ -461,11 +523,12 @@ M0 票 01 要交付：
 | 字級 bigram 不足以讓 `mir` 選「一台」 | M1 驗收 | M1 票 03 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
 | `ferrous-opencc` 不能編 WebAssembly | M1 票 05 | 票開工時 | 改自讀 OpenCC 字典，記偏差 |
-| iOS 鍵盤擴充放不下核心與資料包 | M3 的模型大小、M6 | M2 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
-| 免費佈建不能跑鍵盤擴充 | M2、M6 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
+| iOS 鍵盤擴充放不下核心與資料包 | M3 的模型大小、M7 | M2 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
+| 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
 | CirrusSearch dump 不可用或格式改變 | M1 票 03 | 票開工時 | 改用 pages-articles 加文字抽取，記偏差 |
 | 延遲超過預算 | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
-| LLM 重排提升太小或太慢 | M3 範圍 | §7.7 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |
-| iOS 鍵盤擴充不能用 Foundation Models | M6 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
+| LLM 重排提升太小或太慢 | M3 範圍 | §7.8 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |
+| iOS 鍵盤擴充不能用 Foundation Models | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
 | 瀏覽器呼叫雲端 LLM 被 CORS 擋 | M3 的網頁接入 | M3 開工時 | 用 Vite 開發伺服器轉發，只影響網頁測試頁 |
-| 網頁驗不到的平台差異（真實 App 行為、讀上下文、手機延遲） | M5–M9 | 各平台實打 | 修平台殼；要動核心時記偏差並重跑首選字基準 |
+| 內嵌網頁編輯器在手機主 App 手感不佳 | M7、M8 | M7 開工時 | 只把手機上手感差的操作改原生；要全改原生時記偏差 |
+| 網頁驗不到的平台差異（真實 App 行為、讀上下文、手機延遲） | M6–M10 | 各平台實打 | 修平台殼；要動核心時記偏差並重跑首選字基準 |

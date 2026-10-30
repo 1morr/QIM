@@ -15,7 +15,7 @@
 | 里程碑 | 票目錄 | 拆票前讀 | 備註 |
 | --- | --- | --- | --- |
 | M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6、§7.1；ADR 0001–0003 | 進行中。未拆票，下一步在新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
-| M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2 | 未開始 |
+| M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004 | 未開始 |
 
 ## Session 紀錄
 
@@ -27,6 +27,7 @@
 | 2026-10-30 | M0 brief | 階段 3 訪談三輪：brief §0–§11 填完、`GLOSSARY.md`、ADR 0001–0003（自寫 Rust 核心、prototype 共用核心、速成碼建置時推導） | 使用者確認 brief 後寫 plan（階段 4） |
 | 2026-10-30 | M0 plan | 寫 `docs/plan.md`：架構、目錄、依賴規則、測試策略（首選字基準）、M0–M1 任務與驗收；研究檔 email 脫敏並改寫本機歷史 | `/to-tickets docs/plan.md` 拆 M0 票 |
 | 2026-10-31 | M0 plan | 依使用者要求重排路線圖：網頁做完核心功能並經使用者驗收，才開工平台殼（plan §7、brief §3） | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
+| 2026-10-31 | M0 plan | 加入畫布式佈局與佈局編輯器（brief §4.6、plan §2.6、§7.6、ADR 0004） | 開新 session 開工 M0：細化 spec 再拆票 |
 | 2026-10-31 | M0 框架 | 開工改成一個指令做完；所有 session 結尾都給下一步的完整指令（`CLAUDE.md`〈每個 session 的流程〉），閘門列入 plan §6 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 
 ## 偏差與決定
@@ -40,3 +41,4 @@
 - 2026-10-30 M0 框架：里程碑規格改放 `.scratch/<里程碑>/spec.md`（學 Berth docs-diet），plan §7 只留路線圖。Berth 的票序寫在里程碑表備註，一格長成一段。
 - 2026-10-31 M0 框架：spec 由使用者在新 session 下 `/to-tickets docs/plan.md` 時先寫、接著拆票，一個指令做完；之後的里程碑留在 plan §7。預先寫好的 spec 會因重排里程碑要改目錄名，內容也會在開工前過時。
 - 2026-10-31 M0 plan：路線圖改為 M2 平台可行性實驗、M3 智慧候選、M4 輸入增強（含使用者驗收關卡）、M5 macOS、M6 iOS、M7 Android、M8 Windows、M9 Linux。同步與資料拆入 M3、M4 與各平台。理由：核心穩定後平台一次接上，避免半成品反覆改。
+- 2026-10-31 M0 plan：佈局從按排的矩形改為畫布模型，允許重疊與亂序（ADR 0004）；新增 M5 佈局編輯器，使用者驗收關卡移到 M5 結尾，平台順延為 M6 macOS、M7 iOS、M8 Android、M9 Windows、M10 Linux。

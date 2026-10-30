@@ -13,7 +13,7 @@
 - 速成連打：一串不分隔的速成碼切成字詞並排出首選（§4）。
 - 候選排序與使用者學習，全部在裝置上。
 - 輸入方案的抽象：核心不寫死速成，日後可加倉頡、粵拼、注音。
-- 手機的觸控鍵盤，佈局用資料描述（§4）。
+- 手機的觸控鍵盤，佈局用資料描述，提供畫布式的佈局編輯器（§4.6）。
 - 功能分級見 §1.5。
 
 ### 1.2 本產品不負責【決定】
@@ -31,6 +31,7 @@
 | Rime | 輸入方案與核心分離的做法 | 每個方案只索引自己的碼；長詞條與造句用同一把尺比分數（`docs/research/rime.md` §5） |
 | libime | 碼表格式、使用者學習的做法 | — |
 | afm-ime / 青簡 | LLM 只做非同步重排、不搶首選 | — |
+| Delta skin、Keyboard Designer | 佈局是畫布：設計尺寸加每鍵座標；按鍵可自由擺放 | 允許重疊、多邊形、旋轉；內建格線與吸附 |
 
 ### 1.4 名稱
 
@@ -40,8 +41,8 @@ QIM（暫名）。
 
 依據 `docs/research/ime-primer.md` §5。
 
-- **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞加一份授權乾淨的小詞表）；簡繁切換；中文狀態下的英文候選；資料描述的矩形佈局（預設 Gboard 佈局、多頁、長按）；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
-- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序；英文滑動輸入；任意形狀的按鍵；剪貼簿歷史與同步；萬用鍵；容錯；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（授權查清後）。
+- **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞加一份授權乾淨的小詞表）；簡繁切換；中文狀態下的英文候選；畫布模型的佈局（預設 Gboard 佈局、多頁、長按）；佈局編輯器；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
+- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題；萬用鍵；容錯；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（授權查清後）。
 - **待評估**：LLM 候選優化；中文滑動輸入；多端檔案傳輸。
 
 ## 2. 使用者與情境【決定】
@@ -52,7 +53,7 @@ QIM（暫名）。
 
 ## 3. 平台範圍與順序【決定】
 
-網頁 prototype → 平台可行性實驗 → 智慧候選與輸入增強（網頁）→ 使用者驗收 → macOS → iOS → Android → Windows → Linux。
+網頁 prototype → 平台可行性實驗 → 智慧候選、輸入增強、佈局編輯器（網頁）→ 使用者驗收 → macOS → iOS → Android → Windows → Linux。
 
 - 先在網頁做完所有核心功能：功能大多在共用核心裡，平台殼開工時核心介面已穩定，每個平台一次接上全部功能，不必做半成品再慢慢修改（plan §7）。
 - 平台可行性實驗排在智慧候選之前：iOS 限制最多（記憶體上限不公開、沒有 marked text、密碼欄換系統鍵盤，§12.3），模型大小要先知道放不放得下。
@@ -111,6 +112,15 @@ QIM（暫名）。
 - 無痕模式：密碼欄與帶「不要個人化學習」旗標的欄位自動進入，也可從候選列按鈕手動切換。
 - 學習資料在主 App 列出，可搜尋、刪除、全清。
 
+### 4.6 佈局與編輯器【決定】
+
+- 佈局是畫布：每個按鍵各自有位置、大小、旋轉、形狀、上下層順序、外觀與動作（ADR 0004）。預設是 Gboard 佈局，也是這種資料。
+- 允許搞怪：按鍵可以重疊、亂序、超出常規。重疊時上層優先；各平台用同一份點擊判定。
+- 形狀：長方形、圓角、橢圓、旋轉、拖頂點改任意多邊形。外觀：每鍵顏色、透明度、文字大小與位置。曲線自由手繪、按鍵貼圖、外觀主題是之後的功能。
+- 編輯器：拖動、縮放、旋轉、改形狀、調上下層、多選、復原；設定輸出、長按、滑動、切頁；邊編輯邊試打；匯入匯出。只寫一份網頁版，在各平台主 App 內嵌，桌面可用滑鼠編輯（ADR 0004）。
+- 對齊：格線與吸附預設開，欄數列數可調並存進佈局檔；可一鍵切完全自由，也可按住修飾鍵（手機用雙指）暫時不吸附；拖動時顯示與其他按鍵對齊的參考線。
+- 安全底線：只擋三種情況：檔案壞掉；頁面之間切不回有字母的頁面；iOS 需要切換鍵盤鍵時卻沒有。重疊、被蓋住、超出畫布、缺字母只警告。主 App 永遠有「恢復預設佈局」。
+
 ## 5. 碼表與資料
 
 ### 5.1 發佈原則【決定】
@@ -163,7 +173,7 @@ QIM（暫名）。
 
 - 雲端功能預設開啟，但只有使用者在設定裡接上雲端服務（填入 API key）後才實際連線；雲端給的候選標示來源。
 - 雲端 LLM 由使用者自帶 API key，支援 OpenAI 相容介面與 Anthropic 介面；QIM 不架代理服務。
-- 送往雲端的內容：游標前最多 200 字、目前輸入碼、前 10 個候選；不送游標後的文字。QIM 不在任何伺服器保存；模型供應商的保存規則依其政策，在設定頁註明。200 字由 LLM 評估實驗調整（plan §7.7）。
+- 送往雲端的內容：游標前最多 200 字、目前輸入碼、前 10 個候選；不送游標後的文字。QIM 不在任何伺服器保存；模型供應商的保存規則依其政策，在設定頁註明。200 字由 LLM 評估實驗調整（plan §7.8）。
 - 不收集使用統計。崩潰回報可選、預設關閉，只送堆疊不送輸入內容。
 
 ## 9. 效能與品質指標
@@ -183,7 +193,7 @@ QIM（暫名）。
 
 ## 11. 待決
 
-- LLM 候選優化接入到什麼程度：LLM 評估實驗（Apple Foundation Models、DeepSeek）後決定（plan §7.7）。
+- LLM 候選優化接入到什麼程度：LLM 評估實驗（Apple Foundation Models、DeepSeek）後決定（plan §7.8）。
 - LGPL 資料、以 CC BY-SA 語料訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 沒有付費帳號時，iOS 鍵盤擴充能否用免費佈建在實機上跑、App Group 能否使用：平台可行性實驗開工時查證（plan §7.3）。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
@@ -246,4 +256,7 @@ QIM（暫名）。
 - libime：KenLM trie，beam 20，每按一鍵增量更新 lattice；使用者歷史 bigram 以三個 LRU 池（128 / 8192 / 65536 句）固定權重混入。`fcitx/libime` `src/libime/core/decoder.h`、`historybigram.cpp`。
 - afm-ime 用 Apple Foundation Models 做異步重排，結果只放第 2 位。`Bemly/afm-ime` `Sources/IMECore/FMReranker.swift`（`a8543a1`）。
 - 可重用的滑動輸入實作：FlorisBoard v0.5.2 `StatisticalGlideTypingClassifier.kt`、AnySoftKeyboard `GestureTypingDetector.java`，皆 Apache-2.0；HeliBoard / OpenBoard 的滑動依賴閉源函式庫。`docs/research/open-source-imes.md` §1。
+- Delta skin 的 `info.json`：每個方向一個 `mappingSize`（設計尺寸）與 `items`，每項有 `frame`（x、y、width、height）與 `extendedEdges`（擴大觸控範圍），依裝置與方向分版本。[Delta skin 文件](https://noah978.gitbook.io/delta-docs/skins)，2026-10-31 查。
+- Keyboard Designer（Android）可自由擺放按鍵並設定尺寸、標籤、顏色、邊框；官網沒提重疊、格線與吸附。[Keyboard Designer](https://www.keyboarddesigner.com)，2026-10-31 查。
+- iOS 鍵盤不能畫到鍵盤上緣之外；`needsInputModeSwitchKey` 為真時要自己提供切換鍵盤的按鈕。[App Extension Programming Guide](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/CustomKeyboard.html)、[needsInputModeSwitchKey](https://developer.apple.com/documentation/uikit/uiinputviewcontroller/needsinputmodeswitchkey)。
 - 開源佈局格式（FlorisBoard、Trime、Hamster、AnySoftKeyboard、HeliBoard）都只支援矩形按鍵。`docs/research/open-source-imes.md` §4。
