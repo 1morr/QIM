@@ -42,8 +42,8 @@ QIM（暫名）。
 依據 `docs/research/ime-primer.md` §5。
 
 - **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞加一份授權乾淨的小詞表）；簡繁切換；中文狀態下的英文候選；組字中修改分段；畫布模型的佈局（預設 Gboard 佈局、多頁、長按、直向與橫向、淺色與深色）；按鍵放大預覽；佈局編輯器；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
-- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題；個人 bigram；空間模型；英文模式的預測與自動修正；依欄位類型切換；智慧標點；單手佈局；震動與按鍵音；無障礙；萬用鍵；容錯；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（授權查清後）。
-- **待評估**：小型神經模型重排；LLM 候選優化；中文滑動輸入；語音輸入；懸浮鍵盤；多端檔案傳輸。
+- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題；個人 bigram；空間模型；英文模式的預測與自動修正；依欄位類型切換；智慧標點；單手佈局；震動與按鍵音；觸控平台的實體鍵盤；Android 懸浮鍵盤；無障礙；萬用鍵；容錯；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（授權查清後）。
+- **待評估**：小型神經模型重排；LLM 候選優化；中文滑動輸入；語音輸入；多端檔案傳輸。
 
 ## 2. 使用者與情境【決定】
 
@@ -125,7 +125,7 @@ QIM（暫名）。
 - 編輯器：拖動、縮放、旋轉、改形狀、調上下層、多選、復原；設定輸出、長按、滑動、切頁；邊編輯邊試打；匯入匯出。只寫一份網頁版，在各平台主 App 內嵌，桌面可用滑鼠編輯（ADR 0004）。
 - 對齊：格線與吸附預設開，欄數列數可調並存進佈局檔；可一鍵切完全自由，也可按住修飾鍵（手機用雙指）暫時不吸附；拖動時顯示與其他按鍵對齊的參考線。
 - 安全底線：只擋三種情況：檔案壞掉；頁面之間切不回有字母的頁面；iOS 需要切換鍵盤鍵時卻沒有。重疊、被蓋住、超出畫布、缺字母只警告。主 App 永遠有「恢復預設佈局」。
-- 單手：內建左手、右手兩份預設佈局。懸浮鍵盤要平台支援，Android 里程碑評估；iOS 不能畫到鍵盤外（§12.4）。
+- 單手：內建左手、右手兩份預設佈局。懸浮鍵盤只在 Android 做；iOS 不能畫到鍵盤外（§12.4）。
 
 ### 4.7 英文模式與欄位類型【決定】
 
@@ -281,5 +281,8 @@ QIM（暫名）。
 - iOS 鍵盤不能畫到鍵盤上緣之外；`needsInputModeSwitchKey` 為真時要自己提供切換鍵盤的按鈕。[App Extension Programming Guide](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/CustomKeyboard.html)、[needsInputModeSwitchKey](https://developer.apple.com/documentation/uikit/uiinputviewcontroller/needsinputmodeswitchkey)。
 - 開源佈局格式（FlorisBoard、Trime、Hamster、AnySoftKeyboard、HeliBoard）都只支援矩形按鍵。`docs/research/open-source-imes.md` §4。
 - 青簡的神經重排：詞圖 Viterbi 出前 6 條路徑，停鍵 80 ms 後在背景執行緒重排（candle，字級 Transformer，23M / 36M 參數，56 MB fp16，Metal 首次編譯 12 秒）。8,322 句拼音集上整句首選：bigram 37.6%、神經重排 41.9%、自由生成 51.9%（前五 73.5%，平均 130–200 ms，最慢 2.4 秒，未進產品）。行動端未查證。`docs/research/open-source-imes.md` §3。
+- CyIME 九宮格拼音（自測）：真實聊天 130 句整段首選，原算法 54、詞級 bigram 92、詞級 trigram 97；trigram 203 MB，剪枝版 105 MB、約低 3 個百分點，每鍵約 5–7 ms，可選下載。34 MB 的神經整句重排因提升小、拖慢打字、停頓後改動候選而停用。GPL-3.0。`docs/research/cyime.md` §3。
+- CyIME 的外掛是 Lua 腳本，主要用於工具面板、線上語音、同步；模型和方案不走外掛。唯一進按鍵路徑的候選變換有 15 ms 硬超時、連續 3 次超時熔斷。它的審計記下新增一個能力要動 6 處。`docs/research/cyime.md` §2。
+- App Review 2.5.2 禁止下載或執行會引入、改變功能的程式碼；4.7 允許 HTML5 與 JavaScript 的 mini app、聊天機器人與外掛等不內嵌於二進位的軟體，但開發者要對其負責，並提供索引、內容檢舉，不得未經許可開放原生 API，每次分享資料都要使用者同意。[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)，2026-10-31 查。
 - Google 條款禁止逆向其服務與機器學習模型以取得商業機密，除非法律允許。[Google Terms](https://policies.google.com/terms)，2026-10-31 查。
 - Apple 的 macOS 授權限制反編譯與逆向，例外是法律禁止此限制或開源元件條款允許；核對的是 Sequoia 版摘錄，未核對最新版。[macOS Sequoia SLA](https://www.apple.com/legal/sla/docs/macOSSequoia.pdf)，2026-10-31 查。
