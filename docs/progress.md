@@ -32,6 +32,7 @@
 | 2026-10-31 | M0 plan | 審 plan 缺口（未寫回）：學習未進 lattice、選兩次成首選的門檻算不到、佈局缺方向與深色、無空間模型與小神經重排、語料偏書面、黑箱測試未排 | 等使用者：決定這些缺口是否照建議寫進 plan |
 | 2026-10-31 | M0 plan | 上述缺口照建議寫回 plan、brief、`GLOSSARY.md`、ADR 0004–0006：個人模型進 lattice、佈局版本與深色、模型階梯實驗、空間模型、口語語料、修正次數、黑箱基線 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 | 2026-10-31 | M0 研究 | 查 CyIME 的外掛與模型評估，寫 `docs/research/cyime.md`；plan 加觸控平台實體鍵盤、Android 懸浮鍵盤、可選下載的詞級 trigram 對照 | 等使用者：決定擴充架構（資料擴充包、服務接縫、暫不做腳本外掛） |
+| 2026-10-31 | M0 plan | 擴充架構維持原案，腳本外掛列待評估；M3 線上更新時才加 manifest，另補撤銷學習語意與基準防洩漏 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 
 ## 偏差與決定
 
