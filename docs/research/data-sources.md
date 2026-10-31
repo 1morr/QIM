@@ -220,6 +220,8 @@
 | LIHKG（HF `AlienKevin/LIHKG`） | 14.4 GB，100 萬–1,000 萬筆 | 資料卡標 MIT；貼文版權與站方條款未查證；資料卡未談同意或個資 | 授權標示來自爬取者，不是論壇或發文者；LIHKG 曾封鎖腳本存取（lilm 專案 2024-06 紀錄） ★ |
 | Common Crawl / FineWeb 系列 | 英文 FineWeb 為主；粵語子集未查證 | ODC-By v1.0 + 須遵守 Common Crawl Terms of Use | 網頁內容的個別著作權不因整理而消失 ★ |
 | HKCanCor | 約 20–23 萬字詞 | CC BY | 太小，只適合驗證或口語詞補強 |
+| Common Voice Scripted Speech 粵語（25.0，2026-03） | 文字語料 28,727 句，已驗證 18,556 句 | 標 CC0-1.0；24.0 的資料說明另寫不得轉發資料集（2026-10-31 查，摘要層級） | 條款間的關係未查清 ★ |
+| Tatoeba 粵語句子 | 句數未查 | 預設 CC BY 2.0 FR，部分 CC0（2026-10-31 查） | 須署名，文字的署名寫法見其 wiki；翻譯句不能標 CC0 |
 | rime-essay / essay-cantonese | 見上 | LGPL-3.0 / CC BY 4.0 | 已是頻次表，可直接當 unigram 基底 |
 
 ### 7.2 現成模型與工具
