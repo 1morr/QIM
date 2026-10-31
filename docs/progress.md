@@ -29,6 +29,7 @@
 | 2026-10-31 | M0 plan | 依使用者要求重排路線圖：網頁做完核心功能並經使用者驗收，才開工平台殼（plan §7、brief §3） | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 | 2026-10-31 | M0 plan | 加入畫布式佈局與佈局編輯器（brief §4.6、plan §2.6、§7.6、ADR 0004） | 開新 session 開工 M0：細化 spec 再拆票 |
 | 2026-10-31 | M0 框架 | 開工改成一個指令做完；所有 session 結尾都給下一步的完整指令（`CLAUDE.md`〈每個 session 的流程〉），閘門列入 plan §6 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
+| 2026-10-31 | M0 plan | 審 plan 缺口（未寫回）：學習未進 lattice、選兩次成首選的門檻算不到、佈局缺方向與深色、無空間模型與小神經重排、語料偏書面、黑箱測試未排 | 等使用者：決定這些缺口是否照建議寫進 plan |
 
 ## 偏差與決定
 
