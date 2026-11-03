@@ -1,7 +1,9 @@
-//! `cargo xtask data --verify` 的檢查（plan §4.5）；Unihan 交叉比對另由票 06 加。
+//! `cargo xtask data --verify` 的檢查（plan §4.5）。Unihan 交叉比對不是檢查、不影響通過與否，
+//! 由 `pipeline` 算好放進 [`Report::unihan`]，比對本身在 `unihan` 模組。
 
 use std::collections::BTreeSet;
 use std::fmt;
+use std::path::PathBuf;
 
 use qim_core::Pack;
 
@@ -57,6 +59,20 @@ pub struct Report {
     pub codes: usize,
     pub sha256: String,
     pub checks: Vec<Check>,
+    /// Unihan 交叉比對的摘要；[`run`] 不算，由呼叫端填。
+    pub unihan: Option<UnihanSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnihanSummary {
+    /// 兩邊都有碼的字數。
+    pub compared: usize,
+    /// 碼不同的字數。
+    pub differences: usize,
+    /// 差異中 Unihan 的碼等於 libcangjie 五代碼的字數。
+    pub matching_cangjie5: usize,
+    /// 差異報表，相對 repo 根目錄。
+    pub report: PathBuf,
 }
 
 impl Report {
@@ -71,6 +87,16 @@ impl fmt::Display for Report {
         writeln!(f, "擴展區：{} 字", self.extension)?;
         writeln!(f, "速成碼：{} 個", self.codes)?;
         writeln!(f, "sha256：{}", self.sha256)?;
+        if let Some(u) = &self.unihan {
+            writeln!(
+                f,
+                "Unihan kCangjie：比對 {} 字，差異 {} 字（其中 {} 字等於五代碼），報表 {}（不影響 verify 結果）",
+                u.compared,
+                u.differences,
+                u.matching_cangjie5,
+                u.report.display()
+            )?;
+        }
         for c in &self.checks {
             let mark = if c.passed { "通過" } else { "失敗" };
             writeln!(f, "[{mark}] {}：{}", c.id, c.detail)?;
@@ -104,6 +130,7 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
                     },
                     deterministic,
                 ],
+                unihan: None,
             };
         }
     };
@@ -178,6 +205,7 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
         codes: pack.code_table.iter().count(),
         sha256,
         checks,
+        unihan: None,
     }
 }
 

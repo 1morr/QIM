@@ -8,6 +8,7 @@ mod pipeline;
 pub mod quick;
 pub mod scheme;
 pub mod sources;
+pub mod unihan;
 pub mod verify;
 
 pub use error::Error;

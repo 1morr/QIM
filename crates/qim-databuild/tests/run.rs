@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::Path;
 
 use qim_core::Pack;
@@ -22,6 +23,25 @@ Domain, in the hope that is is useful.
 ";
 
 const STATEMENT: &str = "The data in the ``table.txt`` file is hereby placed under the Public Domain, in the hope that is is useful.";
+
+/// 日同碼、丟異碼、㐀只在 Unihan：比對 2 字、差異 1 字。
+const KCANGJIE: &str = "\
+# Unihan_DictionaryLikeData.txt
+U+3400\tkCangjie\tTM
+U+4E1F\tkCangjie\tMGI
+U+65E5\tkCangjie\tA
+";
+
+fn unihan_zip() -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    zip.start_file(
+        "Unihan_DictionaryLikeData.txt",
+        zip::write::SimpleFileOptions::default(),
+    )
+    .unwrap();
+    zip.write_all(KCANGJIE.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
 
 struct Files(BTreeMap<String, Vec<u8>>);
 
@@ -49,6 +69,7 @@ fn upstream(readme: &str) -> Files {
             "https://example.invalid/README.table.md".into(),
             readme.into(),
         ),
+        ("https://example.invalid/Unihan.zip".into(), unihan_zip()),
     ]))
 }
 
@@ -64,7 +85,7 @@ fn repo(root: &Path, statement: &str) {
         r#"
 [source.libcangjie]
 repository = "https://example.invalid/libcangjie"
-commit = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
+version = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
 license = "Public Domain"
 license_file = "data/README.table.md"
 license_statement = "{statement}"
@@ -78,9 +99,20 @@ sha256 = "{table}"
 path = "data/README.table.md"
 url = "https://example.invalid/README.table.md"
 sha256 = "{readme}"
+
+[source.unihan]
+repository = "https://example.invalid/ucd/"
+version = "18.0.0"
+license = "Unicode-3.0"
+
+[[source.unihan.files]]
+path = "Unihan.zip"
+url = "https://example.invalid/Unihan.zip"
+sha256 = "{unihan}"
 "#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
+        unihan = sha256_hex(&unihan_zip()),
     );
     std::fs::write(root.join("data/sources.toml"), sources).unwrap();
 }
@@ -110,6 +142,52 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
     assert_eq!((report.continuous, report.extension), (3, 1));
+}
+
+#[test]
+fn verify_writes_the_unihan_report_and_still_passes_with_differences() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let report = run(root.path(), &upstream(README), true)
+        .unwrap()
+        .report
+        .unwrap();
+    assert!(report.passed(), "{report}");
+
+    let unihan = report.unihan.as_ref().unwrap();
+    assert_eq!(
+        (
+            unihan.compared,
+            unihan.differences,
+            unihan.matching_cangjie5
+        ),
+        (2, 1, 1)
+    );
+    assert_eq!(
+        unihan.report,
+        Path::new("build/reports/unihan-kcangjie.tsv")
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.path().join(&unihan.report)).unwrap(),
+        "codepoint\tcharacter\tunihan\tlibcangjie_cangjie3\tlibcangjie_cangjie5\n\
+         U+4E1F\t丟\tmgi\thgi\tmgi,xxmgi\n"
+    );
+    let shown = report.to_string();
+    assert!(
+        shown.contains(
+            "Unihan kCangjie：比對 2 字，差異 1 字（其中 1 字等於五代碼），報表 build/reports/unihan-kcangjie.tsv"
+        ),
+        "{shown}"
+    );
+}
+
+#[test]
+fn build_without_verify_does_not_fetch_unihan() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let mut files = upstream(README);
+    files.0.remove("https://example.invalid/Unihan.zip");
+    run(root.path(), &files, false).unwrap();
 }
 
 #[test]
@@ -157,4 +235,20 @@ fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
         }
     }
     out
+}
+
+#[test]
+fn packed_source_without_license_statement_fails_the_build() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let path = root.path().join("data/sources.toml");
+    let sources = std::fs::read_to_string(&path).unwrap();
+    let without: String = sources
+        .lines()
+        .filter(|l| !l.starts_with("license_statement"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&path, without).unwrap();
+    let err = run(root.path(), &upstream(README), false).unwrap_err();
+    assert!(err.to_string().contains("license_statement"), "{err}");
 }
