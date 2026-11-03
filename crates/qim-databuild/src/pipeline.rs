@@ -136,13 +136,13 @@ fn license(source: &Source, file: &str, statement: &str) -> String {
         "The code table in this pack is derived from {table} of libcangjie.\n\
          License of that data: {license}\n\
          \n\
-         Statement in {file} ({repo}, commit {commit}):\n\
+         Statement in {file} ({repo}, commit {version}):\n\
          \n\
          {statement}\n",
         table = TABLE,
         license = source.license,
         repo = source.repository,
-        commit = source.version,
+        version = source.version,
     )
 }
 
@@ -152,7 +152,7 @@ fn notice(id: &str, source: &Source, table: &sources::SourceFile) -> String {
          \n\
          Source: libcangjie\n\
          Repository: {repo}\n\
-         Commit: {commit}\n\
+         Commit: {version}\n\
          File: {path} (sha256 {sha256})\n\
          License: {license} (see LICENSE)\n\
          \n\
@@ -161,7 +161,7 @@ fn notice(id: &str, source: &Source, table: &sources::SourceFile) -> String {
          two letters. Han characters flagged as Big5 or HKSCS form the continuous set;\n\
          other Han characters are marked as extension.\n",
         repo = source.repository,
-        commit = source.version,
+        version = source.version,
         path = table.path,
         sha256 = table.sha256,
         license = source.license,

@@ -45,6 +45,7 @@
 | 2026-11-03 | M0 03 | commit-msg 閘門：`cargo xtask commit-msg`、`.githooks/commit-msg`；合併中放行；細節見票 | 新 session 下 `/implement .scratch/m0/issues/04-docs-gates.md` |
 | 2026-11-03 | M0 04 | 文件閘門：`cargo xtask check` 的 `docs` 步驟守 progress 與 spec 規則（plan §6），變異測試用內建範本；細節見票 | 新 session 下 `/implement .scratch/m0/issues/05-quick-code-table-pack.md` |
 | 2026-11-03 | M0 05 | `cargo xtask data [--verify]`：libcangjie → `build/packs/quick/`，連打字集 17611、擴展區 57052，§4.5 檢查全過；細節見票 | 新 session 下 `/implement .scratch/m0/issues/06-unihan-cross-check.md` |
+| 2026-11-03 | M0 06 | `--verify` 加 Unihan 18.0.0 `kCangjie` 交叉比對：比對 29121 字、差異 2744 字（2246 字等於五代碼），報表在 `build/reports/`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/07-tracer-bullet-type-a.md` |
 
 ## 偏差與決定
 
@@ -71,3 +72,4 @@
 - 2026-11-03 M0 票 03：commit-msg 閘門在 `git merge` 進行中一律放行（使用者決定）：ticket-coordinator 的 `merge: ticket NN slug` 不在 type 清單，否則每次合併票都被擋。
 - 2026-11-03 M0 票 04：封存里程碑與把下一個標成進行中改在同一個 commit，封存 session 的紀錄標新里程碑：文件閘門要求剛好一個進行中的里程碑，中間不留空檔。
 - 2026-11-03 M0 票 05：資料包一個方案一份（`build/packs/<id>/<id>.pack`，含方案與碼表，旁放授權檔），plan §2.5 `[packs]` 拿掉 `code_table`：碼表每方案一份，不同授權的資料包不共用授權檔。
+- 2026-11-03 M0 票 06：`sources.toml` 的 `commit` 改 `version`、授權聲明欄改選填（Unihan 沒有 commit、不進資料包）；kCangjie 與 libcangjie 三代碼有 9.4% 不同，多數等於五代碼（brief §12.1）。
