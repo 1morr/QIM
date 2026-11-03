@@ -74,3 +74,4 @@
 - 2026-11-03 M0 票 05：資料包一個方案一份（`build/packs/<id>/<id>.pack`，含方案與碼表，旁放授權檔），plan §2.5 `[packs]` 拿掉 `code_table`：碼表每方案一份，不同授權的資料包不共用授權檔。
 - 2026-11-03 M0 票 06：`sources.toml` 的 `commit` 改 `version`、授權聲明欄改選填（Unihan 沒有 commit、不進資料包）；kCangjie 與 libcangjie 三代碼有 9.4% 不同，多數等於五代碼（brief §12.1）。
 - 2026-11-03 M0 票 07：`a` 的首選是「曰」不是「日」（libcangjie Big5 排序值 23060 < 23061），M0 沒有字頻；空白上屏首選，「日」改由票 08 的數字鍵驗收；spec 驗收同步改。
+- 2026-11-03 M0 票 07：plan §2.1 的 `Snapshot` 加 `handled`（核心是否吃下這個鍵，同 librime `process_key` 的回傳值），殼才知道沒有組字時把空白交還宿主。

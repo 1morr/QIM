@@ -1,6 +1,6 @@
 import { type Key, toKey } from "./keys.ts";
 import "./style.css";
-import init, { Ime, type Snapshot } from "./wasm/qim_wasm.js";
+import init, { Session, type Snapshot } from "./wasm/qim_wasm.js";
 
 const PACK_URL = "/packs/quick/quick.pack";
 
@@ -25,12 +25,12 @@ async function loadPack(): Promise<Uint8Array> {
 	return new Uint8Array(await response.arrayBuffer());
 }
 
-function press(ime: Ime, key: Key): Snapshot {
+function press(session: Session, key: Key): Snapshot {
 	switch (key.kind) {
 		case "letter":
-			return ime.letter(key.char);
+			return session.letter(key.char);
 		case "space":
-			return ime.space();
+			return session.space();
 	}
 }
 
@@ -56,14 +56,14 @@ function insert(commit: string): void {
 
 async function start(): Promise<void> {
 	const [, pack] = await Promise.all([init(), loadPack()]);
-	const ime = new Ime(pack);
+	const session = new Session(pack);
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);
 		if (!key) {
 			return;
 		}
-		const snapshot = press(ime, key);
+		const snapshot = press(session, key);
 		try {
 			if (!snapshot.handled) {
 				return;

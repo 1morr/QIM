@@ -101,3 +101,13 @@ fn letters_outside_the_scheme_alphabet_are_left_to_the_host() {
     assert!(!snapshot.handled);
     assert_eq!(snapshot.composition.input, "");
 }
+
+#[test]
+fn space_with_no_candidates_is_swallowed_and_keeps_the_composition() {
+    let mut ime = Ime::new();
+    ime.press(Key::Letter('c'));
+    let snapshot = ime.press(Key::Space);
+    assert!(snapshot.handled);
+    assert_eq!(snapshot.commit, None);
+    assert_eq!(snapshot.composition.input, "c");
+}

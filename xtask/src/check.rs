@@ -26,8 +26,8 @@ pub enum Action {
     Deps,
     /// progress 與里程碑 spec 的規則（plan §6），見 [`crate::docs`]。
     Docs,
-    /// 產生網頁的 WebAssembly 綁定，`tsc` 要讀它的型別；見 [`crate::web::bindings`]。
-    Bindings,
+    /// 產生網頁的 WebAssembly 綁定，`tsc` 要讀它的型別；見 [`crate::web::wasm_bindings`]。
+    WasmBindings,
     /// 複製資料包到網頁，再跑 Playwright（`npm run e2e`）。
     E2e,
 }
@@ -68,7 +68,7 @@ const ALL: &[Step] = &[
     Step {
         name: "wasm",
         slow: false,
-        action: Action::Bindings,
+        action: Action::WasmBindings,
     },
     Step {
         name: "tsc",
@@ -115,22 +115,21 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             command.args(args).current_dir(root);
             command
         }
-        Action::NpmScript(script) => match npm(root, script) {
-            Some(command) => command,
-            None => return false,
-        },
-        Action::E2e => {
-            if !crate::web::packs(root) {
+        Action::NpmScript(script) => {
+            let Some(command) = npm(root, script) else {
                 return false;
-            }
-            match npm(root, "e2e") {
-                Some(command) => command,
-                None => return false,
-            }
+            };
+            command
+        }
+        Action::E2e => {
+            let Some(command) = crate::web::packs(root).then(|| npm(root, "e2e")).flatten() else {
+                return false;
+            };
+            command
         }
         Action::Deps => return crate::deps::report(root),
         Action::Docs => return crate::docs::report(root),
-        Action::Bindings => return crate::web::bindings(root),
+        Action::WasmBindings => return crate::web::wasm_bindings(root),
     };
     match command.status() {
         Ok(status) => status.success(),

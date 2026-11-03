@@ -21,7 +21,7 @@ fn main() -> ExitCode {
         ["data", "--verify"] => data(&["--verify"]),
         ["web"] => {
             let root = repo_root();
-            if web::bindings(&root) && web::packs(&root) {
+            if web::wasm_bindings(&root) && web::packs(&root) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE

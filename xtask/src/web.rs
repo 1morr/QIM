@@ -1,6 +1,6 @@
 //! `cargo xtask web`：準備網頁要的 WebAssembly 綁定與資料包。
 //!
-//! - [`bindings`]：用 release 編 `qim-wasm`，`wasm-bindgen --target web` 產生到 [`BINDINGS_DIR`]。
+//! - [`wasm_bindings`]：用 release 編 `qim-wasm`，`wasm-bindgen --target web` 產生到 [`BINDINGS_DIR`]。
 //! - [`packs`]：把 `build/packs/` 複製到 [`PACKS_DIR`]，網頁 fetch 它。
 
 use std::fs;
@@ -17,8 +17,8 @@ const BUILT_PACKS_DIR: &str = "build/packs";
 const TARGET: &str = "wasm32-unknown-unknown";
 
 /// 編 `qim-wasm` 並產生 JS 綁定；回傳是否成功，失敗原因印到終端機。
-pub fn bindings(root: &Path) -> bool {
-    match try_bindings(root) {
+pub fn wasm_bindings(root: &Path) -> bool {
+    match try_wasm_bindings(root) {
         Ok(()) => true,
         Err(message) => {
             eprintln!("{message}");
@@ -27,7 +27,7 @@ pub fn bindings(root: &Path) -> bool {
     }
 }
 
-fn try_bindings(root: &Path) -> Result<(), String> {
+fn try_wasm_bindings(root: &Path) -> Result<(), String> {
     let lock = fs::read_to_string(root.join("Cargo.lock"))
         .map_err(|e| format!("讀不到 Cargo.lock：{e}"))?;
     let wanted = locked_version(&lock, "wasm-bindgen")
