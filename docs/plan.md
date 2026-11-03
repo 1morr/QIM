@@ -134,6 +134,7 @@ pub enum Key { Letter(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp,
 pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool }
 
 pub struct Snapshot {
+    pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
     pub composition: Composition,   // 輸入碼、已打的字根、各分段（碼、字、是否已選定）、目前分段
     pub candidates: Vec<Candidate>, // 目前頁
     pub page: usize,

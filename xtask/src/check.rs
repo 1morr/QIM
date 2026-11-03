@@ -26,6 +26,10 @@ pub enum Action {
     Deps,
     /// progress 與里程碑 spec 的規則（plan §6），見 [`crate::docs`]。
     Docs,
+    /// 產生網頁的 WebAssembly 綁定，`tsc` 要讀它的型別；見 [`crate::web::bindings`]。
+    Bindings,
+    /// 複製資料包到網頁，再跑 Playwright（`npm run e2e`）。
+    E2e,
 }
 
 const ALL: &[Step] = &[
@@ -62,6 +66,11 @@ const ALL: &[Step] = &[
         action: Action::Docs,
     },
     Step {
+        name: "wasm",
+        slow: false,
+        action: Action::Bindings,
+    },
+    Step {
         name: "tsc",
         slow: false,
         action: Action::NpmScript("typecheck"),
@@ -70,6 +79,11 @@ const ALL: &[Step] = &[
         name: "biome",
         slow: false,
         action: Action::NpmScript("lint"),
+    },
+    Step {
+        name: "e2e",
+        slow: true,
+        action: Action::E2e,
     },
 ];
 
@@ -101,22 +115,22 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             command.args(args).current_dir(root);
             command
         }
-        Action::NpmScript(script) => {
-            let web = root.join("web");
-            if !web.join("node_modules").is_dir() {
-                eprintln!(
-                    "web/node_modules 不存在：先在 web/ 跑 `npm ci`（見 docs/development.md）"
-                );
+        Action::NpmScript(script) => match npm(root, script) {
+            Some(command) => command,
+            None => return false,
+        },
+        Action::E2e => {
+            if !crate::web::packs(root) {
                 return false;
             }
-            // Windows 上 npm 是批次檔，Command 不會自己補副檔名。
-            let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
-            let mut command = Command::new(npm);
-            command.args(["run", "--silent", script]).current_dir(web);
-            command
+            match npm(root, "e2e") {
+                Some(command) => command,
+                None => return false,
+            }
         }
         Action::Deps => return crate::deps::report(root),
         Action::Docs => return crate::docs::report(root),
+        Action::Bindings => return crate::web::bindings(root),
     };
     match command.status() {
         Ok(status) => status.success(),
@@ -125,6 +139,20 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             false
         }
     }
+}
+
+/// 在 `web/` 跑 `npm run <script>` 的指令；`node_modules` 還沒裝時印提示、回 `None`。
+fn npm(root: &Path, script: &str) -> Option<Command> {
+    let web = root.join("web");
+    if !web.join("node_modules").is_dir() {
+        eprintln!("web/node_modules 不存在：先在 web/ 跑 `npm ci`（見 docs/development.md）");
+        return None;
+    }
+    // Windows 上 npm 是批次檔，Command 不會自己補副檔名。
+    let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
+    let mut command = Command::new(npm);
+    command.args(["run", "--silent", script]).current_dir(web);
+    Some(command)
 }
 
 #[cfg(test)]
@@ -158,15 +186,17 @@ mod tests {
     fn full_check_runs_every_step_in_order() {
         assert_eq!(
             names(&steps(false)),
-            ["fmt", "clippy", "test", "deps", "docs", "tsc", "biome"]
+            [
+                "fmt", "clippy", "test", "deps", "docs", "wasm", "tsc", "biome", "e2e"
+            ]
         );
     }
 
     #[test]
-    fn fast_check_skips_only_cargo_test() {
+    fn fast_check_skips_cargo_test_and_e2e() {
         assert_eq!(
             names(&steps(true)),
-            ["fmt", "clippy", "deps", "docs", "tsc", "biome"]
+            ["fmt", "clippy", "deps", "docs", "wasm", "tsc", "biome"]
         );
     }
 

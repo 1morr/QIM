@@ -1,0 +1,34 @@
+body {
+	font-family: system-ui, sans-serif;
+	margin: 2rem;
+}
+
+main {
+	display: grid;
+	gap: 0.5rem;
+	max-width: 40rem;
+}
+
+textarea {
+	font-size: 1.5rem;
+}
+
+#composition {
+	min-height: 1.5rem;
+	font-family: ui-monospace, monospace;
+}
+
+#candidates {
+	display: flex;
+	gap: 1rem;
+	min-height: 2rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 1.5rem;
+}
+
+#candidates .index {
+	color: gray;
+	font-size: 1rem;
+}

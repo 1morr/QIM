@@ -48,7 +48,7 @@ repo 骨架與閘門就位；資料管線產出速成碼表資料包；在網頁
 - `cargo xtask check` 綠燈；pre-commit 與 commit-msg hook 依 `docs/development.md` 啟用後，違規的 commit message 被擋。
 - `deps`、progress、spec 閘門各自在變異副本上會紅、在無關改動上不紅。
 - `cargo xtask data --verify` 綠燈；報告列出連打字集字數、擴展區字數、Unihan 差異數；同樣的來源建兩次，資料包 sha256 相同。
-- Playwright 在網頁打 `a` 讀回候選含「日」，按空白讀回輸入框為「日」；打 `ar` 讀回候選含「問」（必要時翻頁）；截圖存證。
+- Playwright 在網頁打 `a` 讀回候選含「日」，按空白讀回輸入框為首選「曰」（Big5 序排在「日」前），按 `a` `2` 讀回「日」；打 `ar` 讀回候選含「問」（必要時翻頁）；截圖存證。
 - progress.md 依〈寫法與封存〉封存 M0、M1 標為進行中之前，以上全部成立。
 
 ## 票序
@@ -61,7 +61,7 @@ repo 骨架與閘門就位；資料管線產出速成碼表資料包；在網頁
 | [04](issues/04-docs-gates.md) | 01 | progress 與 spec 文件閘門 |
 | [05](issues/05-quick-code-table-pack.md) | 01 | 速成碼表資料包與 `--verify` |
 | [06](issues/06-unihan-cross-check.md) | 05 | Unihan 交叉比對報表 |
-| [07](issues/07-tracer-bullet-type-a.md) | 05 | 網頁打 `a` 上屏「日」 |
+| [07](issues/07-tracer-bullet-type-a.md) | 05 | 網頁打 `a` 列出「日」、空白上屏首選 |
 | [08](issues/08-m0-keys-and-paging.md) | 07 | Backspace、Esc、數字選字、翻頁；`ar` → 問 |
 
 02–05 只被 01 擋，可並行；一個一個做時照編號。
