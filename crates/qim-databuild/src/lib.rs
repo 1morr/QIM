@@ -14,12 +14,14 @@ pub mod verify;
 pub use error::Error;
 pub use pipeline::{Outcome, run};
 
+use std::collections::BTreeMap;
+
 use qim_core::{Pack, Scheme};
 
-/// 由 libcangjie 的列與方案建速成資料包。
-pub fn build_pack(rows: &[libcangjie::Row], scheme: Scheme) -> Pack {
+/// 由 libcangjie 的列、Unihan `kGradeLevel` 與方案建速成資料包。
+pub fn build_pack(rows: &[libcangjie::Row], grades: &BTreeMap<char, u8>, scheme: Scheme) -> Pack {
     Pack {
         scheme,
-        code_table: quick::code_table(rows),
+        code_table: quick::code_table(rows, grades),
     }
 }

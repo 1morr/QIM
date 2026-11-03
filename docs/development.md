@@ -47,7 +47,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 `cargo xtask data` 用 release 編 `qim-databuild` 並在 repo 根目錄執行，步驟見 plan §4：
 
 - 來源列在 `data/sources.toml`：每個來源釘 `version`（git 來源填 commit，其他填上游版本號）與每個檔的 sha256。下載到 `.cache/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 version、url 與 sha256，快取路徑跟著換。
-- 進資料包的來源要寫 `license_file` 與 `license_statement`：照抄上游的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`。只用來驗證的來源（Unihan）不寫。
+- 進資料包的來源要寫 `license_file` 與 `license_statement`：照抄上游的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`。Unihan 的 `kGradeLevel` 進速成資料包，所以 Unihan 也要寫：`license.txt` 是 Unicode License V3 全文，版權年份每年改，改了就照新檔更新 sha256 與 `license_statement`。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<方案 id>/` 下的 `<方案 id>.pack`、`LICENSE`、`NOTICE`。資料包格式定義在 `crates/qim-core/src/pack.rs`，改格式時加 `FORMAT_VERSION`。
 
@@ -55,7 +55,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 ### Unihan 交叉比對
 
-`--verify` 另外下載 Unihan（`Unihan.zip`，只在驗證時用、不進資料包），拿 `Unihan_DictionaryLikeData.txt` 的 `kCangjie` 與 libcangjie 的倉頡三代碼比對，抓 libcangjie 的錯碼。兩邊都有碼的字才比；Unihan 的碼等於該字任一個三代碼就算相同。差異只寫報表、不影響 `verify` 結果。摘要一行：
+每次建置都讀 Unihan（`Unihan.zip`）的 `kGradeLevel` 排字序；`--verify` 另外拿 `Unihan_DictionaryLikeData.txt` 的 `kCangjie` 與 libcangjie 的倉頡三代碼比對，抓 libcangjie 的錯碼。兩邊都有碼的字才比；Unihan 的碼等於該字任一個三代碼就算相同。差異只寫報表、不影響 `verify` 結果。摘要一行：
 
 ```text
 Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> 字等於五代碼），報表 build/reports/unihan-kcangjie.tsv（不影響 verify 結果）

@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 	await text.focus();
 });
 
-// 沒有字頻前字序照 Big5，「問」不一定在 `ar` 第一頁（spec〈範圍〉）。
+// 字序之後會加字頻，不寫死「問」在 `ar` 的第幾頁第幾位。
 test("打 ar 翻頁找到「問」，用數字鍵上屏", async ({ page }, testInfo) => {
 	const { text, composition, items } = ui(page);
 	await page.keyboard.type("ar");
@@ -58,12 +58,32 @@ test("- = 與 PageUp PageDown 翻頁", async ({ page }, testInfo) => {
 	await expect(items).toHaveText(first);
 });
 
-// `a` 的首選是「曰」、「日」第 2（M0 票 07 Comments）。
-test("打 a 再按 2 上屏「日」", async ({ page }) => {
+// `a` 只有「日」「曰」兩個字（M0 票 08b Comments）。
+test("打 a 再按 2 上屏第 2 個「曰」", async ({ page }) => {
 	const { text, composition } = ui(page);
 	await page.keyboard.type("a2");
-	await expect(text).toHaveValue("日");
+	await expect(text).toHaveValue("曰");
 	await expect(composition).toHaveText("");
+});
+
+test("翻頁後按空白，上屏第一頁的首選", async ({ page }, testInfo) => {
+	const { text, composition, items } = ui(page);
+	await page.keyboard.type("ar");
+	const first = await items.allTextContents();
+	// 候選的文字是數字標籤加字，如「1問」。
+	const top = first[0].slice(1);
+
+	await page.keyboard.press("=");
+	await expect(items).not.toHaveText(first);
+	await page.screenshot({
+		path: testInfo.outputPath("space-after-paging.png"),
+	});
+	await page.keyboard.type(" ");
+	await expect(text).toHaveValue(top);
+	await expect(composition).toHaveText("");
+	await page.screenshot({
+		path: testInfo.outputPath("space-after-paging-committed.png"),
+	});
 });
 
 test("Backspace 刪一碼、Esc 清空組字，沒有組字時交給輸入框", async ({
@@ -73,7 +93,7 @@ test("Backspace 刪一碼、Esc 清空組字，沒有組字時交給輸入框", 
 	await page.keyboard.type("ar");
 	await page.keyboard.press("Backspace");
 	await expect(composition).toHaveText("a");
-	await expect(items.first()).toHaveText("1曰");
+	await expect(items.first()).toHaveText("1日");
 	await page.screenshot({ path: testInfo.outputPath("backspace.png") });
 
 	await page.keyboard.press("Escape");
@@ -82,9 +102,9 @@ test("Backspace 刪一碼、Esc 清空組字，沒有組字時交給輸入框", 
 	await expect(text).toHaveValue("");
 
 	await page.keyboard.type("a 1-");
-	await expect(text).toHaveValue("曰1-");
+	await expect(text).toHaveValue("日1-");
 	await page.keyboard.press("Backspace");
 	await page.keyboard.press("Backspace");
-	await expect(text).toHaveValue("曰");
+	await expect(text).toHaveValue("日");
 	await expect(composition).toHaveText("");
 });

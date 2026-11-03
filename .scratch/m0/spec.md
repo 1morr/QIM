@@ -15,7 +15,7 @@ repo 骨架與閘門就位；資料管線產出速成碼表資料包；在網頁
 - 資料管線 v0（plan §4、§4.1 步驟 1–4、§4.5）：
   - `data/sources.toml` 釘 libcangjie `346026b` 與 Unihan（版本與 sha256 在票內釘）。
   - `qim-databuild` 下載到 `.cache/sources/` 並核對 sha256。
-  - 推導速成碼表：三代與五代的聯集，連打字集與擴展區分開標記，字序依 libcangjie 的 Big5 排序值（還沒有字頻）。
+  - 推導速成碼表：三代與五代的聯集，連打字集與擴展區分開標記，字序先看 Unihan `kGradeLevel` 再看 libcangjie 的 Big5 排序值（還沒有字頻，票 08b）。
   - `data/schemes/quick.toml` 由 `qim-databuild` 編進資料包，`qim-core` 不讀 TOML（plan §2.5）。
   - 資料包用 `postcard`，帶格式版本號，旁邊放 `LICENSE` 與 `NOTICE`。
   - `cargo xtask data` 與 `--verify` 跑 §4.5 全部檢查；Unihan 交叉比對只出報表、不擋建置。
@@ -48,7 +48,7 @@ repo 骨架與閘門就位；資料管線產出速成碼表資料包；在網頁
 - `cargo xtask check` 綠燈；pre-commit 與 commit-msg hook 依 `docs/development.md` 啟用後，違規的 commit message 被擋。
 - `deps`、progress、spec 閘門各自在變異副本上會紅、在無關改動上不紅。
 - `cargo xtask data --verify` 綠燈；報告列出連打字集字數、擴展區字數、Unihan 差異數；同樣的來源建兩次，資料包 sha256 相同。
-- Playwright 在網頁打 `a` 讀回候選含「日」，按空白讀回輸入框為首選「曰」（Big5 序排在「日」前），按 `a` `2` 讀回「日」；打 `ar` 讀回候選含「問」（必要時翻頁）；截圖存證。
+- Playwright 在網頁打 `a` 讀回候選含「日」，按空白讀回輸入框為「日」；打 `ar` 讀回候選含「問」（必要時翻頁）；翻頁後按空白上屏全部候選的第一個；截圖存證。
 - progress.md 依〈寫法與封存〉封存 M0、M1 標為進行中之前，以上全部成立。
 
 ## 票序

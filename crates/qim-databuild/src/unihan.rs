@@ -1,4 +1,5 @@
-//! Unihan `kCangjie` 與 libcangjie 倉頡三代碼的交叉比對（plan §4.5）：只出報表，不擋建置。
+//! Unihan 的兩個用途：`kGradeLevel` 給速成碼表排字序（plan §4.1）；`kCangjie` 與
+//! libcangjie 倉頡三代碼交叉比對（plan §4.5），只出報表，不擋建置。
 //!
 //! 研究顯示 `kCangjie` 對應三代（`docs/research/data-sources.md`），所以只和第 12 欄比。
 
@@ -9,7 +10,7 @@ use std::io::Read;
 use crate::Error;
 use crate::libcangjie::Row;
 
-/// `Unihan.zip` 裡放 `kCangjie` 的檔。
+/// `Unihan.zip` 裡放 `kCangjie` 與 `kGradeLevel` 的檔。
 pub const ARCHIVE_ENTRY: &str = "Unihan_DictionaryLikeData.txt";
 
 /// 從 `Unihan.zip` 的位元組取出 [`ARCHIVE_ENTRY`] 的內容。
@@ -22,9 +23,29 @@ pub fn read_archive(zip: &[u8]) -> Result<String, Error> {
     Ok(text)
 }
 
-/// 取出 `kCangjie` 欄：字到小寫的倉頡碼。格式見 UAX #38：`U+XXXX<tab>欄位<tab>值`，
-/// `#` 開頭是註解；`kCangjie` 的值是一串大寫字母。
+/// 取出 `kCangjie` 欄：字到小寫的倉頡碼。`kCangjie` 的值是一串大寫字母（UAX #38）。
 pub fn parse(text: &str) -> Result<BTreeMap<char, String>, Error> {
+    field(text, "kCangjie", |v| {
+        (!v.is_empty() && v.bytes().all(|b| b.is_ascii_uppercase()))
+            .then(|| v.to_ascii_lowercase())
+            .ok_or("應是一串大寫字母")
+    })
+}
+
+/// 取出 `kGradeLevel` 欄：字到香港小學的年級 1–6（UAX #38，出自《朗文初級中文詞典》2001）。
+pub fn grade_levels(text: &str) -> Result<BTreeMap<char, u8>, Error> {
+    field(text, "kGradeLevel", |v| match v.as_bytes() {
+        [d @ b'1'..=b'6'] => Ok(d - b'0'),
+        _ => Err("應是 1–6"),
+    })
+}
+
+/// 取出一個欄位。格式見 UAX #38：`U+XXXX<tab>欄位<tab>值`，`#` 開頭是註解。
+fn field<T>(
+    text: &str,
+    name: &str,
+    value_of: impl Fn(&str) -> Result<T, &'static str>,
+) -> Result<BTreeMap<char, T>, Error> {
     let mut out = BTreeMap::new();
     for (i, line) in text.lines().enumerate() {
         if line.is_empty() || line.starts_with('#') {
@@ -32,7 +53,7 @@ pub fn parse(text: &str) -> Result<BTreeMap<char, String>, Error> {
         }
         let mut fields = line.split('\t');
         let (codepoint, field, value) = (fields.next(), fields.next(), fields.next());
-        if field != Some("kCangjie") {
+        if field != Some(name) {
             continue;
         }
         let invalid =
@@ -42,13 +63,11 @@ pub fn parse(text: &str) -> Result<BTreeMap<char, String>, Error> {
             .and_then(|hex| u32::from_str_radix(hex, 16).ok())
             .and_then(char::from_u32)
             .ok_or_else(|| invalid(format!("碼位不合格式：{codepoint:?}")))?;
-        let code = match (value, fields.next()) {
-            (Some(v), None) if !v.is_empty() && v.bytes().all(|b| b.is_ascii_uppercase()) => {
-                v.to_ascii_lowercase()
-            }
-            _ => return Err(invalid(format!("kCangjie 應是一串大寫字母：{line:?}"))),
+        let value = match (value, fields.next()) {
+            (Some(v), None) => value_of(v).map_err(|e| invalid(format!("{name} {e}：{line:?}")))?,
+            _ => return Err(invalid(format!("{name} 應是一個值：{line:?}"))),
         };
-        out.insert(text, code);
+        out.insert(text, value);
     }
     Ok(out)
 }

@@ -14,7 +14,7 @@
 
 | 里程碑 | 票目錄 | 拆票前讀 | 備註 |
 | --- | --- | --- | --- |
-| M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 進行中。已拆 8 張票，票序見 `.scratch/m0/spec.md` |
+| M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 進行中。已拆 10 張票，票序見 `.scratch/m0/spec.md` |
 | M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006 | 未開始 |
 
 ## Session 紀錄
@@ -50,6 +50,7 @@
 | 2026-11-03 | M0 08 | Backspace、Esc、數字選字、翻頁（`-` / `=`）；`ar` 第二頁選到「問」、`a` `2` 上屏「日」，性質測試進 `qim-core`；細節見票 | 等使用者：M0 收尾（驗收、封存、M1 標成進行中）另外處理，之後新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 | 2026-11-03 | M0 09 | 協調者跑完票 01–08；開收尾票 09：問三個待決定、里程碑 code-review、重驗驗收、封存 M0 | 新 session 下 `/implement .scratch/m0/issues/09-m0-close.md` |
 | 2026-11-03 | M0 08b | 使用者定 `a` 首選「日」、空白一律上屏首選、暫不用 wayfinder；開 08b 做前兩項，09 改由 08b 擋 | 新 session 下 `/implement .scratch/m0/issues/08b-m0-order-and-space.md` |
+| 2026-11-04 | M0 08b | 字序加 Unihan `kGradeLevel`（使用者選），`a` 首選「日」、`ar` 的「問」到第 1 頁；空白一律上屏首選；細節見票 | 新 session 下 `/implement .scratch/m0/issues/09-m0-close.md` |
 
 ## 偏差與決定
 
@@ -80,3 +81,5 @@
 - 2026-11-03 M0 票 07：`a` 的首選是「曰」不是「日」（libcangjie Big5 排序值 23060 < 23061），M0 沒有字頻；空白上屏首選，「日」改由票 08 的數字鍵驗收；spec 驗收同步改。
 - 2026-11-03 M0 票 07：plan §2.1 的 `Snapshot` 加 `handled`（核心是否吃下這個鍵，同 librime `process_key` 的回傳值），殼才知道沒有組字時把空白交還宿主。
 - 2026-11-03 M0 票 08：翻頁後空白上屏目前頁的第一個，brief §4.3 與名詞表「候選頁」同步改：使用者翻到這頁就是在看這頁。
+- 2026-11-04 M0 票 08b：字序改為連打字集 → Unihan `kGradeLevel` 年級 → Big5（使用者選，plan §4.1）；M1 字頻排在年級前。Unihan 因此進速成資料包，plan §4 授權檔的措辭改成指不同資料包。
+- 2026-11-04 M0 票 08b：推翻票 08 的「翻頁後空白上屏目前頁的第一個」，空白一律上屏全部候選的第一個（使用者決定）；brief §4.3、名詞表「候選頁」同步改。
