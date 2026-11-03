@@ -8,6 +8,7 @@
 | --- | --- |
 | `rime.md` | librime 架構、Rime 速成方案、三個案例的根因與復現 |
 | `open-source-imes.md` | afm-ime、qingjian、Wisdom-Weasel、Fcitx5 / libime、FlorisBoard、AnySoftKeyboard、Trime、Hamster 等 |
+| `qingjian.md` | 青簡宣傳影片與 `97dde30` 原始碼：知意 / 通变模型、評測、糾錯、隱私 |
 | `closed-source-imes.md` | Gboard、iOS / macOS、Microsoft、搜狗的公開資料與黑箱測試表 |
 | `platform-frameworks.md` | 五個平台的輸入法框架能做與不能做的事 |
 | `data-sources.md` | 碼表、詞庫、字頻、語料、英文詞表、OpenCC 的來源與授權 |

@@ -281,7 +281,8 @@ QIM（暫名）。
 - Keyboard Designer（Android）可自由擺放按鍵並設定尺寸、標籤、顏色、邊框；官網沒提重疊、格線與吸附。[Keyboard Designer](https://www.keyboarddesigner.com)，2026-10-31 查。
 - iOS 鍵盤不能畫到鍵盤上緣之外；`needsInputModeSwitchKey` 為真時要自己提供切換鍵盤的按鈕。[App Extension Programming Guide](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/CustomKeyboard.html)、[needsInputModeSwitchKey](https://developer.apple.com/documentation/uikit/uiinputviewcontroller/needsinputmodeswitchkey)。
 - 開源佈局格式（FlorisBoard、Trime、Hamster、AnySoftKeyboard、HeliBoard）都只支援矩形按鍵。`docs/research/open-source-imes.md` §4。
-- 青簡的神經重排：詞圖 Viterbi 出前 6 條路徑，停鍵 80 ms 後在背景執行緒重排（candle，字級 Transformer，23M / 36M 參數，56 MB fp16，Metal 首次編譯 12 秒）。8,322 句拼音集上整句首選：bigram 37.6%、神經重排 41.9%、自由生成 51.9%（前五 73.5%，平均 130–200 ms，最慢 2.4 秒，未進產品）。行動端未查證。`docs/research/open-source-imes.md` §3。
+- 青簡（0.3.2）的兩個可選本地模型都在停鍵後（macOS 80 ms、Windows 30 ms）非同步改首選：知意（mmBERT-small 12 層加選詞頭，權重 Apache-2.0，Windows int8 ONNX 70 MB）讀游標前文，在前 5 / 9 / 18 條中挑首選；通变（自研 P2C，43 MB）在乾淨拼音 6 音節以上時把生成句排第一。作者開發集首選：通变 59.1%、知意 75.0%（含 79 MB 三元模型）。只防「翻過頁就不換」與過期結果，按空白時整句還沒換上的問題仍在。評測資料不入庫。`docs/research/qingjian.md` §4、§5。
+- 青簡沒有倉頡、速成；繁體是簡體核心在出口用 OpenCC 轉字形。拼寫糾錯只算一處編輯，替換限 QWERTY 鄰鍵，每段都讀得通時照原樣、糾正只當備選。`docs/research/qingjian.md` §6。
 - CyIME 九宮格拼音（自測）：真實聊天 130 句整段首選，原算法 54、詞級 bigram 92、詞級 trigram 97；trigram 203 MB，剪枝版 105 MB、約低 3 個百分點，每鍵約 5–7 ms，可選下載。34 MB 的神經整句重排因提升小、拖慢打字、停頓後改動候選而停用。GPL-3.0。`docs/research/cyime.md` §3。
 - CyIME 的外掛是 Lua 腳本，主要用於工具面板、線上語音、同步；模型和方案不走外掛。唯一進按鍵路徑的候選變換有 15 ms 硬超時、連續 3 次超時熔斷。它的審計記下新增一個能力要動 6 處。`docs/research/cyime.md` §2。
 - App Review 2.5.2 禁止下載或執行會引入、改變功能的程式碼；4.7 允許 HTML5 與 JavaScript 的 mini app、聊天機器人與外掛等不內嵌於二進位的軟體，但開發者要對其負責，並提供索引、內容檢舉，不得未經許可開放原生 API，每次分享資料都要使用者同意。[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)，2026-10-31 查。

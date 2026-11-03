@@ -117,6 +117,8 @@
 
 ### qingjian（qingjian-team/qingjian）
 
+> 2026-11-03 已以 `97dde30` 重查，模型、評測與隱私的部分以 `qingjian.md` 為準，過時處見該檔 §11。
+
 #### 2.0 定位
 
 跨平台輸入法，**Rust 自研 Core，不用 librime**（`docs/design/landscape.md`：「青简的『Core + 薄壳』架构与 Rime 相同」，雾凇 GPL 詞庫已移除）。平台殼：macOS IMK、Windows TSF（DLL + Server 進程）、Linux Fcitx5/Fcitx4/IBus、Android InputMethodService（Kotlin 自繪鍵盤 + Rust JNI `.so`）。iOS 在 roadmap 尚未做（`docs/plan/roadmap.md` 第 176 行）。
