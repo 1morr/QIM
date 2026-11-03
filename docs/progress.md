@@ -43,6 +43,7 @@
 | 2026-11-03 | M0 01 | workspace、`qim-core` 空殼、`cargo xtask check`（`--fast` 跳過 test）、`web/` 空殼、pre-commit、`docs/development.md`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/02-deps-gate.md` |
 | 2026-11-03 | M0 02 | `deps` 閘門：白名單在 `xtask/src/deps.rs` 的 `RULES`，測試比對 plan §1.3 表；斷詞掃 `qim-core`、`qim-layout` 的 `src/`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/03-commit-msg-gate.md` |
 | 2026-11-03 | M0 03 | commit-msg 閘門：`cargo xtask commit-msg`、`.githooks/commit-msg`；合併中放行；細節見票 | 新 session 下 `/implement .scratch/m0/issues/04-docs-gates.md` |
+| 2026-11-03 | M0 04 | 文件閘門：`cargo xtask check` 的 `docs` 步驟守 progress 與 spec 規則（plan §6），變異測試用內建範本；細節見票 | 新 session 下 `/implement .scratch/m0/issues/05-quick-code-table-pack.md` |
 
 ## 偏差與決定
 
@@ -67,3 +68,4 @@
 - 2026-11-03 M0 拆票：plan §7.1 的三項拆成 8 張票（閘門一張做不完）；加翻頁，因為沒有字頻時「問」可能不在 `ar` 第一頁；字根提示資料包延到 M1，M0 沒有功能用到。
 - 2026-11-03 M0 票 02：plan §1.3 表改成具體名字：綁定工具寫死 `wasm-bindgen` / `uniffi`，`qim-databuild` / `qim-bench` 外部 crate 不限；workspace crate 任何依賴都要在「可以依賴」欄，比票寫的嚴（理由見票）。
 - 2026-11-03 M0 票 03：commit-msg 閘門在 `git merge` 進行中一律放行（使用者決定）：ticket-coordinator 的 `merge: ticket NN slug` 不在 type 清單，否則每次合併票都被擋。
+- 2026-11-03 M0 票 04：封存里程碑與把下一個標成進行中改在同一個 commit，封存 session 的紀錄標新里程碑：文件閘門要求剛好一個進行中的里程碑，中間不留空檔。
