@@ -10,6 +10,18 @@
 - `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
 - `GLOSSARY.md`、`docs/adr/`：名詞表與架構決定，由 `/grill-with-docs` 按需建立；命名一律用名詞表的詞。
 
+## 目錄
+
+| 路徑 | 內容 |
+| --- | --- |
+| `crates/` | Rust crate；各 crate 的職責與依賴規則見 plan §1.2、§1.3 |
+| `xtask/` | 閘門與開發指令（`cargo xtask check`），用法見 `docs/development.md` |
+| `web/` | 網頁 prototype（Vite + TypeScript + Biome） |
+| `docs/` | brief、plan、progress、`development.md`、ADR、研究 |
+| `.scratch/` | 里程碑的 spec 與票 |
+| `.githooks/` | git hook，啟用方式見 `docs/development.md` |
+| `scripts/` | 腳本；設計實驗在 `scripts/experiments/` |
+
 ## 每個 session 的流程
 
 工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由使用者在新 session 下 `/to-tickets docs/plan.md 拆 <里程碑> 的票` 產生（見〈Skills〉）。一個 session 只做一張票。

@@ -1,0 +1,3 @@
+#!/bin/sh
+# 快速版檢查；完整檢查與跳過的步驟見 docs/development.md〈全部檢查〉。
+exec cargo xtask check --fast
