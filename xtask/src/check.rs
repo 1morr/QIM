@@ -67,10 +67,10 @@ pub fn steps(fast: bool) -> Vec<Step> {
         .collect()
 }
 
-/// 依序執行 `steps`，`exec` 回傳該步驟是否通過；遇到第一個失敗就停，回傳它的名字。
-pub fn run(steps: &[Step], mut exec: impl FnMut(&Step) -> bool) -> Result<(), &'static str> {
-    for step in steps {
-        if !exec(step) {
+/// 依序執行 `plan`，`execute_step` 回傳該步驟是否通過；遇到第一個失敗就停，回傳它的名字。
+pub fn run(plan: &[Step], mut execute_step: impl FnMut(&Step) -> bool) -> Result<(), &'static str> {
+    for step in plan {
+        if !execute_step(step) {
             return Err(step.name);
         }
     }
@@ -149,5 +149,72 @@ mod tests {
     #[test]
     fn fast_check_skips_only_cargo_test() {
         assert_eq!(names(&steps(true)), ["fmt", "clippy", "tsc", "biome"]);
+    }
+
+    /// 從 `docs/development.md`〈全部檢查〉的表格讀出 (步驟名, `--fast` 是否跑)。
+    /// 步驟名是第一欄以反引號包住的字，`--fast` 是最後一欄的「跑」或「跳過」。
+    fn documented_steps(markdown: &str) -> Vec<(String, bool)> {
+        markdown
+            .split("\n## ")
+            .find(|section| section.starts_with("全部檢查"))
+            .into_iter()
+            .flat_map(str::lines)
+            .filter_map(|line| {
+                let cells: Vec<&str> = line
+                    .trim()
+                    .strip_prefix('|')?
+                    .strip_suffix('|')?
+                    .split('|')
+                    .map(str::trim)
+                    .collect();
+                let name = cells.first()?.strip_prefix('`')?.strip_suffix('`')?;
+                let fast = match *cells.last()? {
+                    "跑" => true,
+                    "跳過" => false,
+                    _ => return None,
+                };
+                Some((name.to_owned(), fast))
+            })
+            .collect()
+    }
+
+    const DEVELOPMENT_MD: &str = include_str!("../../docs/development.md");
+
+    /// 程式碼裡的步驟，以 (名字, `--fast` 是否跑) 表示，與文件表格比對。
+    fn coded_steps() -> Vec<(String, bool)> {
+        steps(false)
+            .iter()
+            .map(|step| (step.name.to_owned(), !step.slow))
+            .collect()
+    }
+
+    #[test]
+    fn development_md_lists_every_step_as_coded() {
+        assert_eq!(documented_steps(DEVELOPMENT_MD), coded_steps());
+    }
+
+    #[test]
+    fn missing_or_wrong_row_in_development_md_is_caught() {
+        let missing = DEVELOPMENT_MD.replace("| `tsc` |", "| tsc-removed |");
+        assert_ne!(documented_steps(&missing), coded_steps());
+
+        let wrong_fast = DEVELOPMENT_MD.replace(
+            "| `cargo test --workspace` | 跳過 |",
+            "| `cargo test --workspace` | 跑 |",
+        );
+        assert_ne!(documented_steps(&wrong_fast), coded_steps());
+    }
+
+    #[test]
+    fn unrelated_edits_to_development_md_are_not_flagged() {
+        let edited = DEVELOPMENT_MD
+            .replace("| --- | --- | --- |", "|:---|:---|:---:|")
+            .replace("每張票收尾時照跑", "每張票收尾時都照跑")
+            .replace(
+                "| `fmt` | `cargo fmt --all --check` | 跑 |",
+                "|  `fmt`  |  cargo fmt  |  跑  |",
+            );
+        assert_ne!(edited, DEVELOPMENT_MD);
+        assert_eq!(documented_steps(&edited), coded_steps());
     }
 }

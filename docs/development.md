@@ -52,4 +52,4 @@ cargo xtask check
 
 格式自動修正：`cargo fmt --all`、`npm run --prefix web lint -- --write`。
 
-步驟定義在 `xtask/src/check.rs`；加步驟時同輪更新上表。
+步驟定義在 `xtask/src/check.rs`；加步驟時同輪更新上表，`cargo test` 會比對兩邊的步驟名與 `--fast` 欄。
