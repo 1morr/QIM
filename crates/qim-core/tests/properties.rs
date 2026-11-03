@@ -6,7 +6,7 @@ use proptest::prelude::*;
 use qim_core::{CodeEntry, CodeTable, Engine, Key, Pack, Scheme, Session, UserModel};
 
 /// 輸入碼 → 字；碼含超過 `max_code_length` 的，字有重複的。
-fn code_table() -> impl Strategy<Value = BTreeMap<String, Vec<char>>> {
+fn random_table() -> impl Strategy<Value = BTreeMap<String, Vec<char>>> {
     prop::collection::btree_map(
         "[abc]{1,3}",
         prop::collection::vec(prop::char::range('一', '十'), 1..20),
@@ -52,7 +52,7 @@ fn engine(table: &BTreeMap<String, Vec<char>>) -> Engine {
 proptest! {
     #[test]
     fn every_candidate_has_a_code_equal_to_the_current_input(
-        table in code_table(),
+        table in random_table(),
         keys in prop::collection::vec(key(), 0..40),
     ) {
         // 字 → 它的所有碼，直接由生成的碼表建，不經核心。

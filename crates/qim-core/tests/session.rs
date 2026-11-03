@@ -253,3 +253,20 @@ fn input_longer_than_max_code_length_has_no_candidates_and_space_does_not_commit
     let back = ime.press(Key::Backspace);
     assert_eq!(back.composition.input, "aa");
 }
+
+#[test]
+fn space_after_paging_commits_the_first_candidate_on_the_current_page() {
+    let mut ime = Ime::new();
+    ime.press(Key::Letter('a'));
+    ime.press(Key::PageDown);
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("旬"));
+}
+
+#[test]
+fn paging_counts_as_a_candidate_change_only_when_the_page_moves() {
+    let mut ime = Ime::new();
+    let typed = ime.press(Key::Letter('a')).generation;
+    let turned = ime.press(Key::PageDown).generation;
+    assert_ne!(turned, typed);
+    assert_eq!(ime.press(Key::PageDown).generation, turned);
+}

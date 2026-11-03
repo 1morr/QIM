@@ -105,54 +105,56 @@ pub struct Session {
 
 impl Session {
     pub fn handle(&mut self, engine: &Engine, _user: &mut UserModel, key: Key) -> Snapshot {
+        if let Key::Letter(c) = key
+            && engine.scheme.alphabet.contains(c)
+        {
+            self.input.push(c);
+            self.refresh_candidates(engine);
+            return self.snapshot(true, None);
+        }
+        // 沒有組字時其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
+        if self.input.is_empty() {
+            return self.snapshot(false, None);
+        }
         match key {
-            Key::Letter(c) if engine.scheme.alphabet.contains(c) => {
-                self.input.push(c);
-                self.look_up(engine);
-                self.snapshot(true, None)
-            }
-            Key::Backspace if !self.input.is_empty() => {
+            Key::Backspace => {
                 self.input.pop();
-                self.look_up(engine);
+                self.refresh_candidates(engine);
                 self.snapshot(true, None)
             }
-            Key::Space if !self.input.is_empty() => {
-                let commit = self.candidates.first().cloned();
-                if commit.is_some() {
-                    self.clear();
-                }
-                self.snapshot(true, commit)
-            }
-            Key::Digit(digit) if !self.input.is_empty() => {
-                let commit = usize::from(digit)
-                    .checked_sub(1)
-                    .and_then(|i| self.page_candidates().get(i))
-                    .cloned();
-                if commit.is_some() {
-                    self.clear();
-                }
-                self.snapshot(true, commit)
-            }
-            Key::PageUp if !self.input.is_empty() => {
-                self.page = self.page.saturating_sub(1);
-                self.snapshot(true, None)
-            }
-            Key::PageDown if !self.input.is_empty() => {
-                if self.has_more() {
-                    self.page += 1;
-                }
-                self.snapshot(true, None)
-            }
-            Key::Escape if !self.input.is_empty() => {
+            Key::Escape => {
                 self.clear();
                 self.snapshot(true, None)
             }
+            Key::Space => self.commit_at(0),
+            Key::Digit(digit) => match usize::from(digit).checked_sub(1) {
+                Some(index) => self.commit_at(index),
+                None => self.snapshot(true, None),
+            },
+            Key::PageUp if self.page > 0 => self.turn_to(self.page - 1),
+            Key::PageDown if self.has_more() => self.turn_to(self.page + 1),
+            Key::PageUp | Key::PageDown => self.snapshot(true, None),
             _ => self.snapshot(false, None),
         }
     }
 
-    /// 整串輸入碼查碼表，候選回到第一頁；超過方案的最長碼時沒有候選（連打是 M1）。
-    fn look_up(&mut self, engine: &Engine) {
+    /// 上屏目前頁第 `index` 個候選並清空組字；沒有該位置時不動作，鍵照樣吃下。
+    fn commit_at(&mut self, index: usize) -> Snapshot {
+        let commit = self.page_candidates().get(index).cloned();
+        if commit.is_some() {
+            self.clear();
+        }
+        self.snapshot(true, commit)
+    }
+
+    fn turn_to(&mut self, page: usize) -> Snapshot {
+        self.page = page;
+        self.generation += 1;
+        self.snapshot(true, None)
+    }
+
+    /// 輸入碼變了：整串查碼表、回到第一頁；超過方案的最長碼時沒有候選（連打是 M1）。
+    fn refresh_candidates(&mut self, engine: &Engine) {
         self.candidates = if self.input.chars().count() > usize::from(engine.scheme.max_code_length)
         {
             Vec::new()

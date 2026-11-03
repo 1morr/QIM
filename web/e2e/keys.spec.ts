@@ -44,6 +44,7 @@ test("- = 與 PageUp PageDown 翻頁", async ({ page }, testInfo) => {
 	const { items } = ui(page);
 	await page.keyboard.type("ar");
 	const first = await items.allTextContents();
+	await page.screenshot({ path: testInfo.outputPath("page-1.png") });
 
 	await page.keyboard.press("=");
 	await expect(items).not.toHaveText(first);
