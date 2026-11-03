@@ -20,3 +20,6 @@ Thumbs.db
 /.cache/
 /build/
 /web/public/packs/
+
+# 個人集：使用者的學習資料與句子，只在本機（plan §5.2）
+/bench/personal/

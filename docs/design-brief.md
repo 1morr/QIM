@@ -212,7 +212,7 @@ QIM（暫名）。
 - 記憶體：iOS 鍵盤擴充常駐暫定 ≤ 30 MB，平台可行性實驗（plan §7.3）量到真實上限後修訂。
 - 首選正確率：首選字基準。把真實繁體 / 粵語句子機械轉成速成碼，讓核心連打，量整句首選正確率與字正確率；`mir` → 一台、`anr` → 門口等案例為固定必過題。改核心或資料包時必跑，答錯數不得上升。
 - 修正成本：長句首選常會錯（速成每字資訊少，§12.4 的拼音數字可參考），所以同時量打一句平均要選字和翻頁幾次、每字按鍵數，以及打字途中首選跳動多少；修正次數不得上升（plan §5.2）。
-- 基準語料：中文維基與粵語維基抽樣（CC BY-SA 4.0，基準檔單獨標註授權，只放測試資料、不打包進 App）；口語語料（§5.2）；使用者提供的真實句子（去個資，M1 就要有）；使用者回報的案例為固定必過題，持續增加。品質判斷以口語與真實句子為主，維基只防退步。
+- 基準語料：中文維基與粵語維基抽樣（CC BY-SA 4.0，基準檔單獨標註授權，只放測試資料、不打包進 App）；口語語料（§5.2）；使用者 Rime 的學習資料（詞與上屏次數，M1 就要有，只在本機）與選填的真實句子；使用者回報的案例為固定必過題，持續增加。品質判斷以口語與個人集為主，維基只防退步。
 
 ## 10. 發佈與更新
 
@@ -223,7 +223,7 @@ QIM（暫名）。
 ## 11. 待決
 
 - 語言模型升級、小型神經重排、LLM 候選優化各接入到什麼程度：模型階梯實驗後決定（plan §7.8）。
-- Common Voice 粵語句子能否用於訓練與基準：標 CC0-1.0，但資料說明另寫不得轉發資料集，M1 票 03 讀完條款後定（§12.1）。
+- Common Voice 粵語句子能否用於訓練與基準：標 CC0-1.0，但資料說明另寫不得轉發資料集，M1〈語料管線〉開工時讀完條款後定（§12.1）。
 - LGPL 資料、以 CC BY-SA 語料訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 沒有付費帳號時，iOS 鍵盤擴充能否用免費佈建在實機上跑、App Group 能否使用：平台可行性實驗開工時查證（plan §7.3）。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
@@ -262,6 +262,7 @@ QIM（暫名）。
 - 使用者詞熱度隨上屏次數指數衰減，時間常數 200 次。`src/rime/algo/dynamics.h`、`src/rime/dict/user_dictionary.cc:425-457`。
 - rime-quick `45d0690`（2026-07-17）拿掉 `min_phrase_weight: 100`，八股文全部約 49.8 萬條多字詞進碼表，含權重 0 的詞。
 - 三案例根因：`anr` 的「問」是倉頡全碼、與「門口」同長而比詞頻（50737 > 9435）；`mir` 的「一台」不在詞庫，且精確詞條（䂖、一店、歹口）擋掉造句；只保留速成碼後 `anr` 首選變「門口」。`docs/research/rime.md` §4，復現：`scripts/experiments/rime-cases/`。
+- 使用者資料同步把每個使用者詞典寫成純文字 `<詞典名>.userdb.txt`，放在 `sync_dir/<user_id>/`（`user_id` 即 `installation.yaml` 的 `installation_id`）。每列三欄以 Tab 分隔：輸入碼（每個音節後帶一個空白）、詞、`c=上屏次數 d=衰減值 t=tick`。`c` 為負代表已刪除。librime `e930f57`：`src/rime/dict/user_db.cc:22-25,69-95`、`src/rime/lever/user_dict_manager.cc:51-71`、`src/rime/deployer.cc:150-152`、`src/rime/lever/deployment_tasks.cc:97-107`（`sync_dir` 預設為使用者目錄下的 `sync`）、`src/rime/dict/user_dictionary.cc:443-451`，2026-11-04 查。
 - librime-octagram 外掛為 BSD-3-Clause，語法模型資料 rime-octagram-data 為 LGPL-3.0；繁體字級 / 詞級壓縮模型 10.3 MB / 41.4 MB（release 20260712）。[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)。
 
 ### 12.3 平台框架
