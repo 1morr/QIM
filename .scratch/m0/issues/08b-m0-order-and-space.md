@@ -52,8 +52,8 @@ Blocked by: 08
   - C Unicode 碼位取代 Big5：不用新來源；日 U+65E5 < 曰 U+66F0 只是部首剛好在前，「問」第 2 位、排在罕用字「䦡」後。
   - 「有年級的字在 9 個一頁的第一頁」的比例：現況 294/2564、A 2558、B 2207、C 1078；以年級當常用字的定義，對 A 有利。
 - 2026-11-04 擴展區內也照年級排：規則對兩區一視同仁，擴展區實際上幾乎沒有字有年級。
-- 2026-11-04 Unihan 原本只用來驗證，現在每次建置都讀 `kGradeLevel`、進速成資料包。票寫「授權檔放進 `NOTICE`」，照既有機制改成：`sources.toml` 的 Unihan 釘 `https://www.unicode.org/license.txt` 並照抄 Unicode License V3 全文（它要求整份聲明隨副本），建置時核對後寫進 `LICENSE`；`NOTICE` 列兩個來源與取用的內容。plan §4「不同來源的授權不混在同一個檔」原意是不同資料包不共用授權檔（票 05），措辭改清楚。
-- 2026-11-04 `license.txt` 沒有隨 UCD 版本化的網址，Unicode 每年改版權年份；改了之後乾淨 clone 的建置會 sha256 不符而失敗，要照新檔更新 sha256 與 `license_statement`（`docs/development.md`〈資料建置〉）。舊 commit 也一樣，除非快取裡還有舊檔。
+- 2026-11-04 Unihan 原本只用來驗證，現在每次建置都讀 `kGradeLevel`、進速成資料包。票寫「授權檔放進 `NOTICE`」，照既有機制改成：授權寫進 `LICENSE`，`NOTICE` 列兩個來源與取用的內容。plan §4「不同來源的授權不混在同一個檔」原意是不同資料包不共用授權檔（票 05），措辭改清楚。
+- 2026-11-04 Unicode License V3 要求整份聲明隨副本出現，上游 `https://www.unicode.org/license.txt` 卻沒有版本化網址、每年改版權年份；釘 sha256 下載會讓新 worktree 與舊 commit 的乾淨建置在改版後失敗（使用者要求本票修掉）。改成全文存 `data/licenses/Unicode-3.0.txt`（2026-01-05 版，sha256 `e7a93b00…`），`sources.toml` 加 `license_text` 欄位指向它，建置從 repo 讀、整份寫進 `LICENSE`，不再下載。`license_text` 與 `license_file` 加 `license_statement` 二選一，都寫或都不寫、檔案不存在都讓建置失敗（`tests/run.rs` 三支測試）。
 - 2026-11-04 空白改上屏 `Session` 全部候選的第一個，數字鍵仍選目前頁；`commit_at(index)` 改成 `commit(Option<String>)`，兩個鍵各自決定上屏哪個。e2e 的 `a` `2` 改驗第 2 個「曰」。
 - 2026-11-04 驗收輸出：
   - `cargo xtask data --verify`：連打字集 17611 字、擴展區 57052 字、速成碼 649 個，八項 `[通過]`（含「抽查：a 的首選是「日」」），`verify 通過`，sha256 `31974c80fe810e4d0a24537acb6767346e34f40bac338d8361b44f1963e2125f`。
@@ -61,4 +61,5 @@ Blocked by: 08
   - `cargo xtask check`：各步驟通過，e2e `6 passed`，最後一行 `check 通過`。
   - 截圖：`.scratch/m0/evidence/08b-type-a.png`、`08b-type-a-space.png`、`08b-ar-found.png`、`08b-ar-committed.png`、`08b-space-after-paging.png`、`08b-space-after-paging-committed.png`。
 - 2026-11-04 code-review 已處理：progress 偏差、票 07 Comments；`pipeline.rs` 的 `notice()` 原本寫死兩套平行欄位，改成進資料包的來源清單 `PACKED`，`LICENSE` 與 `NOTICE` 都逐一列；`build` 的四元組改 `Build` 結構；與模組同名的變數改 `dictionary_like`；plan §4 授權檔措辭。
+- 2026-11-04 授權改存 repo 後的驗收：刪掉快取裡的 `license.txt`、`rm -rf build` 後跑兩次 `cargo xtask data --verify`，都是八項 `[通過]`、sha256 `31974c80fe810e4d0a24537acb6767346e34f40bac338d8361b44f1963e2125f`（授權檔不在資料包本體裡，所以與改前相同），快取沒有再出現 `license.txt`；`LICENSE` 裡的 Unicode 段與 `data/licenses/Unicode-3.0.txt` 逐字相同。
 - 2026-11-04 code-review 沒處理的發現：年級表用 `BTreeMap<char, u8>` 從 `build_pack` 傳到 `code_table`，沒有包成型別；只有一個用途，M1 加字頻時再看排序依據要不要收成一個型別。

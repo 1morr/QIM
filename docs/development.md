@@ -47,7 +47,9 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 `cargo xtask data` 用 release 編 `qim-databuild` 並在 repo 根目錄執行，步驟見 plan §4：
 
 - 來源列在 `data/sources.toml`：每個來源釘 `version`（git 來源填 commit，其他填上游版本號）與每個檔的 sha256。下載到 `.cache/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 version、url 與 sha256，快取路徑跟著換。
-- 進資料包的來源要寫 `license_file` 與 `license_statement`：照抄上游的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`。Unihan 的 `kGradeLevel` 進速成資料包，所以 Unihan 也要寫：`license.txt` 是 Unicode License V3 全文，版權年份每年改，改了就照新檔更新 sha256 與 `license_statement`。
+- 進資料包的來源要寫授權，二選一，都寫或都不寫時建置失敗：
+  - `license_file` 加 `license_statement`：照抄上游檔裡的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`（libcangjie）。
+  - `license_text`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 的 `kGradeLevel` 進速成資料包，用 `data/licenses/Unicode-3.0.txt`）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<方案 id>/` 下的 `<方案 id>.pack`、`LICENSE`、`NOTICE`。資料包格式定義在 `crates/qim-core/src/pack.rs`，改格式時加 `FORMAT_VERSION`。
 

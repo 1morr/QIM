@@ -33,14 +33,20 @@ const PACKED: [(&str, &str, &str, &str); 2] = [
     ),
 ];
 
-/// 一個進資料包的來源，授權聲明已核對過。
+/// 一個進資料包的來源，授權已核對過。
 struct Packed<'a> {
     name: &'a str,
     source: &'a Source,
     file: &'a sources::SourceFile,
     used: &'a str,
-    license_file: &'a str,
-    statement: &'a str,
+    license: License,
+}
+
+/// 要寫進資料包 `LICENSE` 的一段授權。
+struct License {
+    /// 這段授權從哪裡來，寫在原文前一行。
+    origin: String,
+    text: String,
 }
 
 /// 建一次的結果；`--verify` 會再建一次比 `bytes`。
@@ -82,20 +88,13 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     let mut packed = Vec::new();
     for (name, id, path, used) in PACKED {
         let source = source_of(id)?;
-        let (license_file, statement) = license_notice(source)?;
-        check_license_statement(
-            source,
-            license_file,
-            statement,
-            &load_text(id, license_file)?,
-        )?;
+        let license = license_of(source, |file| load_text(id, file), |path| read(path))?;
         packed.push(Packed {
             name,
             source,
             file: source.file(path)?,
             used,
-            license_file,
-            statement,
+            license,
         });
     }
 
@@ -158,14 +157,33 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     })
 }
 
-/// 進資料包的來源要寫授權聲明所在的檔與聲明原文。
-fn license_notice(source: &Source) -> Result<(&str, &str), Error> {
-    match (&source.license_file, &source.license_statement) {
-        (Some(file), Some(statement)) => Ok((file, statement)),
+/// 進資料包的來源二選一：照抄上游檔裡的聲明（`license_file` 加 `license_statement`），
+/// 或 repo 裡存一份授權全文（`license_text`）。`upstream` 讀來源檔，`repo` 讀 repo 裡的檔。
+fn license_of(
+    source: &Source,
+    upstream: impl Fn(&str) -> Result<String, Error>,
+    repo: impl Fn(&str) -> Result<String, Error>,
+) -> Result<License, Error> {
+    match (
+        &source.license_file,
+        &source.license_statement,
+        &source.license_text,
+    ) {
+        (Some(file), Some(statement), None) => {
+            check_license_statement(source, file, statement, &upstream(file)?)?;
+            Ok(License {
+                origin: format!("Statement in {file}"),
+                text: statement.clone(),
+            })
+        }
+        (None, None, Some(path)) => Ok(License {
+            origin: format!("Full text, kept in the QIM repository as {path}"),
+            text: repo(path)?,
+        }),
         _ => Err(Error::invalid(
             SOURCES,
             format!(
-                "{} 的資料進資料包，要寫 license_file 與 license_statement",
+                "{} 的資料進資料包，要寫 license_file 加 license_statement，或只寫 license_text",
                 source.repository
             ),
         )),
@@ -199,15 +217,15 @@ fn license(packed: &[Packed]) -> String {
                 "Source: {name}, {repo} ({version})\n\
                  License: {license}\n\
                  \n\
-                 Statement in {file}:\n\
+                 {origin}:\n\
                  \n\
-                 {statement}\n",
+                 {text}\n",
                 name = p.name,
                 repo = p.source.repository,
                 version = p.source.version,
                 license = p.source.license,
-                file = p.license_file,
-                statement = p.statement,
+                origin = p.license.origin,
+                text = p.license.text.trim_end(),
             )
         })
         .collect::<Vec<_>>()

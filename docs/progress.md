@@ -51,6 +51,7 @@
 | 2026-11-03 | M0 09 | 協調者跑完票 01–08；開收尾票 09：問三個待決定、里程碑 code-review、重驗驗收、封存 M0 | 新 session 下 `/implement .scratch/m0/issues/09-m0-close.md` |
 | 2026-11-03 | M0 08b | 使用者定 `a` 首選「日」、空白一律上屏首選、暫不用 wayfinder；開 08b 做前兩項，09 改由 08b 擋 | 新 session 下 `/implement .scratch/m0/issues/08b-m0-order-and-space.md` |
 | 2026-11-04 | M0 08b | 字序加 Unihan `kGradeLevel`（使用者選），`a` 首選「日」、`ar` 的「問」到第 1 頁；空白一律上屏首選；細節見票 | 新 session 下 `/implement .scratch/m0/issues/09-m0-close.md` |
+| 2026-11-04 | M0 08b | 依使用者要求，Unicode 授權全文改存 `data/licenses/`、`sources.toml` 加 `license_text`，不再下載會過期的 `license.txt`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/09-m0-close.md` |
 
 ## 偏差與決定
 

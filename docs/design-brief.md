@@ -240,7 +240,7 @@ QIM（暫名）。
 - libcangjie `data/table.txt`（77,575 列，倉頡三代與五代、HKSCS 旗標）聲明為 Public Domain。[libcangjie](https://gitlab.freedesktop.org/cangjie/libcangjie) `data/README.table.md`。
 - Unihan `kCangjie` 29,189 字，對應倉頡三代，授權 Unicode License v3。[UAX #38](https://www.unicode.org/reports/tr38/)、[Unicode copyright](https://www.unicode.org/copyright.html)。
 - Unihan `kGradeLevel`：香港小學第幾年級要認得這個字（1–6），出自《朗文初級中文詞典》2001，屬 Provisional。18.0.0 有 2,633 字，其中 2,625 字在連打字集；「日」1 年級、「曰」沒有年級。[UAX #38](https://www.unicode.org/reports/tr38/)；字數為本機統計，2026-11-03。
-- Unicode License V3 的全文在 `https://www.unicode.org/license.txt`，沒有隨 UCD 版本化的網址，版權年份每年改（2026-01-05 版為 1991-2026）。[license.txt](https://www.unicode.org/license.txt)，2026-11-03 查。
+- Unicode License V3 的全文在 `https://www.unicode.org/license.txt`，沒有隨 UCD 版本化的網址，版權年份每年改（2026-01-05 版為 1991-2026），所以 QIM 把全文存在 `data/licenses/Unicode-3.0.txt`，不釘下載。[license.txt](https://www.unicode.org/license.txt)，2026-11-03 查。
 - Unihan 18.0.0 `kCangjie` 與 libcangjie `346026b` 的三代碼：兩邊都有碼 29,121 字，2,744 字不同；其中 2,246 字的 Unihan 碼等於 libcangjie 的五代碼，其餘 498 字才是疑似錯碼。本機統計，`cargo xtask data --verify` 的報表，2026-11-03。
 - rime-cangjie、rime-quick、rime-essay 為 LGPL-3.0；`cangjie5.base.dict.yaml` 檔頭卻寫 GPL，上游《五倉世紀》權利人未查明。各 repo LICENSE；`docs/research/rime.md` §3。
 - 繁體詞頻只找到 LGPL 來源：rime-essay（442,688 筆）、libchewing-data（160,462 筆）。教育部國語辭典為 CC BY-ND 3.0 台灣、無頻次。`docs/research/data-sources.md` §5。
