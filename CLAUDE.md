@@ -10,13 +10,25 @@
 - `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
 - `GLOSSARY.md`、`docs/adr/`：名詞表與架構決定，由 `/grill-with-docs` 按需建立；命名一律用名詞表的詞。
 
+## 目錄
+
+| 路徑 | 內容 |
+| --- | --- |
+| `crates/` | Rust crate；各 crate 的職責與依賴規則見 plan §1.2、§1.3 |
+| `xtask/` | 閘門與開發指令（`cargo xtask check`），用法見 `docs/development.md` |
+| `web/` | 網頁 prototype（Vite + TypeScript + Biome） |
+| `docs/` | brief、plan、progress、`development.md`、ADR、研究 |
+| `.scratch/` | 里程碑的 spec 與票 |
+| `.githooks/` | git hook，啟用方式見 `docs/development.md` |
+| `scripts/experiments/` | 設計實驗的腳本 |
+
 ## 每個 session 的流程
 
 工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由使用者在新 session 下 `/to-tickets docs/plan.md 拆 <里程碑> 的票` 產生（見〈Skills〉）。一個 session 只做一張票。
 
 1. 讀 `docs/progress.md` 的 session 紀錄與偏差、該里程碑的 spec，再讀票；只讀票列出的 plan / brief 章節，其他按需讀。
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾 `/code-review <開工時的 commit>`、commit。
-3. 驗證：`docs/development.md`〈全部檢查〉加 test；貼指令輸出。
+3. 驗證：`docs/development.md`〈全部檢查〉（`cargo xtask check`，含 test）；貼指令輸出。
 4. 實作若推翻 plan、brief 或先前的決定，同一 commit 改文件，並在 progress.md「偏差與決定」記一行。只在票內的取捨記到票的 `## Comments`；影響架構的另寫 ADR。
 5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；progress.md 加一列 session 紀錄（做了什麼、下一步，細節留在票裡）；commit。
 

@@ -7,3 +7,8 @@ Thumbs.db
 # 工具產物與本機實驗輸出
 .playwright-mcp/
 /.local/
+
+# 建置產物
+/target/
+/web/node_modules/
+/web/dist/
