@@ -41,3 +41,4 @@ Blocked by: 05
   - 加一種鍵要改四處（`qim_core::Key`、`qim-wasm` 方法、`keys.ts`、`main.ts` 的 `press`）：綁定層不能傳帶資料的 enum，是 plan §1.3 薄綁定的代價。
   - 組字中按 Backspace、數字或 `z` 會直接改到輸入框而組字不清：Backspace、數字是票 08 的範圍。
   - 測試裡的 `Ime` 輔助結構與 `WebSession` 同形：測試不能依賴綁定 crate，保留。
+- 2026-11-04 首選「曰」由票 08b 改掉：字序加 Unihan `kGradeLevel`，`a` 的首選是「日」，空白上屏「日」；見票 08b 的 Comments。

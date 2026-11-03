@@ -19,12 +19,16 @@ path = "data/README.table.md"
 url = "https://gitlab.freedesktop.org/cangjie/libcangjie/-/raw/346026b8ccf4ffdfbe424400edb6a588c0c5ba8e/data/README.table.md"
 sha256 = "5962758f991e9119dddf78391202443731264332ea6b1f013791ba599fcb1b5d"
 
-# 只用來交叉比對 libcangjie 的倉頡三代碼（plan §4.5），不進資料包，所以不寫授權聲明欄。
-# kCangjie 在 zip 裡的 Unihan_DictionaryLikeData.txt；檔頭指向 https://www.unicode.org/terms_of_use.html。
+# kGradeLevel 給速成碼表排字序（plan §4.1），進資料包；kCangjie 只用來交叉比對
+# libcangjie 的倉頡三代碼（plan §4.5）。兩欄都在 zip 裡的 Unihan_DictionaryLikeData.txt，
+# 檔頭指向 https://www.unicode.org/terms_of_use.html，其中 Data Files 適用 Unicode License V3。
 [source.unihan]
 repository = "https://www.unicode.org/Public/18.0.0/ucd/"
 version = "18.0.0"
 license = "Unicode-3.0"
+# Unicode License V3 要求整份版權與許可聲明隨副本出現。上游 https://www.unicode.org/license.txt
+# 沒有版本化的網址、每年改版權年份，釘 sha256 會讓乾淨建置過期失敗，所以全文存在 repo。
+license_text = "data/licenses/Unicode-3.0.txt"
 
 [[source.unihan.files]]
 path = "Unihan.zip"

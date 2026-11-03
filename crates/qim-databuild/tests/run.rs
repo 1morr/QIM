@@ -8,6 +8,7 @@ use qim_databuild::{Error, run};
 
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
+曰 曰 1 1 0 0 1 0 0 0 0 a,ax a,xa NA 23060
 問 问 1 1 0 0 1 0 0 0 0 anr anr NA 20001
 丟 丢 1 1 0 0 1 0 0 0 0 hgi mgi,xxmgi NA 22813
 𠀀 𠀀 1 0 0 0 0 0 0 0 0 a NA NA 0
@@ -24,13 +25,25 @@ Domain, in the hope that is is useful.
 
 const STATEMENT: &str = "The data in the ``table.txt`` file is hereby placed under the Public Domain, in the hope that is is useful.";
 
-/// 日同碼、丟異碼、㐀只在 Unihan：比對 2 字、差異 1 字。
+/// 日同碼、丟異碼、㐀只在 Unihan：比對 2 字、差異 1 字。日有年級，曰沒有（同 Unihan 18.0.0）。
 const KCANGJIE: &str = "\
 # Unihan_DictionaryLikeData.txt
 U+3400\tkCangjie\tTM
 U+4E1F\tkCangjie\tMGI
 U+65E5\tkCangjie\tA
+U+65E5\tkGradeLevel\t1
 ";
+
+/// repo 裡存的 Unicode License V3 全文（這裡只取開頭）。
+const UNICODE_LICENSE: &str = "\
+UNICODE LICENSE V3
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright © 1991-2026 Unicode, Inc.
+";
+
+const UNICODE_LICENSE_PATH: &str = "data/licenses/Unicode-3.0.txt";
 
 fn unihan_zip() -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
@@ -73,8 +86,10 @@ fn upstream(readme: &str) -> Files {
     ]))
 }
 
-/// 在 `root` 放 sources.toml 與 repo 裡的速成方案檔。
+/// 在 `root` 放 sources.toml、repo 裡的速成方案檔與 Unicode 授權全文。
 fn repo(root: &Path, statement: &str) {
+    std::fs::create_dir_all(root.join("data/licenses")).unwrap();
+    std::fs::write(root.join(UNICODE_LICENSE_PATH), UNICODE_LICENSE).unwrap();
     std::fs::create_dir_all(root.join("data/schemes")).unwrap();
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/schemes/quick.toml"),
@@ -104,6 +119,7 @@ sha256 = "{readme}"
 repository = "https://example.invalid/ucd/"
 version = "18.0.0"
 license = "Unicode-3.0"
+license_text = "{UNICODE_LICENSE_PATH}"
 
 [[source.unihan.files]]
 path = "Unihan.zip"
@@ -132,16 +148,19 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
     assert!(license.contains("Public Domain"), "{license}");
     assert!(license.contains(STATEMENT), "{license}");
+    assert!(license.contains("Unicode-3.0"), "{license}");
+    assert!(license.contains(UNICODE_LICENSE), "{license}");
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
     assert!(
         notice.contains("346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"),
         "{notice}"
     );
     assert!(notice.contains(&sha256_hex(TABLE.as_bytes())), "{notice}");
+    assert!(notice.contains(&sha256_hex(&unihan_zip())), "{notice}");
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (3, 1));
+    assert_eq!((report.continuous, report.extension), (4, 1));
 }
 
 #[test]
@@ -182,12 +201,14 @@ fn verify_writes_the_unihan_report_and_still_passes_with_differences() {
 }
 
 #[test]
-fn build_without_verify_does_not_fetch_unihan() {
+fn build_puts_characters_with_a_grade_level_before_big5_order() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
-    let mut files = upstream(README);
-    files.0.remove("https://example.invalid/Unihan.zip");
-    run(root.path(), &files, false).unwrap();
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+    let pack = Pack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
+    let a: String = pack.code_table.lookup("a").iter().map(|e| e.text).collect();
+    // Big5 排序值曰 23060 < 日 23061，日有年級所以在前。
+    assert_eq!(a, "日曰𠀀");
 }
 
 #[test]
@@ -251,4 +272,51 @@ fn packed_source_without_license_statement_fails_the_build() {
     std::fs::write(&path, without).unwrap();
     let err = run(root.path(), &upstream(README), false).unwrap_err();
     assert!(err.to_string().contains("license_statement"), "{err}");
+}
+
+/// 改 sources.toml 的某些行。
+fn edit_sources(root: &Path, edit: impl Fn(&str) -> String) {
+    let path = root.join("data/sources.toml");
+    let sources = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, edit(&sources)).unwrap();
+}
+
+#[test]
+fn missing_license_text_file_fails_the_build() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    std::fs::remove_file(root.path().join(UNICODE_LICENSE_PATH)).unwrap();
+    let err = run(root.path(), &upstream(README), false).unwrap_err();
+    assert!(matches!(err, Error::Io { .. }), "{err}");
+    assert!(err.to_string().contains("Unicode-3.0.txt"), "{err}");
+}
+
+#[test]
+fn packed_source_without_any_license_fails_the_build() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    edit_sources(root.path(), |s| {
+        s.lines()
+            .filter(|l| !l.starts_with("license_text"))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    });
+    let err = run(root.path(), &upstream(README), false).unwrap_err();
+    assert!(err.to_string().contains("license_text"), "{err}");
+}
+
+#[test]
+fn packed_source_with_both_license_forms_fails_the_build() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    edit_sources(root.path(), |s| {
+        s.replace(
+            "license_file = \"data/README.table.md\"",
+            &format!(
+                "license_file = \"data/README.table.md\"\nlicense_text = \"{UNICODE_LICENSE_PATH}\""
+            ),
+        )
+    });
+    let err = run(root.path(), &upstream(README), false).unwrap_err();
+    assert!(err.to_string().contains("license_text"), "{err}");
 }

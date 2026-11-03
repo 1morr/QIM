@@ -255,11 +255,13 @@ fn input_longer_than_max_code_length_has_no_candidates_and_space_does_not_commit
 }
 
 #[test]
-fn space_after_paging_commits_the_first_candidate_on_the_current_page() {
+fn space_after_paging_still_commits_the_top_candidate_of_the_first_page() {
     let mut ime = Ime::new();
     ime.press(Key::Letter('a'));
-    ime.press(Key::PageDown);
-    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("旬"));
+    assert_eq!(texts(&ime.press(Key::PageDown)), ["旬"]);
+    let snapshot = ime.press(Key::Space);
+    assert_eq!(snapshot.commit.as_deref(), Some("日"));
+    assert_eq!(snapshot.composition.input, "");
 }
 
 #[test]

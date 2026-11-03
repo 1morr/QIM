@@ -126,9 +126,10 @@ impl Session {
                 self.clear();
                 self.snapshot(true, None)
             }
-            Key::Space => self.commit_at(0),
+            // 空白一律上屏首選，與目前在第幾頁無關（brief §4.3）。
+            Key::Space => self.commit(self.candidates.first().cloned()),
             Key::Digit(digit) => match usize::from(digit).checked_sub(1) {
-                Some(index) => self.commit_at(index),
+                Some(index) => self.commit(self.page_candidates().get(index).cloned()),
                 None => self.snapshot(true, None),
             },
             Key::PageUp if self.page > 0 => self.turn_to(self.page - 1),
@@ -138,9 +139,8 @@ impl Session {
         }
     }
 
-    /// 上屏目前頁第 `index` 個候選並清空組字；沒有該位置時不動作，鍵照樣吃下。
-    fn commit_at(&mut self, index: usize) -> Snapshot {
-        let commit = self.page_candidates().get(index).cloned();
+    /// 上屏 `commit` 並清空組字；沒有候選可上屏時不動作，鍵照樣吃下。
+    fn commit(&mut self, commit: Option<String>) -> Snapshot {
         if commit.is_some() {
             self.clear();
         }

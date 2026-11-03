@@ -347,14 +347,14 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 ## 4. 碼表與資料管線
 
-`data/sources.toml` 列出每個來源：URL、釘住的版本（git 來源填 commit）與每個檔的 sha256、授權、取用的檔案。`cargo xtask data` 依序執行下列步驟，產物放 `build/packs/`，每個資料包一個目錄，旁邊放它的 `LICENSE` 與 `NOTICE`（brief §5.1）；不同來源的授權不混在同一個檔。
+`data/sources.toml` 列出每個來源：URL、釘住的版本（git 來源填 commit）與每個檔的 sha256、授權、取用的檔案。`cargo xtask data` 依序執行下列步驟，產物放 `build/packs/`，每個資料包一個目錄，旁邊放它的 `LICENSE` 與 `NOTICE`（brief §5.1）；不同資料包不共用授權檔，一個資料包用到幾個來源，`LICENSE` 就逐一寫進各來源的授權（照抄上游聲明，或上游授權檔沒有版本化網址時用 `data/licenses/` 裡存的全文）、`NOTICE` 逐一列出來源與取用的內容。
 
 ### 4.1 速成碼表
 
 1. 取 libcangjie `data/table.txt`（freedesktop GitLab，`346026b`）。
 2. 只取 Big5 或 HKSCS 旗標為 1 的漢字當連打字集；其他漢字標成擴展區（只在單字查詢時出現）。
 3. 由倉頡三代與五代碼推導速成碼，取聯集（brief §4.2）。
-4. 字的排序先用字頻；沒有字頻的退回 libcangjie 的 Big5 排序值。
+4. 字的排序先用字頻（M1）；再來是 Unihan `kGradeLevel`，有年級的字依年級排前面；都沒有的退回 libcangjie 的 Big5 排序值。M0 還沒有字頻，靠年級讓「日」排在「曰」前（M0 票 08b）。
 5. 另產一份字根提示資料包（字 → 倉頡三代 / 五代碼），只給字根提示用。
 
 ### 4.2 詞庫
@@ -381,7 +381,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 - 不掉字：連打字集的字數等於來源中旗標符合、且有倉頡碼的字數。
 - 速成碼表的每個鍵長度都是 1 或 2；不存在長度 3 以上的鍵（ADR 0003 的守門測試）。
-- 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`。
+- 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」。
 - Unihan `kCangjie` 交叉比對，差異清單輸出成報表，不擋建置。
 - 決定性：同樣的來源建出 sha256 相同的資料包。
 

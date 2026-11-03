@@ -28,6 +28,9 @@ pub struct Source {
     pub license_file: Option<String>,
     /// 照抄 [`Source::license_file`] 裡的聲明原文；進資料包的來源才要。
     pub license_statement: Option<String>,
+    /// repo 裡存的授權全文檔，相對 repo 根目錄；上游的授權檔不釘版本時用它，
+    /// 不和 [`Source::license_file`] 並用。進資料包的來源才要。
+    pub license_text: Option<String>,
     pub files: Vec<SourceFile>,
 }
 

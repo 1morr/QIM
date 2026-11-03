@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use qim_databuild::{libcangjie, quick};
 
 /// 前 9 列照抄 libcangjie `346026b` 的 `data/table.txt`；後面幾列是排序用的假資料。
@@ -20,7 +22,12 @@ const TABLE: &str = "\
 ";
 
 fn table() -> qim_core::CodeTable {
-    quick::code_table(&libcangjie::parse(TABLE).unwrap())
+    table_with(&BTreeMap::new())
+}
+
+/// `grades` 是 Unihan `kGradeLevel`：字到香港小學的年級。
+fn table_with(grades: &BTreeMap<char, u8>) -> qim_core::CodeTable {
+    quick::code_table(&libcangjie::parse(TABLE).unwrap(), grades)
 }
 
 fn texts(table: &qim_core::CodeTable, code: &str) -> String {
@@ -71,6 +78,22 @@ fn big5_order_first_then_other_hkscs_then_extension_by_code_point() {
     assert_eq!(texts(&table, "a"), "曰日㐃㗎𠀀𠀉");
     let extension: Vec<bool> = table.lookup("a").iter().map(|e| e.extension).collect();
     assert_eq!(extension, [false, false, false, false, true, true]);
+}
+
+#[test]
+fn characters_with_a_grade_level_come_first_by_grade_then_the_rest_by_big5_order() {
+    // 日、㗎有年級，排在沒年級的曰之前，雖然曰的 Big5 排序值較小、㗎沒有排序值。
+    // 𠀉在擴展區，有年級也只在擴展區內提前。
+    let table = table_with(&BTreeMap::from([('㗎', 2), ('日', 1), ('𠀉', 3)]));
+    assert_eq!(texts(&table, "a"), "日㗎曰㐃𠀉𠀀");
+    let extension: Vec<bool> = table.lookup("a").iter().map(|e| e.extension).collect();
+    assert_eq!(extension, [false, false, false, false, true, true]);
+}
+
+#[test]
+fn lower_grade_comes_first_and_same_grade_falls_back_to_big5_order() {
+    let table = table_with(&BTreeMap::from([('日', 2), ('曰', 2), ('㐃', 1)]));
+    assert_eq!(texts(&table, "a"), "㐃曰日㗎𠀀𠀉");
 }
 
 #[test]

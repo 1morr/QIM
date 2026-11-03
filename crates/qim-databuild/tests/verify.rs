@@ -31,7 +31,7 @@ fn rows() -> Vec<Row> {
 }
 
 fn pack() -> Pack {
-    build_pack(&rows(), scheme::parse(SCHEME).unwrap())
+    build_pack(&rows(), &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
 }
 
 fn run(pack: &Pack) -> Report {
@@ -88,6 +88,7 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::NoCangjieCodeForWen,
             CheckId::WenHasAr,
             CheckId::DiuHasHiAndMi,
+            CheckId::RiIsTopForA,
             CheckId::Deterministic,
         ]
     );
@@ -99,7 +100,7 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     let table =
         format!("{TABLE}㐀 㐀 1 0 0 0 0 0 0 0 0 a NA NA 0\n㐀 㐀 1 0 1 0 0 0 0 0 0 NA NA NA 0\n");
     let rows = libcangjie::parse(&table).unwrap();
-    let bytes = build_pack(&rows, scheme::parse(SCHEME).unwrap())
+    let bytes = build_pack(&rows, &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
         .to_bytes()
         .unwrap();
     let report = verify::run(&rows, &bytes, &bytes);
@@ -143,6 +144,15 @@ fn missing_spot_check_codes_fail() {
         failed(&run(&pack)),
         [CheckId::WenHasAr, CheckId::DiuHasHiAndMi]
     );
+}
+
+#[test]
+fn another_character_before_ri_on_a_fails_the_top_candidate_check() {
+    let pack = edited(|t| {
+        // `a` 是「日𠀀」，倒過來就是別的字在前。
+        t.get_mut("a").unwrap().reverse();
+    });
+    assert_eq!(failed(&run(&pack)), [CheckId::RiIsTopForA]);
 }
 
 #[test]

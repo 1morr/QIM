@@ -16,6 +16,48 @@ const UNIHAN_ZIP: &str = "Unihan.zip";
 /// Unihan 交叉比對的差異報表，相對 repo 根目錄；格式見 `unihan::CrossCheck::to_tsv`。
 const UNIHAN_REPORT: &str = "build/reports/unihan-kcangjie.tsv";
 
+/// 進資料包的來源：名字、`sources.toml` 的 id、取用的檔、取用的內容（寫進 NOTICE）。
+/// libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序（plan §4.1）。
+const PACKED: [(&str, &str, &str, &str); 2] = [
+    (
+        "libcangjie",
+        LIBCANGJIE,
+        TABLE,
+        "Cangjie 3 and Cangjie 5 codes, Big5 and HKSCS flags, Big5 order",
+    ),
+    (
+        "Unihan",
+        UNIHAN,
+        UNIHAN_ZIP,
+        "field kGradeLevel of Unihan_DictionaryLikeData.txt",
+    ),
+];
+
+/// 一個進資料包的來源，授權已核對過。
+struct Packed<'a> {
+    name: &'a str,
+    source: &'a Source,
+    file: &'a sources::SourceFile,
+    used: &'a str,
+    license: License,
+}
+
+/// 要寫進資料包 `LICENSE` 的一段授權。
+struct License {
+    /// 這段授權從哪裡來，寫在原文前一行。
+    origin: String,
+    text: String,
+}
+
+/// 建一次的結果；`--verify` 會再建一次比 `bytes`。
+struct Build {
+    rows: Vec<libcangjie::Row>,
+    /// `Unihan_DictionaryLikeData.txt` 的內容。
+    dictionary_like: String,
+    bytes: Vec<u8>,
+    scheme_id: String,
+}
+
 #[derive(Debug)]
 pub struct Outcome {
     pub pack_path: PathBuf,
@@ -36,26 +78,49 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
             .get(id)
             .ok_or_else(|| Error::invalid(SOURCES, format!("沒有 [source.{id}]")))
     };
-    let source = source_of(LIBCANGJIE)?;
     let cache = root.join(CACHE);
-    let load = |path: &str| -> Result<String, Error> {
-        let bytes = sources::load(&cache, LIBCANGJIE, source.file(path)?, fetch)?;
-        String::from_utf8(bytes).map_err(|e| Error::invalid(path, e.to_string()))
+    let load = |id: &str, path: &str| -> Result<Vec<u8>, Error> {
+        sources::load(&cache, id, source_of(id)?.file(path)?, fetch)
     };
-    let (license_file, statement) = license_notice(source)?;
-    check_license_statement(source, license_file, statement, &load(license_file)?)?;
+    let load_text = |id: &str, path: &str| -> Result<String, Error> {
+        String::from_utf8(load(id, path)?).map_err(|e| Error::invalid(path, e.to_string()))
+    };
+    let mut packed = Vec::new();
+    for (name, id, path, used) in PACKED {
+        let source = source_of(id)?;
+        let license = license_of(source, |file| load_text(id, file), |path| read(path))?;
+        packed.push(Packed {
+            name,
+            source,
+            file: source.file(path)?,
+            used,
+            license,
+        });
+    }
 
     // 每次都從快取與方案檔重讀，`--verify` 的第二次建置才是真的重建。
-    let build = || -> Result<(Vec<libcangjie::Row>, Vec<u8>, String), Error> {
-        let rows = libcangjie::parse(&load(TABLE)?)?;
+    let build = || -> Result<Build, Error> {
+        let rows = libcangjie::parse(&load_text(LIBCANGJIE, TABLE)?)?;
+        let dictionary_like = unihan::read_archive(&load(UNIHAN, UNIHAN_ZIP)?)?;
+        let grades = unihan::grade_levels(&dictionary_like)?;
         let scheme = scheme::parse(&read(QUICK_SCHEME)?)?;
-        let id = scheme.id.clone();
-        let bytes = build_pack(&rows, scheme)
+        let scheme_id = scheme.id.clone();
+        let bytes = build_pack(&rows, &grades, scheme)
             .to_bytes()
             .map_err(|e| Error::invalid("資料包", e.to_string()))?;
-        Ok((rows, bytes, id))
+        Ok(Build {
+            rows,
+            dictionary_like,
+            bytes,
+            scheme_id,
+        })
     };
-    let (rows, bytes, id) = build()?;
+    let Build {
+        rows,
+        dictionary_like,
+        bytes,
+        scheme_id: id,
+    } = build()?;
 
     let dir = root.join(PACKS).join(&id);
     std::fs::create_dir_all(&dir).map_err(Error::io(&dir))?;
@@ -63,21 +128,14 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     let write =
         |path: PathBuf, contents: &[u8]| std::fs::write(&path, contents).map_err(Error::io(path));
     write(pack_path.clone(), &bytes)?;
-    write(
-        dir.join("LICENSE"),
-        license(source, license_file, statement).as_bytes(),
-    )?;
-    write(
-        dir.join("NOTICE"),
-        notice(&id, source, source.file(TABLE)?).as_bytes(),
-    )?;
+    write(dir.join("LICENSE"), license(&packed).as_bytes())?;
+    write(dir.join("NOTICE"), notice(&id, &packed).as_bytes())?;
 
     let report = if verify {
-        let (_, second, _) = build()?;
+        let second = build()?.bytes;
         let mut report = verify::run(&rows, &bytes, &second);
-        // Unihan 只在驗證時下載；比對結果只寫報表，不影響通過與否。
-        let zip = sources::load(&cache, UNIHAN, source_of(UNIHAN)?.file(UNIHAN_ZIP)?, fetch)?;
-        let check = unihan::compare(&rows, &unihan::parse(&unihan::read_archive(&zip)?)?);
+        // Unihan 交叉比對的結果只寫報表，不影響通過與否。
+        let check = unihan::compare(&rows, &unihan::parse(&dictionary_like)?);
         let path = root.join(UNIHAN_REPORT);
         let reports = path.parent().expect("報表路徑有上層目錄");
         std::fs::create_dir_all(reports).map_err(Error::io(reports))?;
@@ -99,14 +157,33 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     })
 }
 
-/// 進資料包的來源要寫授權聲明所在的檔與聲明原文。
-fn license_notice(source: &Source) -> Result<(&str, &str), Error> {
-    match (&source.license_file, &source.license_statement) {
-        (Some(file), Some(statement)) => Ok((file, statement)),
+/// 進資料包的來源二選一：照抄上游檔裡的聲明（`license_file` 加 `license_statement`），
+/// 或 repo 裡存一份授權全文（`license_text`）。`upstream` 讀來源檔，`repo` 讀 repo 裡的檔。
+fn license_of(
+    source: &Source,
+    upstream: impl Fn(&str) -> Result<String, Error>,
+    repo: impl Fn(&str) -> Result<String, Error>,
+) -> Result<License, Error> {
+    match (
+        &source.license_file,
+        &source.license_statement,
+        &source.license_text,
+    ) {
+        (Some(file), Some(statement), None) => {
+            check_license_statement(source, file, statement, &upstream(file)?)?;
+            Ok(License {
+                origin: format!("Statement in {file}"),
+                text: statement.clone(),
+            })
+        }
+        (None, None, Some(path)) => Ok(License {
+            origin: format!("Full text, kept in the QIM repository as {path}"),
+            text: repo(path)?,
+        }),
         _ => Err(Error::invalid(
             SOURCES,
             format!(
-                "{} 的資料進資料包，要寫 license_file 與 license_statement",
+                "{} 的資料進資料包，要寫 license_file 加 license_statement，或只寫 license_text",
                 source.repository
             ),
         )),
@@ -131,39 +208,60 @@ fn check_license_statement(
     }
 }
 
-fn license(source: &Source, file: &str, statement: &str) -> String {
-    format!(
-        "The code table in this pack is derived from {table} of libcangjie.\n\
-         License of that data: {license}\n\
-         \n\
-         Statement in {file} ({repo}, commit {version}):\n\
-         \n\
-         {statement}\n",
-        table = TABLE,
-        license = source.license,
-        repo = source.repository,
-        version = source.version,
-    )
+/// 每個進資料包的來源一段：來源、授權、照抄的聲明。
+fn license(packed: &[Packed]) -> String {
+    packed
+        .iter()
+        .map(|p| {
+            format!(
+                "Source: {name}, {repo} ({version})\n\
+                 License: {license}\n\
+                 \n\
+                 {origin}:\n\
+                 \n\
+                 {text}\n",
+                name = p.name,
+                repo = p.source.repository,
+                version = p.source.version,
+                license = p.source.license,
+                origin = p.license.origin,
+                text = p.license.text.trim_end(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
-fn notice(id: &str, source: &Source, table: &sources::SourceFile) -> String {
+fn notice(id: &str, packed: &[Packed]) -> String {
+    let sources: String = packed
+        .iter()
+        .map(|p| {
+            format!(
+                "Source: {name}\n\
+                 Repository: {repo}\n\
+                 Version: {version}\n\
+                 File: {path} (sha256 {sha256})\n\
+                 Used: {used}\n\
+                 License: {license} (see LICENSE)\n\
+                 \n",
+                name = p.name,
+                repo = p.source.repository,
+                version = p.source.version,
+                path = p.file.path,
+                sha256 = p.file.sha256,
+                used = p.used,
+                license = p.source.license,
+            )
+        })
+        .collect();
     format!(
         "{id}.pack: QIM input scheme pack \"{id}\".\n\
          \n\
-         Source: libcangjie\n\
-         Repository: {repo}\n\
-         Commit: {version}\n\
-         File: {path} (sha256 {sha256})\n\
-         License: {license} (see LICENSE)\n\
-         \n\
-         Quick codes are derived from the Cangjie 3 and Cangjie 5 codes in that file:\n\
-         the first and last letter of each code, or the code itself when it has one or\n\
-         two letters. Han characters flagged as Big5 or HKSCS form the continuous set;\n\
-         other Han characters are marked as extension.\n",
-        repo = source.repository,
-        version = source.version,
-        path = table.path,
-        sha256 = table.sha256,
-        license = source.license,
+         {sources}\
+         Quick codes are derived from the Cangjie 3 and Cangjie 5 codes in the libcangjie\n\
+         file: the first and last letter of each code, or the code itself when it has one\n\
+         or two letters. Han characters flagged as Big5 or HKSCS form the continuous set;\n\
+         other Han characters are marked as extension. Within each code, characters with a\n\
+         Unihan kGradeLevel come first by grade, then libcangjie's Big5 order.\n"
     )
 }

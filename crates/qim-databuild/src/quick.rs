@@ -24,11 +24,12 @@ struct Character {
     quick_codes: BTreeSet<String>,
 }
 
-/// 只收漢字；三代與五代的每個碼各自推導，取聯集。
+/// 只收漢字；三代與五代的每個碼各自推導，取聯集。`grades` 是 Unihan `kGradeLevel`。
 ///
-/// 每個速成碼的字序：連打字集在前、擴展區在後；同一區內排序值非 0 的依排序值，
-/// 排序值為 0 的排在後面，最後依碼位，讓結果不受來源列序影響。
-pub fn code_table(rows: &[Row]) -> CodeTable {
+/// 每個速成碼的字序：連打字集在前、擴展區在後；同一區內有年級的字依年級排在前面，
+/// 其餘與同年級的字依排序值，排序值為 0 的排在後面，最後依碼位，讓結果不受來源列序影響。
+/// M1 的字頻接在年級之前（plan §4.1）。
+pub fn code_table(rows: &[Row], grades: &BTreeMap<char, u8>) -> CodeTable {
     let mut characters: BTreeMap<char, Character> = BTreeMap::new();
     for row in rows.iter().filter(|row| row.hanzi) {
         let c = characters.entry(row.text).or_insert(Character {
@@ -55,7 +56,17 @@ pub fn code_table(rows: &[Row]) -> CodeTable {
         }
     }
     CodeTable::from_entries(by_code.into_iter().map(|(code, mut chars)| {
-        chars.sort_by_key(|&(text, c)| (!c.continuous, c.order == 0, c.order, text));
+        chars.sort_by_key(|&(text, c)| {
+            let grade = grades.get(&text);
+            (
+                !c.continuous,
+                grade.is_none(),
+                grade,
+                c.order == 0,
+                c.order,
+                text,
+            )
+        });
         let entries = chars
             .into_iter()
             .map(|(text, c)| CodeEntry {

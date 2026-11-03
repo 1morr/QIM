@@ -75,8 +75,11 @@ const DICTIONARY_LIKE_DATA: &str = "\
 U+3400\tkCangjie\tTM
 U+3400\tkFourCornerCode\t5000.7
 
+U+554F\tkGradeLevel\t1
 U+65E5\tkCangjie\tA
+U+65E5\tkGradeLevel\t1
 U+20000\tkCangjie\tMV
+U+95CA\tkGradeLevel\t6
 ";
 
 #[test]
@@ -96,6 +99,27 @@ fn parse_rejects_malformed_kcangjie_lines() {
         "U+D800\tkCangjie\tA",
     ] {
         assert!(unihan::parse(line).is_err(), "{line:?}");
+    }
+}
+
+#[test]
+fn grade_levels_takes_kgradelevel_and_skips_other_fields() {
+    assert_eq!(
+        unihan::grade_levels(DICTIONARY_LIKE_DATA).unwrap(),
+        BTreeMap::from([('問', 1), ('日', 1), ('闊', 6)])
+    );
+}
+
+#[test]
+fn grade_levels_rejects_values_outside_1_to_6() {
+    for line in [
+        "U+65E5\tkGradeLevel\t0",
+        "U+65E5\tkGradeLevel\t7",
+        "U+65E5\tkGradeLevel\t1 2",
+        "U+65E5\tkGradeLevel",
+        "U+D800\tkGradeLevel\t1",
+    ] {
+        assert!(unihan::grade_levels(line).is_err(), "{line:?}");
     }
 }
 

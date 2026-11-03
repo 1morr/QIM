@@ -24,6 +24,8 @@ pub enum CheckId {
     WenHasAr,
     /// 「丟」同時有三代的 `hi` 與五代的 `mi`。
     DiuHasHiAndMi,
+    /// `a` 的首選是「日」（字序依 Unihan `kGradeLevel`，plan §4.1）。
+    RiIsTopForA,
     /// 同樣的來源建兩次，sha256 相同。
     Deterministic,
 }
@@ -37,6 +39,7 @@ impl fmt::Display for CheckId {
             Self::NoCangjieCodeForWen => "抽查：anr 查不到「問」",
             Self::WenHasAr => "抽查：「問」的速成碼含 ar",
             Self::DiuHasHiAndMi => "抽查：「丟」同時有 hi 與 mi",
+            Self::RiIsTopForA => "抽查：a 的首選是「日」",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
         })
     }
@@ -197,6 +200,10 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
         spot(CheckId::NoCangjieCodeForWen, !has("anr", '問')),
         spot(CheckId::WenHasAr, has("ar", '問')),
         spot(CheckId::DiuHasHiAndMi, has("hi", '丟') && has("mi", '丟')),
+        spot(
+            CheckId::RiIsTopForA,
+            pack.code_table.lookup("a").first().map(|e| e.text) == Some('日'),
+        ),
         deterministic,
     ];
     Report {
