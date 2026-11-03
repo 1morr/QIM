@@ -46,6 +46,7 @@
 | 2026-11-03 | M0 04 | 文件閘門：`cargo xtask check` 的 `docs` 步驟守 progress 與 spec 規則（plan §6），變異測試用內建範本；細節見票 | 新 session 下 `/implement .scratch/m0/issues/05-quick-code-table-pack.md` |
 | 2026-11-03 | M0 05 | `cargo xtask data [--verify]`：libcangjie → `build/packs/quick/`，連打字集 17611、擴展區 57052，§4.5 檢查全過；細節見票 | 新 session 下 `/implement .scratch/m0/issues/06-unihan-cross-check.md` |
 | 2026-11-03 | M0 06 | `--verify` 加 Unihan 18.0.0 `kCangjie` 交叉比對：比對 29121 字、差異 2744 字（2246 字等於五代碼），報表在 `build/reports/`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/07-tracer-bullet-type-a.md` |
+| 2026-11-03 | M0 07 | 網頁打 `a` 列出「日」、空白上屏首選「曰」（Big5 序）：`Session`、`qim-wasm`、`cargo xtask web`、Playwright e2e 進 check；細節見票 | 新 session 下 `/implement .scratch/m0/issues/08-m0-keys-and-paging.md` |
 
 ## 偏差與決定
 
