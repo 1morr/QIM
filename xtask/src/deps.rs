@@ -363,6 +363,7 @@ mod tests {
     }
 
     /// 在副本的檔尾追加 `text`，回傳追加的第一行的行號，讓斷言不綁原檔的長度。
+    /// 追加到 `Cargo.toml` 的依賴寫成 `[dependencies.<名字>]` 子表，不受檔尾是哪一段影響。
     fn append(dir: &Path, file: &str, text: &str) -> usize {
         let path = dir.join(file);
         let mut content = fs::read_to_string(&path).unwrap();
@@ -395,7 +396,11 @@ mod tests {
     #[test]
     fn core_dependency_off_the_table_is_red() {
         let dir = copy_repo();
-        append(dir.path(), CORE_TOML, "serde_json = \"1\"\n");
+        append(
+            dir.path(),
+            CORE_TOML,
+            "[dependencies.serde_json]\nversion = \"1\"\n",
+        );
         assert_red(dir.path(), &["qim-core", "serde_json"]);
     }
 
@@ -418,7 +423,7 @@ mod tests {
         append(
             dir.path(),
             CORE_TOML,
-            "qim-wasm = { path = \"../qim-wasm\" }\n",
+            "[dependencies.qim-wasm]\npath = \"../qim-wasm\"\n",
         );
         assert_red(dir.path(), &["qim-core", "qim-wasm"]);
     }
@@ -430,7 +435,7 @@ mod tests {
         append(
             dir.path(),
             CORE_TOML,
-            "\n[dev-dependencies]\nqim-wasm = { path = \"../qim-wasm\" }\n",
+            "[dev-dependencies.qim-wasm]\npath = \"../qim-wasm\"\n",
         );
         assert_red(dir.path(), &["qim-core", "qim-wasm"]);
     }
@@ -458,7 +463,7 @@ mod tests {
         append(
             dir.path(),
             CORE_TOML,
-            "\n[dev-dependencies]\nproptest = \"1\"\n",
+            "[dev-dependencies.serde_json]\nversion = \"1\"\n",
         );
         assert_green(dir.path());
     }
