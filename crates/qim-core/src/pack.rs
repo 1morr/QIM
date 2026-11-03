@@ -45,9 +45,12 @@ impl fmt::Display for PackError {
 
 impl std::error::Error for PackError {}
 
+fn malformed(e: postcard::Error) -> PackError {
+    PackError::Malformed(e.to_string())
+}
+
 impl Pack {
     pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        let malformed = |e: postcard::Error| PackError::Malformed(e.to_string());
         let mut bytes = MAGIC.to_vec();
         bytes.extend(postcard::to_allocvec(&FORMAT_VERSION).map_err(malformed)?);
         bytes.extend(postcard::to_allocvec(self).map_err(malformed)?);
@@ -55,7 +58,6 @@ impl Pack {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        let malformed = |e: postcard::Error| PackError::Malformed(e.to_string());
         let rest = bytes.strip_prefix(MAGIC).ok_or(PackError::NotAPack)?;
         let (found, rest) = postcard::take_from_bytes::<u32>(rest).map_err(malformed)?;
         if found != FORMAT_VERSION {

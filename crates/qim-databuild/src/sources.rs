@@ -8,6 +8,9 @@ use sha2::{Digest, Sha256};
 
 use crate::Error;
 
+/// 來源清單在 repo 裡的位置。
+pub const SOURCES: &str = "data/sources.toml";
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sources {
@@ -41,12 +44,12 @@ impl Source {
         self.files
             .iter()
             .find(|f| f.path == path)
-            .ok_or_else(|| Error::invalid("data/sources.toml", format!("沒有列出 {path}")))
+            .ok_or_else(|| Error::invalid(SOURCES, format!("沒有列出 {path}")))
     }
 }
 
 pub fn parse(text: &str) -> Result<Sources, Error> {
-    toml::from_str(text).map_err(|e| Error::invalid("data/sources.toml", e.to_string()))
+    toml::from_str(text).map_err(|e| Error::invalid(SOURCES, e.to_string()))
 }
 
 /// 下載一個網址的內容；測試換成假的，不連網。

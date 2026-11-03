@@ -120,19 +120,18 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
             .insert(e.text);
         }
     }
-    // 由來源獨立重數，不經推導程式。
-    let coded = rows
-        .iter()
-        .filter(|r| r.hanzi && !(r.cangjie3.is_empty() && r.cangjie5.is_empty()));
-    let source_continuous: BTreeSet<char> = coded
-        .clone()
+    // 由來源獨立重數，不經推導程式。以字為單位：同一個字的旗標與碼可能分在不同列。
+    let hanzi = || rows.iter().filter(|r| r.hanzi);
+    let coded: BTreeSet<char> = hanzi()
+        .filter(|r| !(r.cangjie3.is_empty() && r.cangjie5.is_empty()))
+        .map(|r| r.text)
+        .collect();
+    let flagged: BTreeSet<char> = hanzi()
         .filter(|r| r.big5 || r.hkscs)
         .map(|r| r.text)
         .collect();
-    let source_extension: BTreeSet<char> = coded
-        .map(|r| r.text)
-        .filter(|c| !source_continuous.contains(c))
-        .collect();
+    let source_continuous: BTreeSet<char> = coded.intersection(&flagged).copied().collect();
+    let source_extension: BTreeSet<char> = coded.difference(&flagged).copied().collect();
 
     let long_keys: Vec<&str> = pack
         .code_table

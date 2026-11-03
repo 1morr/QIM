@@ -94,6 +94,20 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
 }
 
 #[test]
+fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous() {
+    // 有碼的列沒有旗標、有旗標的列沒有碼：以字為單位，它仍是有倉頡碼的連打字集的字。
+    let table =
+        format!("{TABLE}㐀 㐀 1 0 0 0 0 0 0 0 0 a NA NA 0\n㐀 㐀 1 0 1 0 0 0 0 0 0 NA NA NA 0\n");
+    let rows = libcangjie::parse(&table).unwrap();
+    let bytes = build_pack(&rows, scheme::parse(SCHEME).unwrap())
+        .to_bytes()
+        .unwrap();
+    let report = verify::run(&rows, &bytes, &bytes);
+    assert_eq!(failed(&report), []);
+    assert_eq!((report.continuous, report.extension), (5, 1));
+}
+
+#[test]
 fn three_letter_key_fails_the_key_length_check() {
     let pack = edited(|t| {
         t.insert("abc".into(), vec![entry('日')]);

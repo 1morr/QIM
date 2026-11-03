@@ -2,11 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::sources::{self, Fetch, Source, sha256_hex};
+use crate::sources::{self, Fetch, SOURCES, Source, sha256_hex};
 use crate::verify::{self, Report};
 use crate::{Error, build_pack, libcangjie, scheme};
 
-const SOURCES: &str = "data/sources.toml";
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 const CACHE: &str = ".cache/sources";
 const PACKS: &str = "build/packs";
@@ -37,13 +36,12 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
         let bytes = sources::load(&cache, LIBCANGJIE, source.file(path)?, fetch)?;
         String::from_utf8(bytes).map_err(|e| Error::invalid(path, e.to_string()))
     };
-    let table = load(TABLE)?;
     check_license_statement(source, &load(&source.license_file)?)?;
-    let scheme_text = read(QUICK_SCHEME)?;
 
+    // 每次都從快取與方案檔重讀，`--verify` 的第二次建置才是真的重建。
     let build = || -> Result<(Vec<libcangjie::Row>, Vec<u8>, String), Error> {
-        let rows = libcangjie::parse(&table)?;
-        let scheme = scheme::parse(&scheme_text)?;
+        let rows = libcangjie::parse(&load(TABLE)?)?;
+        let scheme = scheme::parse(&read(QUICK_SCHEME)?)?;
         let id = scheme.id.clone();
         let bytes = build_pack(&rows, scheme)
             .to_bytes()
