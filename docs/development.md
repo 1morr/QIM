@@ -67,6 +67,6 @@ commit-msg hook 跑 `cargo xtask commit-msg <訊息檔>`，subject（第一個�
 
 不檢查的情況：
 
-- git 自動產生的 `Merge …`、`Revert "…"`、`fixup!`、`squash!`、`amend!` 開頭的訊息。
+- git 自動產生的 `Merge …`、`Revert "…"`、`Reapply "…"`、`fixup!`、`squash!`、`amend!` 開頭的訊息。
 - 正在 `git merge` 時（`MERGE_HEAD` 存在）一律放行：ticket-coordinator 用 `merge: ticket NN slug` 合併票。
 - body 與 `git commit -v` 剪刀線之後的 diff。

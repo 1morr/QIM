@@ -14,7 +14,15 @@ pub const TYPES: &[&str] = &[
 const MAX_SUBJECT: usize = 72;
 
 /// git 自動產生的訊息開頭，不檢查。
-const GIT_PREFIXES: &[&str] = &["Merge ", "Revert \"", "fixup! ", "squash! ", "amend! "];
+/// `Reapply "` 是 git 2.43 起 revert 一個 revert 時產生的。
+const GIT_PREFIXES: &[&str] = &[
+    "Merge ",
+    "Revert \"",
+    "Reapply \"",
+    "fixup! ",
+    "squash! ",
+    "amend! ",
+];
 
 /// `git commit -v` 的剪刀線：之後是 diff，不算訊息。
 const SCISSORS: &str = "# ------------------------ >8 ------------------------";
@@ -112,6 +120,7 @@ pub fn report(message_file: &Path) -> bool {
             return false;
         }
     };
+    // git 在 worktree 根目錄跑 hook。
     if merge_in_progress(Path::new(".")) {
         return true;
     }
@@ -228,6 +237,7 @@ mod tests {
             "x".repeat(80)
         ));
         assert_green("Revert \"feat: add stuff\"\n\nThis reverts commit 991814d.\n");
+        assert_green("Reapply \"feat: add stuff\"");
         assert_green("fixup! feat: add stuff");
         assert_green(&format!("squash! feat: {}", "a".repeat(66)));
         assert_green("amend! feat: add stuff");
