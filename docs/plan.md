@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0 完成（`.scratch/m0/spec.md`，封存 `docs/archive/M0.md`）；M1 進行中、尚未拆票，寫到任務與驗收；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0 完成（`.scratch/m0/spec.md`，封存 `docs/archive/M0.md`）；M1 進行中（`.scratch/m1/spec.md`）；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -112,7 +112,7 @@ flowchart LR
 | `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證 | 佈局要給 TS、Swift、Kotlin 直接讀 |
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2） | 一份介面產生兩種語言 |
-| `ferrous-opencc` | 0.4.0 | 簡繁轉換 | 純 Rust、Apache-2.0；能否編 WebAssembly 在 M1 票開工時驗證 |
+| `ferrous-opencc` | 0.4.0 | 簡繁轉換 | 純 Rust、Apache-2.0；能否編 WebAssembly 在 M1 票 16 開工時驗證 |
 | `proptest` | 1.12.0 | 核心的性質測試（dev） | — |
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
@@ -193,7 +193,7 @@ score(path) = log P_bigram(輸出文字)
 
 - `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看輸出文字，與切法無關；所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；初值由首選字基準的開發集調出，寫進方案檔。
-- `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` 初值 0.2（`docs/research/open-source-imes.md` §5）；沒學過的段為 0。個人機率由衰減值換算，公式在 M1〈學習〉定。M3 再加個人 bigram（前一字詞 → 這一段）。
+- `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` 初值 0.2（`docs/research/open-source-imes.md` §5）；沒學過的段為 0。個人機率由衰減值換算，公式在 M1 票 13 定。M3 再加個人 bigram（前一字詞 → 這一段）。
 - 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4）；每按一鍵只補算新增的位置。
 - Unicode 擴展區的字不進 lattice；整串輸入碼就是一個字的碼時，排在一般字之後（brief §4.1）。
 
@@ -396,7 +396,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 | 檔案 | 內容 | 授權 / 位置 |
 | --- | --- | --- |
-| `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`，`anr 門口`、`mir 一台` 由 M1〈連打〉〈bigram 訓練〉通過時加入 | 進 git |
+| `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`，`anr 門口`、`mir 一台` 由 M1 票 07（連打）、11（bigram 訓練）通過時加入 | 進 git |
 | `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼） | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
 | `bench/colloquial/` | 口語語料 test 切分的句子，轉碼方式同上；口語集的開發切分只用來調參 | 依來源（CC BY 等），附 `ATTRIBUTION.md`，進 git |
 | `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料（brief §12.2 的 `.userdb.txt`；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
@@ -471,60 +471,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 
 ### 7.2 M1 網頁 prototype
 
-目標：使用者任務書的階段 5，手感驗證引擎與佈局。
-
-各項以〈名稱〉稱呼，票號拆票時才定。`.scratch/m0/issues/09-m0-close.md` 的 Comments 用的是舊編號：1 詞庫、2 連打、4 學習、5 英文與簡繁、7 佈局、8 組字中修改、9 整合。
-
-順序：〈語料管線〉→〈首選字基準〉→〈詞庫與字頻〉→〈連打〉→〈bigram 訓練〉→〈bigram 調參〉→〈學習〉→〈英文與簡繁〉→〈粵語詞表〉→〈佈局格式〉→〈觸控鍵盤〉→〈組字中修改〉→〈整合〉。〈黑箱基線〉不依賴核心，和其他項平行，在〈bigram 調參〉之前完成。先建基準，之後每一項都有前後的數字可比；字頻、bigram、測試句都出自語料管線，所以它排第一。
-
-共同規則（拆票時寫進 spec〈共同規則〉）：
-
-- 〈首選字基準〉之後，改核心或資料包的票在 commit 附 `bench` 的前後對照：各集合的指標、依長度分組、翻盤清單（§5.2）。
-- 動到網頁的票，收尾除了 Playwright 腳本，再實際操作網頁亂按一輪（組字中夾雜各種鍵、快速連按、切換模式），找到的問題先寫成會紅的 Playwright 測試再修。
-- M1 不新增流程閘門（progress、commit message 這類）；新的自動檢查只加在產品行為與基準上。
-
-需要使用者提供：〈黑箱基線〉的裝置；〈首選字基準〉開工前，Windows 小狼毫的學習資料（已收到，2026-11-04 轉成 `bench/personal/rime-userdb.txt`，4,528 個詞）；真實句子選填。沒拿到就在該票停下問，不阻塞其他票。
-
-- **黑箱基線**（ADR 0006）：
-  - 照 `docs/research/closed-source-imes.md` §4 的 T1–T18 實測 Gboard（Android 模擬器、iPhone）、iOS 內建速成（iPhone）、macOS 內建速成，做不到的項目註明原因。開工先確認 iPhone 版 Gboard 有沒有速成（目前只有第三方整理的說法）。
-  - T5 只用測試字串 `bc12345@example.edu`，不用使用者的真實 email，不登入個人帳號。只讀畫面，不開啟產品的檔案。
-  - 用 `iphone-use`、`orca emulator-android`、`orca computer` 操作並讀回畫面。
-  - 驗收：`docs/research/blackbox-baseline.md` 記下版本、裝置與每項結果；QIM 要達到或刻意不同的項目寫回 brief §1.3，可機械驗證的案例進 `bench/fixed.tsv`。
-- **語料管線**：§4.3 的取得與前處理（維基、口語語料）、切 train / dev / test、機械轉成速成碼；產出 `bench/corpus/`、`bench/colloquial/` 與訓練用的 train 切分，並由 train 切分統計字頻（§4.2）。開工先讀完 Common Voice 的條款，結論寫回 brief §11、§12.1。驗收：`data --verify` 報各集合句數、轉碼失敗數、測試句原樣出現在訓練語料的句數（要為 0，§5.2 防洩漏）；建兩次結果相同。
-- **首選字基準**：`qim-bench`、`cargo xtask bench`（`--check`、`--update-baseline`、`--learning`）、`bench/fixed.tsv`、§5.2 的全部指標；個人集讀 Rime 學習資料。先在 M0 的逐字查碼上跑出第一份 baseline，數字差沒關係。驗收：
-  - `bench` 輸出各集合的指標、依長度分組、翻盤清單；個人集只印數字與題號。
-  - `--check` 在固定題沒過、或答錯數與修正次數高於 baseline 時紅；雙向測試（造一個退步會紅，只改輸出格式不紅）。
-  - `bench/baseline.json` 進 git，`bench/personal/` 在 `.gitignore`。
-- **詞庫與字頻**：§4.2 的 rime-essay（含門檻），字頻用〈語料管線〉的統計，資料包附 LICENSE；字序改成字頻 → 年級 → Big5（§4.1）。驗收：`data --verify` 加入「詞的碼都由字的速成碼組成」；bench 前後對照。
-- **連打**：lattice、Viterbi + beam、§2.3 打分（先只有 unigram 與 β、γ）。開工前讀 libime 的 lattice 與增量更新，記到 `docs/research/`。同一票修組字中按鍵的殘留：現在組字中按 `z`、Enter、標點或大寫字母，核心回 `handled` 為假，字元進了輸入框，組字卻還在。先加性質測試「`handled` 為假時組字是空的」（現在會紅），再定各鍵行為：Enter 把輸入碼原樣上屏（brief §4.3）；`z` 在萬用鍵（M4）之前吃下、不動作；標點與大寫字母參考 Rime、macOS 速成與〈黑箱基線〉的 T18（已做完的話），定了寫回 brief §4.3。驗收：
-  - `anr` 首選為「門口」，加進 `fixed.tsv`。
-  - 上述性質測試綠燈。
-  - bench 前後對照。
-- **bigram 訓練**：§4.3 的字級 bigram 訓練與剪枝，接進 §2.3 打分。驗收：`mir` 首選為「一台」並加進 `fixed.tsv`，`anr` 仍為「門口」；bigram 資料包 ≤ 8 MB；bench 前後對照。
-- **bigram 調參**：用 dev 切分調 `β`、`γ` 與口語語料權重，寫進方案檔，定 baseline。網頁加「回報」：把剛才那次組字的輸入碼和使用者要的字匯出成 `fixed.tsv` 的一行。完成後請使用者在網頁試打（不擋後續的票），回報的案例進 `fixed.tsv`。驗收：
-  - 每鍵 p95 在原生 ≤ 10 ms、WebAssembly ≤ 50 ms（Mac 上量，含 20 碼以上的長輸入）。
-  - 維基、口語、個人三個集合的指標分開列出；加入口語語料後，口語集修正次數下降，維基集首選正確率的退步寫進票的 `## Comments`。
-- **學習**：§2.4 的排位規則、§2.3 的 `personal`、自動造詞、觸發詞、無痕、TSV 匯出匯入。開工前讀 libime 怎麼把使用者資料併入 lattice（`UserLanguageModel`、`HistoryBigram`），記到 `docs/research/`。驗收：
-  - 同一個碼選同一個非首選字兩次後成為首選，兩次之間隔 500 次上屏也成立。
-  - 學過「門口」後，打一串含 `anr` 且原本首選不含「門口」的連打，首選含「門口」。
-  - 在 `mir` 分段選「一」「台」後，下次 `mir` 的「一台」在第 2 位，再選一次成首選。
-  - 無痕模式下學習資料不變。
-  - `bench --learning` 在口語集與個人集上，學習開的修正次數低於學習關。
-- **英文與簡繁**：SCOWL 資料包、第 2 位規則；`ferrous-opencc` 接上（先驗證能編 WebAssembly，不能就退回自讀 OpenCC 字典檔，記偏差）。驗收：
-  - 打 `the` 時第 2 位是 `the`。
-  - 簡體模式打 `anr` 首選為「门口」。
-- **粵語詞表**：`yue-colloquial.tsv` 初版，使用者審過再進資料包；固定題加入 3–5 句粵語口語。驗收：使用者審過的詞表進資料包，新增的固定題全過。
-- **佈局格式**：§2.6 的格式與 JSON Schema，定稿欄位（含佈局版本、淺色與深色、無障礙標籤）；`qim-layout` 的驗證、點擊判定、幾何計算。M1 實作矩形、圓角、旋轉、上下層順序；橢圓與多邊形的欄位留好，M5 實作。驗收：§5.3 的測試綠燈；一個兩鍵重疊的測試佈局，點重疊處判定為上層按鍵（Rust 測試）。
-- **觸控鍵盤**：預設 Gboard 速成佈局由 `qim-databuild` 算出（手機直向與橫向；字根主標籤、字母角標、長按出字母，第一排含數字）、符號頁（打完不跳回）、一個自訂頁面示範；按鍵放大預覽、深色模式。驗收：Playwright 在行動裝置 viewport 點按鍵打出「門口」，長按讀回彈出的英文字母；轉成橫向後仍打得出「門口」；切深色模式讀回按鍵顏色；重疊測試佈局點重疊處輸出上層按鍵。
-- **組字中修改**：§2.1 的分段顯示與 `Left`、`Right`、`focus_segment`；桌面用方向鍵，觸控點組字裡的分段。驗收：Playwright 打一串連打、移到中間分段改選別的字後上屏，其他分段的字符合重算結果，讀回輸入框。
-- **整合**：實體鍵盤模式的 §4.3 鍵位、候選展開面板、組字中顯示字根、字根提示快捷鍵、重排介面的假實作。驗收（即使用者的階段 5 驗收）：
-  - Playwright 實際打字並讀回畫面，貼上結果：
-    - 三個 Rime 案例的首選；
-    - 候選依使用次數前移；
-    - 中文狀態下的英文候選；
-    - 自訂頁面與長按。
-  - 〈黑箱基線〉的測試表能在網頁做的項目在 QIM 上重跑，和競品並列。
-  - `bench --check` 綠燈。
+進行中（2026-11-04 拆成 24 張票）：目標、範圍、共同規則、驗收與票序見 `.scratch/m1/spec.md`。
 
 ### 7.3 M2 平台可行性實驗
 
@@ -643,17 +590,17 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 | 風險 | 影響 | 何時確認 | 回寫 |
 | --- | --- | --- | --- |
-| 字級 bigram 不足以讓 `mir` 選「一台」 | M1 驗收 | M1〈bigram 訓練〉 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
-| 口語語料太小，或 Common Voice 條款不許使用 | 口語集代表性、bigram 品質 | M1〈語料管線〉 | 靠個人集與 HKCanCor、Tatoeba；再不足時請使用者決定其他來源，寫回 brief §5.2 |
-| 使用者的 Rime 學習資料遲遲沒到，個人集是空的 | M1 的品質判斷只剩公開語料 | M1〈首選字基準〉開工時 | 停下問使用者；其他票照常 |
-| iPhone 版 Gboard 沒有速成 | 黑箱基線少一個對象 | M1〈黑箱基線〉開頭 | 只測 Android 版，註明 |
+| 字級 bigram 不足以讓 `mir` 選「一台」 | M1 驗收 | M1 票 11 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
+| 口語語料太小，或 Common Voice 條款不許使用 | 口語集代表性、bigram 品質 | M1 票 03 | 靠個人集與 HKCanCor、Tatoeba；再不足時請使用者決定其他來源，寫回 brief §5.2 |
+| 使用者的 Rime 學習資料遲遲沒到，個人集是空的 | M1 的品質判斷只剩公開語料 | M1 票 04 開工時 | 停下問使用者；其他票照常 |
+| iPhone 版 Gboard 沒有速成 | 黑箱基線少一個對象 | M1 票 09 開頭 | 只測 Android 版，註明 |
 | 空間模型讓正確輸入被錯字蓋過 | M4 範圍 | M4 基準 | 改成只在無候選時啟動，或只用於觸控 |
 | 小型神經模型放不進鍵盤擴充或太慢 | M3 範圍、M7 | M2、§7.8 | 只在桌面與 Android 用，或不做，寫回 brief §1.5 |
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
-| `ferrous-opencc` 不能編 WebAssembly | M1〈英文與簡繁〉 | 票開工時 | 改自讀 OpenCC 字典，記偏差 |
+| `ferrous-opencc` 不能編 WebAssembly | M1 票 16 | 票開工時 | 改自讀 OpenCC 字典，記偏差 |
 | iOS 鍵盤擴充放不下核心與資料包 | M3 的模型大小、M7 | M2 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
 | 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
-| CirrusSearch dump 不可用或格式改變 | M1〈語料管線〉 | 票開工時 | 改用 pages-articles 加文字抽取，記偏差 |
+| CirrusSearch dump 不可用或格式改變 | M1 票 01 | 票開工時 | 改用 pages-articles 加文字抽取，記偏差 |
 | 延遲超過預算 | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢 | M3 範圍 | §7.8 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |
 | iOS 鍵盤擴充不能用 Foundation Models | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |

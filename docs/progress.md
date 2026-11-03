@@ -15,7 +15,7 @@
 | 里程碑 | 票目錄 | 拆票前讀 | 備註 |
 | --- | --- | --- | --- |
 | M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 完成，[已封存](archive/M0.md) |
-| M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 進行中，尚未拆票 |
+| M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 進行中，24 張票，票序見 `.scratch/m1/spec.md` |
 
 ## Session 紀錄
 
@@ -24,6 +24,7 @@
 | 2026-11-04 | M1 封存 M0 | 票 09：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過；M0 封存到 `docs/archive/M0.md`，M1 標進行中；細節見票 09 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 | 2026-11-04 | M1 plan | M0 review 後依使用者同意改 plan §5.2、§7.2：語料管線與基準先行、拆 bigram 與佈局、學習模式、個人集改用 Rime 學習資料；brief §9、§12.2 同步 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 | 2026-11-04 | M1 plan | 收到使用者小狼毫的 `quick5.userdb`，轉成 `bench/personal/rime-userdb.txt`（本機）；查出 Rime 記的是倉頡全碼而非按鍵，plan §5.2 改由自己轉碼 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
+| 2026-11-04 | M1 拆票 | 寫 `.scratch/m1/spec.md`，依使用者同意拆成 24 張票（票序在 spec）；plan §7.2 縮成連結，plan、brief 裡的「M1〈名稱〉」改成票號 | 新 session 下 `/implement .scratch/m1/issues/01-corpus-yue-wiki.md` |
 
 ## 偏差與決定
 
@@ -33,3 +34,8 @@
 - 2026-11-04 M1 plan：個人集由「≥ 100 句真實句子」改為使用者 Windows 小狼毫的 Rime 學習資料（使用者提供），句子改選填；內容只在本機、不送雲端（plan §5.2）。
 - 2026-11-04 M1 plan：基準加依長度分組、翻盤清單、`--learning` 學習模式（plan §5.2）；`fixed.tsv` 起始只放已過的 `a 日`，`anr`、`mir` 在通過時加入，`--check` 才不會一開始就紅。
 - 2026-11-04 M1 plan：個人集的輸入碼改由 `qim-databuild` 轉碼，不用 Rime 記下的碼：實測那是詞典的倉頡全碼（99.5%），不是使用者按的鍵，看不出打不打全碼（brief §12.2）。
+- 2026-11-04 M1 拆票：plan §7.2 的 14 項拆成 24 張票：語料管線、學習各 2 張，基準 3 張，黑箱分 Apple 與 Gboard，英文與簡繁分開，〈整合〉拆成字根、面板與重排、收尾 3 張。
+- 2026-11-04 M1 拆票：`bench --learning` 由首選字基準移到票 13（學習）：沒有學習前，開關學習的結果相同，量不出差別。
+- 2026-11-04 M1 拆票：組字中按鍵殘留由〈連打〉拆成票 10；`Left` / `Right` 在票 21 之前先吃下不動作，「`handled` 為假時組字是空的」才成立。
+- 2026-11-04 M1 拆票：佈局由「格式 → 觸控鍵盤」改成 tracer（票 18）→ 格式定稿（19）→ 觸控功能（20），第一張就從資料打通到網頁。
+- 2026-11-04 M1 拆票：票 06 先讓詞庫用整串輸入碼查，網頁 `anr` 就查得到「門口」；`anr 門口` 在哪張票通過就由哪張加進 `fixed.tsv`。
