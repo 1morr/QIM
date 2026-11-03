@@ -63,5 +63,6 @@ repo 骨架與閘門就位；資料管線產出速成碼表資料包；在網頁
 | [06](issues/06-unihan-cross-check.md) | 05 | Unihan 交叉比對報表 |
 | [07](issues/07-tracer-bullet-type-a.md) | 05 | 網頁打 `a` 列出「日」、空白上屏首選 |
 | [08](issues/08-m0-keys-and-paging.md) | 07 | Backspace、Esc、數字選字、翻頁；`ar` → 問 |
+| [09](issues/09-m0-close.md) | 08 | M0 收尾：問三個待決定、里程碑 code-review、重驗驗收、封存 M0、M1 標進行中 |
 
 02–05 只被 01 擋，可並行；一個一個做時照編號。
