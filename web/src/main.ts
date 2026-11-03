@@ -29,8 +29,18 @@ function press(session: Session, key: Key): Snapshot {
 	switch (key.kind) {
 		case "letter":
 			return session.letter(key.char);
+		case "digit":
+			return session.digit(key.digit);
 		case "space":
 			return session.space();
+		case "backspace":
+			return session.backspace();
+		case "escape":
+			return session.escape();
+		case "pageUp":
+			return session.pageUp();
+		case "pageDown":
+			return session.pageDown();
 	}
 }
 

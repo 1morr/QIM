@@ -32,6 +32,28 @@ impl WebSession {
         self.handle(Key::Space)
     }
 
+    pub fn backspace(&mut self) -> WebSnapshot {
+        self.handle(Key::Backspace)
+    }
+
+    pub fn escape(&mut self) -> WebSnapshot {
+        self.handle(Key::Escape)
+    }
+
+    pub fn digit(&mut self, digit: u8) -> WebSnapshot {
+        self.handle(Key::Digit(digit))
+    }
+
+    #[wasm_bindgen(js_name = pageUp)]
+    pub fn page_up(&mut self) -> WebSnapshot {
+        self.handle(Key::PageUp)
+    }
+
+    #[wasm_bindgen(js_name = pageDown)]
+    pub fn page_down(&mut self) -> WebSnapshot {
+        self.handle(Key::PageDown)
+    }
+
     fn handle(&mut self, key: Key) -> WebSnapshot {
         self.session
             .handle(&self.engine, &mut self.user, key)

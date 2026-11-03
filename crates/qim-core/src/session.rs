@@ -96,39 +96,95 @@ pub struct Snapshot {
 #[derive(Debug, Clone, Default)]
 pub struct Session {
     input: String,
+    /// 整串輸入碼的全部候選。
     candidates: Vec<String>,
+    /// 目前頁，從 0 起。
+    page: usize,
     generation: u64,
 }
 
 impl Session {
     pub fn handle(&mut self, engine: &Engine, _user: &mut UserModel, key: Key) -> Snapshot {
+        if let Key::Letter(c) = key
+            && engine.scheme.alphabet.contains(c)
+        {
+            self.input.push(c);
+            self.refresh_candidates(engine);
+            return self.snapshot(true, None);
+        }
+        // 沒有組字時其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
+        if self.input.is_empty() {
+            return self.snapshot(false, None);
+        }
         match key {
-            Key::Letter(c) if engine.scheme.alphabet.contains(c) => {
-                self.input.push(c);
-                self.candidates = engine
-                    .code_table
-                    .lookup(&self.input)
-                    .iter()
-                    .map(|e| e.text.to_string())
-                    .collect();
-                self.generation += 1;
+            Key::Backspace => {
+                self.input.pop();
+                self.refresh_candidates(engine);
                 self.snapshot(true, None)
             }
-            Key::Space if !self.input.is_empty() => {
-                let commit = self.candidates.first().cloned();
-                if commit.is_some() {
-                    self.clear();
-                }
-                self.snapshot(true, commit)
+            Key::Escape => {
+                self.clear();
+                self.snapshot(true, None)
             }
+            Key::Space => self.commit_at(0),
+            Key::Digit(digit) => match usize::from(digit).checked_sub(1) {
+                Some(index) => self.commit_at(index),
+                None => self.snapshot(true, None),
+            },
+            Key::PageUp if self.page > 0 => self.turn_to(self.page - 1),
+            Key::PageDown if self.has_more() => self.turn_to(self.page + 1),
+            Key::PageUp | Key::PageDown => self.snapshot(true, None),
             _ => self.snapshot(false, None),
         }
+    }
+
+    /// 上屏目前頁第 `index` 個候選並清空組字；沒有該位置時不動作，鍵照樣吃下。
+    fn commit_at(&mut self, index: usize) -> Snapshot {
+        let commit = self.page_candidates().get(index).cloned();
+        if commit.is_some() {
+            self.clear();
+        }
+        self.snapshot(true, commit)
+    }
+
+    fn turn_to(&mut self, page: usize) -> Snapshot {
+        self.page = page;
+        self.generation += 1;
+        self.snapshot(true, None)
+    }
+
+    /// 輸入碼變了：整串查碼表、回到第一頁；超過方案的最長碼時沒有候選（連打是 M1）。
+    fn refresh_candidates(&mut self, engine: &Engine) {
+        self.candidates = if self.input.chars().count() > usize::from(engine.scheme.max_code_length)
+        {
+            Vec::new()
+        } else {
+            engine
+                .code_table
+                .lookup(&self.input)
+                .iter()
+                .map(|e| e.text.to_string())
+                .collect()
+        };
+        self.page = 0;
+        self.generation += 1;
     }
 
     fn clear(&mut self) {
         self.input.clear();
         self.candidates.clear();
+        self.page = 0;
         self.generation += 1;
+    }
+
+    /// 目前頁的候選。
+    fn page_candidates(&self) -> &[String] {
+        let start = self.page * PAGE_SIZE;
+        &self.candidates[start..self.candidates.len().min(start + PAGE_SIZE)]
+    }
+
+    fn has_more(&self) -> bool {
+        self.candidates.len() > (self.page + 1) * PAGE_SIZE
     }
 
     fn snapshot(&self, handled: bool, commit: Option<String>) -> Snapshot {
@@ -139,13 +195,12 @@ impl Session {
                 ..Composition::default()
             },
             candidates: self
-                .candidates
+                .page_candidates()
                 .iter()
-                .take(PAGE_SIZE)
                 .map(|text| Candidate { text: text.clone() })
                 .collect(),
-            page: 0,
-            has_more: self.candidates.len() > PAGE_SIZE,
+            page: self.page,
+            has_more: self.has_more(),
             commit,
             ascii: false,
             generation: self.generation,
