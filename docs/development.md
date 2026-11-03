@@ -20,6 +20,8 @@ git config core.hooksPath .githooks    # 啟用 pre-commit hook
 cargo xtask check                      # 確認環境就緒
 ```
 
+macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預編譯檔，不必核准。
+
 ## 建置
 
 | 指令 | 作用 |
