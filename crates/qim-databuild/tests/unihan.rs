@@ -83,22 +83,22 @@ U+95CA\tkGradeLevel\t6
 ";
 
 #[test]
-fn parse_takes_kcangjie_lowercased_and_skips_other_fields() {
+fn cangjie_codes_takes_kcangjie_lowercased_and_skips_other_fields() {
     assert_eq!(
-        unihan::parse(DICTIONARY_LIKE_DATA).unwrap(),
+        unihan::cangjie_codes(DICTIONARY_LIKE_DATA).unwrap(),
         kcangjie(&[('㐀', "tm"), ('日', "a"), ('𠀀', "mv")])
     );
 }
 
 #[test]
-fn parse_rejects_malformed_kcangjie_lines() {
+fn cangjie_codes_rejects_malformed_kcangjie_lines() {
     for line in [
         "U+65E5\tkCangjie\tA1",
         "U+65E5\tkCangjie",
         "65E5\tkCangjie\tA",
         "U+D800\tkCangjie\tA",
     ] {
-        assert!(unihan::parse(line).is_err(), "{line:?}");
+        assert!(unihan::cangjie_codes(line).is_err(), "{line:?}");
     }
 }
 

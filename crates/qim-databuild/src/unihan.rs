@@ -24,7 +24,7 @@ pub fn read_archive(zip: &[u8]) -> Result<String, Error> {
 }
 
 /// 取出 `kCangjie` 欄：字到小寫的倉頡碼。`kCangjie` 的值是一串大寫字母（UAX #38）。
-pub fn parse(text: &str) -> Result<BTreeMap<char, String>, Error> {
+pub fn cangjie_codes(text: &str) -> Result<BTreeMap<char, String>, Error> {
     field(text, "kCangjie", |v| {
         (!v.is_empty() && v.bytes().all(|b| b.is_ascii_uppercase()))
             .then(|| v.to_ascii_lowercase())

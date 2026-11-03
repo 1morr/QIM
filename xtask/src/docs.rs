@@ -226,7 +226,7 @@ fn table<'a>(section: &Section<'a>) -> Option<Table<'a>> {
 }
 
 /// 表格列的各欄，去掉前後空白；`\|` 是欄內的直線，不分欄。
-fn cells(text: &str) -> Vec<&str> {
+pub(crate) fn cells(text: &str) -> Vec<&str> {
     let text = text.trim();
     let text = text.strip_prefix('|').unwrap_or(text);
     let text = text.strip_suffix('|').unwrap_or(text);

@@ -72,7 +72,7 @@ flowchart LR
 | `crates/qim-bench/` | 首選字基準 runner，量正確率與每鍵延遲 |
 | `crates/qim-wasm/`、`crates/qim-ffi/` | 綁定層，不放邏輯；`qim-ffi` 在 M2 建 |
 | `xtask/` | 閘門與開發指令（`cargo xtask check`、`data`、`web`、`bench`、`commit-msg`） |
-| `data/` | 自己維護的方案檔、佈局檔、粵語詞表、來源清單 `sources.toml`；不放第三方原始檔與建置產物 |
+| `data/` | 自己維護的方案檔、佈局檔、粵語詞表、來源清單 `sources.toml`，與進資料包的授權全文 `licenses/`；不放其他第三方原始檔與建置產物 |
 | `bench/` | `fixed.tsv`、`corpus/`、`colloquial/`（都含授權與署名）、`baseline.json` |
 | `web/` | 網頁 prototype（Vite + TypeScript）、`web/editor/` 佈局編輯器、Playwright 測試 |
 | `platforms/` | 各平台殼，M6 起逐一建立 |

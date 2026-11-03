@@ -49,8 +49,7 @@ fn try_wasm_bindings(root: &Path) -> Result<(), String> {
         Some(_) => {}
     }
 
-    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    run(Command::new(cargo)
+    run(Command::new(crate::cargo())
         .args(["build", "--release", "-p", "qim-wasm", "--target", TARGET])
         .current_dir(root))?;
     let wasm = root.join(format!("target/{TARGET}/release/qim_wasm.wasm"));

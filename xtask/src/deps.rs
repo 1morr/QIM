@@ -629,7 +629,8 @@ pub const BYTES: &[u8] = b"std::net";
             .into_iter()
             .flat_map(str::lines)
             .filter_map(|line| {
-                let cells: Vec<&str> = line.trim().strip_prefix('|')?.split('|').collect();
+                line.trim().starts_with('|').then_some(())?;
+                let cells = crate::docs::cells(line);
                 let crates = backticked(cells.first()?);
                 let allowed_cell = cells.get(1)?;
                 (!crates.is_empty() && crates.iter().all(|name| name.starts_with("qim-"))).then(
