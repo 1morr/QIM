@@ -263,6 +263,7 @@ QIM（暫名）。
 - rime-quick `45d0690`（2026-07-17）拿掉 `min_phrase_weight: 100`，八股文全部約 49.8 萬條多字詞進碼表，含權重 0 的詞。
 - 三案例根因：`anr` 的「問」是倉頡全碼、與「門口」同長而比詞頻（50737 > 9435）；`mir` 的「一台」不在詞庫，且精確詞條（䂖、一店、歹口）擋掉造句；只保留速成碼後 `anr` 首選變「門口」。`docs/research/rime.md` §4，復現：`scripts/experiments/rime-cases/`。
 - 使用者資料同步把每個使用者詞典寫成純文字 `<詞典名>.userdb.txt`，放在 `sync_dir/<user_id>/`（`user_id` 即 `installation.yaml` 的 `installation_id`）。每列三欄以 Tab 分隔：輸入碼（每個音節後帶一個空白）、詞、`c=上屏次數 d=衰減值 t=tick`。`c` 為負代表已刪除。librime `e930f57`：`src/rime/dict/user_db.cc:22-25,69-95`、`src/rime/lever/user_dict_manager.cc:51-71`、`src/rime/deployer.cc:150-152`、`src/rime/lever/deployment_tasks.cc:97-107`（`sync_dir` 預設為使用者目錄下的 `sync`）、`src/rime/dict/user_dictionary.cc:443-451`，2026-11-04 查。
+- userdb 的輸入碼是詞典的音節碼，不是使用者按的鍵：使用者速成方案（rime-quick）的 4,528 個詞、9,241 個音節，99.5% 等於該字的倉頡全碼，沒有一個是速成碼。所以看不出使用者打的是速成碼還是全碼，也看不出三代或五代。本機統計（小狼毫 `quick5.userdb`，用 `rime_dict_manager -b` 轉出），2026-11-04。
 - librime-octagram 外掛為 BSD-3-Clause，語法模型資料 rime-octagram-data 為 LGPL-3.0；繁體字級 / 詞級壓縮模型 10.3 MB / 41.4 MB（release 20260712）。[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)。
 
 ### 12.3 平台框架

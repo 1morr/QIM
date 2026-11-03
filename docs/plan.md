@@ -399,13 +399,13 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 | `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`，`anr 門口`、`mir 一台` 由 M1〈連打〉〈bigram 訓練〉通過時加入 | 進 git |
 | `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼） | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
 | `bench/colloquial/` | 口語語料 test 切分的句子，轉碼方式同上；口語集的開發切分只用來調參 | 依來源（CC BY 等），附 `ATTRIBUTION.md`，進 git |
-| `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料匯出（brief §12.2 的 `.userdb.txt`）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
+| `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料（brief §12.2 的 `.userdb.txt`；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
 | `bench/personal/sentences.txt` | 選填：使用者提供的真實句子，一行一句，由 `qim-databuild` 轉碼；英文段落切開不算 | 同上 |
 | `bench/baseline.json` | 各集合（`personal` 除外）的答錯數與修正次數 | 進 git |
 | `bench/personal/baseline.json` | 個人集的答錯數與修正次數 | 只在本機 |
 
 - 個人集（Rime 資料）：
-  - 輸入碼用 Rime 記下的碼（使用者真實的打法，含三代或五代的選擇）；那串碼不是合法速成碼時（多半是倉頡全碼，如 `anr` → 問，ADR 0003）改由 `qim-databuild` 轉碼，並回報這種詞有幾條。
+  - 輸入碼由 `qim-databuild` 從詞轉成速成碼，轉法同 `bench/corpus/`。Rime 記下的碼是詞典的倉頡全碼，不是使用者按的鍵（brief §12.2），不能用，也看不出使用者打不打全碼。
   - 同時報不加權與依上屏次數加權的結果。
   - 偏差：使用者只選得到 Rime 給的候選，所以這份資料偏向 Rime 詞庫已有的詞；QIM 的詞庫也來自 rime-essay，個人集的分數可能偏高，判斷時要和口語集一起看。
   - 隱私：個人集的內容不寫進 repo 的任何檔案、commit、票，只報數字；不送雲端 LLM（§7.8 的雲端部分不跑個人集，除非使用者同意）。
@@ -483,7 +483,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 - 動到網頁的票，收尾除了 Playwright 腳本，再實際操作網頁亂按一輪（組字中夾雜各種鍵、快速連按、切換模式），找到的問題先寫成會紅的 Playwright 測試再修。
 - M1 不新增流程閘門（progress、commit message 這類）；新的自動檢查只加在產品行為與基準上。
 
-需要使用者提供：〈黑箱基線〉的裝置；〈首選字基準〉開工前，Windows 小狼毫的學習資料匯出（右鍵選單「用戶資料同步」後，`%APPDATA%\Rime\sync\<installation_id>\` 裡速成方案的 `<方案>.userdb.txt`，rime-quick 是 `quick5.userdb.txt`，放到 `bench/personal/rime-userdb.txt`）；真實句子選填。沒拿到就在該票停下問，不阻塞其他票。
+需要使用者提供：〈黑箱基線〉的裝置；〈首選字基準〉開工前，Windows 小狼毫的學習資料（已收到，2026-11-04 轉成 `bench/personal/rime-userdb.txt`，4,528 個詞）；真實句子選填。沒拿到就在該票停下問，不阻塞其他票。
 
 - **黑箱基線**（ADR 0006）：
   - 照 `docs/research/closed-source-imes.md` §4 的 T1–T18 實測 Gboard（Android 模擬器、iPhone）、iOS 內建速成（iPhone）、macOS 內建速成，做不到的項目註明原因。開工先確認 iPhone 版 Gboard 有沒有速成（目前只有第三方整理的說法）。

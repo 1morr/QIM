@@ -23,6 +23,7 @@
 | --- | --- | --- | --- |
 | 2026-11-04 | M1 封存 M0 | 票 09：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過；M0 封存到 `docs/archive/M0.md`，M1 標進行中；細節見票 09 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 | 2026-11-04 | M1 plan | M0 review 後依使用者同意改 plan §5.2、§7.2：語料管線與基準先行、拆 bigram 與佈局、學習模式、個人集改用 Rime 學習資料；brief §9、§12.2 同步 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
+| 2026-11-04 | M1 plan | 收到使用者小狼毫的 `quick5.userdb`，轉成 `bench/personal/rime-userdb.txt`（本機）；查出 Rime 記的是倉頡全碼而非按鍵，plan §5.2 改由自己轉碼 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 
 ## 偏差與決定
 
@@ -31,3 +32,4 @@
 - 2026-11-04 M1 plan：組字中按鍵殘留（`z`、Enter、標點時 `handled` 為假但組字還在）由票 09 的去處 M1 票 8、9 提前到〈連打〉，因為連打後組字變長、更常碰到。
 - 2026-11-04 M1 plan：個人集由「≥ 100 句真實句子」改為使用者 Windows 小狼毫的 Rime 學習資料（使用者提供），句子改選填；內容只在本機、不送雲端（plan §5.2）。
 - 2026-11-04 M1 plan：基準加依長度分組、翻盤清單、`--learning` 學習模式（plan §5.2）；`fixed.tsv` 起始只放已過的 `a 日`，`anr`、`mir` 在通過時加入，`--check` 才不會一開始就紅。
+- 2026-11-04 M1 plan：個人集的輸入碼改由 `qim-databuild` 轉碼，不用 Rime 記下的碼：實測那是詞典的倉頡全碼（99.5%），不是使用者按的鍵，看不出打不打全碼（brief §12.2）。
