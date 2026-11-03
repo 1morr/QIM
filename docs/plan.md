@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0、M1 寫到任務與驗收；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0 已開工（`.scratch/m0/spec.md`）；M1 寫到任務與驗收；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -88,7 +88,7 @@ flowchart LR
 | `qim-databuild`、`qim-bench` | `qim-core`（資料包格式）、I/O 套件 | 被 `qim-core` 依賴 |
 | `web/`、`platforms/*` | 只透過綁定呼叫核心與 `qim-layout` | 重寫排序、查碼或點擊判定邏輯 |
 
-強制：`cargo xtask check` 的 `deps` 步驟讀 `cargo metadata` 比對上表的白名單，並掃 `qim-core`、`qim-layout` 原始碼的禁用路徑。測試做雙向變異：在暫存副本加入違規依賴或 `use std::fs` 會紅；改無關的格式或命名不紅。M0 票 01 接上。
+強制：`cargo xtask check` 的 `deps` 步驟讀 `cargo metadata` 比對上表的白名單，並掃 `qim-core`、`qim-layout` 原始碼的禁用路徑。測試做雙向變異：在暫存副本加入違規依賴或 `use std::fs` 會紅；改無關的格式或命名不紅。M0 票 02 接上。
 
 ### 1.4 主要依賴
 
@@ -414,7 +414,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 ## 6. 開發環境與閘門
 
-M0 票 01 要交付：
+M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；02：`deps`；03：commit-msg；04：progress 與 spec 閘門）：
 
 - `docs/development.md`：環境需求、安裝、建置、〈全部檢查〉，是開發指令的單一來源。
 - `cargo xtask check`：`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、`deps`（§1.3），以及網頁的 `tsc --noEmit` 與 `biome check`。
@@ -448,22 +448,7 @@ M0 票 01 要交付：
 
 ### 7.1 M0 骨架
 
-目標：repo 骨架與閘門就位；資料管線產出速成碼表；按 `a` 在網頁上看到「日」等候選，按空白上屏（tracer bullet）。
-
-1. **骨架與閘門**：Cargo workspace、`rust-toolchain.toml`、`xtask`、`.githooks/`、`web/` 的 Vite + TS + Biome 空殼、`docs/development.md`、§6 全部閘門與它們的測試。驗收：
-   - `cargo xtask check` 綠燈。
-   - 違規 commit message 被擋。
-   - 在暫存副本讓 `qim-core` 依賴 `qim-wasm` 或 `use std::fs` 時 `deps` 會紅。
-   - 違反 progress 規則時閘門會紅。
-   - 同輪更新 `CLAUDE.md` 的頂層目錄地圖。
-2. **資料管線 v0**：`data/sources.toml`、`qim-databuild` 取得 libcangjie、§4.1 速成碼表、§4.5 的驗證、`postcard` 資料包格式（含格式版本號）、`data/schemes/quick.toml`。驗收：
-   - `cargo xtask data --verify` 綠燈。
-   - 驗證報告列出連打字集字數與擴展區字數。
-   - 同樣的來源建兩次，資料包 sha256 相同。
-3. **核心 tracer bullet**：`Session` 處理字母、空白、Backspace、Escape、數字選字；只做單字查詢，依 Big5 排序；`qim-wasm` 綁定；網頁有輸入框與候選列。驗收：
-   - Playwright 在網頁打 `a` 讀回候選含「日」，按空白讀回輸入框為「日」。
-   - 打 `ar` 讀回候選含「問」。
-   - 截圖存證。
+已開工，見 `.scratch/m0/spec.md`。
 
 ### 7.2 M1 網頁 prototype
 
