@@ -1,0 +1,35 @@
+# 速成輸入方案。欄位見 docs/plan.md §2.5；由 qim-databuild 編進資料包，qim-core 不讀 TOML。
+# [packs]、[ranking] 等欄位在用到它們的里程碑加入（M1）。
+
+id = "quick"
+name = "速成"
+version = "1"
+alphabet = "abcdefghijklmnopqrstuvwxy"
+max_code_length = 2
+
+[radicals] # 鍵 → 字根，組字與鍵盤標籤用
+a = "日"
+b = "月"
+c = "金"
+d = "木"
+e = "水"
+f = "火"
+g = "土"
+h = "竹"
+i = "戈"
+j = "十"
+k = "大"
+l = "中"
+m = "一"
+n = "弓"
+o = "人"
+p = "心"
+q = "手"
+r = "口"
+s = "尸"
+t = "廿"
+u = "山"
+v = "女"
+w = "田"
+x = "難"
+y = "卜"

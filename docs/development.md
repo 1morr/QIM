@@ -29,6 +29,25 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `cargo build` | 建置全部 Rust crate |
 | `npm run --prefix web dev` | 網頁開發伺服器 |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
+| `cargo xtask data [--verify]` | 建資料包到 `build/packs/`，見〈資料建置〉 |
+
+## 資料建置
+
+```sh
+cargo xtask data            # 建資料包
+cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一項失敗就 exit 非零
+```
+
+`cargo xtask data` 用 release 編 `qim-databuild` 並在 repo 根目錄執行，步驟見 plan §4：
+
+- 來源列在 `data/sources.toml`：每個來源釘 commit 與每個檔的 sha256。下載到 `.cache/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 commit、url 與 sha256，快取路徑跟著換。
+- `sources.toml` 的 `license_statement` 照抄上游的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`。
+- 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
+- 產物：`build/packs/<方案 id>/` 下的 `<方案 id>.pack`、`LICENSE`、`NOTICE`。資料包格式定義在 `crates/qim-core/src/pack.rs`，改格式時加 `FORMAT_VERSION`。
+
+`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、資料包 sha256，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`。
+
+`.cache/` 與 `build/` 不進 git。
 
 ## 全部檢查
 

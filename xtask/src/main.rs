@@ -8,7 +8,7 @@ mod docs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔>";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -16,6 +16,8 @@ fn main() -> ExitCode {
     match args.as_slice() {
         ["check"] => check(false),
         ["check", "--fast"] => check(true),
+        ["data"] => data(&[]),
+        ["data", "--verify"] => data(&["--verify"]),
         ["commit-msg", file] => {
             if commit_msg::report(Path::new(file)) {
                 ExitCode::SUCCESS
@@ -39,6 +41,23 @@ fn check(fast: bool) -> ExitCode {
         }
         Err(step) => {
             eprintln!("check 失敗：{step}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// 建資料包（plan §4）；邏輯在 `qim-databuild`，這裡只轉交。
+fn data(args: &[&str]) -> ExitCode {
+    let status = std::process::Command::new(env!("CARGO"))
+        .args(["run", "--quiet", "--release", "-p", "qim-databuild", "--"])
+        .args(args)
+        .current_dir(repo_root())
+        .status();
+    match status {
+        Ok(s) if s.success() => ExitCode::SUCCESS,
+        Ok(_) => ExitCode::FAILURE,
+        Err(e) => {
+            eprintln!("跑不起 qim-databuild：{e}");
             ExitCode::FAILURE
         }
     }

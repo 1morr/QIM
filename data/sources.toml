@@ -1,0 +1,20 @@
+# 資料來源（plan §4）：每個來源釘 commit 與每個檔的 sha256。
+# qim-databuild 下載到 .cache/sources/，sha256 不符就失敗；換版本時改 commit、url 與 sha256。
+
+[source.libcangjie]
+repository = "https://gitlab.freedesktop.org/cangjie/libcangjie"
+commit = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
+license = "Public Domain"
+# 授權聲明所在的檔，與照抄的聲明原文；建置時核對原文確實在檔內，再寫進資料包的 LICENSE。
+license_file = "data/README.table.md"
+license_statement = "The data in the ``table.txt`` file is hereby placed under the Public Domain, in the hope that is is useful."
+
+[[source.libcangjie.files]]
+path = "data/table.txt"
+url = "https://gitlab.freedesktop.org/cangjie/libcangjie/-/raw/346026b8ccf4ffdfbe424400edb6a588c0c5ba8e/data/table.txt"
+sha256 = "86118f2a50591b837e3317a3dab87f96e7188c54046e8ed20dd4a0933877d3ea"
+
+[[source.libcangjie.files]]
+path = "data/README.table.md"
+url = "https://gitlab.freedesktop.org/cangjie/libcangjie/-/raw/346026b8ccf4ffdfbe424400edb6a588c0c5ba8e/data/README.table.md"
+sha256 = "5962758f991e9119dddf78391202443731264332ea6b1f013791ba599fcb1b5d"

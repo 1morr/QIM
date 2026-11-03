@@ -362,11 +362,21 @@ mod tests {
         }
     }
 
-    fn append(dir: &Path, file: &str, text: &str) {
+    /// 在副本的檔尾追加 `text`，回傳追加的第一行的行號，讓斷言不綁原檔的長度。
+    fn append(dir: &Path, file: &str, text: &str) -> usize {
         let path = dir.join(file);
         let mut content = fs::read_to_string(&path).unwrap();
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        let first_line = content.lines().count() + 1;
         content.push_str(text);
         fs::write(path, content).unwrap();
+        first_line
+    }
+
+    fn core_line(line: usize) -> String {
+        format!("{CORE_LIB}:{line}")
     }
 
     const CORE_TOML: &str = "crates/qim-core/Cargo.toml";
@@ -458,26 +468,26 @@ mod tests {
     #[test]
     fn use_std_fs_in_core_is_red() {
         let dir = copy_repo();
-        append(dir.path(), CORE_LIB, "use std::fs;\n");
-        assert_red(dir.path(), &["crates/qim-core/src/lib.rs:4", "std::fs"]);
+        let at = append(dir.path(), CORE_LIB, "use std::fs;\n");
+        assert_red(dir.path(), &[&core_line(at), "std::fs"]);
     }
 
     #[test]
     fn std_fs_call_in_core_is_red() {
         let dir = copy_repo();
-        append(
+        let at = append(
             dir.path(),
             CORE_LIB,
             "pub fn load() -> Vec<u8> {\n    std::fs::read(\"pack\").unwrap()\n}\n",
         );
-        assert_red(dir.path(), &["crates/qim-core/src/lib.rs:5", "std::fs"]);
+        assert_red(dir.path(), &[&core_line(at + 1), "std::fs"]);
     }
 
     #[test]
     fn std_fs_in_use_group_is_red() {
         let dir = copy_repo();
-        append(dir.path(), CORE_LIB, "use std::{fs, io};\n");
-        assert_red(dir.path(), &["crates/qim-core/src/lib.rs:4", "std::fs"]);
+        let at = append(dir.path(), CORE_LIB, "use std::{fs, io};\n");
+        assert_red(dir.path(), &[&core_line(at), "std::fs"]);
     }
 
     #[test]
@@ -535,26 +545,27 @@ pub const BYTES: &[u8] = b"std::net";
              mod fs {\n    pub fn read() {}\n}\npub mod net {}\n\
              pub fn renamed_fs_helper(fs: u8) -> u8 {\n    self::fs::read();\n    crate::fs::read();\n    fs\n}\n",
         );
-        append(
-            dir.path(),
-            CORE_TOML,
-            "serde   =   { version = \"1\", default-features = false }  # 允許的依賴\n",
-        );
+        // 既有的允許依賴改成怪格式、加行尾註解。
+        let toml = dir.path().join(CORE_TOML);
+        let manifest = fs::read_to_string(&toml).unwrap();
+        let serde_line = manifest
+            .lines()
+            .find(|line| line.starts_with("serde = "))
+            .expect("qim-core 依賴 serde");
+        let odd = serde_line.replacen("serde = ", "serde   =   ", 1) + "  # 允許的依賴";
+        fs::write(&toml, manifest.replace(serde_line, &odd)).unwrap();
         assert_green(dir.path());
     }
 
     #[test]
     fn system_time_through_imported_module_is_red() {
         let dir = copy_repo();
-        append(
+        let at = append(
             dir.path(),
             CORE_LIB,
             "use std::time;\npub fn now() {\n    let _ = time::SystemTime::now();\n}\n",
         );
-        assert_red(
-            dir.path(),
-            &["crates/qim-core/src/lib.rs:6", "std::time::SystemTime"],
-        );
+        assert_red(dir.path(), &[&core_line(at + 2), "std::time::SystemTime"]);
     }
 
     #[test]
@@ -571,12 +582,12 @@ pub const BYTES: &[u8] = b"std::net";
     #[test]
     fn std_fs_in_cfg_test_module_is_red() {
         let dir = copy_repo();
-        append(
+        let at = append(
             dir.path(),
             CORE_LIB,
             "#[cfg(test)]\nmod tests {\n    use std::fs;\n}\n",
         );
-        assert_red(dir.path(), &["crates/qim-core/src/lib.rs:6", "std::fs"]);
+        assert_red(dir.path(), &[&core_line(at + 2), "std::fs"]);
     }
 
     #[test]

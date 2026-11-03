@@ -18,3 +18,7 @@ Blocked by: 05
 - [ ] `cargo xtask data --verify` 綠燈，輸出含 Unihan 比對字數與差異數（貼輸出）。
 - [ ] 差異數大於 0 時建置仍成功。
 - [ ] 測試：用小型假資料，一個字兩邊碼相同不進報表、碼不同進報表、只有一邊有的字不進報表。
+
+## Comments
+
+- 2026-11-03 票 05 留下的介面：`qim_databuild::sources::Source` 的 `commit`、`license_file`、`license_statement` 是必填、`deny_unknown_fields`，是照 libcangjie 寫的；Unihan 沒有 git commit，開工時調 schema（例如 `commit` 改成 `version`）。快取路徑以 sha256 為鍵，不受影響。
