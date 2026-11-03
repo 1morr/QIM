@@ -5,7 +5,11 @@
 mod code_table;
 mod pack;
 mod scheme;
+mod session;
 
 pub use code_table::{CodeEntry, CodeTable};
 pub use pack::{FORMAT_VERSION, Pack, PackError};
 pub use scheme::Scheme;
+pub use session::{
+    Candidate, Composition, Engine, Key, Options, PAGE_SIZE, Segment, Session, Snapshot, UserModel,
+};

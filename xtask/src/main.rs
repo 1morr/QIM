@@ -4,11 +4,12 @@ mod check;
 mod commit_msg;
 mod deps;
 mod docs;
+mod web;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -18,6 +19,14 @@ fn main() -> ExitCode {
         ["check", "--fast"] => check(true),
         ["data"] => data(&[]),
         ["data", "--verify"] => data(&["--verify"]),
+        ["web"] => {
+            let root = repo_root();
+            if web::wasm_bindings(&root) && web::packs(&root) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
         ["commit-msg", file] => {
             if commit_msg::report(Path::new(file)) {
                 ExitCode::SUCCESS

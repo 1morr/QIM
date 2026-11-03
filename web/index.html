@@ -4,9 +4,15 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>QIM</title>
+		<link rel="stylesheet" href="/src/style.css" />
 	</head>
 	<body>
-		<main id="app"></main>
+		<main>
+			<textarea id="text" aria-label="輸入框" rows="4" readonly></textarea>
+			<div id="composition" data-testid="composition"></div>
+			<ol id="candidates" aria-label="候選"></ol>
+			<p id="status" role="status">載入中…</p>
+		</main>
 		<script type="module" src="/src/main.ts"></script>
 	</body>
 </html>

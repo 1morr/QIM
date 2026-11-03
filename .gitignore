@@ -12,7 +12,11 @@ Thumbs.db
 /target/
 /web/node_modules/
 /web/dist/
+/web/src/wasm/
+/web/test-results/
+/web/playwright-report/
 
 # 資料管線：下載的來源與建置產物
 /.cache/
 /build/
+/web/public/packs/

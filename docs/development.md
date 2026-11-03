@@ -6,7 +6,8 @@
 
 | 工具 | 版本 | 說明 |
 | --- | --- | --- |
-| rustup | 任一近期版本 | Rust 版本由 `rust-toolchain.toml` 釘住，第一次在 repo 內跑 `cargo` 時 rustup 自動安裝，含 `rustfmt`、`clippy` |
+| rustup | 任一近期版本 | Rust 版本由 `rust-toolchain.toml` 釘住，第一次在 repo 內跑 `cargo` 時 rustup 自動安裝，含 `rustfmt`、`clippy` 與 `wasm32-unknown-unknown` target |
+| `wasm-bindgen-cli` | 與 `Cargo.lock` 的 `wasm-bindgen` 相同（0.2.130） | 產生網頁的 JS 綁定；版本不同時 `cargo xtask web` 與 `check` 的 `wasm` 步驟會擋下並印安裝指令 |
 | Node.js | 26 LTS（開工時 26.12.0） | 附帶的 `npm` 管理 `web/` 的依賴 |
 | git | 任一近期版本 | hook 用 `core.hooksPath`，Windows 上由 Git for Windows 的 `sh` 執行 |
 
@@ -16,7 +17,10 @@
 
 ```sh
 npm ci --prefix web                    # 依 web/package-lock.json 裝網頁依賴
+(cd web && npx playwright install chromium)   # Playwright 用的瀏覽器
+cargo install wasm-bindgen-cli --version 0.2.130 --locked
 git config core.hooksPath .githooks    # 啟用 pre-commit 與 commit-msg hook
+cargo xtask data                       # 建資料包（第一次要下載來源），e2e 要用
 cargo xtask check                      # 確認環境就緒
 ```
 
@@ -27,7 +31,9 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | 指令 | 作用 |
 | --- | --- |
 | `cargo build` | 建置全部 Rust crate |
-| `npm run --prefix web dev` | 網頁開發伺服器 |
+| `cargo xtask web` | 編 WebAssembly 綁定、複製資料包到網頁，見〈網頁〉 |
+| `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
+| `npm run --prefix web e2e` | Playwright 實打網頁（自己起開發伺服器，埠 5179）；先跑 `cargo xtask web` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`，見〈資料建置〉 |
 
@@ -69,6 +75,17 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 `.cache/` 與 `build/` 不進 git。
 
+## 網頁
+
+`cargo xtask web` 做兩件事，邏輯在 `xtask/src/web.rs`：
+
+1. 用 release 編 `qim-wasm` 到 `wasm32-unknown-unknown`，`wasm-bindgen --target web` 產生到 `web/src/wasm/`，`web/src/main.ts` 直接 import。
+2. 把 `build/packs/` 整個複製到 `web/public/packs/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`。`build/packs/` 不存在時失敗，先跑 `cargo xtask data`。
+
+兩個目錄都不進 git。改了 `qim-core` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
+
+Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。
+
 ## 全部檢查
 
 每張票收尾時照跑，並貼輸出：
@@ -86,10 +103,12 @@ cargo xtask check
 | `test` | `cargo test --workspace` | 跳過 |
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
 | `docs` | 文件規則（plan §6）：`docs/progress.md` 的段落、表格、長度、里程碑標記、下一步指令，與 `.scratch/` 的 spec | 跑 |
+| `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
 | `tsc` | `web/` 的 `tsc --noEmit`（`npm run typecheck`） | 跑 |
 | `biome` | `web/` 的 `biome check`（`npm run lint`） | 跑 |
+| `e2e` | 複製資料包（〈網頁〉第 2 步）後跑 Playwright（`npm run e2e`）；要先跑過 `cargo xtask data` | 跳過 |
 
-`cargo xtask check --fast` 是 pre-commit hook 跑的快速版，只跳過 `test`：測試會隨碼表與性質測試變慢，其他步驟只做靜態檢查，增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
+`cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test` 與 `e2e`：測試會隨碼表與性質測試變慢，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。
 

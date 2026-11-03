@@ -1,0 +1,67 @@
+//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`，不放邏輯（plan §1.3）。
+
+use qim_core::{Engine, Key, Session, Snapshot, UserModel};
+use wasm_bindgen::prelude::*;
+
+/// 網頁的一個輸入框：一份資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
+#[wasm_bindgen(js_name = Session)]
+pub struct WebSession {
+    engine: Engine,
+    user: UserModel,
+    session: Session,
+}
+
+#[wasm_bindgen(js_class = Session)]
+impl WebSession {
+    /// 由資料包的位元組建立；資料包由網頁 fetch。
+    #[wasm_bindgen(constructor)]
+    pub fn new(pack: &[u8]) -> Result<WebSession, JsError> {
+        let engine = Engine::from_pack_bytes(pack).map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Self {
+            engine,
+            user: UserModel::default(),
+            session: Session::default(),
+        })
+    }
+
+    pub fn letter(&mut self, c: char) -> WebSnapshot {
+        self.handle(Key::Letter(c))
+    }
+
+    pub fn space(&mut self) -> WebSnapshot {
+        self.handle(Key::Space)
+    }
+
+    fn handle(&mut self, key: Key) -> WebSnapshot {
+        self.session
+            .handle(&self.engine, &mut self.user, key)
+            .into()
+    }
+}
+
+/// `Snapshot` 給 JS 的樣子：攤平成網頁用得到的欄位，其他欄位等網頁用到時再加。JS 端叫 `Snapshot`。
+#[wasm_bindgen(js_name = Snapshot, getter_with_clone)]
+pub struct WebSnapshot {
+    /// 為假時網頁不攔截這個鍵，交給瀏覽器。
+    #[wasm_bindgen(readonly)]
+    pub handled: bool,
+    /// 輸入碼。
+    #[wasm_bindgen(readonly)]
+    pub input: String,
+    /// 目前頁的候選。
+    #[wasm_bindgen(readonly)]
+    pub candidates: Vec<String>,
+    #[wasm_bindgen(readonly)]
+    pub commit: Option<String>,
+}
+
+impl From<Snapshot> for WebSnapshot {
+    fn from(s: Snapshot) -> Self {
+        Self {
+            handled: s.handled,
+            input: s.composition.input,
+            candidates: s.candidates.into_iter().map(|c| c.text).collect(),
+            commit: s.commit,
+        }
+    }
+}
