@@ -3,6 +3,7 @@
 mod check;
 mod commit_msg;
 mod deps;
+mod docs;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

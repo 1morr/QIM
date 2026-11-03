@@ -46,12 +46,15 @@ cargo xtask check
 | `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | 跑 |
 | `test` | `cargo test --workspace` | 跳過 |
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
+| `docs` | 文件規則（plan §6）：`docs/progress.md` 的段落、表格、長度、里程碑標記、下一步指令，與 `.scratch/` 的 spec | 跑 |
 | `tsc` | `web/` 的 `tsc --noEmit`（`npm run typecheck`） | 跑 |
 | `biome` | `web/` 的 `biome check`（`npm run lint`） | 跑 |
 
 `cargo xtask check --fast` 是 pre-commit hook 跑的快速版，只跳過 `test`：測試會隨碼表與性質測試變慢，其他步驟只做靜態檢查，增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。
+
+`docs` 失敗時每條違規印一行 `檔案:行號: 說明`，規則在 `xtask/src/docs.rs`。最常見的是平行的票合併後 `docs/progress.md` 被 union 合併抄出第二個〈Session 紀錄〉段：把第二段新的列移回第一段的表尾、刪掉重複段。
 
 格式自動修正：`cargo fmt --all`、`npm run --prefix web lint -- --write`。
 

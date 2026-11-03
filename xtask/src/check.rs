@@ -24,6 +24,8 @@ pub enum Action {
     NpmScript(&'static str),
     /// 依賴規則（plan §1.3），見 [`crate::deps`]。
     Deps,
+    /// progress 與里程碑 spec 的規則（plan §6），見 [`crate::docs`]。
+    Docs,
 }
 
 const ALL: &[Step] = &[
@@ -53,6 +55,11 @@ const ALL: &[Step] = &[
         name: "deps",
         slow: false,
         action: Action::Deps,
+    },
+    Step {
+        name: "docs",
+        slow: false,
+        action: Action::Docs,
     },
     Step {
         name: "tsc",
@@ -109,6 +116,7 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             command
         }
         Action::Deps => return crate::deps::report(root),
+        Action::Docs => return crate::docs::report(root),
     };
     match command.status() {
         Ok(status) => status.success(),
@@ -150,7 +158,7 @@ mod tests {
     fn full_check_runs_every_step_in_order() {
         assert_eq!(
             names(&steps(false)),
-            ["fmt", "clippy", "test", "deps", "tsc", "biome"]
+            ["fmt", "clippy", "test", "deps", "docs", "tsc", "biome"]
         );
     }
 
@@ -158,7 +166,7 @@ mod tests {
     fn fast_check_skips_only_cargo_test() {
         assert_eq!(
             names(&steps(true)),
-            ["fmt", "clippy", "deps", "tsc", "biome"]
+            ["fmt", "clippy", "deps", "docs", "tsc", "biome"]
         );
     }
 
