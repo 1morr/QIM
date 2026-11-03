@@ -26,6 +26,12 @@ const FORBIDDEN_PATHS: &[&[&str]] = &[
     &["std", "time", "SystemTime"],
 ];
 
+/// 只會來自禁用路徑的名字：不論前面怎麼寫（`use std::time; time::SystemTime`），出現就算。
+const FORBIDDEN_NAMES: &[(&str, &str)] = &[("SystemTime", "std::time::SystemTime")];
+
+/// [`RULES`] 所在的檔案，違規說明裡指給人看。
+const RULES_FILE: &str = "xtask/src/deps.rs";
+
 const RULES: &[Rule] = &[
     Rule {
         krate: "qim-core",
@@ -116,7 +122,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
                 if !rule.workspace.contains(&dep) {
                     violations.push(format!(
                         "{name} 不可以依賴 {dep}（{kind}）：plan §1.3 只允許 {name} 依賴這些 workspace crate：{}",
-                        list(rule.workspace)
+                        join_names(rule.workspace)
                     ));
                 }
             } else if let Some(allowed) = rule.external
@@ -125,7 +131,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
             {
                 violations.push(format!(
                     "{name} 的{kind} {dep} 不在 plan §1.3 的白名單（{}）：要加先改 plan §1.3 與 {RULES_FILE} 的 RULES",
-                    list(allowed)
+                    join_names(allowed)
                 ));
             }
         }
@@ -201,24 +207,34 @@ fn collect_rust_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String
 ///
 /// 先斷詞，所以註解與字串裡的字不算；每個 `std` 之後沿 `::` 讀出路徑，
 /// `use` 的 `{..}` 展開成各自的路徑，`*` 涵蓋它底下的一切。
+/// 用斷詞而不用 `syn` 解析：巨集呼叫的內容 `syn` 不會當成路徑，斷詞則一樣掃得到。
+/// 已知漏洞：把 `std` 本身改名（`use std as s`、`extern crate std as s`）後的路徑抓不到。
 fn forbidden_uses(source: &str) -> Result<Vec<(usize, String)>, String> {
     let tokens: TokenStream = source.parse().map_err(|error| format!("{error}"))?;
     let mut found = Vec::new();
-    walk(tokens, &mut found);
+    find_std_paths(tokens, &mut found);
+    // `std::time::SystemTime` 會被路徑與名字各抓一次。
+    found.sort();
+    found.dedup();
     Ok(found)
 }
 
-fn walk(stream: TokenStream, found: &mut Vec<(usize, String)>) {
+fn find_std_paths(stream: TokenStream, found: &mut Vec<(usize, String)>) {
     let tokens: Vec<TokenTree> = stream.into_iter().collect();
     for (index, token) in tokens.iter().enumerate() {
         match token {
-            TokenTree::Group(group) => walk(group.stream(), found),
+            TokenTree::Group(group) => find_std_paths(group.stream(), found),
             TokenTree::Ident(ident) if ident == "std" => {
                 let line = ident.span().start().line;
                 for path in expand(&tokens[index + 1..], vec!["std".to_owned()]) {
                     for forbidden in FORBIDDEN_PATHS.iter().filter(|f| covers(&path, f)) {
                         found.push((line, forbidden.join("::")));
                     }
+                }
+            }
+            TokenTree::Ident(ident) => {
+                if let Some((_, path)) = FORBIDDEN_NAMES.iter().find(|(name, _)| ident == name) {
+                    found.push((ident.span().start().line, (*path).to_owned()));
                 }
             }
             _ => {}
@@ -278,19 +294,16 @@ fn expand_group(group: &Group, prefix: &[String]) -> Vec<Vec<String>> {
 
 /// `path` 是否用到 `forbidden`：從它開始，或是涵蓋它的 `*`。
 fn covers(path: &[String], forbidden: &[&str]) -> bool {
-    let is_prefix = |short: &[String], long: &[&str]| {
-        short.len() <= long.len() && short.iter().zip(long).all(|(a, b)| a == b)
-    };
-    let starts_with_forbidden =
-        path.len() >= forbidden.len() && path.iter().zip(forbidden).all(|(a, b)| a == b);
-    let glob_above_forbidden = matches!(
-        path.split_last(),
-        Some((last, parent)) if last == "*" && is_prefix(parent, forbidden)
-    );
+    let shared = path
+        .iter()
+        .zip(forbidden)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let starts_with_forbidden = shared == forbidden.len();
+    let glob_above_forbidden =
+        path.last().is_some_and(|last| last == "*") && shared == path.len() - 1;
     starts_with_forbidden || glob_above_forbidden
 }
-
-const RULES_FILE: &str = "xtask/src/deps.rs";
 
 fn kind_name(kind: DependencyKind) -> &'static str {
     match kind {
@@ -300,7 +313,7 @@ fn kind_name(kind: DependencyKind) -> &'static str {
     }
 }
 
-fn list(names: &[&str]) -> String {
+fn join_names(names: &[&str]) -> String {
     if names.is_empty() {
         "（無）".to_owned()
     } else {
@@ -527,6 +540,60 @@ pub const BYTES: &[u8] = b"std::net";
             CORE_TOML,
             "serde   =   { version = \"1\", default-features = false }  # 允許的依賴\n",
         );
+        assert_green(dir.path());
+    }
+
+    #[test]
+    fn system_time_through_imported_module_is_red() {
+        let dir = copy_repo();
+        append(
+            dir.path(),
+            CORE_LIB,
+            "use std::time;\npub fn now() {\n    let _ = time::SystemTime::now();\n}\n",
+        );
+        assert_red(
+            dir.path(),
+            &["crates/qim-core/src/lib.rs:6", "std::time::SystemTime"],
+        );
+    }
+
+    #[test]
+    fn core_build_dependency_off_the_table_is_red() {
+        let dir = copy_repo();
+        append(
+            dir.path(),
+            CORE_TOML,
+            "\n[build-dependencies]\ncc = \"1\"\n",
+        );
+        assert_red(dir.path(), &["qim-core", "build 依賴", "cc"]);
+    }
+
+    #[test]
+    fn std_fs_in_cfg_test_module_is_red() {
+        let dir = copy_repo();
+        append(
+            dir.path(),
+            CORE_LIB,
+            "#[cfg(test)]\nmod tests {\n    use std::fs;\n}\n",
+        );
+        assert_red(dir.path(), &["crates/qim-core/src/lib.rs:6", "std::fs"]);
+    }
+
+    #[test]
+    fn std_fs_outside_src_is_green() {
+        let dir = copy_repo();
+        let core = dir.path().join("crates/qim-core");
+        let reads_file = "fn main() {\n    let _ = std::fs::read(\"pack\");\n}\n";
+        for file in [
+            "build.rs",
+            "tests/pack.rs",
+            "benches/pack.rs",
+            "examples/pack.rs",
+        ] {
+            let path = core.join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, reads_file).unwrap();
+        }
         assert_green(dir.path());
     }
 
