@@ -1,6 +1,7 @@
 //! 開發指令與閘門；用法見 `docs/development.md`。
 
 mod check;
+mod deps;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

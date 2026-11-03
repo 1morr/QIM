@@ -22,6 +22,8 @@ pub enum Action {
     Cargo(&'static [&'static str]),
     /// 在 `web/` 跑 `npm run <script>`。
     NpmScript(&'static str),
+    /// 依賴規則（plan §1.3），見 [`crate::deps`]。
+    Deps,
 }
 
 const ALL: &[Step] = &[
@@ -46,6 +48,11 @@ const ALL: &[Step] = &[
         name: "test",
         slow: true,
         action: Action::Cargo(&["test", "--workspace"]),
+    },
+    Step {
+        name: "deps",
+        slow: false,
+        action: Action::Deps,
     },
     Step {
         name: "tsc",
@@ -101,6 +108,7 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             command.args(["run", "--silent", script]).current_dir(web);
             command
         }
+        Action::Deps => return crate::deps::report(root),
     };
     match command.status() {
         Ok(status) => status.success(),
@@ -142,13 +150,16 @@ mod tests {
     fn full_check_runs_every_step_in_order() {
         assert_eq!(
             names(&steps(false)),
-            ["fmt", "clippy", "test", "tsc", "biome"]
+            ["fmt", "clippy", "test", "deps", "tsc", "biome"]
         );
     }
 
     #[test]
     fn fast_check_skips_only_cargo_test() {
-        assert_eq!(names(&steps(true)), ["fmt", "clippy", "tsc", "biome"]);
+        assert_eq!(
+            names(&steps(true)),
+            ["fmt", "clippy", "deps", "tsc", "biome"]
+        );
     }
 
     /// 從 `docs/development.md`〈全部檢查〉的表格讀出 (步驟名, `--fast` 是否跑)。
