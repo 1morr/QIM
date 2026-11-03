@@ -23,6 +23,7 @@
 | 個人模型 | `UserModel` | 空間模型 | `SpatialModel` |
 | 重排 | `Rerank` | 譯詞 | `Gloss` |
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
+| 連打字集 / 擴展區 | `continuous` / `extension` | — | — |
 
 ## 1. 架構總覽
 
@@ -374,7 +375,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 英文：SCOWL / ESDB（`en-wl/wordlist`）size ≤ 60 的詞，size 級別當常見度。
 - 簡繁：OpenCC（`fae2a0a`）的字典，經 `ferrous-opencc` 轉換。
 
-### 4.5 驗證（`cargo xtask data --verify`，M0 起每次建置都跑）
+### 4.5 驗證（`cargo xtask data --verify`，M0 起每次改資料管線或來源都跑）
 
 - 不掉字：連打字集的字數等於來源中旗標符合、且有倉頡碼的字數。
 - 速成碼表的每個鍵長度都是 1 或 2；不存在長度 3 以上的鍵（ADR 0003 的守門測試）。
