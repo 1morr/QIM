@@ -47,6 +47,7 @@
 | 2026-11-03 | M0 05 | `cargo xtask data [--verify]`：libcangjie → `build/packs/quick/`，連打字集 17611、擴展區 57052，§4.5 檢查全過；細節見票 | 新 session 下 `/implement .scratch/m0/issues/06-unihan-cross-check.md` |
 | 2026-11-03 | M0 06 | `--verify` 加 Unihan 18.0.0 `kCangjie` 交叉比對：比對 29121 字、差異 2744 字（2246 字等於五代碼），報表在 `build/reports/`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/07-tracer-bullet-type-a.md` |
 | 2026-11-03 | M0 07 | 網頁打 `a` 列出「日」、空白上屏首選「曰」（Big5 序）：`Session`、`qim-wasm`、`cargo xtask web`、Playwright e2e 進 check；細節見票 | 新 session 下 `/implement .scratch/m0/issues/08-m0-keys-and-paging.md` |
+| 2026-11-03 | M0 08 | Backspace、Esc、數字選字、翻頁（`-` / `=`）；`ar` 第二頁選到「問」、`a` `2` 上屏「日」，性質測試進 `qim-core`；細節見票 | 等使用者：M0 收尾（驗收、封存、M1 標成進行中）另外處理，之後新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 
 ## 偏差與決定
 
@@ -76,3 +77,4 @@
 - 2026-11-03 M0 票 06：`sources.toml` 的 `commit` 改 `version`、授權聲明欄改選填（Unihan 沒有 commit、不進資料包）；kCangjie 與 libcangjie 三代碼有 9.4% 不同，多數等於五代碼（brief §12.1）。
 - 2026-11-03 M0 票 07：`a` 的首選是「曰」不是「日」（libcangjie Big5 排序值 23060 < 23061），M0 沒有字頻；空白上屏首選，「日」改由票 08 的數字鍵驗收；spec 驗收同步改。
 - 2026-11-03 M0 票 07：plan §2.1 的 `Snapshot` 加 `handled`（核心是否吃下這個鍵，同 librime `process_key` 的回傳值），殼才知道沒有組字時把空白交還宿主。
+- 2026-11-03 M0 票 08：翻頁後空白上屏目前頁的第一個，brief §4.3 與名詞表「候選頁」同步改：使用者翻到這頁就是在看這頁。
