@@ -35,6 +35,7 @@
 | 2026-10-31 | M0 plan | 擴充架構維持原案，腳本外掛列待評估；M3 線上更新時才加 manifest，另補撤銷學習語意與基準防洩漏 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 | 2026-10-31 | M0 plan | 審新增輸入方案的路徑：學習鍵與匯出加輸入方案、佈局標籤可取自方案、詞庫碼索引分方案，音碼方案的工作寫進 plan §2.5 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 | 2026-10-31 | M0 plan | 定新方案的發佈方式：必需且不大的資料內建，大模型主 App 下載，資料包可從檔案匯入，程式碼只隨 App 發版（brief §5.3、plan §2.5） | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
+| 2026-11-03 | M0 研究 | 讀 xsime（librime 五端前端）寫 `docs/research/xsime.md`；平台殼做法與簽章查證摘進 brief §12.4，plan §7.7 的 M6–M9 加開工時要做的檢查 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 
 ## 偏差與決定
 
