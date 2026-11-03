@@ -42,6 +42,7 @@
 | 2026-11-03 | M0 拆票 | 寫 `.scratch/m0/spec.md`，拆成 8 張票：閘門分成 01–04，碼表資料包 05、Unihan 報表 06，網頁 tracer bullet 07–08 | 新 session 下 `/implement .scratch/m0/issues/01-skeleton-and-check.md` |
 | 2026-11-03 | M0 01 | workspace、`qim-core` 空殼、`cargo xtask check`（`--fast` 跳過 test）、`web/` 空殼、pre-commit、`docs/development.md`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/02-deps-gate.md` |
 | 2026-11-03 | M0 02 | `deps` 閘門：白名單在 `xtask/src/deps.rs` 的 `RULES`，測試比對 plan §1.3 表；斷詞掃 `qim-core`、`qim-layout` 的 `src/`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/03-commit-msg-gate.md` |
+| 2026-11-03 | M0 03 | commit-msg 閘門：`cargo xtask commit-msg`、`.githooks/commit-msg`；合併中放行；細節見票 | 新 session 下 `/implement .scratch/m0/issues/04-docs-gates.md` |
 
 ## 偏差與決定
 
@@ -65,3 +66,4 @@
 - 2026-11-03 M0 brief：撤回同日的中文狀態英文糾錯，§4.7 回到只認拼對的完整單字（理由見 brief §4.7、§12.1 的實驗）；名詞表「英文候選」去掉「前綴」，對齊 §4.3。
 - 2026-11-03 M0 拆票：plan §7.1 的三項拆成 8 張票（閘門一張做不完）；加翻頁，因為沒有字頻時「問」可能不在 `ar` 第一頁；字根提示資料包延到 M1，M0 沒有功能用到。
 - 2026-11-03 M0 票 02：plan §1.3 表改成具體名字：綁定工具寫死 `wasm-bindgen` / `uniffi`，`qim-databuild` / `qim-bench` 外部 crate 不限；workspace crate 任何依賴都要在「可以依賴」欄，比票寫的嚴（理由見票）。
+- 2026-11-03 M0 票 03：commit-msg 閘門在 `git merge` 進行中一律放行（使用者決定）：ticket-coordinator 的 `merge: ticket NN slug` 不在 type 清單，否則每次合併票都被擋。
