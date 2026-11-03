@@ -16,7 +16,7 @@
 
 ```sh
 npm ci --prefix web                    # 依 web/package-lock.json 裝網頁依賴
-git config core.hooksPath .githooks    # 啟用 pre-commit hook
+git config core.hooksPath .githooks    # 啟用 pre-commit 與 commit-msg hook
 cargo xtask check                      # 確認環境就緒
 ```
 
@@ -56,3 +56,17 @@ cargo xtask check
 格式自動修正：`cargo fmt --all`、`npm run --prefix web lint -- --write`。
 
 步驟定義在 `xtask/src/check.rs`；加步驟時同輪更新上表，`cargo test` 會比對兩邊的步驟名與 `--fast` 欄。
+
+## Commit message
+
+commit-msg hook 跑 `cargo xtask commit-msg <訊息檔>`，subject（第一個非空白、非 `#` 註解的行）不符下列規則就擋下並逐條說明：
+
+- 格式 `type(scope)!: description`，`(scope)` 與 `!` 選填，冒號後接一個空格。
+- type 只能是 `xtask/src/commit_msg.rs` 的 `TYPES`：feat、fix、docs、refactor、test、chore、build、ci、perf、style、revert。
+- description 不以大寫字母開頭，結尾不加句號；subject 整行 ≤ 72 字元。
+
+不檢查的情況：
+
+- git 自動產生的 `Merge …`、`Revert "…"`、`fixup!`、`squash!`、`amend!` 開頭的訊息。
+- 正在 `git merge` 時（`MERGE_HEAD` 存在）一律放行：ticket-coordinator 用 `merge: ticket NN slug` 合併票。
+- body 與 `git commit -v` 剪刀線之後的 diff。

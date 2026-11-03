@@ -1,0 +1,3 @@
+#!/bin/sh
+# commit message 規則見 docs/development.md〈Commit message〉。
+exec cargo xtask commit-msg "$1"

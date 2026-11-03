@@ -1,12 +1,13 @@
 //! 開發指令與閘門；用法見 `docs/development.md`。
 
 mod check;
+mod commit_msg;
 mod deps;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -14,6 +15,13 @@ fn main() -> ExitCode {
     match args.as_slice() {
         ["check"] => check(false),
         ["check", "--fast"] => check(true),
+        ["commit-msg", file] => {
+            if commit_msg::report(Path::new(file)) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)
