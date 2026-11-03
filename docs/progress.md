@@ -40,6 +40,7 @@
 | 2026-11-03 | M0 brief | 對照青簡定新功能分級：中文狀態英文糾錯、譯詞、候選窗皮膚（併入外觀主題）列之後，句中英文混輸待評估，小工具與速成輔碼不做；brief 加 §4.8 容錯，plan §2.5、M4、M6 同步 | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 | 2026-11-03 | M0 brief | 撤回中文狀態英文糾錯：隨機 4 字母約四成與英文詞差一處，會常佔第 2 位；英文候選只認拼對的完整單字，糾錯與預測只在英文模式（brief §4.7、§12.1） | 新 session 下 `/to-tickets docs/plan.md 拆 M0 的票` |
 | 2026-11-03 | M0 拆票 | 寫 `.scratch/m0/spec.md`，拆成 8 張票：閘門分成 01–04，碼表資料包 05、Unihan 報表 06，網頁 tracer bullet 07–08 | 新 session 下 `/implement .scratch/m0/issues/01-skeleton-and-check.md` |
+| 2026-11-03 | M0 01 | workspace、`qim-core` 空殼、`cargo xtask check`（`--fast` 跳過 test）、`web/` 空殼、pre-commit、`docs/development.md`；細節見票 | 新 session 下 `/implement .scratch/m0/issues/02-deps-gate.md` |
 
 ## 偏差與決定
 

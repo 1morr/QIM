@@ -1,6 +1,6 @@
 # 01: 骨架與 `cargo xtask check`
 
-Status: ready-for-agent
+Status: done
 Blocked by: None (can start immediately)
 讀: plan §0、§1.2、§1.4、§6；spec〈範圍〉〈共同規則〉
 
@@ -20,8 +20,18 @@ Blocked by: None (can start immediately)
 
 ## 驗收
 
-- [ ] 乾淨的 checkout 照 `docs/development.md` 操作後，`cargo xtask check` 綠燈（貼輸出）。
-- [ ] 分別造出 fmt 錯、clippy 警告、TS 型別錯、Biome 錯，各自讓 `cargo xtask check` 紅並指出是哪一步（手動驗一次，貼輸出後還原）。
-- [ ] 啟用 hook 後，`check --fast` 失敗時 `git commit` 被擋。
-- [ ] 依賴版本與 plan §1.4 不同的，已同一 commit 更新該表。
-- [ ] `CLAUDE.md` 有頂層目錄地圖。
+- [x] 乾淨的 checkout 照 `docs/development.md` 操作後，`cargo xtask check` 綠燈（貼輸出）。
+- [x] 分別造出 fmt 錯、clippy 警告、TS 型別錯、Biome 錯，各自讓 `cargo xtask check` 紅並指出是哪一步（手動驗一次，貼輸出後還原）。
+- [x] 啟用 hook 後，`check --fast` 失敗時 `git commit` 被擋。
+- [x] 依賴版本與 plan §1.4 不同的，已同一 commit 更新該表。
+- [x] `CLAUDE.md` 有頂層目錄地圖。
+
+## Comments
+
+- 2026-11-03 `--fast` 只跳過 `test`：`test` 會隨碼表測試與 proptest 變慢；其餘步驟是靜態檢查，增量執行幾秒內完成。`clippy --all-targets` 仍編譯測試碼，測試編不過照樣擋 commit。之後的 `deps` 與文件閘門也是靜態檢查，應放進 `--fast`。
+- 2026-11-03 驗收輸出：乾淨 clone 照 `docs/development.md` 做完 `cargo xtask check` 印 `check 通過`、exit 0；fmt、clippy、TS 型別、Biome 錯各自印 `check 失敗：fmt` / `clippy` / `tsc` / `biome`、exit 1；hook 啟用後造 fmt 錯，`git commit` 印 `check 失敗：fmt`、exit 1、沒有產生 commit。
+- 2026-11-03 依賴版本（Rust 1.99.1、Vite 8.3.5、TypeScript 7.0.2、Biome 2.6.4）與 plan §1.4 相同，表不用改。Biome 釘精確版本，這是官方建議，因為格式化規則會隨版本變；`biome.json` 設 `vcs.root: ".."` 讀根目錄的 `.gitignore`。
+- 2026-11-03 code-review 沒處理的發現：
+  - `check::exec` 的 `node_modules` 缺失分支、Windows `npm.cmd`、`main` 的參數解析（錯參數 exit 2）沒有自動測試，只手動跑過正常路徑。
+  - spec 寫「每個閘門都附雙向變異測試」，外部工具步驟（fmt、clippy、tsc、biome）照本票只手動驗過一次；自動的雙向變異測試留給票 02–04 自己寫的閘門。
+  - pre-commit 檢查的是工作目錄，不是暫存區：沒有 stage 的修正也會讓 hook 通過。之後要改的話，可以在 hook 裡用 `git stash push --keep-index`，但它和其他 worktree 共用 stash 堆疊，所以這次沒做。
