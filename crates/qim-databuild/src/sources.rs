@@ -21,12 +21,13 @@ pub struct Sources {
 #[serde(deny_unknown_fields)]
 pub struct Source {
     pub repository: String,
-    pub commit: String,
+    /// git 來源填 commit，其他填上游的版本號。
+    pub version: String,
     pub license: String,
-    /// 授權聲明所在的檔，是 [`Source::files`] 之一。
-    pub license_file: String,
-    /// 照抄 [`Source::license_file`] 裡的聲明原文。
-    pub license_statement: String,
+    /// 授權聲明所在的檔，是 [`Source::files`] 之一；進資料包的來源才要。
+    pub license_file: Option<String>,
+    /// 照抄 [`Source::license_file`] 裡的聲明原文；進資料包的來源才要。
+    pub license_statement: Option<String>,
     pub files: Vec<SourceFile>,
 }
 

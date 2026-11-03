@@ -99,12 +99,28 @@ fn sources_file_in_repo_pins_libcangjie_table() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/sources.toml");
     let all = sources::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
     let lib = &all.source["libcangjie"];
-    assert!(lib.commit.starts_with("346026b"));
+    assert!(lib.version.starts_with("346026b"));
     let table = lib
         .files
         .iter()
         .find(|f| f.path == "data/table.txt")
         .unwrap();
     assert_eq!(table.sha256.len(), 64);
-    assert!(table.url.contains(&lib.commit));
+    assert!(table.url.contains(&lib.version));
+}
+
+#[test]
+fn sources_file_in_repo_pins_unihan_zip_of_the_same_unicode_version() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/sources.toml");
+    let all = sources::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let unihan = &all.source["unihan"];
+    assert_eq!(unihan.license, "Unicode-3.0");
+    let zip = unihan.file("Unihan.zip").unwrap();
+    assert_eq!(zip.sha256.len(), 64);
+    assert!(
+        zip.url
+            .contains(&format!("/Public/{}/ucd/", unihan.version)),
+        "{}",
+        zip.url
+    );
 }
