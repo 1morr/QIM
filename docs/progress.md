@@ -49,6 +49,7 @@
 | 2026-11-03 | M0 07 | 網頁打 `a` 列出「日」、空白上屏首選「曰」（Big5 序）：`Session`、`qim-wasm`、`cargo xtask web`、Playwright e2e 進 check；細節見票 | 新 session 下 `/implement .scratch/m0/issues/08-m0-keys-and-paging.md` |
 | 2026-11-03 | M0 08 | Backspace、Esc、數字選字、翻頁（`-` / `=`）；`ar` 第二頁選到「問」、`a` `2` 上屏「日」，性質測試進 `qim-core`；細節見票 | 等使用者：M0 收尾（驗收、封存、M1 標成進行中）另外處理，之後新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 | 2026-11-03 | M0 09 | 協調者跑完票 01–08；開收尾票 09：問三個待決定、里程碑 code-review、重驗驗收、封存 M0 | 新 session 下 `/implement .scratch/m0/issues/09-m0-close.md` |
+| 2026-11-03 | M0 08b | 使用者定 `a` 首選「日」、空白一律上屏首選、暫不用 wayfinder；開 08b 做前兩項，09 改由 08b 擋 | 新 session 下 `/implement .scratch/m0/issues/08b-m0-order-and-space.md` |
 
 ## 偏差與決定
 
