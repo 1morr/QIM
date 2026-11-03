@@ -135,7 +135,7 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
         let second = build()?.bytes;
         let mut report = verify::run(&rows, &bytes, &second);
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
-        let check = unihan::compare(&rows, &unihan::parse(&dictionary_like)?);
+        let check = unihan::compare(&rows, &unihan::cangjie_codes(&dictionary_like)?);
         let path = root.join(UNIHAN_REPORT);
         let reports = path.parent().expect("報表路徑有上層目錄");
         std::fs::create_dir_all(reports).map_err(Error::io(reports))?;
@@ -261,7 +261,8 @@ fn notice(id: &str, packed: &[Packed]) -> String {
          Quick codes are derived from the Cangjie 3 and Cangjie 5 codes in the libcangjie\n\
          file: the first and last letter of each code, or the code itself when it has one\n\
          or two letters. Han characters flagged as Big5 or HKSCS form the continuous set;\n\
-         other Han characters are marked as extension. Within each code, characters with a\n\
-         Unihan kGradeLevel come first by grade, then libcangjie's Big5 order.\n"
+         other Han characters are marked as extension. Within each code, the continuous set\n\
+         comes before extension; within each set, characters with a Unihan kGradeLevel\n\
+         come first by grade, then libcangjie's Big5 order.\n"
     )
 }

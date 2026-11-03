@@ -18,7 +18,7 @@
 | `data/` | 方案檔、來源清單 `sources.toml`、進資料包的授權全文 `licenses/`；建置方式見 `docs/development.md`〈資料建置〉 |
 | `xtask/` | 閘門與開發指令（`cargo xtask check`），用法見 `docs/development.md` |
 | `web/` | 網頁 prototype（Vite + TypeScript + Biome） |
-| `docs/` | brief、plan、progress、`development.md`、ADR、研究 |
+| `docs/` | brief、plan、progress、`development.md`、ADR、研究、已完成里程碑的封存 `archive/` |
 | `.scratch/` | 里程碑的 spec 與票 |
 | `.githooks/` | git hook，啟用方式見 `docs/development.md` |
 | `scripts/` | 腳本；設計實驗在 `scripts/experiments/` |

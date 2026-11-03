@@ -57,7 +57,7 @@ fn check(fast: bool) -> ExitCode {
 
 /// 建資料包（plan §4）；邏輯在 `qim-databuild`，這裡只轉交。
 fn data(args: &[&str]) -> ExitCode {
-    let status = std::process::Command::new(env!("CARGO"))
+    let status = std::process::Command::new(cargo())
         .args(["run", "--quiet", "--release", "-p", "qim-databuild", "--"])
         .args(args)
         .current_dir(repo_root())
@@ -70,6 +70,11 @@ fn data(args: &[&str]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// 跑 xtask 的那個 cargo；`cargo xtask` 經 alias 執行時 cargo 會設 `CARGO`。
+fn cargo() -> std::ffi::OsString {
+    std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into())
 }
 
 fn repo_root() -> PathBuf {

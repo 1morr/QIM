@@ -110,8 +110,7 @@ pub fn exec(step: &Step, root: &Path) -> bool {
     eprintln!("==> {}", step.name);
     let mut command = match step.action {
         Action::Cargo(args) => {
-            let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-            let mut command = Command::new(cargo);
+            let mut command = Command::new(crate::cargo());
             command.args(args).current_dir(root);
             command
         }
@@ -208,13 +207,8 @@ mod tests {
             .into_iter()
             .flat_map(str::lines)
             .filter_map(|line| {
-                let cells: Vec<&str> = line
-                    .trim()
-                    .strip_prefix('|')?
-                    .strip_suffix('|')?
-                    .split('|')
-                    .map(str::trim)
-                    .collect();
+                line.trim().starts_with('|').then_some(())?;
+                let cells = crate::docs::cells(line);
                 let name = cells.first()?.strip_prefix('`')?.strip_suffix('`')?;
                 let fast = match *cells.last()? {
                     "跑" => true,
