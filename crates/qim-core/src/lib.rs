@@ -1,3 +1,11 @@
 //! QIM 的核心：輸入方案、資料包讀取、候選與 `Session`。
 //!
 //! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
+
+mod code_table;
+mod pack;
+mod scheme;
+
+pub use code_table::{CodeEntry, CodeTable};
+pub use pack::{FORMAT_VERSION, Pack, PackError};
+pub use scheme::Scheme;

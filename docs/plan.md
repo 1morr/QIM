@@ -70,7 +70,7 @@ flowchart LR
 | `crates/qim-databuild/` | CLI：取得來源、建資料包、訓練 bigram、產生基準語料 |
 | `crates/qim-bench/` | 首選字基準 runner，量正確率與每鍵延遲 |
 | `crates/qim-wasm/`、`crates/qim-ffi/` | 綁定層，不放邏輯；`qim-ffi` 在 M2 建 |
-| `xtask/` | 閘門與開發指令（`cargo xtask check`、`bench`、`commit-msg`） |
+| `xtask/` | 閘門與開發指令（`cargo xtask check`、`data`、`bench`、`commit-msg`） |
 | `data/` | 自己維護的方案檔、佈局檔、粵語詞表、來源清單 `sources.toml`；不放第三方原始檔與建置產物 |
 | `bench/` | `fixed.tsv`、`corpus/`、`colloquial/`（都含授權與署名）、`baseline.json` |
 | `web/` | 網頁 prototype（Vite + TypeScript）、`web/editor/` 佈局編輯器、Playwright 測試 |
@@ -105,7 +105,8 @@ flowchart LR
 | --- | --- | --- | --- |
 | Rust | 1.99.1 | 核心與工具 | ADR 0002 |
 | `serde` / `postcard` | 1.0.229 / 1.1.3 | 資料包序列化 | `no_std` 友善、體積小；資料包格式是內部格式，可換 |
-| `toml` | 1.1.8 | 方案檔 | Rust 生態標準格式，可寫註解 |
+| `toml` | 1.1.8 | 方案檔、`data/sources.toml` | Rust 生態標準格式，可寫註解 |
+| `ureq` / `sha2` | 3.5.1 / 0.11.1 | `qim-databuild` 下載來源並核對 sha256 | 同步 API、不必帶 async runtime |
 | `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證 | 佈局要給 TS、Swift、Kotlin 直接讀 |
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2） | 一份介面產生兩種語言 |
@@ -222,8 +223,7 @@ a = "日"
 b = "月"
 # …
 
-[packs]
-code_table = "quick-table"
+[packs]               # 另外的資料包；碼表和方案一起編進方案自己的資料包
 lexicon = "quick-lexicon"
 language_model = "zh-hant-bigram"
 radical_hint = "cangjie-hint"   # 字根提示用的倉頡碼，不進 lattice（ADR 0003）
@@ -246,7 +246,7 @@ beam = 20
 | 學習 | 計數分方案（§2.4），個人 bigram 共用 |
 | 容錯 | 機制共用：修正過的讀法帶懲罰進 lattice，按鍵位置來自空間模型或實體鍵盤鄰鍵表。允許哪些修正（鄰鍵替換、漏碼、多碼、對調）、懲罰、啟動條件寫在方案檔，各用含打錯碼的基準調（brief §4.8）。速成不做單字容錯；青簡對形碼與雙拼不糾錯 |
 
-發佈方式（brief §5.3）：方案檔由 `qim-databuild` 編進資料包，`qim-core` 不讀 TOML。內建的資料包隨 App 發佈；可選的由主 App 下載或從檔案匯入，校驗後放進鍵盤讀得到的位置（iOS 是 App Group，沒有完整取用權限時鍵盤唯讀即可，brief §12.3），擴充不做編譯（Hamster 的分工）。資料包要求較新的核心時拒絕安裝，提示更新 App。手寫純文字方案檔在裝置上匯入要把編譯搬進主 App，等第一個使用者要自訂方案時再做。
+發佈方式（brief §5.3）：方案檔由 `qim-databuild` 和它的碼表一起編進方案自己的資料包（`<方案 id>.pack`，ADR 0003 讓碼表每個方案一份），`qim-core` 不讀 TOML。內建的資料包隨 App 發佈；可選的由主 App 下載或從檔案匯入，校驗後放進鍵盤讀得到的位置（iOS 是 App Group，沒有完整取用權限時鍵盤唯讀即可，brief §12.3），擴充不做編譯（Hamster 的分工）。資料包要求較新的核心時拒絕安裝，提示更新 App。手寫純文字方案檔在裝置上匯入要把編譯搬進主 App，等第一個使用者要自訂方案時再做。
 
 方案之間怎麼切換由殼負責，每個方案一個 `Engine`。依方案類型，工作量不同：
 
@@ -344,7 +344,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 ## 4. 碼表與資料管線
 
-`data/sources.toml` 列出每個來源：URL、釘住的 commit 或檔案 sha256、授權、取用的檔案。`cargo xtask data` 依序執行下列步驟，產物放 `build/packs/`。每個資料包旁邊放它的 `LICENSE` 與 `NOTICE`（brief §5.1）。
+`data/sources.toml` 列出每個來源：URL、釘住的 commit 或檔案 sha256、授權、取用的檔案。`cargo xtask data` 依序執行下列步驟，產物放 `build/packs/`，每個資料包一個目錄，旁邊放它的 `LICENSE` 與 `NOTICE`（brief §5.1）；不同來源的授權不混在同一個檔。
 
 ### 4.1 速成碼表
 

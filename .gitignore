@@ -12,3 +12,7 @@ Thumbs.db
 /target/
 /web/node_modules/
 /web/dist/
+
+# 資料管線：下載的來源與建置產物
+/.cache/
+/build/
