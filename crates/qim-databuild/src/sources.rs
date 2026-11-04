@@ -86,10 +86,12 @@ pub fn cache_path(cache_root: &Path, id: &str, file: &SourceFile) -> PathBuf {
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    hex(&Sha256::digest(bytes))
+}
+
+/// 小寫十六進位，sha256 的寫法。
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// 讀來源檔：有快取就只讀快取、不連網；沒有才下載。兩種情況 sha256 不符都失敗，

@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use crate::corpus::{BENCH_SENTENCES, Builder, Finished};
-use crate::sources::{self, Fetch, SOURCES, Source, sha256_hex};
+use crate::sources::{self, Fetch, SOURCES, Source, hex, sha256_hex};
 use crate::transcode::Transcoder;
-use crate::verify::{self, CorpusSummary, Report, UnihanSummary};
+use crate::verify::{self, CorpusDigests, CorpusSummary, Report, UnihanSummary};
 use crate::{Error, build_pack, libcangjie, scheme, unihan, wiki};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -30,14 +30,14 @@ const BUILD_CORPUS: &str = "build/corpus";
 /// 一份維基語料：基準檔與切分的名字、`sources.toml` 的 id、署名用的名稱與網址。
 struct Wiki {
     name: &'static str,
-    source: &'static str,
+    source_id: &'static str,
     title: &'static str,
     site: &'static str,
 }
 
 const WIKIS: [Wiki; 1] = [Wiki {
     name: "yue-wiki",
-    source: "yue_wiki",
+    source_id: "yue_wiki",
     title: "Cantonese Wikipedia",
     site: "https://zh-yue.wikipedia.org/",
 }];
@@ -166,11 +166,11 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     let bench_dir = root.join(BENCH_CORPUS);
     std::fs::create_dir_all(&bench_dir).map_err(Error::io(&bench_dir))?;
     for wiki in &WIKIS {
-        let source = source_of(wiki.source)?;
+        let source = source_of(wiki.source_id)?;
         let [file] = source.files.as_slice() else {
             return Err(Error::invalid(
                 SOURCES,
-                format!("[source.{}] 要剛好列一個 dump 檔", wiki.source),
+                format!("[source.{}] 要剛好列一個 dump 檔", wiki.source_id),
             ));
         };
         let dir = root.join(BUILD_CORPUS).join(wiki.name);
@@ -181,8 +181,14 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
                 .map(|f| Hashed::new(BufWriter::new(f)))
                 .map_err(Error::io(path))
         };
-        let dump = load(wiki.source, &file.path)?;
-        let first = build_wiki(&dump, &transcoder, create(&train_path)?, create(&dev_path)?)?;
+        let dump = load(wiki.source_id, &file.path)?;
+        let first = build_wiki(
+            &dump,
+            &transcoder,
+            create(&train_path)?,
+            create(&dev_path)?,
+            &dir,
+        )?;
         let bench_rel = format!("{BENCH_CORPUS}/{}.tsv", wiki.name);
         write(root.join(&bench_rel), first.bench.as_bytes())?;
         corpora.push(CorpusSummary {
@@ -194,9 +200,10 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
         attributions.push(attribution(wiki, source, file));
         if verify {
             // 第二次從快取重讀 dump，只算 sha256、不寫檔。
-            let dump = load(wiki.source, &file.path)?;
+            drop(dump);
+            let dump = load(wiki.source_id, &file.path)?;
             let sink = || Hashed::new(io::sink());
-            let second = build_wiki(&dump, &transcoder, sink(), sink())?;
+            let second = build_wiki(&dump, &transcoder, sink(), sink(), &dir)?;
             let open = |path: &Path| {
                 File::open(path)
                     .map(BufReader::new)
@@ -250,27 +257,22 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     })
 }
 
-/// 一份維基 dump 建一次語料；train、dev 寫進兩個 writer，同時算 sha256。
+/// 一份維基 dump 建一次語料；train、dev 寫進兩個 writer，同時算 sha256。寫入失敗時報 `dir`。
 fn build_wiki<W: Write>(
     dump: &[u8],
     transcoder: &Transcoder,
     train: Hashed<W>,
     dev: Hashed<W>,
+    dir: &Path,
 ) -> Result<Built, Error> {
     let mut builder = Builder::new(transcoder, train, dev);
-    wiki::articles(dump, |text| {
-        builder
-            .add(text)
-            .map_err(|e| Error::invalid("語料切分", e.to_string()))
-    })?;
+    wiki::articles(dump, |text| builder.add(text).map_err(Error::io(dir)))?;
     let Finished {
         counts,
         bench,
         train,
         dev,
-    } = builder
-        .finish()
-        .map_err(|e| Error::invalid("語料切分", e.to_string()))?;
+    } = builder.finish().map_err(Error::io(dir))?;
     Ok(Built {
         counts,
         bench,
@@ -288,13 +290,13 @@ struct Built {
 }
 
 impl Built {
-    /// 基準檔、train、dev 的 sha256，比較兩次建置用。
-    fn digests(&self) -> Vec<String> {
-        vec![
-            sha256_hex(self.bench.as_bytes()),
-            self.train.clone(),
-            self.dev.clone(),
-        ]
+    /// 比較兩次建置用。
+    fn digests(&self) -> CorpusDigests {
+        CorpusDigests {
+            bench: sha256_hex(self.bench.as_bytes()),
+            train: self.train.clone(),
+            dev: self.dev.clone(),
+        }
     }
 }
 
@@ -313,11 +315,7 @@ impl<W: Write> Hashed<W> {
     }
 
     fn sha256(self) -> String {
-        self.hasher
-            .finalize()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect()
+        hex(&self.hasher.finalize())
     }
 }
 

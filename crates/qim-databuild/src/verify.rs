@@ -264,16 +264,24 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
     }
 }
 
+/// 一次語料建置寫出的三個檔的 sha256。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorpusDigests {
+    pub bench: String,
+    pub train: String,
+    pub dev: String,
+}
+
 /// 一個語料的檢查。`bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
-/// `first`、`second` 是兩次建置的基準檔、train、dev 的 sha256。
+/// `first`、`second` 是兩次建置的 sha256。
 pub fn corpus(
     name: &str,
     transcoder: &Transcoder,
     bench: &str,
     train: impl BufRead,
     dev: impl BufRead,
-    first: &[String],
-    second: &[String],
+    first: &CorpusDigests,
+    second: &CorpusDigests,
 ) -> io::Result<Vec<Check>> {
     let mut failures = 0;
     let mut sentences = HashSet::new();

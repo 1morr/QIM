@@ -33,6 +33,9 @@ pub fn articles(
                 if name == "redirect" {
                     page.redirect = true;
                 }
+                if name == "revision" {
+                    page.text = None;
+                }
                 path.push(name);
             }
             Event::Empty(e) => match e.local_name().as_ref() {
@@ -82,7 +85,7 @@ pub fn articles(
 struct Page {
     ns: String,
     redirect: bool,
-    /// 最後一個 revision 的 `<text>`；pages-articles 每頁只有一個。
+    /// 最後一個 revision 的 `<text>`（pages-articles 每頁只有一個）。
     text: Option<String>,
 }
 

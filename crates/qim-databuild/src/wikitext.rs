@@ -141,7 +141,10 @@ fn internal_links(s: &str) -> String {
     let mut rest = s;
     while let Some(start) = rest.find("[[") {
         let Some(len) = closing(&rest[start + 2..], "[[", "]]") else {
-            break;
+            // 沒收尾的 `[[` 留成原文，後面的連結照常處理。
+            out.push_str(&rest[..start + 2]);
+            rest = &rest[start + 2..];
+            continue;
         };
         out.push_str(&rest[..start]);
         let inner = &rest[start + 2..start + 2 + len];
@@ -222,7 +225,7 @@ fn tags(s: &str) -> String {
             continue;
         };
         out.push_str(&rest[..start]);
-        if name.to_ascii_lowercase().starts_with("br") {
+        if name.get(..2).is_some_and(|n| n.eq_ignore_ascii_case("br")) {
             out.push('\n');
         }
         rest = &after[end + 1..];

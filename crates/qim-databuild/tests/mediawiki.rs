@@ -70,3 +70,18 @@ fn malformed_xml_is_an_error() {
     let result = mediawiki::articles(broken.as_bytes(), |_| Ok(()));
     assert!(result.is_err());
 }
+
+#[test]
+fn page_with_several_revisions_yields_only_the_last_one() {
+    let dump = r#"<mediawiki><page><title>a</title><ns>0</ns>
+<revision><text>舊版</text></revision>
+<revision><text>新版</text></revision>
+</page></mediawiki>"#;
+    let mut seen = Vec::new();
+    mediawiki::articles(dump.as_bytes(), |text| {
+        seen.push(text.to_string());
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(seen, ["新版"]);
+}

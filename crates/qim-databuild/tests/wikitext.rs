@@ -113,3 +113,20 @@ fn unclosed_markup_stays_as_literal_text_like_mediawiki_renders_it() {
         "壞咗{{模板\n下一段[[連結。 尾"
     );
 }
+
+#[test]
+fn unclosed_link_does_not_stop_later_links_from_being_converted() {
+    assert_eq!(
+        text("壞咗[[連結。之後[[目標|文字]]同[[File:x.png|說明]]完"),
+        "壞咗[[連結。之後文字同完"
+    );
+}
+
+#[test]
+fn many_tags_in_a_long_article_stay_fast() {
+    let article = "字<span>內容</span>".repeat(50_000);
+    let start = std::time::Instant::now();
+    let out = plain_text(&article);
+    assert_eq!(out.trim(), "字內容".repeat(50_000));
+    assert!(start.elapsed().as_secs() < 2, "{:?}", start.elapsed());
+}
