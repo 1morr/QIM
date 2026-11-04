@@ -52,6 +52,7 @@
 | 2026-11-04 | M1 23 | 展開面板、單按 Shift 英文直通、重排介面與假實作、翻頁不加 `generation`、簡體文字鍵、組字中組合鍵吃下；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md`（14、17 另在並行） |
 | 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 | 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 23 | merge main（票 14、17）：衝突只在文件與 `main.ts` 的 `start()`；data --verify、bench --check、check 全套與亂按都過；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 
 ## 偏差與決定
 

@@ -47,3 +47,5 @@ Blocked by: 20, 21
 - 亂按：桌面 1,500 步（夾 Shift、↑ ↓、組合鍵、翻頁、切簡繁與重排、點面板）、觸控 600 步，沒有頁面錯誤，組字為空時沒有候選、面板與展開鍵。
 - bench 前後對照：改動前 = `bench/baseline.json`（HEAD）；改動後 `cargo xtask bench --check` 通過，沒有翻盤、固定題 15/15，預設路徑的排序沒動。
 - code-review 未處理：「原樣回傳」的 e2e 只看得出順序沒變，分不出結果是否送達（原樣本來就看不出），送達與丟棄由核心測試驗。`main.ts` 的 `core` 與 `start()` 的 `session` 是同一個物件兩個名字：面板與重排在 `start()` 外要用它，網頁 prototype 先不重構。
+- 使用者確認（協調者轉告）：組字中單按 Shift 維持先上屏整個組字再切英文，左右 Shift 相同；brief §4.3 的 Shift 列已寫明。
+- merge main（票 14、17）：衝突只在 brief §12.4、plan §3.1（兩邊的條目都留）與 `main.ts` 的 `start()`（`core = session` 與 `mountUserDict` 都要）。`cargo xtask data --verify` 通過；`bench --check` 通過，沒有翻盤、固定題 19/19；`cargo xtask check` 全套通過（e2e 93 項）。亂按：桌面 1,500 步（含 Shift、↑ ↓、組合鍵、展開面板、加詞、匯入確定 / 取消 / 壞檔）、觸控 700 步（含點面板與匯入），沒有頁面錯誤與原生對話框。
