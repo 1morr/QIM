@@ -27,7 +27,7 @@
 
 | 產品 | 採用 | 刻意不同 |
 | --- | --- | --- |
-| Gboard | 連打、容錯、長按出英文、預設佈局 | 候選依使用頻率前移 |
+| Gboard | 連打（整串解碼，選開頭一段後其餘重算）、容錯（觸控按點擊位置算，原樣讀法優先）、長按出英文、打完符號留在符號頁、預設佈局（[黑箱基線](research/blackbox-baseline.md)） | 候選依使用頻率前移（Gboard 速成選 10 次都不動）；自動造詞（Gboard 不學）；繁體模式不混簡體字（Gboard 混排，`ls` 首選「门」）；英文候選放第 2 位（Gboard 速成沒有）；單碼不列鄰鍵的字 |
 | iOS / macOS 內建速成 | 聯想（iOS：看前文、字詞都給、可一直接下去）、中文狀態下的英文候選、字根提示；粵語字序以 iOS 為準（嘢、啲、嘅、佢排第 1）；組字中按標點的行為由票 10 參考兩者決定（[黑箱基線](research/blackbox-baseline.md)） | 連打做整串解碼（兩者都不做，iOS 固定 2 碼一段）；選兩次才成首選，不學它們「選一次就到第 1、只記最近一次」；自動造詞（兩者逐字上屏都不學新詞）；繁體模式不混簡體字（iOS 混排）；英文候選放第 2 位（macOS 排第 1）；長按出英文字母（iOS 字根鍵沒有子鍵）；打完符號留在符號頁（iOS 打標點後跳回） |
 | Rime | 輸入方案與核心分離的做法 | 每個方案只索引自己的碼；長詞條與造句用同一把尺比分數（`docs/research/rime.md` §5） |
 | libime | 碼表格式、使用者學習的做法 | — |
@@ -294,6 +294,7 @@ QIM（暫名）。
 - Gboard 下一詞預測：CIFG-LSTM 1.4M 參數、量化後 1.4 MB、詞表 1 萬；英文靜態 LM 為 Katz 5-gram 125 萬條。[arXiv:1811.03604](https://arxiv.org/abs/1811.03604)。
 - Gboard 的神經 LM 皆以聯邦學習加差分隱私訓練；OOV 學詞取的是全體使用者的高頻詞。[arXiv:2305.18465](https://arxiv.org/abs/2305.18465)、[Google Research blog](https://research.google/blog/advances-in-private-training-for-production-on-device-language-models/)。
 - macOS 27.0.1 與 iOS 27.0.1 的內建速成（黑箱實測）：都不做整串解碼，macOS 第 3 碼起整串改當英文、iOS 固定 2 碼一段且前段自動取首選；學習都是選一次就到第 1、只記最近一次，不學新詞；iOS 字序以粵語為主、繁簡混排，聯想看前文且離線時結果相同；macOS 組字中 Enter 上屏首選。[`docs/research/blackbox-baseline.md`](research/blackbox-baseline.md)，2026-11-04 測。
+- Gboard 17.2.2 的速成（Android 17 模擬器，黑箱實測）：整串解碼（`mir` 一台），選開頭一段後其餘重算；容錯只靠點擊位置，原樣讀法優先，漏碼與對調不救；選 10 次不前移、不學新詞；字序粵語為主、繁簡混排；打碼的候選微受游標前文影響；沒有英文候選；組字中 Enter 上屏首選；字根鍵長按出英文字母。英文鍵盤打 3 次 email 後有時學會（觸發不穩，兩輪學到、一輪沒有），不是 autofill，模擬器重開後消失。iPhone 版有沒有速成未確認。[`docs/research/blackbox-baseline.md`](research/blackbox-baseline.md)，2026-11-04 測。
 - macOS 倉頡 / 速成可輸入英文字後從候選窗選，並有「Adjust word frequency」設定。[Apple 倉頡](https://support.apple.com/guide/chinese-input-method/cangjie-traditional-cimcjt11820/mac)、[Apple 設定](https://support.apple.com/guide/chinese-input-method/change-chinese-and-cantonese-settings-cim21aa5fa50/mac)。
 - DeepSeek API 相容 OpenAI 與 Anthropic 的介面格式，模型為 `deepseek-flash` 與 `deepseek-v4-pro`；思考模式預設開啟，可用 `thinking` 參數關閉；Responses API 為無狀態、不在伺服器保存對話。[DeepSeek API Docs](https://api-docs.deepseek.com)、[Responses API](https://api-docs.deepseek.com/api/create-response)，2026-10-30 查。
 - Apple 端上基礎模型約 3B 參數；iPhone 15 Pro 每個 prompt token 約 0.6 ms、生成 30 token/s。[Apple ML Research](https://machinelearning.apple.com/research/introducing-apple-foundation-models)。
