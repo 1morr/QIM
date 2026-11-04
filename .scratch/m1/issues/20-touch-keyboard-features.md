@@ -65,3 +65,13 @@ Blocked by: 19
     - `bench --check`：exit 0，公開語料四集的答錯與修正數都和 baseline 相同、沒有翻盤，固定題 15/15。個人集答錯 1106 → 1096，由錯變對 40 題、由對變錯 30 題，都來自票 12 的調參；個人集的 baseline 只在本機，合併時沒更新，本票沒動打分。
     - `cargo xtask check`：通過（e2e `54 passed`）。
   - 觸控亂按：4 個種子 × 150 步，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 21 等，`8bb2231`）：兩個檔衝突。
+  - `crates/qim-wasm/src/lib.rs`：兩邊各加了「記下還在不在組字」的 helper（本票 `record_composing`、票 21 `track_composing`）。留票 21 的：它看 `composition.input`，有分段時比較準；本票的 `perform` 改呼叫它。票 21 的 `select`、`focus_segment` 與本票的 `tap`、`longPress`、`perform` 都留，票 21 那份舊的 `tap`（文字、切頁都當 `Key::Other`）拿掉。
+  - `web/src/main.ts`：import 留 `pageSize`，拿掉沒人用的 `LayoutKey`。
+  - `touch.ts` 票 21 沒動。點候選、點分段在候選列與組字上，長按與預覽在 `#keyboard` 裡，選字後經 `apply` → `refresh` 重畫鍵上的標籤。
+  - 補 Playwright「點候選選字之後，長按與放大預覽照常」。
+  - 合併後的檢查：
+    - `cargo xtask data`：通過，資料包 sha256 和上次合併相同：quick `ae3bc207ce7a`、quick-lexicon `95e8f43e91cb`、zh-hant-bigram `d5c20a5a307e`。
+    - `bench --check`：exit 0，公開語料四集沒有翻盤，固定題 15/15。個人集的數字和上次合併相同。
+    - `cargo xtask check`：通過（e2e `60 passed`）。
+  - 觸控亂按兩輪，各 4 個種子 × 150 步，加了點候選與點分段，第二輪加重這兩項：共點候選 55 次、點分段 44 次，三頁都走到，沒有錯誤。
