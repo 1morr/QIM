@@ -42,7 +42,7 @@
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
 | 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 | 2026-11-04 | M1 22 | 組字顯示字根；`cangjie-hint` 資料包與 `--verify` 抽查；組字中 Tab、觸控長按候選列出字根提示；細節見票 22 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等 20、21） |
-| 2026-11-04 | M1 17 | 粵語口語詞表 197 詞（使用者審過）進詞庫，4 句口語進 `fixed.tsv`，口語修正 −3%、−9.5%；細節見票 17 | 協調者開 17b 後新 session 下 `/implement .scratch/m1/issues/17b-<slug>.md`（不讓 `s2hk` 換掉「晒」「搵」） |
+| 2026-11-04 | M1 17 | 粵語口語詞表 197 詞（使用者審過）進詞庫，4 句口語進 `fixed.tsv`，口語修正 −3%、−9.5%；細節見票 17 | 新 session 下 `/implement .scratch/m1/issues/17b-s2hk-keep-cantonese-chars.md` |
 
 ## 偏差與決定
 
