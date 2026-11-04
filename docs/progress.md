@@ -37,6 +37,7 @@
 | 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
 | 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
+| 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1，口語修正少三成；`bench --dev`、網頁「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 
 ## 偏差與決定
 
@@ -76,3 +77,7 @@
 - 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。
 - 2026-11-04 M1 11：詞的段改成第一字用 bigram、詞內用詞頻（plan §2.3）：詞內也用字級 bigram 時同碼的詞分不出常用度，個人集答錯 1146 → 1452；票 12 用 dev 複核。
 - 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。
+- 2026-11-04 M1 12：口語語料權重放 `corpora.rs` 不放方案檔（票寫 `quick.toml`）：它屬於各方案共用的語言模型（plan §2.5、§4.3）。
+- 2026-11-04 M1 12：調參只看 dev，但個人集當守門：dev 偏好的低 β、詞內內插都讓個人集答錯變多，取過守門的 dev 最佳點（plan §2.3、§5.2，票 12）。
+- 2026-11-04 M1 12：`--update-baseline` 接受 zh-wiki 答錯 +20、修正 +4.3%，換口語兩集修正 −32%、−36%（brief §9：維基只防退步）。
+- 2026-11-04 M1 12：詞庫字頻也乘語料權重；bigram 剪枝看乘權重後的次數，口語字對全留（plan §4.2、§4.3）。
