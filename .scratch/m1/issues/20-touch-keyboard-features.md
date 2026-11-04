@@ -1,6 +1,6 @@
 # 20: 觸控鍵盤功能
 
-Status: ready-for-agent
+Status: done
 Blocked by: 19
 讀: plan §2.6、§3.1、§5.3；brief §4.4、§4.6；spec〈共同規則〉
 
@@ -23,9 +23,31 @@ Blocked by: 19
 
 ## 驗收
 
-- [ ] Playwright（行動裝置 viewport）：點按鍵打出「門口」；長按字母鍵讀回彈出的英文字母，選了上屏該字母；長按第一排讀回含數字。
-- [ ] Playwright：切到符號頁打兩個符號，讀回仍在符號頁；按「ABC」回字母頁；切到自訂頁面並輸入。
-- [ ] Playwright：轉成橫向 viewport 後仍打得出「門口」；切深色讀回按鍵顏色是深色版本。
-- [ ] 內建佈局通過嚴格檢查（含直向與橫向）。
+- [x] Playwright（行動裝置 viewport）：點按鍵打出「門口」；長按字母鍵讀回彈出的英文字母，選了上屏該字母；長按第一排讀回含數字。
+- [x] Playwright：切到符號頁打兩個符號，讀回仍在符號頁；按「ABC」回字母頁；切到自訂頁面並輸入。
+- [x] Playwright：轉成橫向 viewport 後仍打得出「門口」；切深色讀回按鍵顏色是深色版本。
+- [x] 內建佈局通過嚴格檢查（含直向與橫向）。
 
 ## Comments
+
+- 2026-11-04 預設佈局（`crates/qim-databuild/src/gboard.rs`）：直向（畫布 390 × 216）與橫向（844 × 160，鍵變寬、排變矮）用同一份排列，只換畫布、排高與縫。三頁：字母（最下排 `?123`、`，`、空白、`。`、Enter）、符號（數字、常用符號、中文標點；左下「ABC」，左邊「常用」）、常用（自訂頁面的示範：10 個表情與 7 句粵語常用語，示範 `switchPage` 與多字的 `text`）。切頁鍵與刪除、Enter 同一個深一階的底色。
+- 2026-11-04 長按：字母鍵長按是 `text`（英文字母直接上屏、不進組字，plan §2.6 例子就是這樣寫），第一排另含數字，字母在前（角標是字母，預設跟著角標）。網頁按住 400 ms 出清單、橫向滑動換選項、放開做選到的；靠左半的鍵清單往右展開、右半往左，免得超出畫面。
+- 2026-11-04 組字中按文字鍵（票 19 留下的）：核心加 `Session::text`，和票 10 的標點相同先上屏整個組字再接文字，文字照原樣不轉全形；沒組字時核心直接上屏，網頁不再自己插入文字。沒用 `Key::Text(String)`：`Key` 是 `Copy`，各處以值比對，加帶 `String` 的變體要動到所有用法；M4 的 `Weighted` 屆時再一起考慮。plan §2.1、§2.6 已補。
+- 2026-11-04 切頁：狀態在綁定的 `WebLayout`（`tap` / `longPress` 收 `&mut Layout`），核心收到 `Key::Other`，組字中吃下、組字留著，所以「組字中切符號頁再按符號」= 先上屏組字再接符號。`nextKeyboard` 網頁沒有對應，也當 `Key::Other`；`toggleAscii` 轉 `Key::ToggleAscii`（票 23 接）。
+- 2026-11-04 深色與轉向（票 19 留下的）：綁定把淺色與深色都給網頁，網頁用 CSS `light-dark()`，`color-scheme` 跟 `prefers-color-scheme`，「深色」開關在根元素寫 `data-theme` 蓋過；鍵盤底色、預覽與長按清單也用 `light-dark()`。轉向時 `Layout.select` 重選佈局版本、有同 id 的頁就留在那頁；鍵盤寬度取 `min(100%, 45vh × 畫布寬高比)`，`body` 的 `padding-bottom` 改由 `ResizeObserver` 量鍵盤實際高度（不再寫死 390 × 216）。
+- 2026-11-04 動作改在放開時做（原本按下就做）：要分辨點一下與長按；預覽在按下時顯示。快打時前一指還沒放開就按下一鍵，前一鍵先當點一下做掉（Playwright 雙向驗過：改回「不理第二指」時紅，打出 `ar` 而非 `anr`）；長按清單開著時不理新的手指。
+- 2026-11-04 Playwright 寫測試時抓到兩個釋放順序的錯：沒組字時按切頁鍵，重畫先釋放了舊頁的鍵、`hostDefault` 才讀它（`null pointer passed to rust`）；組字中按切頁鍵，`refresh` 拿新頁的鍵對舊頁的元素。`touch-features.spec.ts` 每個測試結尾檢查沒有 page error，兩個都先紅再修。
+- 2026-11-04 亂按：Pixel 7 viewport，暫時的種子腳本（沒進 repo）4 個種子 × 150 步，隨機點鍵、長按並滑動、兩指交疊、按住時轉向、切深色、關開觸控鍵盤，三頁都走到；沒有 page error 或 console 錯誤，每次放開後預覽與長按清單都收起。第一版的亂數產生器（模 2³¹ 的 LCG）低位元太差，永遠點不到切頁鍵，換成 mulberry32 後才真的走到三頁。
+- 2026-11-04 驗證：`cargo xtask check` 通過（e2e `42 passed`）。`cargo xtask bench --check` exit 0：資料包 quick `f9499e401df5`、quick-lexicon `fe79d8a13d48`、zh-hant-bigram `088a93199bd2`，各集合答錯數、修正次數都和 baseline 相同，沒有翻盤，固定題 11/11。`Session::text` 是新方法，基準走的 `handle` 沒變，前後一樣是預期的結果。每鍵 p95：原生 50.46 µs、WebAssembly 59.79 µs，比票 19 的 18.92 / 23.92 µs 高。這次沒動 `handle`，並行的 worktree 同時在跑建置，多半是機器負載；只報不擋。截圖：`.scratch/m1/evidence/20-*.png`（長按 a、長按 q 選 1、符號頁、常用頁、放大預覽、深色、橫向）。
+- 2026-11-04 code-review（`25834f0` 起）已處理：
+  - 轉向留在同頁的規則移到 `qim-layout`（`LayoutVariant::page_index_or_initial`），綁定不放這條規則。
+  - 「要不要放大預覽」移到 `qim-layout`（`Key::shows_preview`），也照 `composing` 判斷。
+  - 核心沒吃下長按選的動作時，網頁原本照鍵的 `tap` 做。改成綁定在 `Snapshot` 帶上做了的 `action` 與 `letter`，`LayoutKey` 拿掉 `tap` / `letter`。補了自訂佈局「長按選刪除」的 Playwright，先紅（打出 `！！a`）再修。
+  - `toggleAscii` 改回 `Key::Other`，票 23 再接、補測試。
+  - 改名：`left` / `top` 改成 `ofWidth` / `ofHeight`，`after` 改成 `record_composing`。重畫判斷收成 `followPage`。
+  - `touch.ts` 開頭的註解改正，寫明目前頁記在綁定。
+  - 深色測試加 Enter 的淺色斷言，分得出佈局顏色和 CSS 預設底色。
+- 2026-11-04 code-review 沒處理：
+  - 綁定裡 `Action` 轉 `Key`：`qim-layout` 不能依賴 `qim-core`（plan §1.3），只能放在綁定。M2 的 `qim-ffi` 要用時，再決定要不要抽成共用。
+  - 淺深兩組顏色攤平成四個欄位：wasm-bindgen 的 getter 不好回傳巢狀物件，網頁也只把它們接成 `light-dark()`。
+  - 放開才做動作、兩指交疊：票沒寫，但分辨點一下與長按一定會帶出這兩點。已寫進 plan §2.6，平台殼照做。

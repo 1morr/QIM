@@ -38,6 +38,7 @@
 | 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
+| 2026-11-04 | M1 20 | 長按、符號頁、自訂頁、放大預覽、深色、橫向；核心加 `Session::text`；Gboard 佈局直橫兩版過嚴格檢查；細節見票 20 | 新 session 下 `/implement .scratch/m1/issues/21-edit-segments-in-composition.md` |
 
 ## 偏差與決定
 
@@ -82,3 +83,6 @@
 - 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
 - 2026-11-04 M1 19：`jsonschema` 讓網頁 WebAssembly 由 0.42 MB 變 4.6 MB；iOS 鍵盤擴充要不要略過 Schema 在 M2 量記憶體時定（plan §8）。
 - 2026-11-04 M1 19（使用者決定）：`touchInset` 改名 `extendedEdges`，與 Delta skin 同名同義（正數往外擴、負數往內縮），格式還沒發佈、不留舊名（plan §2.6）。
+- 2026-11-04 M1 20：組字中按觸控文字鍵先上屏組字再接文字（同票 10 的標點），核心加 `Session::text`，不用 `Key::Text` 以保住 `Key: Copy`（plan §2.1、§2.6）。
+- 2026-11-04 M1 20：觸控鍵改在放開時做動作，按住 400 ms 出長按清單；快打時前一指先當點一下做掉；轉向時留在同 id 的頁（plan §2.6）。
+- 2026-11-04 M1 20：預設佈局的字母鍵長按用 `text`，英文字母直接上屏不進組字，第一排字母在前、數字在後；切頁時組字留著（plan §2.6）。
