@@ -1,5 +1,14 @@
 {
+  "common-voice-yue": {
+    "wrong": 1635
+  },
+  "hkcancor": {
+    "wrong": 990
+  },
   "yue-wiki": {
+    "wrong": 2000
+  },
+  "zh-wiki": {
     "wrong": 2000
   }
 }

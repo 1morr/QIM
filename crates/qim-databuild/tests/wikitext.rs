@@ -98,11 +98,32 @@ fn headings_lists_and_indented_lines_are_dropped() {
 }
 
 #[test]
-fn language_conversion_keeps_plain_text_and_drops_variant_rules() {
+fn language_conversion_keeps_plain_text_and_the_traditional_variant() {
     assert_eq!(
         text("用-{歐羅}-同-{zh-hans:欧元;zh-hant:歐元;}-"),
-        "用歐羅同"
+        "用歐羅同歐元"
     );
+    // 香港 > 繁體 > 台灣 > 澳門 > 簡體 > 大陸 > 新加坡（s2hk 之後再轉）。
+    assert_eq!(
+        text("甲-{zh-cn:内存; zh-tw:記憶體; zh-hk:記憶體儲}-乙"),
+        "甲記憶體儲乙"
+    );
+    assert_eq!(text("甲-{zh-cn:网络;zh-sg:网路}-乙"), "甲网络乙");
+    // 單向規則 `原文=>變體:文字`。
+    assert_eq!(text("甲-{巴士=>zh-hant:公車;}-乙"), "甲公車乙");
+}
+
+#[test]
+fn hidden_conversion_rules_leave_a_separator_not_glued_text() {
+    // `H` 是只登記規則、不顯示；`-{…}-` 拿掉後兩邊的字不黏在一起。
+    assert_eq!(text("甲-{H|zh-hans:鼠标;zh-hant:滑鼠;}-乙"), "甲 乙");
+    assert_eq!(text("甲-{zh-hans:;zh-hant:}-乙"), "甲 乙");
+}
+
+#[test]
+fn conversion_flags_that_show_text_keep_the_variant() {
+    assert_eq!(text("甲-{A|zh-hans:鼠标;zh-hant:滑鼠;}-乙"), "甲滑鼠乙");
+    assert_eq!(text("甲-{R|zh-hans:x}-乙"), "甲zh-hans:x乙");
 }
 
 #[test]

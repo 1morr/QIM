@@ -116,7 +116,14 @@ fn remove_balanced(s: &str, open: &str, close: &str, replacement: &str) -> Strin
     without(s, &pairs, replacement)
 }
 
-/// `-{文字}-` 留文字；含 `zh-` 的是繁簡規則，整個丟掉。
+/// 繁簡規則挑哪個變體，依序找；`plain_text` 之後還會經 `s2hk`，所以簡體也比沒有好。
+const VARIANTS: [&str; 7] = [
+    "zh-hk", "zh-hant", "zh-tw", "zh-mo", "zh-hans", "zh-cn", "zh-sg",
+];
+
+/// `-{…}-` 繁簡轉換標記（<https://www.mediawiki.org/wiki/Writing_systems/Syntax>）：
+/// 沒有規則的 `-{文字}-` 留文字；`zh-xx:文字` 的規則留 [`VARIANTS`] 最前面的那個；
+/// 旗標 `R`（原樣）留原文；`H`、`T`、`-` 不顯示，和挑不到變體時一樣留一個空白，免得兩邊的字黏在一起。
 fn language_conversion(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -126,13 +133,52 @@ fn language_conversion(s: &str) -> String {
         };
         out.push_str(&rest[..start]);
         let inner = &rest[start + 2..start + 2 + len];
-        if !inner.contains("zh-") {
-            out.push_str(inner);
-        }
+        out.push_str(
+            conversion_text(inner)
+                .filter(|t| !t.is_empty())
+                .unwrap_or(" "),
+        );
         rest = &rest[start + 2 + len + 2..];
     }
     out.push_str(rest);
     out
+}
+
+/// 一個 `-{inner}-` 顯示的文字；不顯示時是 `None`。
+fn conversion_text(inner: &str) -> Option<&str> {
+    let (flags, body) = match inner.split_once('|') {
+        Some((flags, body))
+            if flags.len() <= 4
+                && flags
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c == '-' || c == ';') =>
+        {
+            (flags, body)
+        }
+        _ => ("", inner),
+    };
+    if flags.contains('R') {
+        return Some(body);
+    }
+    if flags.contains(['H', 'T', '-']) {
+        return None;
+    }
+    if !body.contains("zh") {
+        return Some(body);
+    }
+    // 每條規則 `變體:文字`，單向規則 `原文=>變體:文字`。
+    let rules: Vec<(&str, &str)> = body
+        .split(';')
+        .filter_map(|rule| {
+            let rule = rule.rsplit_once("=>").map_or(rule, |(_, r)| r);
+            let (variant, text) = rule.split_once(':')?;
+            Some((variant.trim(), text.trim()))
+        })
+        .collect();
+    VARIANTS
+        .iter()
+        .find_map(|v| rules.iter().find(|(variant, _)| variant == v))
+        .map(|(_, text)| *text)
 }
 
 /// `[[目標|文字]]` 留文字、`[[目標]]` 留目標；目標含 `:` 的（檔案、分類、跨語言）整個丟掉。

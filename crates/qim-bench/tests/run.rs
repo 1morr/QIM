@@ -253,3 +253,38 @@ fn report_names_the_pack_by_its_sha256_so_a_stale_pack_shows() {
     );
     assert_ne!(before, pack_line(&repo), "換了資料包，指紋要跟著變");
 }
+
+#[test]
+fn colloquial_sets_run_after_the_wiki_sets_and_need_a_baseline() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/talk.tsv",
+        "b\t月\na\t曰\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let names: Vec<&str> = outcome.sets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["toy", "talk"]);
+    assert_eq!(outcome.sets[1].wrong(), 1);
+
+    write(
+        repo.path(),
+        "bench/baseline.json",
+        br#"{"toy": {"wrong": 2}}"#,
+    );
+    let violations = check(&repo);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert!(violations[0].contains("talk"), "{violations:?}");
+}
+
+#[test]
+fn the_same_set_name_in_two_directories_is_an_error() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/toy.tsv",
+        "a\t日\n".as_bytes(),
+    );
+    let error = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(error.contains("toy"), "{error}");
+}

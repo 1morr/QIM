@@ -6,14 +6,14 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::corpus::{BENCH_SENTENCES, Builder, Finished};
+use crate::corpora::{self, CORPORA, Corpus, Group};
+use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, SOURCES, Source, hex, sha256_hex};
 use crate::transcode::Transcoder;
 use crate::verify::{self, CorpusDigests, CorpusSummary, Report, UnihanSummary};
-use crate::{Error, build_pack, libcangjie, scheme, unihan, wiki};
+use crate::{Error, build_pack, libcangjie, scheme, unihan};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
-const CACHE: &str = ".cache/sources";
 const PACKS: &str = "build/packs";
 const LIBCANGJIE: &str = "libcangjie";
 const TABLE: &str = "data/table.txt";
@@ -21,26 +21,6 @@ const UNIHAN: &str = "unihan";
 const UNIHAN_ZIP: &str = "Unihan.zip";
 /// Unihan 交叉比對的差異報表，相對 repo 根目錄；格式見 `unihan::CrossCheck::to_tsv`。
 const UNIHAN_REPORT: &str = "build/reports/unihan-kcangjie.tsv";
-
-/// 進 git 的基準語料（plan §5.2），旁邊放 `ATTRIBUTION.md`。
-const BENCH_CORPUS: &str = "bench/corpus";
-/// 訓練切分：建置產物，不進 git。
-const BUILD_CORPUS: &str = "build/corpus";
-
-/// 一份維基語料：基準檔與切分的名字、`sources.toml` 的 id、署名用的名稱與網址。
-struct Wiki {
-    name: &'static str,
-    source_id: &'static str,
-    title: &'static str,
-    site: &'static str,
-}
-
-const WIKIS: [Wiki; 1] = [Wiki {
-    name: "yue-wiki",
-    source_id: "yue_wiki",
-    title: "Cantonese Wikipedia",
-    site: "https://zh-yue.wikipedia.org/",
-}];
 
 /// 進資料包的來源：名字、`sources.toml` 的 id、取用的檔、取用的內容（寫進 NOTICE）。
 /// libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序（plan §4.1）。
@@ -94,8 +74,9 @@ pub struct Outcome {
     pub report: Option<Report>,
 }
 
-/// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`，旁邊放 `LICENSE` 與 `NOTICE`。
-pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
+/// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`，旁邊放 `LICENSE` 與 `NOTICE`，
+/// 再建各語料。來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
+pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     let read = |rel: &str| {
         let path = root.join(rel);
         std::fs::read_to_string(&path).map_err(Error::io(path))
@@ -106,7 +87,7 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
             .get(id)
             .ok_or_else(|| Error::invalid(SOURCES, format!("沒有 [source.{id}]")))
     };
-    let cache = root.join(CACHE);
+    let cache = cache.join("sources");
     let load = |id: &str, path: &str| -> Result<Vec<u8>, Error> {
         sources::load(&cache, id, source_of(id)?.file(path)?, fetch)
     };
@@ -162,18 +143,18 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     let transcoder = Transcoder::new(&rows);
     let mut corpora = Vec::new();
     let mut corpus_checks = Vec::new();
-    let mut attributions = Vec::new();
-    let bench_dir = root.join(BENCH_CORPUS);
-    std::fs::create_dir_all(&bench_dir).map_err(Error::io(&bench_dir))?;
-    for wiki in &WIKIS {
-        let source = source_of(wiki.source_id)?;
-        let [file] = source.files.as_slice() else {
-            return Err(Error::invalid(
-                SOURCES,
-                format!("[source.{}] 要剛好列一個 dump 檔", wiki.source_id),
-            ));
-        };
-        let dir = root.join(BUILD_CORPUS).join(wiki.name);
+    let mut attributions: Vec<(Group, String)> = Vec::new();
+    // 驗證用：各語料的基準檔內容與 train 檔，洩漏要拿每個基準集比對所有 train。
+    let mut benches: Vec<(&str, String)> = Vec::new();
+    let mut trains = Vec::new();
+    for corpus in &CORPORA {
+        let source = source_of(corpus.source_id)?;
+        let paths = corpus
+            .files
+            .iter()
+            .map(|path| sources::cached(&cache, corpus.source_id, source.file(path)?, fetch))
+            .collect::<Result<Vec<_>, _>>()?;
+        let dir = corpora::build_dir(root, corpus);
         std::fs::create_dir_all(&dir).map_err(Error::io(&dir))?;
         let (train_path, dev_path) = (dir.join("train.txt"), dir.join("dev.txt"));
         let create = |path: &Path| {
@@ -181,37 +162,33 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
                 .map(|f| Hashed::new(BufWriter::new(f)))
                 .map_err(Error::io(path))
         };
-        let dump = load(wiki.source_id, &file.path)?;
-        let first = build_wiki(
-            &dump,
+        let first = build_corpus(
+            corpus,
+            &paths,
             &transcoder,
             create(&train_path)?,
             create(&dev_path)?,
             &dir,
         )?;
-        let bench_rel = format!("{BENCH_CORPUS}/{}.tsv", wiki.name);
+        let bench_dir = root.join(corpus.group.dir());
+        std::fs::create_dir_all(&bench_dir).map_err(Error::io(&bench_dir))?;
+        let bench_rel = format!("{}/{}.tsv", corpus.group.dir(), corpus.name);
         write(root.join(&bench_rel), first.bench.as_bytes())?;
+        write(dir.join("chars.tsv"), first.chars.as_bytes())?;
         corpora.push(CorpusSummary {
-            name: wiki.name.into(),
+            name: corpus.name.into(),
             counts: first.counts,
             bench_sentences: first.bench.lines().count(),
             bench: bench_rel.into(),
         });
-        attributions.push(attribution(wiki, source, file));
+        attributions.push((corpus.group, corpus.attribution(source)?));
         if verify {
-            // 第二次從快取重讀 dump，只算 sha256、不寫檔。
-            drop(dump);
-            let dump = load(wiki.source_id, &file.path)?;
+            // 第二次從快取重讀來源，只算 sha256、不寫檔。
             let sink = || Hashed::new(io::sink());
-            let second = build_wiki(&dump, &transcoder, sink(), sink(), &dir)?;
-            let open = |path: &Path| {
-                File::open(path)
-                    .map(BufReader::new)
-                    .map_err(Error::io(path))
-            };
+            let second = build_corpus(corpus, &paths, &transcoder, sink(), sink(), &dir)?;
             corpus_checks.extend(
                 verify::corpus(
-                    wiki.name,
+                    corpus.name,
                     &transcoder,
                     &first.bench,
                     open(&train_path)?,
@@ -221,12 +198,31 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
                 )
                 .map_err(Error::io(&dir))?,
             );
+            benches.push((corpus.name, first.bench));
+            trains.push(train_path);
         }
     }
-    write(
-        bench_dir.join("ATTRIBUTION.md"),
-        attribution_file(&attributions).as_bytes(),
-    )?;
+    for group in Group::ALL {
+        let sections: Vec<String> = attributions
+            .iter()
+            .filter(|(g, _)| *g == group)
+            .map(|(_, section)| section.clone())
+            .collect();
+        write(
+            root.join(group.dir()).join("ATTRIBUTION.md"),
+            corpora::attribution_file(group, &sections).as_bytes(),
+        )?;
+    }
+    if verify {
+        let benches: Vec<(&str, &str)> = benches.iter().map(|(n, b)| (*n, b.as_str())).collect();
+        let readers = trains
+            .iter()
+            .map(|p| open(p))
+            .collect::<Result<Vec<_>, _>>()?;
+        corpus_checks.extend(
+            verify::leaks(&benches, readers).map_err(Error::io(root.join("build/corpus")))?,
+        );
+    }
 
     let report = if verify {
         let second = build()?.bytes;
@@ -257,34 +253,44 @@ pub fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Erro
     })
 }
 
-/// 一份維基 dump 建一次語料；train、dev 寫進兩個 writer，同時算 sha256。寫入失敗時報 `dir`。
-fn build_wiki<W: Write>(
-    dump: &[u8],
+/// 一份語料建一次；train、dev 寫進兩個 writer，同時算 sha256。寫入失敗時報 `dir`。
+fn build_corpus<W: Write>(
+    corpus: &Corpus,
+    paths: &[PathBuf],
     transcoder: &Transcoder,
     train: Hashed<W>,
     dev: Hashed<W>,
     dir: &Path,
 ) -> Result<Built, Error> {
     let mut builder = Builder::new(transcoder, train, dev);
-    wiki::articles(dump, |text| builder.add(text).map_err(Error::io(dir)))?;
+    corpus.texts(paths, |text| builder.add(text).map_err(Error::io(dir)))?;
     let Finished {
         counts,
         bench,
+        chars,
         train,
         dev,
     } = builder.finish().map_err(Error::io(dir))?;
     Ok(Built {
         counts,
         bench,
+        chars,
         train: train.sha256(),
         dev: dev.sha256(),
     })
+}
+
+fn open(path: &Path) -> Result<BufReader<File>, Error> {
+    File::open(path)
+        .map(BufReader::new)
+        .map_err(Error::io(path))
 }
 
 /// 建一次語料的結果，train、dev 只留 sha256。
 struct Built {
     counts: crate::corpus::Counts,
     bench: String,
+    chars: String,
     train: String,
     dev: String,
 }
@@ -296,6 +302,7 @@ impl Built {
             bench: sha256_hex(self.bench.as_bytes()),
             train: self.train.clone(),
             dev: self.dev.clone(),
+            chars: sha256_hex(self.chars.as_bytes()),
         }
     }
 }
@@ -329,46 +336,6 @@ impl<W: Write> Write for Hashed<W> {
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
-}
-
-/// `bench/corpus/ATTRIBUTION.md` 裡一份語料的段落。
-fn attribution(wiki: &Wiki, source: &Source, file: &sources::SourceFile) -> String {
-    format!(
-        "## {name}.tsv\n\
-         \n\
-         - Source: {title}, {site}, by its contributors (each article's page history lists its authors).\n\
-         - Dump: {version}, file {path} (sha256 {sha256}), {url}\n\
-         - License: {license}\n",
-        name = wiki.name,
-        title = wiki.title,
-        site = wiki.site,
-        version = source.version,
-        path = file.path,
-        sha256 = file.sha256,
-        url = file.url,
-        license = source.license,
-    )
-}
-
-fn attribution_file(sections: &[String]) -> String {
-    format!(
-        "# Attribution\n\
-         \n\
-         The sentences in this directory are derived from Wikipedia articles and are licensed\n\
-         under the Creative Commons Attribution-ShareAlike 4.0 International License\n\
-         (CC BY-SA 4.0), https://creativecommons.org/licenses/by-sa/4.0/. They are test data\n\
-         for the QIM top-choice benchmark and are not shipped in any app.\n\
-         \n\
-         Changes made by QIM: article text was extracted from the wikitext (templates, tables,\n\
-         references, file links, headings and lists removed) and converted with OpenCC s2hk;\n\
-         the text was split into clauses at punctuation and whitespace, and clauses containing\n\
-         characters outside the QIM continuous character set were dropped. Each file keeps up to\n\
-         {BENCH_SENTENCES} distinct clauses from the held-out test split, one per line, preceded by\n\
-         machine-generated Quick codes (one per character, separated by spaces) and a tab.\n\
-         \n\
-         {}",
-        sections.join("\n")
-    )
 }
 
 /// 進資料包的來源二選一：照抄上游檔裡的聲明（`license_file` 加 `license_statement`），

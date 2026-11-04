@@ -49,3 +49,58 @@ license = "CC-BY-SA-4.0"
 path = "zh_yuewiki-20261101-pages-articles.xml.bz2"
 url = "https://dumps.wikimedia.org/zh_yuewiki/20261101/zh_yuewiki-20261101-pages-articles.xml.bz2"
 sha256 = "e493dce7899884e250de0dcb208e560f6dff1e8b7970e7abdd015dc61da83126"
+
+# 中文維基（plan §4.3）：bench/corpus/zh-wiki.tsv 與 bigram、字頻的訓練語料，不進資料包。
+# 取自 Internet Archive 的長期存檔，不用 dumps.wikimedia.org：官方站對 zhwiki 這種大站實測只留約 7 個月
+# （2026-11-04 只列 20260401–20261101，20240101 回 404），小站 zh_yuewiki 卻幾乎全留；保留期數沒有官方明文。
+# 鏡像站（your.org、accum.se）保留得更短。XML dump 另預告 2027-01 停用（dumps.wikimedia.org 首頁）。
+# archive.org 的 zhwiki-YYYYMMDD item 到 20220501 為止（meta 的 Mirroring 頁說 2023-11-29 起沒更新），
+# 這是能長期下載到同一個檔的最近一期；換期要整個來源重釘（網址、日期、sha256），不能只改日期。
+# 抽樣：只取第一個分片 pages-articles1（page id 1–187712，約 204 MB），分片內每篇條目都用，不再抽。
+# 篇數由分片決定、依 dump 順序，同一個檔永遠抽出同一批；其餘分片不下載。取用與抽內文的規則同 yue_wiki。
+# sha256 自己算；archive.org 公布的 sha1 是 a53ef937244e2c1af8fb9513bc17f1ea009554ac（item 的 _files.xml），兩者都核對過。
+[source.zh_wiki]
+repository = "https://archive.org/details/zhwiki-20220501"
+version = "20220501"
+license = "CC-BY-SA-4.0"
+
+[[source.zh_wiki.files]]
+path = "zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"
+url = "https://archive.org/download/zhwiki-20220501/zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"
+sha256 = "c7e1b65a7a36092ac35c2f2f2eaa2c12babf07caa223b46217f8ab6db7fea0aa"
+
+# HKCanCor（香港粵語語料庫，plan §4.3 的口語語料）：bench/colloquial/hkcancor.tsv 與訓練語料，不進資料包。
+# 原始 repo 的 README 與 data/LICENSE 聲明 CC BY 4.0，引用 Luke & Wong (2015)；PyCantonese 內建的版本有改動，不用。
+# zip 裡 utf8/ 下 58 個轉寫檔：一個話輪一個 <sent>，<sent_tag> 裡一行一詞「詞/詞性/粵拼/」。
+# 抽法：只取詞、照原順序接成話輪（標點也是詞，留給切句），規則在 crates/qim-databuild/src/hkcancor.rs。
+[source.hkcancor]
+repository = "https://github.com/fcbond/hkcancor"
+version = "39aeadf920e0b5ca93d0ad7792c59e740e7bdd65"
+license = "CC-BY-4.0"
+
+[[source.hkcancor.files]]
+path = "data/hkcancor-utf8.zip"
+url = "https://raw.githubusercontent.com/fcbond/hkcancor/39aeadf920e0b5ca93d0ad7792c59e740e7bdd65/data/hkcancor-utf8.zip"
+sha256 = "09223963b8756254e15353cad843f8a4b0cbc4b9223dc8a8fa27fb1cf846057e"
+
+# Common Voice 的粵語句子（plan §4.3 的口語語料）：bench/colloquial/common-voice-yue.tsv 與訓練語料，不進資料包。
+# 取 GitHub 上 Sentence Collector 的句子檔，不取 Mozilla Data Collective 的資料集：後者要登入同意條款、
+# 條款禁止 re-host，建置下載不了也不能放進 repo；repo 的 README 與 server/data/LICENSE 聲明句子是 CC0 1.0（brief §12.1）。
+# yue 與 zh-HK 兩個檔都是粵語口語句子（只重疊 69 句），一行一句，都用；兩個檔 2022 年後沒改過。
+[source.common_voice]
+repository = "https://github.com/common-voice/common-voice"
+version = "ec845c798ead7144f2acc95fd8955e9d3995c7d0"
+license = "CC0-1.0"
+
+[[source.common_voice.files]]
+path = "server/data/yue/sentence-collector.txt"
+url = "https://raw.githubusercontent.com/common-voice/common-voice/ec845c798ead7144f2acc95fd8955e9d3995c7d0/server/data/yue/sentence-collector.txt"
+sha256 = "645d6a544634db879cef9d38e13ce58b7cef91772ba4d2ae6f6f674dbeb02a8b"
+
+[[source.common_voice.files]]
+path = "server/data/zh-HK/sentence-collector.txt"
+url = "https://raw.githubusercontent.com/common-voice/common-voice/ec845c798ead7144f2acc95fd8955e9d3995c7d0/server/data/zh-HK/sentence-collector.txt"
+sha256 = "0c537e9d65c1f1de10d70a1e0989d929b557628d975bf480d8b3b6fcc6291f26"
+
+# Tatoeba 的粵語句子沒有加（票 03 的 Comments）：per_language 下載檔每週覆蓋、沒有版本化網址與存檔快照，
+# 釘了 sha256 一週後乾淨建置就失敗；授權 CC BY 2.0 FR 要逐句列作者。

@@ -2,7 +2,7 @@
 
 use std::process::ExitCode;
 
-use qim_databuild::sources::Http;
+use qim_databuild::sources::{CACHE_ENV, Http, default_cache_dir};
 
 const USAGE: &str = "用法：qim-databuild [--verify]（在 repo 根目錄執行）";
 
@@ -23,7 +23,11 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match qim_databuild::run(&root, &Http, verify) {
+    let Some(cache) = default_cache_dir() else {
+        eprintln!("找不到使用者快取目錄：設定環境變數 {CACHE_ENV} 指定下載快取的位置");
+        return ExitCode::FAILURE;
+    };
+    match qim_databuild::run(&root, &cache, &Http, verify) {
         Ok(outcome) => {
             let shown = outcome
                 .pack_path

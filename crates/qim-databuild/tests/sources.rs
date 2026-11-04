@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::io::Write;
 
 use qim_databuild::Error;
 use qim_databuild::sources::{self, Fetch, SourceFile};
@@ -21,16 +22,26 @@ impl FakeFetch {
 }
 
 impl Fetch for FakeFetch {
-    fn fetch(&self, _url: &str) -> Result<Vec<u8>, String> {
+    fn fetch(&self, _url: &str, out: &mut dyn Write) -> Result<(), String> {
         self.calls.set(self.calls.get() + 1);
-        Ok(self.body.to_vec())
+        out.write_all(self.body).map_err(|e| e.to_string())
+    }
+}
+
+/// 寫了一半就斷線。
+struct Interrupted;
+
+impl Fetch for Interrupted {
+    fn fetch(&self, _url: &str, out: &mut dyn Write) -> Result<(), String> {
+        out.write_all(b"hel").map_err(|e| e.to_string())?;
+        Err("連線中斷".into())
     }
 }
 
 struct Offline;
 
 impl Fetch for Offline {
-    fn fetch(&self, url: &str) -> Result<Vec<u8>, String> {
+    fn fetch(&self, url: &str, _out: &mut dyn Write) -> Result<(), String> {
         Err(format!("離線，不該連 {url}"))
     }
 }
@@ -82,6 +93,51 @@ fn fetch_failure_is_reported() {
     let cache = tempfile::tempdir().unwrap();
     let err = sources::load(cache.path(), "demo", &file(), &Offline).unwrap_err();
     assert!(matches!(err, Error::Fetch { .. }), "{err}");
+}
+
+#[test]
+fn cached_returns_the_verified_file_in_the_cache() {
+    let cache = tempfile::tempdir().unwrap();
+    let path = sources::cached(cache.path(), "demo", &file(), &FakeFetch::new(b"hello")).unwrap();
+    assert_eq!(path, sources::cache_path(cache.path(), "demo", &file()));
+    assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+    assert_eq!(
+        sources::cached(cache.path(), "demo", &file(), &Offline).unwrap(),
+        path
+    );
+}
+
+#[test]
+fn interrupted_download_leaves_nothing_in_the_cache() {
+    let cache = tempfile::tempdir().unwrap();
+    let err = sources::cached(cache.path(), "demo", &file(), &Interrupted).unwrap_err();
+    assert!(matches!(err, Error::Fetch { .. }), "{err}");
+    let dir = sources::cache_path(cache.path(), "demo", &file());
+    let dir = dir.parent().unwrap();
+    let left: Vec<_> = std::fs::read_dir(dir)
+        .map(|d| d.map(|e| e.unwrap().path()).collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "{left:?}");
+}
+
+#[test]
+fn cache_dir_prefers_the_environment_variable_then_the_platform_cache() {
+    use std::path::{Path, PathBuf};
+    let platform = Some(PathBuf::from("/home/u/.cache"));
+    assert_eq!(
+        sources::cache_dir(Some("/shared/qim".into()), platform.clone()),
+        Some(PathBuf::from("/shared/qim"))
+    );
+    assert_eq!(
+        sources::cache_dir(None, platform.clone()),
+        Some(Path::new("/home/u/.cache").join("qim"))
+    );
+    // 空字串當沒設，同 XDG 慣例。
+    assert_eq!(
+        sources::cache_dir(Some("".into()), platform),
+        Some(Path::new("/home/u/.cache").join("qim"))
+    );
+    assert_eq!(sources::cache_dir(None, None), None);
 }
 
 #[test]

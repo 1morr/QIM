@@ -4,9 +4,12 @@
 //! 含連打字集以外字元（英文字母、數字、擴展區的字）的句子整句丟掉：拿掉那些字會拼出原文
 //! 沒有的相鄰字，污染 bigram，也不是使用者會一口氣連打的句子。
 //!
-//! 切分看句子本身的雜湊，同一句永遠落在同一個切分，test 句原樣出現在 train 的數量因此為 0。
+//! 切分看句子本身的雜湊，同一句永遠落在同一個切分，test 句原樣出現在 train 的數量因此為 0；
+//! 各語料共用同一個切分函式，同一句出現在兩份語料也不會一邊 train、一邊 test。
+//!
+//! 字頻只數 train（plan §4.2），dev、test 不參與。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 
 use sha2::{Digest, Sha256};
@@ -61,6 +64,7 @@ pub struct Builder<'t, W> {
     train: W,
     dev: W,
     test: HashSet<String>,
+    chars: HashMap<char, u64>,
     counts: Counts,
 }
 
@@ -71,6 +75,7 @@ impl<'t, W: Write> Builder<'t, W> {
             train,
             dev,
             test: HashSet::new(),
+            chars: HashMap::new(),
             counts: Counts::default(),
         }
     }
@@ -86,6 +91,9 @@ impl<'t, W: Write> Builder<'t, W> {
                 Split::Train => {
                     self.counts.train += 1;
                     writeln!(self.train, "{clause}")?;
+                    for c in clause.chars() {
+                        *self.chars.entry(c).or_default() += 1;
+                    }
                 }
                 Split::Dev => {
                     self.counts.dev += 1;
@@ -99,7 +107,7 @@ impl<'t, W: Write> Builder<'t, W> {
         Ok(())
     }
 
-    /// 回傳句數、基準的內容（`bench/` 的 TSV）與兩個 writer。基準取雜湊最小的
+    /// 回傳句數、基準的內容（`bench/` 的 TSV）、字頻與兩個 writer。基準取雜湊最小的
     /// [`BENCH_SENTENCES`] 句、依雜湊排序，和來源的順序無關。
     pub fn finish(mut self) -> io::Result<Finished<W>> {
         self.train.flush()?;
@@ -118,9 +126,13 @@ impl<'t, W: Write> Builder<'t, W> {
                 format!("{}\t{sentence}\n", codes.join(" "))
             })
             .collect();
+        let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
+        chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
         Ok(Finished {
             counts: self.counts,
             bench,
+            chars,
             train: self.train,
             dev: self.dev,
         })
@@ -131,6 +143,8 @@ pub struct Finished<W> {
     pub counts: Counts,
     /// 一行一句：逐字速成碼以空格分隔，tab，句子。
     pub bench: String,
+    /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
+    pub chars: String,
     pub train: W,
     pub dev: W,
 }

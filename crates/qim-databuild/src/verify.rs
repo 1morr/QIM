@@ -33,9 +33,9 @@ pub enum CheckId {
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
-    /// 基準句沒有一句原樣出現在 train（plan §5.2 的防洩漏）。
+    /// 基準句沒有一句原樣出現在任何語料的 train（plan §5.2 的防洩漏；bigram 用所有 train 訓練）。
     CorpusNoLeak,
-    /// 同樣的來源建兩次，基準句與訓練切分的 sha256 相同。
+    /// 同樣的來源建兩次，基準句、訓練切分與字頻的 sha256 相同。
     CorpusDeterministic,
 }
 
@@ -264,15 +264,17 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
     }
 }
 
-/// 一次語料建置寫出的三個檔的 sha256。
+/// 一次語料建置寫出的四個檔的 sha256。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CorpusDigests {
     pub bench: String,
     pub train: String,
     pub dev: String,
+    pub chars: String,
 }
 
-/// 一個語料的檢查。`bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
+/// 一個語料的轉碼與決定性檢查；洩漏要看所有語料的 train，另由 [`leaks`] 檢查。
+/// `bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
 /// `first`、`second` 是兩次建置的 sha256。
 pub fn corpus(
     name: &str,
@@ -283,32 +285,17 @@ pub fn corpus(
     first: &CorpusDigests,
     second: &CorpusDigests,
 ) -> io::Result<Vec<Check>> {
-    let mut failures = 0;
-    let mut sentences = HashSet::new();
-    for line in bench.lines() {
-        let transcoded = line.split_once('\t').filter(|(codes, sentence)| {
-            transcoder
-                .transcode(sentence)
-                .is_ok_and(|expected| expected.join(" ") == *codes)
-        });
-        match transcoded {
-            Some((_, sentence)) => {
-                sentences.insert(sentence);
-            }
-            None => failures += 1,
-        }
-    }
-    let mut leaked = HashSet::new();
-    for line in train.lines() {
-        let line = line?;
-        if transcoder.transcode(&line).is_err() {
-            failures += 1;
-        }
-        if let Some(&sentence) = sentences.get(line.as_str()) {
-            leaked.insert(sentence);
-        }
-    }
-    for line in dev.lines() {
+    let mut failures = bench
+        .lines()
+        .filter(|line| {
+            !line.split_once('\t').is_some_and(|(codes, sentence)| {
+                transcoder
+                    .transcode(sentence)
+                    .is_ok_and(|expected| expected.join(" ") == codes)
+            })
+        })
+        .count();
+    for line in train.lines().chain(dev.lines()) {
         if transcoder.transcode(&line?).is_err() {
             failures += 1;
         }
@@ -320,11 +307,6 @@ pub fn corpus(
             detail: format!("{name} 失敗 {failures} 句"),
         },
         Check {
-            id: CheckId::CorpusNoLeak,
-            passed: leaked.is_empty(),
-            detail: format!("{name} test 句原樣出現在 train {} 句", leaked.len()),
-        },
-        Check {
             id: CheckId::CorpusDeterministic,
             passed: first == second,
             detail: if first == second {
@@ -334,6 +316,42 @@ pub fn corpus(
             },
         },
     ])
+}
+
+/// 每個基準集（名字與基準檔內容）各一項：有幾個不重複的基準句原樣出現在 `trains` 的任一份。
+pub fn leaks(
+    benches: &[(&str, &str)],
+    trains: impl IntoIterator<Item = impl BufRead>,
+) -> io::Result<Vec<Check>> {
+    let sets: Vec<HashSet<&str>> = benches
+        .iter()
+        .map(|(_, bench)| {
+            bench
+                .lines()
+                .filter_map(|line| line.split_once('\t').map(|(_, sentence)| sentence))
+                .collect()
+        })
+        .collect();
+    let mut leaked: Vec<HashSet<String>> = vec![HashSet::new(); benches.len()];
+    for train in trains {
+        for line in train.lines() {
+            let line = line?;
+            for (set, leaked) in sets.iter().zip(&mut leaked) {
+                if set.contains(line.as_str()) {
+                    leaked.insert(line.clone());
+                }
+            }
+        }
+    }
+    Ok(benches
+        .iter()
+        .zip(leaked)
+        .map(|((name, _), leaked)| Check {
+            id: CheckId::CorpusNoLeak,
+            passed: leaked.is_empty(),
+            detail: format!("{name} test 句原樣出現在 train {} 句", leaked.len()),
+        })
+        .collect())
 }
 
 fn spot(id: CheckId, passed: bool) -> Check {

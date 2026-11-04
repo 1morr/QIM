@@ -159,7 +159,7 @@ QIM（暫名）。
 | 字序、碼表交叉驗證 | Unihan `kGradeLevel`、`kCangjie` | Unicode License v3 | `kGradeLevel` 排單字字序（有字頻前用，見 plan §4.1），進速成資料包；`kCangjie` 只用來抓錯碼，不打包 |
 | 詞頻 | rime-essay | LGPL-3.0 | 獨立資料包；建置時設最低詞頻門檻；之後可換成自建詞頻 |
 | 粵語口語小詞表 | 自行整理 | CC0 | 不從 rime-cantonese、粵典複製 |
-| 口語語料 | HKCanCor、Tatoeba 粵語句子；Common Voice 粵語句子待讀完條款 | CC BY、CC BY 2.0 FR；Common Voice 標 CC0-1.0（§12.1） | 維基偏書面語，要補口語，訓練 bigram 與基準都用；LIHKG、OpenSubtitles 權利來源不清，不用 |
+| 口語語料 | HKCanCor（fcbond/hkcancor）、Common Voice 粵語句子（GitHub 的 Sentence Collector 句子檔，不用 Mozilla Data Collective 的資料集） | CC BY 4.0、CC0 1.0（§12.1） | 維基偏書面語，要補口語，訓練 bigram 與基準都用；Tatoeba 沒有版本化的下載又要逐句署名，M1 不用；LIHKG、OpenSubtitles 權利來源不清，不用 |
 | 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
 | 英文詞表 | SCOWL | MIT 類寬鬆授權 | — |
 | 簡繁轉換 | OpenCC | Apache-2.0 | — |
@@ -223,7 +223,7 @@ QIM（暫名）。
 ## 11. 待決
 
 - 語言模型升級、小型神經重排、LLM 候選優化各接入到什麼程度：模型階梯實驗後決定（plan §7.8）。
-- Common Voice 粵語句子能否用於訓練與基準：標 CC0-1.0，但資料說明另寫不得轉發資料集，M1 票 03 開工時讀完條款後定（§12.1）。
+- 已決（M1 票 03）：Common Voice 粵語句子可用於訓練與基準，但只用 GitHub 上 CC0 的 Sentence Collector 句子檔；Mozilla Data Collective 的資料集要登入、禁止 re-host，不用（§5.2、§12.1）。
 - LGPL 資料、以 CC BY-SA 語料訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 沒有付費帳號時，iOS 鍵盤擴充能否用免費佈建在實機上跑、App Group 能否使用：平台可行性實驗開工時查證（plan §7.3）。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
@@ -250,9 +250,12 @@ QIM（暫名）。
 - HKSCS 資料集（含倉頡碼、粵拼）商用免費，須署名，有賠償條款。[data.gov.hk 條款](https://data.gov.hk/en/terms-and-conditions)。
 - 隨機速成字母串（a–y）對 macOS `/usr/share/dict/words` 的 210,773 個小寫詞：4 個字母剛好是英文詞 0.9%、差一處（插入、刪除、替換、對調）38.5%；5 個字母 0.1%、8.7%；6 個字母 0%、1.1%。隨機字母不代表真實速成碼的分佈，詞表含冷僻詞，只看量級。本機實驗 `scripts/experiments/english-edit1/`，2026-11-03。
 - Wikimedia 的 CirrusSearch dump 已停在 `other/cirrussearch/`（最後 20251229），改到 `other/cirrus_search_index/`、依索引分片成 `.json.bz2`，2026-11-04 只列最近 5 週（20261004–20261101）；`pages-articles` dump 的舊版仍可下載（粵語維基 20240101 回 200）。[DEPRECATED.txt](https://dumps.wikimedia.org/other/cirrussearch/DEPRECATED.txt)、[cirrus_search_index](https://dumps.wikimedia.org/other/cirrus_search_index/)、[zh_yuewiki](https://dumps.wikimedia.org/zh_yuewiki/)，2026-11-04 查。
-- HKCanCor：1997–1998 年的自發對話與電台節目轉寫，約 23 萬詞，CC BY（目錄標 4.0，未找到主要來源的授權聲明）。[Hugging Face](https://huggingface.co/datasets/hkcancor)、[PyCantonese](https://pypi.org/project/pycantonese)，2026-10-31 查。
-- Common Voice Scripted Speech 25.0 粵語：標 CC0-1.0，文字語料 28,727 句；24.0 的資料說明另寫不得轉發資料集，兩者的關係未查清。[25.0](https://datacollective.mozillafoundation.org/datasets/cmn29rqn9016to107eniyak65)、[24.0](https://datacollective.mozillafoundation.org/datasets/cmj8u3q2b00v9nxxborfkm824)，2026-10-31 查。
-- Tatoeba 句子預設 CC BY 2.0 FR，須署名，部分句子另有 CC0；粵語句子的數量未查。[Tatoeba 下載頁](https://tatoeba.org/ca/downloads)、[CC0 說明](https://en.wiki.tatoeba.org/articles/show/cc0-contributions)，2026-10-31 查。
+- HKCanCor：1997–1998 年的自發對話與電台節目轉寫，約 23 萬詞。原始 repo `fcbond/hkcancor` 的 README 與 `data/LICENSE` 聲明 CC BY 4.0，要求引用 Luke & Wong (2015)；`data/hkcancor-utf8.zip` 有 58 個轉寫檔，一行一詞 `詞/詞性/粵拼/`。PyCantonese 內建的版本另有改動。[fcbond/hkcancor](https://github.com/fcbond/hkcancor)（`39aeadf`）、[PyCantonese](https://github.com/jacksonllee/pycantonese)，2026-11-04 查。
+- Common Voice 在 Mozilla Data Collective 的資料集標 CC0-1.0，但同平台資料集頁的 Forbidden Usage 寫「It is forbidden to re-host or re-share this dataset」，下載要 API key 並同意條款（沒同意回 403）；粵語 24.0、25.0 頁是 JS 渲染、沒讀到原文，條款是由同平台其他資料集頁推得。Hugging Face 的 `mozilla-foundation` 寫 2025-10 起只經 MDC 發布。所以 QIM 不用 MDC 的資料集。[MDC API 文件](https://mozilladatacollective.com/api-reference/docs)、[27.0 日語頁](https://mozilladatacollective.com/datasets/cmu5xbhnf00fmnq07z9p3aa70)，2026-11-04 查。
+- Common Voice 的句子另在 GitHub `common-voice/common-voice` 的 `server/data/<語言>/sentence-collector.txt`：README 寫 `/server/data` 的句子以 CC0 釋出，`server/data/LICENSE` 是 CC0 1.0 全文。`yue` 9,443 句、`zh-HK` 19,020 句，都是粵語口語，2022 年後沒改過；可用於訓練與基準，QIM 釘 commit `ec845c7` 用這兩個檔。CC0 是投稿者的聲明，未逐句核查。[common-voice](https://github.com/common-voice/common-voice)，2026-11-04 查。
+- Tatoeba 句子預設 CC BY 2.0 FR，重用須列作者名，粵語只有 1 句 CC0；粵語 20,853 句、433 位作者。`downloads.tatoeba.org/exports/per_language/yue/` 的檔每週覆蓋，沒有版本化網址，Wayback Machine 沒有快照。[使用條款](https://tatoeba.org/en/terms_of_use) §6、[下載目錄](https://downloads.tatoeba.org/exports/)，2026-11-04 查。
+- dumps.wikimedia.org 沒有寫明保留幾期（wikitech 只說舊 dump 定期清掉）。實測 2026-11-04：`zhwiki/` 只列 20260401–20261101，enwiki 也只留約 7 個月；`zh_yuewiki/` 列著 2017 年起幾乎每一期。your.org、accum.se 等鏡像不比官方久。首頁另寫 XML dump「deprecated and will be sunset in January 2027」，改用 MediaWiki Content File Exports（`other/mediawiki_content_current/`，只有最近 3 期、每期 3 個約 2 GB 的分片）。[dumps.wikimedia.org](https://dumps.wikimedia.org/)、[Dumps/Current Architecture](https://wikitech.wikimedia.org/wiki/Dumps/Current_Architecture)、[MediaWiki Content File Exports](https://wikitech.wikimedia.org/wiki/MediaWiki_Content_File_Exports)，2026-11-04 查。
+- Internet Archive 的 `wikimediadownloads` 有 `zhwiki-YYYYMMDD` 存檔，最新是 `zhwiki-20220501`（meta 說 2023-11-29 起沒再更新），含 pages-articles 各分片與 md5、sha1；第一分片 `pages-articles1.xml-p1p187712.bz2` 214,433,326 bytes，sha1 `a53ef937…`，自算 sha256 `c7e1b65a…`。[zhwiki-20220501](https://archive.org/details/zhwiki-20220501)、[Mirroring 頁](https://meta.wikimedia.org/wiki/Mirroring_Wikimedia_project_XML_dumps)，2026-11-04 查。
 
 ### 12.2 Rime 行為（librime `56737cd2`）
 
