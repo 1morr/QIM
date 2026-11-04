@@ -498,6 +498,7 @@ impl Session {
         } else {
             self.snapshot(engine, true, Some(text))
         };
+        // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
         with_radicals(engine, snapshot)
     }
 

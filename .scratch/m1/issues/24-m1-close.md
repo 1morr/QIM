@@ -60,7 +60,7 @@ M1 的驗收（使用者任務書的階段 5）全部重驗並留下證據；黑
   - 名詞表：「語言模型」「學習資料」「標點」（`Punct`）沒進 `GLOSSARY.md`（票 10、11、14），下次 `/grill-with-docs` 時補。
   - 不修，選定的語義或代價：
     - Gboard 真機 email 學習不補測（使用者決定，協調者轉入）；iPhone 版 Gboard 不測（使用者決定，票 09）；票 08、09 缺的截圖與 T4、T7、T5c 不補，要重接裝置。
-    - 簡體模式逐段轉換的已知限制（plan §2.2，協調者轉入）。
+    - 簡體模式逐段轉換的已知限制（plan §2.2，協調者轉入）：跨兩段的詞可能轉錯（「乾」「隆」分段時成「干隆」），常見詞在詞庫裡本身是一段所以罕見；等使用者回報再改成整串轉換後切回各段。
     - 子字串洩漏 222 句不加檢查，維基集只防退步（票 01）；共用快取殘留的 `.part` 不自動清（票 03）。
     - `Composition::unselected_input` / `unselected_radicals` 只有測試在用，但它們是給桌面殼的公開介面、性質測試靠它們表達「其餘重算」，不刪（code-review）。
     - 來源 id 留在 `pipeline.rs`，和各自的檔名常數相鄰，不搬 `sources.rs`（code-review）。
@@ -74,4 +74,5 @@ M1 的驗收（使用者任務書的階段 5）全部重驗並留下證據；黑
   - Playwright（`56fb4d3`，腳本只在暫存區、不進 repo，27 項 passed）。實體鍵盤：`a` 首選「日」、`anr`「門口」、`mir`「一台」，空白上屏同字；`bc` 選第 2 位「貝」兩次後「貝」成首選；`the` 第 2 位是 `the`；簡體 `anr` 首選「门口」、上屏「门口」；`anrkbof` 分段「日弓口｜大月｜人火」，← ← 到中間段後候選等於單打 `kb`，選第 2 位「冇」後分段「門口｜冇｜人火」，空白上屏「門口冇係」，等於門口＋冇＋單打 `of` 的首選。觸控（Pixel 7）：點 a、n、r 首選「門口」、空白上屏；長按 `a` 清單只有「a」、放開上屏 a；橫向（839×412）點出「門口」；系統深色時 `key-a` 底色 `rgb(60, 64, 67)`、字 `rgb(227, 227, 227)`（淺色底 `rgb(255, 255, 255)`）；符號頁 → 常用頁打出「唔該👍」、回字母頁打「日」；重疊佈局點重疊處組字「弓」（上層 n）。截圖 `.scratch/m1/evidence/` 的 `24-rime-a.png`、`24-rime-anr.png`、`24-rime-mir.png`、`24-learn-bc.png`、`24-english-the.png`、`24-simplified-anr.png`、`24-segment-focus.png`、`24-segment-rechosen.png`、`24-touch-anr.png`、`24-touch-commit.png`、`24-long-press-a.png`、`24-landscape-anr.png`、`24-dark.png`、`24-phrases.png`、`24-overlap-tap.png`。
   - `4394683` 只改了預設佈局的無障礙標籤這一項網頁行為：在乾淨 checkout 讀回刪除鍵、Enter 鍵的 `aria-label` 是「刪除」「換行」，字母鍵仍是「日，a」。
 - 2026-11-04 黑箱：T1–T18 在 QIM 網頁重跑，寫進 `docs/research/blackbox-baseline.md` 的〈環境：QIM〉、〈首選對照〉的 QIM 欄與〈結果：QIM 與競品並列〉，照 §4 分三類。缺功能：容錯（T2，M4）、email 與欄位（T5，M3、M4）、上下文與聯想（T6、T8，M3）、「。」「，」長按（T13，M5）。行為不同但合理：選兩次成首選與衰減（T3）、自動造詞（T4）、英文排第 2（T7）、Enter 上屏輸入碼與 Shift＋字母（T18）、刪除不撤銷選定段（T1）、無痕代替密碼欄（T15）。行為更差：繁體模式混 HKSCS 簡體字、𨳊 排太前（T17，M3）。〈給 QIM 的取捨〉兩格照實測更正：簡繁那格原寫「繁體模式只出繁體字形」，符號頁那格原寫「票 20 決定」。截圖 `.scratch/m1/evidence/24-qim-*.png`。
-- 2026-11-04 封存：M1 的 38 列 session 紀錄與 78 條偏差移到 `docs/archive/M1.md`；里程碑表 M1 連到封存檔、M2 進行中，拆票前讀加上本票 Comments；plan 開頭的狀態行、§7 表 M1 完成、M2 進行中，§7.2 指向 spec、封存檔與本票。封存後 `cargo xtask check` 全套綠燈（見 commit 前的輸出）。
+- 2026-11-04 封存：M1 的 38 列 session 紀錄與 78 條偏差移到 `docs/archive/M1.md`；里程碑表 M1 連到封存檔、M2 進行中，拆票前讀加上本票 Comments；plan 開頭的狀態行、§7 表 M1 完成、M2 進行中，§7.2 指向 spec、封存檔與本票。封存後（`3b80304` 前，本 worktree）`cargo xtask check`：`==> fmt` … `==> unit`、`==> e2e`、`99 passed (16.6s)`、`check 通過`。
+- 2026-11-04 本 session 的 code-review（`56fb4d3...3b80304`）：兩軸都沒有高或中的發現。已處理：黑箱文件的證據路徑每個都帶 `ev/`、不用萬用字元；無障礙標籤改在建 `Cell` 時給（`.spoken()`），以後加符號鍵只改一處；`Session::text` 補註解說明 `with_radicals` 現在沒有作用；plan §7 加一行指向本票的清單；T9 改寫成不歸類的理由；簡體逐段轉換那條補上理由。沒處理：`24-rime-*.png` 不改名（檔名的 rime 指三個案例，黑箱文件已註明截的是 QIM）。
