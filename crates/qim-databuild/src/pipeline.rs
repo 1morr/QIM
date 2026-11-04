@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use qim_core::{LexiconPack, Pack};
+use qim_core::{LanguageModelPack, LexiconPack, Pack};
 
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
@@ -13,7 +13,7 @@ use crate::transcode::Transcoder;
 use crate::verify::{
     self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
 };
-use crate::{Error, build_pack, lexicon, libcangjie, packing, personal, scheme, unihan};
+use crate::{Error, bigram, build_pack, lexicon, libcangjie, packing, personal, scheme, unihan};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 const PACKS: &str = "build/packs";
@@ -53,6 +53,9 @@ pub struct Outcome {
     pub lexicon_path: PathBuf,
     pub lexicon_sha256: String,
     pub lexicon: LexiconSummary,
+    pub language_model_path: PathBuf,
+    pub language_model_sha256: String,
+    pub language_model: bigram::Summary,
     /// 各語料的句數。
     pub corpora: Vec<CorpusSummary>,
     /// 個人集轉出的統計；沒有 [`personal::USERDB`] 時是 `None`。
@@ -62,7 +65,8 @@ pub struct Outcome {
 }
 
 /// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`、建各語料，再用語料的字頻
-/// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
+/// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`、用語料的 train 切分訓練方案指名的語言模型
+/// 資料包到 `build/packs/<語言模型 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
 /// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     let read = |rel: &str| {
@@ -83,8 +87,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         String::from_utf8(load(id, path)?).map_err(|e| Error::invalid(path, e.to_string()))
     };
     let lexicon_sources = packing::lexicon_sources();
+    let language_model_sources = packing::language_model_sources();
     let quick_packed = packing::resolve(&packing::QUICK, &all, load_text, read)?;
     let lexicon_packed = packing::resolve(&lexicon_sources, &all, load_text, read)?;
+    let language_model_packed = packing::resolve(&language_model_sources, &all, load_text, read)?;
 
     // 每次都從快取與方案檔重讀，`--verify` 的第二次建置才是真的重建。
     let build_quick = || -> Result<QuickBuild, Error> {
@@ -108,6 +114,18 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         quick.pack.scheme.packs.lexicon.clone().ok_or_else(|| {
             Error::invalid(QUICK_SCHEME, "要在 [packs] 寫 lexicon：詞庫資料包的 id")
         })?;
+    let language_model_id = quick
+        .pack
+        .scheme
+        .packs
+        .language_model
+        .clone()
+        .ok_or_else(|| {
+            Error::invalid(
+                QUICK_SCHEME,
+                "要在 [packs] 寫 language_model：語言模型資料包的 id",
+            )
+        })?;
     let dir = root.join(PACKS).join(&id);
     packing::write(&dir, &id, &quick.bytes, &quick_packed, QUICK_ABOUT)?;
     let pack_path = dir.join(format!("{id}.pack"));
@@ -123,7 +141,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let mut second_chars: Vec<String> = Vec::new();
     // 驗證用：各語料的基準檔內容與 train 檔，洩漏要拿每個基準集比對所有 train。
     let mut benches: Vec<(&str, String)> = Vec::new();
-    let mut trains = Vec::new();
+    // 各語料的 train 切分與權重，bigram 用；洩漏檢查也比對它們。
+    let mut trains: Vec<(PathBuf, u64)> = Vec::new();
     for corpus in &CORPORA {
         let source = source_of(corpus.source_id)?;
         let paths = source
@@ -176,8 +195,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 .map_err(Error::io(&dir))?,
             );
             second_chars.push(second.chars);
-            trains.push(train_path);
         }
+        trains.push((train_path, corpus.weight));
         chars.push(first.chars);
         if verify {
             benches.push((corpus.name, first.bench));
@@ -226,12 +245,45 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     )?;
     let lexicon_path = lexicon_dir.join(format!("{lexicon_id}.pack"));
 
+    // bigram 由各語料寫出的 train 切分訓練；每次重讀檔案，`--verify` 的第二次才是真的重訓。
+    let build_language_model = |quick: &QuickBuild| -> Result<(Vec<u8>, bigram::Summary), Error> {
+        let mut counter = bigram::Counter::default();
+        for (path, weight) in &trains {
+            counter.add(open(path)?, *weight).map_err(Error::io(path))?;
+        }
+        let vocabulary = quick
+            .pack
+            .code_table
+            .iter()
+            .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
+            .collect::<std::collections::BTreeSet<char>>()
+            .len();
+        let (model, summary) = bigram::train(&counter, vocabulary, bigram::MIN_COUNT);
+        let bytes = LanguageModelPack {
+            id: language_model_id.clone(),
+            model,
+        }
+        .to_bytes()
+        .map_err(|e| Error::invalid("語言模型資料包", e.to_string()))?;
+        Ok((bytes, summary))
+    };
+    let (language_model_bytes, language_model_summary) = build_language_model(&quick)?;
+    let language_model_dir = root.join(PACKS).join(&language_model_id);
+    packing::write(
+        &language_model_dir,
+        &language_model_id,
+        &language_model_bytes,
+        &language_model_packed,
+        &language_model_about(&language_model_id),
+    )?;
+    let language_model_path = language_model_dir.join(format!("{language_model_id}.pack"));
+
     let personal = build_personal(root, &transcoder)?;
     if verify {
         let benches: Vec<(&str, &str)> = benches.iter().map(|(n, b)| (*n, b.as_str())).collect();
         let readers = trains
             .iter()
-            .map(|p| open(p))
+            .map(|(p, _)| open(p))
             .collect::<Result<Vec<_>, _>>()?;
         corpus_checks.extend(
             verify::leaks(&benches, readers).map_err(Error::io(root.join("build/corpus")))?,
@@ -242,15 +294,18 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         // 第二次從來源重建速成碼表，詞庫也由它重建，整條鏈都比到。
         let second_quick = build_quick()?;
         let (second_lexicon, _) = build_lexicon(&second_quick, &second_chars)?;
+        let (second_language_model, _) = build_language_model(&second_quick)?;
         let mut report = verify::run(
             &quick.rows,
             PackBytes {
                 quick: &quick.bytes,
                 lexicon: &lexicon_bytes,
+                language_model: &language_model_bytes,
             },
             PackBytes {
                 quick: &second_quick.bytes,
                 lexicon: &second_lexicon,
+                language_model: &second_language_model,
             },
         );
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
@@ -266,6 +321,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             report: UNIHAN_REPORT.into(),
         });
         report.lexicon = Some(lexicon_summary);
+        report.language_model = Some(language_model_summary);
         report.corpora = corpora.clone();
         report.checks.extend(corpus_checks);
         Some(report)
@@ -278,6 +334,9 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         lexicon_path,
         lexicon_sha256: sha256_hex(&lexicon_bytes),
         lexicon: lexicon_summary,
+        language_model_path,
+        language_model_sha256: sha256_hex(&language_model_bytes),
+        language_model: language_model_summary,
         corpora,
         personal,
         report,
@@ -299,6 +358,21 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
+    )
+}
+
+/// 語言模型資料包 NOTICE 最後一段：怎麼用來源。授權是否要求模型同授權散布是 brief §11 的
+/// 待決項，這裡不下結論。
+fn language_model_about(id: &str) -> String {
+    format!(
+        "{id} is a character bigram language model trained by QIM with interpolated\n\
+         Kneser-Ney smoothing. It was trained on the training split of each corpus listed\n\
+         above, counting adjacent characters within each clause, and pruned to the pairs\n\
+         seen at least {min} times. Each corpus is extracted, converted with OpenCC s2hk and\n\
+         split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
+         bench/colloquial/ATTRIBUTION.md of the QIM repository. The pack holds statistics\n\
+         only, no text of the corpora.\n",
+        min = bigram::MIN_COUNT,
     )
 }
 

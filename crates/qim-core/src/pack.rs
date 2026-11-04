@@ -3,15 +3,17 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{CodeTable, Lexicon, Scheme};
+use crate::{CodeTable, LanguageModel, Lexicon, Scheme};
 
 /// 資料包格式的版本，兩種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 /// 輸入方案資料包檔頭的魔數。
 const SCHEME_MAGIC: &[u8; 4] = b"QIMP";
 /// 詞庫資料包檔頭的魔數。
 const LEXICON_MAGIC: &[u8; 4] = b"QIML";
+/// 語言模型資料包檔頭的魔數。
+const LANGUAGE_MODEL_MAGIC: &[u8; 4] = b"QIMB";
 
 /// 一個輸入方案的資料包：方案與它的碼表。
 ///
@@ -31,6 +33,15 @@ pub struct LexiconPack {
     pub lexicon: Lexicon,
 }
 
+/// 語言模型資料包：字級 bigram（plan §4.3）。方案用 [`crate::Packs::language_model`] 指名它的 `id`。
+///
+/// 位元組格式：魔數 `QIMB`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LanguageModelPack {
+    pub id: String,
+    pub model: LanguageModel,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackError {
     /// 檔頭不是這種資料包的魔數。
@@ -43,6 +54,11 @@ pub enum PackError {
     Malformed(String),
     /// 給的詞庫資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
     LexiconMismatch {
+        expected: Option<String>,
+        found: Option<String>,
+    },
+    /// 給的語言模型資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
+    LanguageModelMismatch {
         expected: Option<String>,
         found: Option<String>,
     },
@@ -60,6 +76,12 @@ impl fmt::Display for PackError {
             Self::LexiconMismatch { expected, found } => write!(
                 f,
                 "方案指名的詞庫是 {}，給的是 {}",
+                name(expected),
+                name(found)
+            ),
+            Self::LanguageModelMismatch { expected, found } => write!(
+                f,
+                "方案指名的語言模型是 {}，給的是 {}",
                 name(expected),
                 name(found)
             ),
@@ -116,5 +138,15 @@ impl LexiconPack {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
         decode(LEXICON_MAGIC, bytes)
+    }
+}
+
+impl LanguageModelPack {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
+        encode(LANGUAGE_MODEL_MAGIC, self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
+        decode(LANGUAGE_MODEL_MAGIC, bytes)
     }
 }

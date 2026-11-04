@@ -5,6 +5,8 @@ import init, { Session, type Snapshot } from "./wasm/qim_wasm.js";
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
 const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
+/** 速成方案檔 `[packs]` 指名的語言模型資料包（字級 bigram）。 */
+const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
 
 function element<T extends HTMLElement>(selector: string): T {
 	const found = document.querySelector<T>(selector);
@@ -67,12 +69,13 @@ function insert(commit: string): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon] = await Promise.all([
+	const [, pack, lexicon, languageModel] = await Promise.all([
 		init(),
 		loadPack(PACK_URL),
 		loadPack(LEXICON_URL),
+		loadPack(LANGUAGE_MODEL_URL),
 	]);
-	const session = new Session(pack, lexicon);
+	const session = new Session(pack, lexicon, languageModel);
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);

@@ -1,5 +1,7 @@
 //! 連打（plan §2.2、§2.3）經公開介面的行為：輸入碼切成字與詞的 lattice，用同一把尺打分。
 
+mod common;
+
 use std::collections::BTreeMap;
 
 use qim_core::{
@@ -27,6 +29,7 @@ fn engine(data: &Data) -> Engine {
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
+            language_model: Some("unigram".into()),
         },
         ranking: data.ranking,
     };
@@ -51,7 +54,18 @@ fn engine(data: &Data) -> Engine {
         id: "lexicon".into(),
         lexicon: Lexicon::new(words, data.chars.iter().copied()),
     };
-    Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
+    let continuous = code_table
+        .iter()
+        .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    let language_model = common::unigram("unigram", &data.chars, continuous);
+    Engine::new(
+        Pack { scheme, code_table },
+        Some(lexicon),
+        Some(language_model),
+    )
+    .unwrap()
 }
 
 struct Ime {

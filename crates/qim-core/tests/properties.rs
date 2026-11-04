@@ -51,6 +51,7 @@ fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<Stri
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
+            language_model: None,
         },
         ranking: Ranking::default(),
     };
@@ -82,7 +83,7 @@ fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<Stri
         id: "lexicon".into(),
         lexicon,
     };
-    Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
+    Engine::new(Pack { scheme, code_table }, Some(lexicon), None).unwrap()
 }
 
 /// `text` 能拆成一串字詞（`pieces` 的「文字, 碼」），碼接起來是 `input` 開頭的一段（至少一碼）。

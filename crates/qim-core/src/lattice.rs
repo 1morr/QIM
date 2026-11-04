@@ -71,7 +71,8 @@ impl Lattice {
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
         for (e, edge) in edges.iter().enumerate() {
             for (k, node) in self.columns[edge.start].iter().enumerate() {
-                extended.push((node.score + edge.score, e, k));
+                let prev = node.text.chars().next_back();
+                extended.push((node.score + engine.edge_score(prev, edge), e, k));
             }
         }
         // 同分時照邊的順序（起點由前到後、字在詞前）與前一欄的名次，結果才固定。
@@ -136,11 +137,7 @@ pub(crate) fn candidates(engine: &Engine, lattice: &Lattice) -> Vec<CandidateSpa
     if n == 0 {
         return Vec::new();
     }
-    let mut full: Vec<(f64, String)> = engine
-        .span(input)
-        .into_iter()
-        .map(|e| (e.score, e.text))
-        .collect();
+    let mut full = engine.span(input);
     full.extend(
         lattice.columns[n]
             .iter()
@@ -161,7 +158,7 @@ pub(crate) fn candidates(engine: &Engine, lattice: &Lattice) -> Vec<CandidateSpa
         engine
             .span(&input[..len])
             .into_iter()
-            .map(move |e| CandidateSpan { text: e.text, len })
+            .map(move |(_, text)| CandidateSpan { text, len })
     });
     let mut seen = HashSet::new();
     full.chain(extension)

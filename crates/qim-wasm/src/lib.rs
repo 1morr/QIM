@@ -3,7 +3,7 @@
 use qim_core::{Engine, Key, Session, Snapshot, UserModel};
 use wasm_bindgen::prelude::*;
 
-/// 網頁的一個輸入框：速成與詞庫資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
+/// 網頁的一個輸入框：速成、詞庫與語言模型資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
 #[wasm_bindgen(js_name = Session)]
 pub struct WebSession {
     engine: Engine,
@@ -13,10 +13,14 @@ pub struct WebSession {
 
 #[wasm_bindgen(js_class = Session)]
 impl WebSession {
-    /// 由速成資料包與方案指名的詞庫資料包的位元組建立；資料包由網頁 fetch。
+    /// 由速成資料包與方案指名的詞庫、語言模型資料包的位元組建立；資料包由網頁 fetch。
     #[wasm_bindgen(constructor)]
-    pub fn new(pack: &[u8], lexicon: Option<Vec<u8>>) -> Result<WebSession, JsError> {
-        let engine = Engine::from_pack_bytes(pack, lexicon.as_deref())
+    pub fn new(
+        pack: &[u8],
+        lexicon: Option<Vec<u8>>,
+        language_model: Option<Vec<u8>>,
+    ) -> Result<WebSession, JsError> {
+        let engine = Engine::from_pack_bytes(pack, lexicon.as_deref(), language_model.as_deref())
             .map_err(|e| JsError::new(&e.to_string()))?;
         Ok(Self {
             engine,
