@@ -9,7 +9,7 @@ use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, Hashed, SOURCES, Source, sha256_hex};
 use crate::transcode::Transcoder;
 use crate::verify::{self, CorpusDigests, CorpusSummary, Report, UnihanSummary};
-use crate::{Error, build_pack, libcangjie, scheme, unihan};
+use crate::{Error, build_pack, libcangjie, personal, scheme, unihan};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 const PACKS: &str = "build/packs";
@@ -68,6 +68,8 @@ pub struct Outcome {
     pub sha256: String,
     /// 各語料的句數。
     pub corpora: Vec<CorpusSummary>,
+    /// 個人集轉出的統計；沒有 [`personal::USERDB`] 時是 `None`。
+    pub personal: Option<personal::Counts>,
     /// 只有要求驗證時才有。
     pub report: Option<Report>,
 }
@@ -211,6 +213,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             corpora::attribution_file(group, &sections).as_bytes(),
         )?;
     }
+    let personal = build_personal(root, &transcoder)?;
     if verify {
         let benches: Vec<(&str, &str)> = benches.iter().map(|(n, b)| (*n, b.as_str())).collect();
         let readers = trains
@@ -247,8 +250,34 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         pack_path,
         sha256: sha256_hex(&bytes),
         corpora,
+        personal,
         report,
     })
+}
+
+/// 有 [`personal::USERDB`] 就轉出 [`personal::ITEMS`]；沒有就刪掉上次轉出的，基準才不會跑舊題目。
+fn build_personal(root: &Path, transcoder: &Transcoder) -> Result<Option<personal::Counts>, Error> {
+    let items = root.join(personal::ITEMS);
+    let userdb = root.join(personal::USERDB);
+    let text = match std::fs::read_to_string(&userdb) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => match std::fs::remove_file(&items) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => {
+                return Err(Error::io(&items)(e));
+            }
+            _ => return Ok(None),
+        },
+        Err(e) => return Err(Error::io(&userdb)(e)),
+    };
+    let (tsv, counts) = personal::from_userdb(&text, transcoder)
+        .map_err(|e| Error::invalid(personal::USERDB, e))?;
+    let header = format!(
+        "{}{}\n",
+        personal::SOURCE_HEADER,
+        sha256_hex(text.as_bytes())
+    );
+    std::fs::write(&items, header + &tsv).map_err(Error::io(&items))?;
+    Ok(Some(counts))
 }
 
 /// 一份語料建一次；train、dev 寫進兩個 writer，同時算 sha256。寫入失敗時報 `dir`。

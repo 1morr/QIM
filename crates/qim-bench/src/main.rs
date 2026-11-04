@@ -35,6 +35,9 @@ fn main() -> ExitCode {
     print!("{}", outcome.report());
     if mode == Mode::UpdateBaseline {
         println!("\n已改寫 {}", qim_bench::BASELINE);
+        if matches!(outcome.personal, qim_bench::Personal::Ran(_)) {
+            println!("已改寫 {}", qim_bench::PERSONAL_BASELINE);
+        }
     }
     for violation in &outcome.violations {
         eprintln!("{violation}");

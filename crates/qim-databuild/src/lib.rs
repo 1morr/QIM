@@ -8,6 +8,7 @@ mod error;
 pub mod hkcancor;
 pub mod libcangjie;
 pub mod mediawiki;
+pub mod personal;
 mod pipeline;
 pub mod quick;
 pub mod scheme;

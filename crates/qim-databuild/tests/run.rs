@@ -755,3 +755,32 @@ fn every_corpus_gets_bench_sentences_training_splits_and_character_counts() {
         }
     }
 }
+
+#[test]
+fn personal_userdb_is_transcoded_next_to_it_and_removed_with_it() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let fetch = upstream(README);
+    let outcome = run(root.path(), &fetch, false).unwrap();
+    assert_eq!(outcome.personal, None);
+
+    std::fs::create_dir_all(root.path().join("bench/personal")).unwrap();
+    std::fs::write(
+        root.path().join("bench/personal/rime-userdb.txt"),
+        "#@/db_name\tquick5.userdb\nanr a \t問日\tc=2 d=1 t=1\na \t日\tc=0 d=1 t=2\n",
+    )
+    .unwrap();
+    let outcome = run(root.path(), &fetch, false).unwrap();
+    assert_eq!(outcome.personal.map(|c| (c.words, c.unused)), Some((1, 1)));
+    assert_eq!(
+        read(root.path(), "bench/personal/rime-userdb.tsv"),
+        format!(
+            "# rime-userdb.txt sha256 {}\nar a\t問日\t2\n",
+            sha256_hex(&std::fs::read(root.path().join("bench/personal/rime-userdb.txt")).unwrap())
+        )
+    );
+
+    std::fs::remove_file(root.path().join("bench/personal/rime-userdb.txt")).unwrap();
+    run(root.path(), &fetch, false).unwrap();
+    assert!(!root.path().join("bench/personal/rime-userdb.tsv").exists());
+}
