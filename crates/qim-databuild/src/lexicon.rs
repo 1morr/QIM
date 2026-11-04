@@ -1,4 +1,4 @@
-//! 詞庫資料包的內容（plan §4.2）：rime-essay 的多字詞展開成速成碼索引，加上語料的字頻。
+//! 詞庫資料包的內容（plan §4.2）：rime-essay 與粵語口語詞表的多字詞展開成速成碼索引，加上語料的字頻。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -33,10 +33,18 @@ pub struct Counts {
     pub codes: usize,
     /// 詞庫裡（輸入碼, 詞）的個數。
     pub indexed: usize,
+    /// 粵語口語詞表的詞數。
+    pub colloquial: usize,
 }
 
-/// 由 rime-essay 的 `essay.txt`（一行「詞<TAB>詞頻」）建詞庫。
+/// 粵語口語詞表在 repo 裡的位置（plan §4.2、brief §5.2）：QIM 自行整理，CC0。
+pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
+
+/// 由 rime-essay 的 `essay.txt`（一行「詞<TAB>詞頻」）與粵語口語詞表 `colloquial`（[`COLLOQUIAL_PATH`]，
+/// 同格式，`#` 開頭的行與空行略過）建詞庫。
 ///
+/// - 口語詞表只補 essay 沒收的詞，是人工整理的：單字、詞頻低於 [`MIN_FREQUENCY`]、含連打字集以外
+///   的字、重複、essay 已收（詞頻達門檻）的詞都算錯，不默默濾掉；essay 有但低於門檻的詞用詞表的詞頻。
 /// - 單字、詞頻低於 [`MIN_FREQUENCY`] 的詞、含連打字集以外的字的詞不收；同一個詞列了幾次取最大詞頻。
 /// - 詞的碼是每個字的一個速成碼接起來（`code_table` 的連打字集）。多碼字的組合依換掉主碼
 ///   （`transcoder` 的碼，基準也用它）的字數由少到多取，最多 [`MAX_COMBINATIONS`] 個。
@@ -44,6 +52,7 @@ pub struct Counts {
 /// - `char_frequency` 原樣放進詞庫（[`char_frequency`]）。
 pub fn build(
     essay: &str,
+    colloquial: &str,
     code_table: &CodeTable,
     transcoder: &Transcoder,
     char_frequency: BTreeMap<char, u64>,
@@ -53,12 +62,7 @@ pub fn build(
     let mut words: BTreeMap<&str, u64> = BTreeMap::new();
     for (i, line) in essay.lines().enumerate() {
         let invalid = |reason: &str| Error::invalid(format!("essay.txt 第 {} 行", i + 1), reason);
-        let mut fields = line.split('\t');
-        let (Some(text), Some(frequency), None) = (fields.next(), fields.next(), fields.next())
-        else {
-            return Err(invalid("應是「詞<TAB>詞頻」"));
-        };
-        let frequency: u64 = frequency.parse().map_err(|_| invalid("詞頻應是整數"))?;
+        let (text, frequency) = word_and_frequency(line, &invalid)?;
         counts.entries += 1;
         match text.chars().count() {
             0 => return Err(invalid("詞是空的")),
@@ -68,6 +72,36 @@ pub fn build(
                 *kept = (*kept).max(frequency);
             }
         }
+    }
+
+    let mut listed: BTreeSet<&str> = BTreeSet::new();
+    for (i, line) in colloquial.lines().enumerate() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let invalid =
+            |reason: &str| Error::invalid(format!("{COLLOQUIAL_PATH} 第 {} 行", i + 1), reason);
+        let (text, frequency) = word_and_frequency(line, &invalid)?;
+        if text.chars().count() < 2 {
+            return Err(invalid("只收兩字以上的詞"));
+        }
+        if frequency < MIN_FREQUENCY {
+            return Err(invalid(&format!("詞頻要 ≥ {MIN_FREQUENCY}")));
+        }
+        if let Some(ch) = text.chars().find(|ch| !codes.contains_key(ch)) {
+            return Err(invalid(&format!("「{ch}」不在連打字集")));
+        }
+        if !listed.insert(text) {
+            return Err(invalid(&format!("「{text}」重複")));
+        }
+        let kept = words.entry(text).or_insert(0);
+        if *kept >= MIN_FREQUENCY {
+            return Err(invalid(&format!(
+                "「{text}」rime-essay 已收（詞頻 {kept}），不必列"
+            )));
+        }
+        *kept = frequency;
+        counts.colloquial += 1;
     }
 
     let mut index: BTreeMap<String, Vec<Word>> = BTreeMap::new();
@@ -100,6 +134,19 @@ pub fn build(
     counts.codes = index.len();
     counts.indexed = index.values().map(Vec::len).sum();
     Ok((Lexicon::new(index, char_frequency), counts))
+}
+
+/// 「詞<TAB>詞頻」的一行；`invalid` 帶上檔名與行號。
+fn word_and_frequency<'a>(
+    line: &'a str,
+    invalid: &dyn Fn(&str) -> Error,
+) -> Result<(&'a str, u64), Error> {
+    let mut fields = line.split('\t');
+    let (Some(text), Some(frequency), None) = (fields.next(), fields.next(), fields.next()) else {
+        return Err(invalid("應是「詞<TAB>詞頻」"));
+    };
+    let frequency = frequency.parse().map_err(|_| invalid("詞頻應是整數"))?;
+    Ok((text, frequency))
 }
 
 /// 連打字集每個字的速成碼，轉碼用的主碼在第一個，其餘依字母序。

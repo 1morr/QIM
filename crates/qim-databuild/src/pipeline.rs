@@ -129,7 +129,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let lexicon_sources = packing::lexicon_sources();
     let language_model_sources = packing::language_model_sources();
     let quick_packed = packing::resolve(&packing::QUICK, &all, load_text, read)?;
-    let lexicon_packed = packing::resolve(&lexicon_sources, &all, load_text, read)?;
+    let mut lexicon_packed = packing::resolve(&lexicon_sources, &all, load_text, read)?;
+    lexicon_packed.push(packing::repo_data(&packing::COLLOQUIAL, read)?);
     let language_model_packed = packing::resolve(&language_model_sources, &all, load_text, read)?;
     let simplifier_packed = packing::resolve(&packing::SIMPLIFIER, &all, load_text, read)?;
     let radical_hint_packed = packing::resolve(&packing::RADICAL_HINT, &all, load_text, read)?;
@@ -289,6 +290,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             let characters = frequency.len();
             let (lexicon, counts) = lexicon::build(
                 &load_text(RIME_ESSAY, ESSAY)?,
+                &read(lexicon::COLLOQUIAL_PATH)?,
                 &quick.pack.code_table,
                 &Transcoder::new(&quick.rows),
                 frequency,
@@ -450,8 +452,10 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
         "{id} is the lexicon of the QIM input scheme \"{scheme}\". QIM changed the rime-essay\n\
          data as follows: single characters, words with a frequency below {min}, and words\n\
          containing characters outside the continuous set of the scheme were dropped; a word\n\
-         listed more than once keeps its highest frequency. Each word is indexed by the\n\
-         Quick codes of its characters joined, at most {max} combinations per word.\n\
+         listed more than once keeps its highest frequency. The words of the QIM Cantonese\n\
+         colloquial word list, which only lists words the steps above left out, were added\n\
+         with their listed frequencies. Each word is indexed by the Quick codes of its characters joined,\n\
+         at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
          each corpus, added together. Each corpus is extracted, converted with OpenCC s2hk\n\

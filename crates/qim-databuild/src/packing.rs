@@ -4,8 +4,9 @@ use std::path::Path;
 
 use crate::Error;
 use crate::corpora::CORPORA;
+use crate::lexicon;
 use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, UNIHAN};
-use crate::sources::{LicenseText, SOURCES, Source, Sources};
+use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
 
 /// 進資料包的一個來源。
 pub(crate) struct PackedSource {
@@ -64,6 +65,29 @@ pub(crate) fn lexicon_sources() -> Vec<PackedSource> {
         .collect()
 }
 
+/// QIM 自己整理、存在 repo 裡的資料：不經 `sources.toml` 下載，授權全文也在 repo。
+pub(crate) struct RepoData {
+    /// 寫進 `LICENSE`、`NOTICE` 的名字。
+    pub name: &'static str,
+    /// 相對 repo 根目錄。
+    pub path: &'static str,
+    /// SPDX 識別碼。
+    pub license: &'static str,
+    /// repo 裡的授權全文，相對 repo 根目錄。
+    pub license_path: &'static str,
+    /// 取用的內容，寫進 `NOTICE`。
+    pub used: &'static str,
+}
+
+/// 詞庫資料包的粵語口語詞表（plan §4.2、brief §5.2）。
+pub(crate) const COLLOQUIAL: RepoData = RepoData {
+    name: "QIM Cantonese colloquial word list",
+    path: lexicon::COLLOQUIAL_PATH,
+    license: "CC0-1.0",
+    license_path: "data/licenses/CC0-1.0.txt",
+    used: "Cantonese colloquial words and their frequencies, compiled by QIM",
+};
+
 /// 語言模型資料包的來源：每份語料的 train 切分（plan §4.3）。
 pub(crate) fn language_model_sources() -> Vec<PackedSource> {
     CORPORA
@@ -77,9 +101,16 @@ pub(crate) fn language_model_sources() -> Vec<PackedSource> {
 }
 
 /// 一個進資料包的來源，授權已讀出並核對過。
-pub(crate) struct Packed<'a> {
-    spec: &'a PackedSource,
-    source: &'a Source,
+pub(crate) struct Packed {
+    name: &'static str,
+    repository: String,
+    /// repo 裡的資料沒有另外的版本，跟著建置用的 QIM commit。
+    version: Option<String>,
+    /// SPDX 識別碼。
+    license_id: String,
+    /// 每個檔的路徑與 sha256。
+    files: Vec<(String, String)>,
+    used: &'static str,
     license: License,
 }
 
@@ -91,12 +122,12 @@ struct License {
 }
 
 /// 讀出每個來源的授權。`upstream(id, 檔)` 讀快取裡的來源檔，`repo(路徑)` 讀 repo 裡的檔。
-pub(crate) fn resolve<'a>(
-    specs: &'a [PackedSource],
-    sources: &'a Sources,
+pub(crate) fn resolve(
+    specs: &[PackedSource],
+    sources: &Sources,
     upstream: impl Fn(&str, &str) -> Result<String, Error>,
     repo: impl Fn(&str) -> Result<String, Error>,
-) -> Result<Vec<Packed<'a>>, Error> {
+) -> Result<Vec<Packed>, Error> {
     specs
         .iter()
         .map(|spec| {
@@ -105,12 +136,43 @@ pub(crate) fn resolve<'a>(
             })?;
             let license = license_of(source, |file| upstream(spec.source_id, file), &repo)?;
             Ok(Packed {
-                spec,
-                source,
+                name: spec.name,
+                repository: source.repository.clone(),
+                version: Some(source.version.clone()),
+                license_id: source.license.clone(),
+                files: source
+                    .files
+                    .iter()
+                    .map(|f| (f.path.clone(), f.sha256.clone()))
+                    .collect(),
+                used: spec.used,
                 license,
             })
         })
         .collect()
+}
+
+/// repo 裡的資料：`repo(路徑)` 讀 repo 裡的檔，`NOTICE` 記它這次內容的 sha256。
+pub(crate) fn repo_data(
+    spec: &RepoData,
+    repo: impl Fn(&str) -> Result<String, Error>,
+) -> Result<Packed, Error> {
+    Ok(Packed {
+        name: spec.name,
+        repository: "the QIM repository".into(),
+        version: None,
+        license_id: spec.license.into(),
+        files: vec![(spec.path.into(), sha256_hex(repo(spec.path)?.as_bytes()))],
+        used: spec.used,
+        license: License {
+            origin: repo_file_origin(spec.license_path),
+            text: repo(spec.license_path)?,
+        },
+    })
+}
+
+fn repo_file_origin(path: &str) -> String {
+    format!("Full text, kept in the QIM repository as {path}")
 }
 
 fn license_of(
@@ -136,7 +198,7 @@ fn license_of(
             })
         }
         Some(LicenseText::RepoFile(path)) => Ok(License {
-            origin: format!("Full text, kept in the QIM repository as {path}"),
+            origin: repo_file_origin(path),
             text: repo(path)?,
         }),
         None => Err(Error::invalid(
@@ -188,17 +250,21 @@ fn license(packed: &[Packed]) -> String {
     packed
         .iter()
         .map(|p| {
+            let version = p
+                .version
+                .as_ref()
+                .map(|v| format!(" ({v})"))
+                .unwrap_or_default();
             format!(
-                "Source: {name}, {repo} ({version})\n\
+                "Source: {name}, {repo}{version}\n\
                  License: {license}\n\
                  \n\
                  {origin}:\n\
                  \n\
                  {text}\n",
-                name = p.spec.name,
-                repo = p.source.repository,
-                version = p.source.version,
-                license = p.source.license,
+                name = p.name,
+                repo = p.repository,
+                license = p.license_id,
                 origin = p.license.origin,
                 text = p.license.text.trim_end(),
             )
@@ -212,24 +278,27 @@ fn notice(id: &str, packed: &[Packed], about: &str) -> String {
         .iter()
         .map(|p| {
             let files: String = p
-                .source
                 .files
                 .iter()
-                .map(|f| format!("File: {} (sha256 {})\n", f.path, f.sha256))
+                .map(|(path, sha256)| format!("File: {path} (sha256 {sha256})\n"))
                 .collect();
+            let version = p
+                .version
+                .as_ref()
+                .map(|v| format!("Version: {v}\n"))
+                .unwrap_or_default();
             format!(
                 "Source: {name}\n\
                  Repository: {repo}\n\
-                 Version: {version}\n\
+                 {version}\
                  {files}\
                  Used: {used}\n\
                  License: {license} (see LICENSE)\n\
                  \n",
-                name = p.spec.name,
-                repo = p.source.repository,
-                version = p.source.version,
-                used = p.spec.used,
-                license = p.source.license,
+                name = p.name,
+                repo = p.repository,
+                used = p.used,
+                license = p.license_id,
             )
         })
         .collect();
