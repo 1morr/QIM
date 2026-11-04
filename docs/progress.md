@@ -33,6 +33,7 @@
 | 2026-11-04 | M1 06 | rime-essay 詞庫資料包（25 萬詞）與語料字頻，`Engine` 依字頻排字序、整串查詞庫；`anr` 首選「門口」進 `fixed.tsv`，各集合修正/句約減半；細節見票 06 | 新 session 下 `/implement .scratch/m1/issues/07-continuous.md` |
 | 2026-11-04 | M1 07 | lattice、Viterbi + beam、unigram（β 2、γ 0）、選開頭一段後其餘重算；`anr`、`mir` 首選都對，維基答錯少 1/4 以上，口語修正次數變多；細節見票 07 | 新 session 下 `/implement .scratch/m1/issues/08-blackbox-apple.md` |
 | 2026-11-04 | M1 08 | macOS、iOS 內建速成 T1–T18 寫進 `docs/research/blackbox-baseline.md`；brief §1.3 更新，5 題進 `fixed.tsv`；細節見票 08 | 新 session 下 `/implement .scratch/m1/issues/09-blackbox-gboard.md` |
+| 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
 
 ## 偏差與決定
 
@@ -64,3 +65,4 @@
 - 2026-11-04 M1 07：`mir 一台` 由票 07 加進 `fixed.tsv`：unigram 連打已選對；票 11 改成換上 bigram 後仍要過（plan §5.2、§8）。
 - 2026-11-04 M1 07：空白改成選全部候選的第一個；沒有路徑蓋滿整串時第一個是開頭一段，按空白只固定它、不上屏（brief §4.3 的延伸，票 07 Comments）。
 - 2026-11-04 M1 07：口語兩集修正次數高於 baseline（連打錯一處就要選開頭一段），`--update-baseline` 只更新 `bench/baseline.json`，原因在票 07 Comments。
+- 2026-11-04 M1 09：iPhone 版 Gboard 沒測：使用者決定不在 iPhone 安裝，比照 plan §8 的備案只測 Android，有沒有速成記為未確認（票 09 Comments）。
