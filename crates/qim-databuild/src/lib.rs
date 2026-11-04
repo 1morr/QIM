@@ -5,6 +5,7 @@
 mod corpora;
 pub mod corpus;
 mod error;
+pub mod gboard;
 pub mod hkcancor;
 pub mod lexicon;
 pub mod libcangjie;

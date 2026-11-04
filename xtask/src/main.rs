@@ -23,7 +23,7 @@ fn main() -> ExitCode {
         ["bench", flag @ ("--check" | "--update-baseline")] => bench(&[flag]),
         ["web"] => {
             let root = repo_root();
-            if web::wasm_bindings(&root) && web::packs(&root) {
+            if web::wasm_bindings(&root) && web::built_data(&root) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE

@@ -38,6 +38,7 @@ fn main() -> ExitCode {
             };
             println!("資料包：{}", shown(&outcome.pack_path));
             println!("詞庫資料包：{}", shown(&outcome.lexicon_path));
+            println!("佈局：{}", shown(&outcome.layout_path));
             // 個人集只印數字（plan §5.2）。
             match outcome.personal {
                 Some(c) => println!(

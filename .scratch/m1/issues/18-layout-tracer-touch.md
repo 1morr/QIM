@@ -26,3 +26,12 @@ Blocked by: 07
 - [ ] 〈M0 留下的〉已處理。
 
 ## Comments
+
+- 2026-11-04 plan §1.3 表的改法：`qim-databuild` 要用 `qim-layout` 的型別寫出預設佈局，「可以依賴」加 `qim-layout`，和 `qim-bench` 拆成兩列；`qim-core` 的「不可以」由「任何綁定或平台 crate」改成可檢查的「任何 workspace crate（含綁定與平台 crate）」。
+- 2026-11-04 「不可以」欄的同步測試（`xtask/src/deps.rs` 的 `plan_forbidden_column_matches_rules`）：欄以「；」分子句，每句要是反引號包住的禁用路徑或 crate、`被 … 依賴`、`任何 workspace crate`、`同上`、`同上的 I/O` 之一，看不懂的子句也紅；禁用路徑與 `FORBIDDEN_PATHS`、`no_io` 雙向相等，crate 的禁止只單向比（表是白名單）。變異：少一個路徑、拿掉 `同上的 I/O`、禁止它其實依賴的 crate、`被 qim-wasm 依賴`、`任何 workspace crate`、看不懂的子句都紅；改括號說明、空白、表頭不紅。
+- 2026-11-04 格式子集：`format`、`variants[].when`、`canvas`、`pages[].id`、`keys[]` 的 `id`、`frame`、`z`（預設 0）、`label`、`hint`、`tap`；動作 `{ "letter": "a" }` 與 `"space"`、`"backspace"`、`"enter"`（serde 的外部標記）。`deny_unknown_fields`，票 19 加欄位時一起放寬或補。識別符照 plan §0 用 `LayoutVariant`。
+- 2026-11-04 點擊判定的細節（plan §2.6 沒寫的）：矩形左上邊算在內、右下邊不算；同一個 `z` 時陣列裡後面的在上（後畫的蓋住先畫的）；最近的鍵一樣近時取上層的。
+- 2026-11-04 Gboard 直向：畫布 390 × 216，一排 10 鍵寬、高 54，每鍵四周留 3 / 5 的縫（縫上由點擊判定取最近的鍵）；第三排左邊 1.5 鍵寬留給之後的分隔鍵，第四排空白 8.5 加 Enter 1.5。`z` 鍵照 Gboard 放著，方案沒有它的字根所以標籤是字母。寫到 `build/layouts/gboard-quick.json`，`cargo xtask web` 複製到 `web/public/layouts/`。
+- 2026-11-04 綁定：`Layout.hit(x, y)` 回按鍵位置，`Session.tap(layout, index)` 在 `qim-wasm` 把佈局動作轉成 `qim_core::Key`，所以沒加逐鍵的 `enter()`（票 10 也在改 Enter）。核心沒吃下的鍵網頁照輸入框的預設動作處理（插字母、空格、換行，刪游標前一字）。佈局版本的選法留給票 19，綁定先取第一個版本的第一頁。
+- 2026-11-04 網頁：`(pointer: coarse)` 時預設開觸控鍵盤，「觸控鍵盤」按鈕切換；開著時輸入框 `inputmode="none"`。亂按（Pixel 7 viewport，兩個種子各 400 步：隨機點鍵與縫、夾實體鍵、切換模式，加 20 次並發連點）找到兩個問題，各先寫成會紅的 Playwright 測試再修：候選出現時鍵盤往下跳 62 px，改成固定在畫面底部；手機寬度下候選被擠成直排，改單列可左右滑（brief §4.4）。修好後亂按沒有 console 錯誤。
+- 2026-11-04 bench 前後對照：沒改核心與資料包，`cargo xtask data` 前後兩份資料包的 sha256 相同（quick `b515cedf128b`、quick-lexicon `4403437674d5`），各集合答錯與修正次數與 baseline 相同、沒有翻盤，固定題 11/11。

@@ -1,6 +1,12 @@
 import { type Key, toKey } from "./keys.ts";
 import "./style.css";
-import init, { Session, type Snapshot } from "./wasm/qim_wasm.js";
+import { LAYOUT_URL, mountKeyboard } from "./touch.ts";
+import init, {
+	Layout,
+	type LayoutKey,
+	Session,
+	type Snapshot,
+} from "./wasm/qim_wasm.js";
 
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
@@ -18,6 +24,16 @@ const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
+const keyboard = element<HTMLElement>("#keyboard");
+const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+
+async function loadLayout(url: string): Promise<string> {
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`${url}：${response.status}，先跑 cargo xtask web`);
+	}
+	return response.text();
+}
 
 async function loadPack(url: string): Promise<Uint8Array> {
 	const response = await fetch(url);
@@ -66,13 +82,64 @@ function insert(commit: string): void {
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。 */
+function apply(snapshot: Snapshot): void {
+	if (snapshot.commit !== undefined) {
+		insert(snapshot.commit);
+	}
+	render(snapshot);
+}
+
+/** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
+function hostDefault(key: LayoutKey): void {
+	switch (key.tap) {
+		case "letter":
+			insert(key.letter ?? "");
+			return;
+		case "space":
+			insert(" ");
+			return;
+		case "enter":
+			insert("\n");
+			return;
+		case "backspace": {
+			const { selectionStart: start, selectionEnd: end } = text;
+			if (start === end && start > 0) {
+				// 刪游標前一個字元，不切開代理對。
+				const before = Array.from(text.value.slice(0, start));
+				const removed = before.pop()?.length ?? 0;
+				text.setRangeText("", start - removed, start, "end");
+			} else {
+				text.setRangeText("", start, end, "end");
+			}
+			text.dispatchEvent(new Event("input", { bubbles: true }));
+			return;
+		}
+	}
+}
+
+/** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
+function setTouch(on: boolean): void {
+	keyboard.hidden = !on;
+	touchToggle.setAttribute("aria-pressed", String(on));
+	text.inputMode = on ? "none" : "";
+}
+
 async function start(): Promise<void> {
-	const [, pack, lexicon] = await Promise.all([
+	const [, pack, lexicon, layoutJson] = await Promise.all([
 		init(),
 		loadPack(PACK_URL),
 		loadPack(LEXICON_URL),
+		loadLayout(LAYOUT_URL),
 	]);
 	const session = new Session(pack, lexicon);
+	const layout = new Layout(layoutJson);
+	mountKeyboard(keyboard, layout, session, apply, hostDefault);
+	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
+	setTouch(window.matchMedia("(pointer: coarse)").matches);
+	touchToggle.addEventListener("click", () => {
+		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
+	});
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);
@@ -85,10 +152,7 @@ async function start(): Promise<void> {
 				return;
 			}
 			event.preventDefault();
-			if (snapshot.commit !== undefined) {
-				insert(snapshot.commit);
-			}
-			render(snapshot);
+			apply(snapshot);
 		} finally {
 			snapshot.free();
 		}

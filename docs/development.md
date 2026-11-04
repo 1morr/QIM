@@ -35,7 +35,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
 | `npm run --prefix web e2e` | Playwright 實打網頁（自己起開發伺服器，埠 5179）；先跑 `cargo xtask web` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
-| `cargo xtask data [--verify]` | 建資料包到 `build/packs/`，見〈資料建置〉 |
+| `cargo xtask data [--verify]` | 建資料包到 `build/packs/`、預設佈局到 `build/layouts/`，見〈資料建置〉 |
 | `cargo xtask bench [--check \| --update-baseline]` | 首選字基準，見〈首選字基準〉 |
 
 ## 資料建置
@@ -55,6 +55,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分相加的字頻（plan §4.2），在語料之後建。兩種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
+- 預設佈局：`build/layouts/gboard-quick.json`，Gboard 速成的手機直向，由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式定義在 `crates/qim-layout`。不讀來源、沒有授權檔。
 - 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`chars.tsv`（字頻，見〈語料〉），後三者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 35 秒，`--verify` 把語料再建一次比 sha256，約 75 秒（Apple M6，release）。
 
 `--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、兩份資料包的 sha256、詞庫的詞數與被門檻和字集濾掉的數量、有字頻的字數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）與 `anr` 的「門口」經 `qim-core` 的 `Engine` 查，與網頁同一條路。
@@ -176,9 +177,9 @@ ln -s <主 checkout>/bench/personal bench/personal
 `cargo xtask web` 做兩件事，邏輯在 `xtask/src/web.rs`：
 
 1. 用 release 編 `qim-wasm` 到 `wasm32-unknown-unknown`，`wasm-bindgen --target web` 產生到 `web/src/wasm/`，`web/src/main.ts` 直接 import。
-2. 把 `build/packs/` 整個複製到 `web/public/packs/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack` 與 `/packs/quick-lexicon/quick-lexicon.pack`。`build/packs/` 不存在時失敗，先跑 `cargo xtask data`。
+2. 把 `build/packs/`、`build/layouts/` 整個複製到 `web/public/packs/`、`web/public/layouts/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`、`/packs/quick-lexicon/quick-lexicon.pack` 與觸控鍵盤的 `/layouts/gboard-quick.json`。有一個不存在就失敗，先跑 `cargo xtask data`。
 
-兩個目錄都不進 git。改了 `qim-core` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
+這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
 Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 

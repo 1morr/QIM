@@ -59,7 +59,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         krate: "qim-databuild",
-        workspace: &["qim-core"],
+        workspace: &["qim-core", "qim-layout"],
         external: None,
         no_io: false,
     },
@@ -613,18 +613,18 @@ pub const BYTES: &[u8] = b"std::net";
         assert_green(dir.path());
     }
 
-    /// plan §1.3 表裡每個 crate 的「可以依賴」欄：(crate, 欄內反引號包住的名字, 外部 crate 是否不限)。
-    /// 只取第一欄全是 `qim-*` 的列；`web/` 那類不是 crate。
-    fn documented_rules(plan: &str) -> Vec<(String, Vec<String>, bool)> {
-        let backticked = |cell: &str| -> Vec<String> {
-            cell.split('`')
-                .skip(1)
-                .step_by(2)
-                .map(str::to_owned)
-                .collect()
-        };
-        let mut rules: Vec<_> = plan
-            .split("\n### ")
+    fn backticked(cell: &str) -> Vec<String> {
+        cell.split('`')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// plan §1.3 表裡第一欄全是 `qim-*` 的列，依表上的順序：(這列的 crate, 各欄)。
+    /// `web/` 那類不是 crate。
+    fn crate_rows(plan: &str) -> Vec<(Vec<String>, Vec<&str>)> {
+        plan.split("\n### ")
             .find(|section| section.starts_with("1.3 "))
             .into_iter()
             .flat_map(str::lines)
@@ -632,16 +632,25 @@ pub const BYTES: &[u8] = b"std::net";
                 line.trim().starts_with('|').then_some(())?;
                 let cells = crate::docs::cells(line);
                 let crates = backticked(cells.first()?);
-                let allowed_cell = cells.get(1)?;
-                (!crates.is_empty() && crates.iter().all(|name| name.starts_with("qim-"))).then(
-                    || {
-                        let mut allowed = backticked(allowed_cell);
-                        allowed.sort();
-                        crates
-                            .into_iter()
-                            .map(|krate| (krate, allowed.clone(), allowed_cell.contains("不限")))
-                            .collect::<Vec<_>>()
-                    },
+                (!crates.is_empty() && crates.iter().all(|name| name.starts_with("qim-")))
+                    .then_some((crates, cells))
+            })
+            .collect()
+    }
+
+    /// plan §1.3 表裡每個 crate 的「可以依賴」欄：(crate, 欄內反引號包住的名字, 外部 crate 是否不限)。
+    fn documented_rules(plan: &str) -> Vec<(String, Vec<String>, bool)> {
+        let mut rules: Vec<_> = crate_rows(plan)
+            .into_iter()
+            .filter_map(|(crates, cells)| {
+                let allowed_cell = *cells.get(1)?;
+                let mut allowed = backticked(allowed_cell);
+                allowed.sort();
+                Some(
+                    crates
+                        .into_iter()
+                        .map(|krate| (krate, allowed.clone(), allowed_cell.contains("不限")))
+                        .collect::<Vec<_>>(),
                 )
             })
             .flatten()
@@ -707,5 +716,175 @@ pub const BYTES: &[u8] = b"std::net";
         let edited = mutate(&edited, "之後要加的依賴先改本表", "要加依賴就先改這張表");
         let edited = mutate(&edited, "| `qim-layout` | ", "|  `qim-layout`  |  ");
         assert_eq!(documented_rules(&edited), coded_rules());
+    }
+
+    /// plan §1.3 表一列的「不可以」欄，讀成可以和 [`RULES`] 比對的樣子。
+    #[derive(Debug, Default, Clone)]
+    struct Forbidden {
+        /// 反引號包住、`std::` 開頭的禁用路徑。
+        io: Vec<String>,
+        /// 不可以依賴的 workspace crate。
+        deps: Vec<String>,
+        /// 「被 `X` 依賴」：不可以依賴這列的 crate。
+        dependents: Vec<String>,
+        /// 「任何 workspace crate」都不可以依賴。
+        any_workspace: bool,
+    }
+
+    /// 「不可以」欄以「；」分成子句，每句要是下列之一，否則回 `Err`：新寫的規則要先能檢查。
+    /// - `同上`：和上一列的整欄相同；`同上的 I/O`：上一列的禁用路徑。
+    /// - `被 ... 依賴`：裡面反引號包住的 crate 不可以依賴這列的 crate。
+    /// - 含 `任何 workspace crate`：不可以依賴任何 workspace crate。
+    /// - 其他子句裡反引號包住的名字：`std::` 開頭的是禁用路徑，`qim-` 開頭的是不可以依賴的 crate。
+    fn documented_forbidden(plan: &str) -> Result<Vec<(String, Forbidden)>, String> {
+        let mut previous = Forbidden::default();
+        let mut rows = Vec::new();
+        for (crates, cells) in crate_rows(plan) {
+            let cell = cells.get(2).ok_or("「不可以」欄不見了")?;
+            let mut forbidden = Forbidden::default();
+            for clause in cell.split('；').map(str::trim) {
+                let names = backticked(clause);
+                if clause == "同上" {
+                    forbidden = previous.clone();
+                } else if clause.starts_with("同上的 I/O") {
+                    forbidden.io = previous.io.clone();
+                } else if clause.starts_with('被') && clause.ends_with("依賴") {
+                    forbidden.dependents = names;
+                } else if clause.contains("任何 workspace crate") {
+                    forbidden.any_workspace = true;
+                } else if !names.is_empty()
+                    && names
+                        .iter()
+                        .all(|n| n.starts_with("std::") || n.starts_with("qim-"))
+                {
+                    let (io, deps): (Vec<_>, Vec<_>) =
+                        names.into_iter().partition(|n| n.starts_with("std::"));
+                    forbidden.io.extend(io);
+                    forbidden.deps.extend(deps);
+                } else {
+                    return Err(format!(
+                        "{crates:?} 的「不可以」欄有看不懂的子句：{clause:?}"
+                    ));
+                }
+            }
+            forbidden.io.sort();
+            rows.extend(crates.into_iter().map(|krate| (krate, forbidden.clone())));
+            previous = forbidden;
+        }
+        Ok(rows)
+    }
+
+    /// plan §1.3 表的「不可以」欄與 [`RULES`]、[`FORBIDDEN_PATHS`] 對不上的地方。
+    fn forbidden_mismatches(plan: &str) -> Vec<String> {
+        let rows = match documented_forbidden(plan) {
+            Ok(rows) => rows,
+            Err(error) => return vec![error],
+        };
+        let rule = |krate: &str| RULES.iter().find(|rule| rule.krate == krate);
+        let mut coded_io: Vec<String> =
+            FORBIDDEN_PATHS.iter().map(|path| path.join("::")).collect();
+        coded_io.sort();
+        let mut mismatches = Vec::new();
+        for (krate, forbidden) in rows {
+            let Some(own) = rule(&krate) else {
+                mismatches.push(format!("{krate} 不在 RULES"));
+                continue;
+            };
+            let expected_io = if own.no_io {
+                coded_io.clone()
+            } else {
+                Vec::new()
+            };
+            if forbidden.io != expected_io {
+                mismatches.push(format!(
+                    "{krate} 的禁用路徑：plan {:?}，RULES / FORBIDDEN_PATHS {expected_io:?}",
+                    forbidden.io
+                ));
+            }
+            for dep in &forbidden.deps {
+                if own.workspace.contains(&dep.as_str()) {
+                    mismatches.push(format!("plan 說 {krate} 不可以依賴 {dep}，RULES 卻允許"));
+                }
+            }
+            if forbidden.any_workspace && !own.workspace.is_empty() {
+                mismatches.push(format!(
+                    "plan 說 {krate} 不可以依賴任何 workspace crate，RULES 卻允許 {:?}",
+                    own.workspace
+                ));
+            }
+            for dependent in &forbidden.dependents {
+                match rule(dependent) {
+                    Some(other) if other.workspace.contains(&krate.as_str()) => mismatches.push(
+                        format!("plan 說 {krate} 不可以被 {dependent} 依賴，RULES 卻允許"),
+                    ),
+                    Some(_) => {}
+                    None => mismatches.push(format!("{dependent} 不在 RULES")),
+                }
+            }
+        }
+        mismatches
+    }
+
+    #[test]
+    fn plan_forbidden_column_matches_rules() {
+        assert_eq!(forbidden_mismatches(PLAN_MD), Vec::<String>::new());
+    }
+
+    #[test]
+    fn drift_in_forbidden_column_is_caught() {
+        let cases = [
+            // 少列一個禁用路徑。
+            ("`std::net`、`std::thread`、", "`std::net`、"),
+            // qim-layout 不再禁 I/O，RULES 卻還掃。
+            ("| `qim-core`；同上的 I/O |", "| `qim-core` |"),
+            // 說 qim-wasm 不可以依賴它其實依賴的 qim-core。
+            (
+                "綁定工具 `wasm-bindgen` | 被",
+                "綁定工具 `wasm-bindgen` | `qim-core`；被",
+            ),
+            // 說 qim-layout 不可以被 qim-wasm 依賴。
+            (
+                "| `qim-core`；同上的 I/O |",
+                "| `qim-core`；同上的 I/O；被 `qim-wasm` 依賴 |",
+            ),
+            // 說 qim-wasm 不可以依賴任何 workspace crate。
+            (
+                "綁定工具 `wasm-bindgen` | 被",
+                "綁定工具 `wasm-bindgen` | 任何 workspace crate；被",
+            ),
+            // 寫了檢查不了的新規則。
+            (
+                "| `qim-core`；同上的 I/O |",
+                "| `qim-core`；同上的 I/O；不可以太大 |",
+            ),
+        ];
+        for (from, to) in cases {
+            let mutated = mutate(PLAN_MD, from, to);
+            assert_ne!(
+                forbidden_mismatches(&mutated),
+                Vec::<String>::new(),
+                "{from:?} → {to:?} 應該對不上"
+            );
+        }
+    }
+
+    #[test]
+    fn unrelated_edits_to_forbidden_column_are_not_flagged() {
+        let edited = mutate(
+            PLAN_MD,
+            "（時間由殼以上屏次數傳入）",
+            "（時間改由殼傳入上屏次數）",
+        );
+        let edited = mutate(
+            &edited,
+            "| `qim-core`；同上的 I/O |",
+            "|  `qim-core` ； 同上的 I/O  |",
+        );
+        let edited = mutate(
+            &edited,
+            "| crate | 可以依賴 | 不可以 |",
+            "| Crate | 允許依賴 | 禁止 |",
+        );
+        assert_eq!(forbidden_mismatches(&edited), Vec::<String>::new());
     }
 }
