@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { devices, expect, type Page, test } from "@playwright/test";
 
 // 觸控鍵盤功能（M1 票 20）：長按、符號頁、自訂頁面、放大預覽、深色、橫向。
@@ -170,6 +171,11 @@ test("按住按鍵顯示放大預覽，放開消失", async ({ page }, testInfo)
 test("系統深色時按鍵用佈局的深色版本", async ({ page }, testInfo) => {
 	const key = page.getByTestId("key-a");
 	await expect(key).toHaveCSS("background-color", "rgb(255, 255, 255)");
+	// Enter 的佈局顏色淺深都和 CSS 的預設底色不同，讀得出佈局的顏色真的套上了。
+	await expect(page.getByTestId("key-enter")).toHaveCSS(
+		"background-color",
+		"rgb(196, 199, 197)",
+	);
 	await page.emulateMedia({ colorScheme: "dark" });
 	await expect(key).toHaveCSS("background-color", "rgb(60, 64, 67)");
 	await expect(key.locator(".label")).toHaveCSS("color", "rgb(227, 227, 227)");
@@ -263,4 +269,45 @@ test("快打時前一指還沒放開就按下一鍵，兩個鍵都打得出、�
 	await send("touchEnd", [r]);
 	await expect(page.getByTestId("composition")).toHaveText("anr");
 	await expect(page.getByTestId("key-preview")).toBeHidden();
+});
+
+test("核心沒吃下長按選的動作時，網頁照那個動作做，不是照鍵的 tap", async ({
+	page,
+}) => {
+	// 自訂佈局：a 的長按清單是刪除。沒組字時核心不吃刪除，網頁要刪輸入框的字、不是插入 a。
+	const layout = JSON.parse(
+		readFileSync(
+			new URL(
+				"../../crates/qim-layout/tests/fixtures/overlap.json",
+				import.meta.url,
+			),
+			"utf8",
+		),
+	);
+	const a = layout.variants[0].pages[0].keys.find(
+		(key: { id: string }) => key.id === "a",
+	);
+	a.longPress = ["backspace"];
+	await page.route("**/layouts/gboard-quick.json", (route) =>
+		route.fulfill({
+			contentType: "application/json",
+			body: JSON.stringify(layout),
+		}),
+	);
+	await page.reload();
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await expect(text).toHaveAttribute("data-ready", "true");
+	await tapKeys(page, ["bang", "bang"]);
+	await expect(text).toHaveValue("！！");
+	const hand = await finger(page);
+	const box = await page.getByTestId("key-a").boundingBox();
+	if (!box) {
+		throw new Error("a 鍵沒畫出來");
+	}
+	await hand.down(box.x + 10, box.y + box.height / 2);
+	await expect(page.getByTestId("long-press").getByRole("option")).toHaveText([
+		"刪除",
+	]);
+	await hand.up();
+	await expect(text).toHaveValue("！");
 });

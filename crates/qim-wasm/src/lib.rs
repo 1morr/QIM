@@ -108,33 +108,42 @@ impl WebSession {
     }
 
     /// 做一個佈局動作：文字經 `Session::text`（組字中先上屏組字）；切頁換 `layout` 的目前頁，
-    /// 核心收到 `Key::Other`（組字中吃下、組字留著）；網頁沒有下一個鍵盤，也當 `Key::Other`。
+    /// 核心收到 `Key::Other`（組字中吃下、組字留著）；網頁沒有下一個鍵盤，也當 `Key::Other`；
+    /// 中英切換在票 23 接，現在也當 `Key::Other`。結果帶著做了的動作，核心沒吃下時網頁照它做。
     fn perform(&mut self, layout: &mut WebLayout, action: Action) -> WebSnapshot {
-        let key = match action {
-            Action::Letter(c) => Key::Letter(c),
-            Action::Space => Key::Space,
-            Action::Backspace => Key::Backspace,
-            Action::Enter => Key::Enter,
-            Action::ToggleAscii => Key::ToggleAscii,
-            Action::NextKeyboard => Key::Other,
-            Action::SwitchPage(page) => {
-                layout.switch_page(&page);
-                Key::Other
-            }
-            Action::Text(text) => {
-                let snapshot = self.session.text(&self.engine, &mut self.user, &text);
-                return self.after(snapshot);
+        let snapshot = match &action {
+            Action::Text(text) => self.session.text(&self.engine, &mut self.user, text),
+            other => {
+                let key = match other {
+                    Action::Letter(c) => Key::Letter(*c),
+                    Action::Space => Key::Space,
+                    Action::Backspace => Key::Backspace,
+                    Action::Enter => Key::Enter,
+                    Action::SwitchPage(page) => {
+                        layout.switch_page(page);
+                        Key::Other
+                    }
+                    Action::NextKeyboard | Action::ToggleAscii | Action::Text(_) => Key::Other,
+                };
+                self.session.handle(&self.engine, &mut self.user, key)
             }
         };
-        self.handle(key)
+        let mut snapshot = self.record_composing(snapshot);
+        snapshot.action = Some(action.name().into());
+        snapshot.letter = match action {
+            Action::Letter(c) => Some(c.to_string()),
+            _ => None,
+        };
+        snapshot
     }
 
     fn handle(&mut self, key: Key) -> WebSnapshot {
         let snapshot = self.session.handle(&self.engine, &mut self.user, key);
-        self.after(snapshot)
+        self.record_composing(snapshot)
     }
 
-    fn after(&mut self, snapshot: Snapshot) -> WebSnapshot {
+    /// 轉成給 JS 的樣子，並記下按完後是否還在組字。
+    fn record_composing(&mut self, snapshot: Snapshot) -> WebSnapshot {
         let snapshot: WebSnapshot = snapshot.into();
         self.composing = !snapshot.selected.is_empty() || !snapshot.unselected.is_empty();
         snapshot
@@ -158,6 +167,13 @@ pub struct WebSnapshot {
     pub candidates: Vec<String>,
     #[wasm_bindgen(readonly)]
     pub commit: Option<String>,
+    /// 觸控鍵盤做了的佈局動作（`Action::name`），長按時是選到的那個；核心沒吃下時網頁照它做宿主的預設動作。
+    /// 實體鍵盤的鍵是 `None`。
+    #[wasm_bindgen(readonly)]
+    pub action: Option<String>,
+    /// `action` 是 `letter` 時的字母。
+    #[wasm_bindgen(readonly)]
+    pub letter: Option<String>,
 }
 
 impl From<Snapshot> for WebSnapshot {
@@ -168,6 +184,8 @@ impl From<Snapshot> for WebSnapshot {
             unselected: s.composition.unselected_input().to_string(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
             commit: s.commit,
+            action: None,
+            letter: None,
         }
     }
 }
@@ -220,10 +238,9 @@ impl WebLayout {
             .map(|page| page.id.clone());
         let (variant, warning) = self.layout.select(wanted);
         self.variant = variant;
-        let variant = self.variant();
-        self.page = current
-            .and_then(|id| variant.page_index(&id))
-            .or_else(|| variant.initial_page_index())
+        self.page = self
+            .variant()
+            .page_index_or_initial(current.as_deref())
             .expect("validate 保證 initialPage 存在、每個版本至少一頁");
         Ok(warning.map(|w| w.to_string()))
     }
@@ -261,7 +278,6 @@ impl WebLayout {
                     key.display_label(session.composing, |c| radicals.get(&c).map(String::as_str));
                 let style = key.style.clone().unwrap_or_default();
                 let [label_offset_x, label_offset_y] = style.label_offset.unwrap_or([0.0, 0.0]);
-                let tap = key.tap_action(session.composing);
                 WebLayoutKey {
                     id: key.id.clone(),
                     x: key.frame.x,
@@ -282,11 +298,7 @@ impl WebLayout {
                     label_size: style.label_size,
                     label_offset_x,
                     label_offset_y,
-                    tap: tap.name().into(),
-                    letter: match tap {
-                        Action::Letter(c) => Some(c.to_string()),
-                        _ => None,
-                    },
+                    preview: key.shows_preview(session.composing),
                     long_press: key.long_press.iter().map(Action::spoken).collect(),
                 }
             })
@@ -369,12 +381,9 @@ pub struct WebLayoutKey {
     pub label_offset_x: f64,
     #[wasm_bindgen(readonly, js_name = labelOffsetY)]
     pub label_offset_y: f64,
-    /// 點一下的動作種類（`Action::name`），組字中照 `composing`；核心沒吃下時網頁照它做宿主的預設動作。
+    /// 按住時要不要顯示放大預覽（[`qim_layout::Key::shows_preview`]），組字中照 `composing`。
     #[wasm_bindgen(readonly)]
-    pub tap: String,
-    /// `tap` 是 `letter` 時的字母。
-    #[wasm_bindgen(readonly)]
-    pub letter: Option<String>,
+    pub preview: bool,
     /// 長按清單各選項的標籤（[`Action::spoken`]），依序排、第一個是預設；空的就沒有長按。
     #[wasm_bindgen(readonly, js_name = longPress)]
     pub long_press: Vec<String>,

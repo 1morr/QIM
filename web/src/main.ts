@@ -1,12 +1,7 @@
 import { type Key, toKey } from "./keys.ts";
 import "./style.css";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
-import init, {
-	Layout,
-	type LayoutKey,
-	Session,
-	type Snapshot,
-} from "./wasm/qim_wasm.js";
+import init, { Layout, Session, type Snapshot } from "./wasm/qim_wasm.js";
 
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
@@ -105,11 +100,11 @@ function apply(snapshot: Snapshot): void {
 	touchKeyboard?.refresh();
 }
 
-/** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
-function hostDefault(key: LayoutKey): void {
-	switch (key.tap) {
+/** 觸控鍵盤上核心沒吃下的動作：照輸入框收到實體按鍵時的預設動作。 */
+function hostDefault(snapshot: Snapshot): void {
+	switch (snapshot.action) {
 		case "letter":
-			insert(key.letter ?? "");
+			insert(snapshot.letter ?? "");
 			return;
 		case "space":
 			insert(" ");

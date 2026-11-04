@@ -97,3 +97,21 @@ fn long_press_options_are_labelled_by_what_they_type_or_do() {
     assert_eq!(Action::Letter('a').spoken(), "a");
     assert_eq!(Action::Space.spoken(), "空白");
 }
+
+#[test]
+fn keys_that_type_show_a_magnified_preview_and_function_keys_do_not() {
+    // 按住時的放大預覽（brief §4.4）：會輸入字的鍵（字母、文字）才有；組字中照 `composing` 的動作。
+    let layout = keys(
+        r#"[
+            { "id": "a", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" } },
+            { "id": "comma", "frame": { "x": 10, "y": 0, "w": 10, "h": 10 }, "tap": { "text": "，" } },
+            { "id": "space", "frame": { "x": 20, "y": 0, "w": 10, "h": 10 }, "tap": "space" },
+            { "id": "sym", "frame": { "x": 30, "y": 0, "w": 10, "h": 10 }, "tap": { "text": "@" },
+              "composing": { "tap": "enter" } }
+        ]"#,
+    );
+    let page = &layout.variants[0].pages[0];
+    let previews: Vec<bool> = page.keys.iter().map(|k| k.shows_preview(false)).collect();
+    assert_eq!(previews, [true, true, false, true]);
+    assert!(!page.keys[3].shows_preview(true));
+}

@@ -29,24 +29,20 @@ function themed(light: string | undefined, dark: string | undefined) {
 	return `light-dark(${light}, ${dark})`;
 }
 
-/** 按下時顯示放大預覽的鍵：會輸入字的鍵（字母、文字），功能鍵不顯示。 */
-function previews(key: LayoutKey): boolean {
-	return (key.tap === "letter" || key.tap === "text") && key.label !== "";
-}
-
 /**
  * 觸控鍵盤：照 `qim-layout` 給的按鍵畫在 `container` 裡，點擊位置換算成設計尺寸的座標交給
- * `Layout.hit` 判定，網頁自己不判定按到哪個鍵（plan §3.1）。長按、預覽、切頁的狀態在這裡，
- * 動作仍由綁定照佈局做。
+ * `Layout.hit` 判定，網頁自己不判定按到哪個鍵（plan §3.1）。長按與預覽的狀態在這裡；
+ * 目前頁記在綁定的 `Layout`，動作由綁定照佈局做。
  *
- * `onSnapshot` 收到核心吃下的結果；沒吃下時 `onUnhandled` 收到按鍵，照宿主的預設動作處理。
+ * `onSnapshot` 收到核心吃下的結果；沒吃下時 `onUnhandled` 收到同一份結果，照它的 `action`
+ * 做宿主的預設動作。
  */
 export function mountKeyboard(
 	container: HTMLElement,
 	layout: Layout,
 	session: Session,
 	onSnapshot: (snapshot: Snapshot) => void,
-	onUnhandled: (key: LayoutKey) => void,
+	onUnhandled: (snapshot: Snapshot) => void,
 ): Keyboard {
 	let keys: LayoutKey[] = [];
 	let elements: HTMLElement[] = [];
@@ -65,8 +61,9 @@ export function mountKeyboard(
 
 	// 長度依鍵盤寬度縮放：`#keyboard` 是 inline-size 容器，1cqw 是它寬度的 1%。
 	const scaled = (value: number) => `${(value / layout.canvasWidth) * 100}cqw`;
-	const left = (value: number) => `${(value / layout.canvasWidth) * 100}%`;
-	const top = (value: number) => `${(value / layout.canvasHeight) * 100}%`;
+	// 設計尺寸換成鍵盤寬、高的百分比。
+	const ofWidth = (value: number) => `${(value / layout.canvasWidth) * 100}%`;
+	const ofHeight = (value: number) => `${(value / layout.canvasHeight) * 100}%`;
 
 	/** 依目前的佈局版本與頁面畫全部按鍵。 */
 	function render(): void {
@@ -86,10 +83,10 @@ export function mountKeyboard(
 			element.dataset.testid = `key-${key.id}`;
 			element.setAttribute("role", "button");
 			element.setAttribute("aria-label", key.a11yLabel);
-			element.style.left = left(key.x);
-			element.style.top = top(key.y);
-			element.style.width = left(key.w);
-			element.style.height = top(key.h);
+			element.style.left = ofWidth(key.x);
+			element.style.top = ofHeight(key.y);
+			element.style.width = ofWidth(key.w);
+			element.style.height = ofHeight(key.h);
 			element.style.zIndex = String(key.z);
 			element.style.borderRadius = scaled(key.radius);
 			if (key.rotate !== 0) {
@@ -142,16 +139,16 @@ export function mountKeyboard(
 		element.style.right = "";
 		element.style.transform = "";
 		if (!spread) {
-			element.style.left = left(centre);
+			element.style.left = ofWidth(centre);
 			element.style.transform = "translateX(-50%)";
 		} else if (centre < layout.canvasWidth / 2) {
-			element.style.left = left(key.x);
+			element.style.left = ofWidth(key.x);
 		} else {
-			element.style.right = left(layout.canvasWidth - key.x - key.w);
+			element.style.right = ofWidth(layout.canvasWidth - key.x - key.w);
 		}
-		element.style.top = top(key.y - key.h * rise);
-		element.style.height = top(key.h * rise);
-		element.style.minWidth = left(key.w * 1.2);
+		element.style.top = ofHeight(key.y - key.h * rise);
+		element.style.height = ofHeight(key.h * rise);
+		element.style.minWidth = ofWidth(key.w * 1.2);
 		element.style.borderRadius = scaled(key.radius);
 		element.style.fontSize = scaled(key.h * 0.6);
 	}
@@ -207,21 +204,26 @@ export function mountKeyboard(
 		popup.hidden = true;
 	}
 
-	/**
-	 * 照綁定的結果更新畫面；切頁鍵換了頁就重畫。重畫會釋放舊頁的 `key`，所以先交給外面再重畫。
-	 */
-	function finish(key: LayoutKey, snapshot: Snapshot) {
+	/** 切頁鍵換了 `layout` 的目前頁時整個重畫；回傳有沒有重畫。 */
+	function followPage(): boolean {
+		if (layout.pageId === shownPage) {
+			return false;
+		}
+		render();
+		return true;
+	}
+
+	/** 照綁定的結果更新畫面。重畫會釋放舊頁的鍵，所以先交給外面再看要不要重畫。 */
+	function finish(snapshot: Snapshot) {
 		try {
 			if (snapshot.handled) {
 				onSnapshot(snapshot);
 			} else {
-				onUnhandled(key);
+				onUnhandled(snapshot);
 			}
 		} finally {
 			snapshot.free();
-			if (layout.pageId !== shownPage) {
-				render();
-			}
+			followPage();
 		}
 	}
 
@@ -253,7 +255,7 @@ export function mountKeyboard(
 					: undefined,
 		};
 		container.setPointerCapture(event.pointerId);
-		if (previews(key)) {
+		if (key.preview) {
 			showPreview(key);
 		}
 	});
@@ -271,13 +273,11 @@ export function mountKeyboard(
 		}
 		const { index, choice } = press;
 		cancel();
-		// 按下前的鍵：組字中與否決定 `composing` 的動作，核心處理後狀態就變了。
-		const key = keys[index];
 		const snapshot =
 			choice === undefined
 				? session.tap(layout, index)
 				: session.longPress(layout, index, choice);
-		finish(key, snapshot);
+		finish(snapshot);
 	}
 
 	container.addEventListener("pointerup", (event) => {
@@ -297,8 +297,7 @@ export function mountKeyboard(
 	return {
 		refresh() {
 			// 組字中按切頁鍵：核心吃下後外面叫 refresh，這時頁已換，舊頁的元素對不上。
-			if (layout.pageId !== shownPage) {
-				render();
+			if (followPage()) {
 				return;
 			}
 			const old = keys;
