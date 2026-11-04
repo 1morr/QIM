@@ -16,7 +16,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
-use qim_core::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Word};
+use qim_core::{
+    CharModel, CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack,
+    Packs, Ranking, Scheme, Word,
+};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
@@ -29,11 +32,15 @@ fn entry(text: char) -> CodeEntry {
 
 /// `a` → 日曰、`b` → 月、`ab` → 明、`c` → 一到十（兩頁）；`table` 可以換掉整張碼表造退步。
 fn pack_bytes(table: &[(&str, &str)]) -> Vec<u8> {
-    pack_bytes_with(table, None)
+    pack_bytes_with(table, None, None)
 }
 
-/// `lexicon` 是方案指名的詞庫資料包 id。
-fn pack_bytes_with(table: &[(&str, &str)], lexicon: Option<&str>) -> Vec<u8> {
+/// `lexicon`、`language_model` 是方案指名的詞庫、語言模型資料包 id。
+fn pack_bytes_with(
+    table: &[(&str, &str)],
+    lexicon: Option<&str>,
+    language_model: Option<&str>,
+) -> Vec<u8> {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
@@ -43,6 +50,7 @@ fn pack_bytes_with(table: &[(&str, &str)], lexicon: Option<&str>) -> Vec<u8> {
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: lexicon.map(Into::into),
+            language_model: language_model.map(Into::into),
         },
         ranking: Ranking::default(),
     };
@@ -527,7 +535,7 @@ fn lexicon_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprinted() {
     write(
         repo.path(),
         "build/packs/quick/quick.pack",
-        &pack_bytes_with(TABLE, Some("quick-lexicon")),
+        &pack_bytes_with(TABLE, Some("quick-lexicon"), None),
     );
     let err = run(repo.path(), Mode::Report).unwrap_err();
     assert!(
@@ -549,6 +557,52 @@ fn lexicon_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprinted() {
     assert!(before.contains("quick-lexicon.pack"), "{before}");
     write(repo.path(), LEXICON, &lexicon_bytes(&[("ac", "日二")]));
     assert_ne!(before, pack_line(&repo), "換了詞庫，指紋要跟著變");
+}
+
+/// 語言模型資料包 `bigram`：只有「日 → 曰」一對，`a a` 的首選因此是「日曰」而不是「日日」。
+fn language_model_bytes(next: char) -> Vec<u8> {
+    let model = |p: f64| CharModel {
+        start: p.ln(),
+        continuation: p.ln(),
+        backoff: 0.0,
+    };
+    LanguageModelPack {
+        id: "bigram".into(),
+        model: LanguageModel::new(
+            [('日', model(0.5)), ('曰', model(0.1))],
+            model(0.01),
+            [('日', next, 0.9f64.ln())],
+        ),
+    }
+    .to_bytes()
+    .unwrap()
+}
+
+#[test]
+fn language_model_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprinted() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &pack_bytes_with(TABLE, None, Some("bigram")),
+    );
+    const LANGUAGE_MODEL: &str = "build/packs/bigram/bigram.pack";
+    let err = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(err.contains(LANGUAGE_MODEL), "{err}");
+
+    write(repo.path(), LANGUAGE_MODEL, &language_model_bytes('曰'));
+    write(
+        repo.path(),
+        "bench/fixed.tsv",
+        "a\t日\t測試\naa\t日曰\t測試\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert_eq!(outcome.fixed.failures.len(), 0, "{}", outcome.report());
+
+    let before = pack_line(&repo);
+    assert!(before.contains("bigram.pack"), "{before}");
+    write(repo.path(), LANGUAGE_MODEL, &language_model_bytes('日'));
+    assert_ne!(before, pack_line(&repo), "換了語言模型，指紋要跟著變");
 }
 
 #[test]

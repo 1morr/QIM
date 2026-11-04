@@ -49,6 +49,18 @@ pub(crate) fn lexicon_sources() -> Vec<PackedSource> {
         .collect()
 }
 
+/// 語言模型資料包的來源：每份語料的 train 切分（plan §4.3）。
+pub(crate) fn language_model_sources() -> Vec<PackedSource> {
+    CORPORA
+        .iter()
+        .map(|corpus| PackedSource {
+            name: corpus.title,
+            source_id: corpus.source_id,
+            used: "counts of characters and adjacent character pairs in the training split of the extracted text",
+        })
+        .collect()
+}
+
 /// 一個進資料包的來源，授權已讀出並核對過。
 pub(crate) struct Packed<'a> {
     spec: &'a PackedSource,

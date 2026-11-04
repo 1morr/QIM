@@ -44,7 +44,7 @@ struct Ime {
 impl Ime {
     fn new() -> Self {
         Self {
-            engine: Engine::from_pack_bytes(&pack_bytes(), None).unwrap(),
+            engine: Engine::from_pack_bytes(&pack_bytes(), None, None).unwrap(),
             user: UserModel::default(),
             session: Session::default(),
         }

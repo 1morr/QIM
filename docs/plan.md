@@ -190,17 +190,21 @@ flowchart TB
 所有候選，不論是一個長詞條、拼出來的句子，還是單字，都用同一個函式打分。不採用 Rime「有精確詞條就不造句」的規則（ADR 0001、`docs/research/rime.md` §5）。
 
 ```
-score(path) = log P_bigram(輸出文字)
+score(path) = Σ 每段 [ log P_bigram(段的第一字 | 前一段的最後一字) + log P_段內 ]
             + β × (路徑中屬於詞庫的段數)
             − γ × (路徑的段數)
             + Σ personal(段)
+
+P_段內 = 1（單字）
+       = P_詞頻(詞) ÷ P_unigram(詞的第一字)（詞庫的詞）
 ```
 
-- `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看輸出文字，與切法無關；所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比。
+- `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看文字，所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比；同樣的文字當成一個詞或拆成單字，段內的分數不同（詞用詞頻）。組字開頭的字沒有前文，用字頻的 unigram（M3 的 `set_context` 再接上前文）。方案沒指名語言模型時每個字都是 0 分。
+- 詞的段：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，前後文由字級 bigram 接，詞內由 rime-essay 的詞頻估（每個詞算一次的詞頻總和當分母）。詞內也用字級 bigram 時，同碼的詞分不出常用度，個人集答錯多 27%（M1 票 11 Comments）。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；初值由首選字基準的開發集調出，寫進方案檔。
 - `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` 初值 0.2（`docs/research/open-source-imes.md` §5）；沒學過的段為 0。個人機率由衰減值換算，公式在 M1 票 13 定。M3 再加個人 bigram（前一字詞 → 這一段）。
-- bigram 接上之前（M1 票 07–10）用 unigram：字一段是 ln 字頻機率（加一平滑），詞一段是 ln 詞頻在詞庫裡的機率；兩個分佈的尺度差由 β 吸收。粗調結果 β = 2、γ = 0（票 07）。
-- 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
+- 現行 β = 2、γ = 0 是票 07 用 unigram 粗調的值，換上 bigram 後由票 12 重調；詞內用詞頻或字級 bigram 也可以內插，由票 12 一起調。
+- 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；下一段的分數看部分路徑的最後一個字，所以 beam 剪掉的路徑可能本來會勝出，beam 夠寬才等於窮舉。每個起點的每個碼只取字頻最高的 beam 個字進 lattice（詞全進），前文再支持第 21 名以後的同碼字也進不來；這個近似由票 12 量要不要放寬。每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
 - Unicode 擴展區的字不進 lattice；整串輸入碼就是一個字的碼時，排在一般字之後（brief §4.1）。
 - 候選列：蓋滿整串的字、詞與分數最高的幾條多段路徑（方案檔 `ranking.sentences`，速成 3 條）依分數排 → 擴展區的字 → 只蓋住開頭一段的字詞，蓋得長的在前、同長依分數；文字重複的只留第一個。多段路徑放多：維基集修正次數降、口語集升（票 07 Comments）。
 
@@ -382,7 +386,12 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 前處理：OpenCC `s2hk` 轉繁體 → 在標點、空白、符號處切句 → 含連打字集以外字元（英文字母、數字、擴展區的字）的句子整句丟掉，不拿掉個別字，免得拼出原文沒有的相鄰字。
 - 切分：依句子的 sha256 分 train 90%、dev 5%、test 5%，同一句永遠在同一個切分；test 取雜湊最小的 2,000 個不重複句進基準。
 - 每份語料都切 train / dev / test：test 給首選字基準，不參與訓練。
-- 訓練：字級 interpolated Kneser-Ney bigram；剪枝到資料包 ≤ 8 MB（Gboard 文獻的 5–10 MB 預算，brief §12.4）。
+- 訓練：字級 interpolated Kneser-Ney bigram（M1 票 11，`qim-databuild` 的 `bigram` 模組）：
+  - 只數同一句內的相鄰字，不加句首句尾記號：組字多半不在句首，開頭的字用字頻 unigram `(c + 1) ÷ (N + V)`。
+  - 單一折扣 `D = n1 ÷ (n1 + 2 n2)`；退回用接續機率 `(N1+(•w) + 1) ÷ (N1+(••) + V)`，`V` 是連打字集的字數。
+  - 剪枝：只留出現 ≥ 2 次的相鄰字（133 萬對，2.9 MB；不剪約 4.7 MB），剪掉後重算每個前一字的退回權重，讓機率加總仍為 1。資料包 ≤ 8 MB（Gboard 文獻的 5–10 MB 預算，brief §12.4）。
+  - 資料包存 ARPA 式的退回形式：留下的 bigram 機率量化成 `u8`（每級 1/12 nat），unigram 與退回權重存 `f32`。
+  - 各語料的次數乘上權重再相加，口語語料先用 1，由 M1 票 12 調。
 - 授權：語料是 CC BY-SA 4.0，這份模型隨 App 發佈是否要以相同授權散布，與 LGPL 資料並列 brief §11 的待決項，由使用者判斷。
 
 ### 4.4 英文與簡繁
@@ -397,7 +406,8 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」；`anr` 的候選有「門口」。後兩項經 `Engine` 查，含字頻排序。
 - 詞庫：每個詞的碼都由詞裡每個字的一個速成碼接成；報告列詞數、被門檻與字集濾掉的數量。
 - Unihan `kCangjie` 交叉比對，差異清單輸出成報表，不擋建置。
-- 決定性：同樣的來源建出 sha256 相同的資料包（速成與詞庫兩份）。
+- bigram 資料包 ≤ 8 MB（§4.3）。
+- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫與 bigram 三份）。
 
 ## 5. 測試策略
 
@@ -605,7 +615,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 | 風險 | 影響 | 何時確認 | 回寫 |
 | --- | --- | --- | --- |
-| 換成字級 bigram 後 `mir` 不再選「一台」（M1 票 07 的 unigram 已選對） | M1 驗收 | M1 票 11 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
+| 調 bigram 的參數後 `mir` 不再選「一台」（M1 票 11 換上 bigram 後仍選對，`bench/fixed.tsv` 擋） | M1 驗收 | M1 票 12 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
 | 口語語料太小（M1 票 03：HKCanCor 加 Common Voice 約 5.6 萬句 train、2,630 句 test） | 口語集代表性、bigram 品質 | M1 票 12 調權重時 | 先靠個人集；再不足時請使用者決定其他來源（例如自存一份 Tatoeba），寫回 brief §5.2 |
 | Wikimedia 的 XML dump 預告 2027-01 停用，粵語維基的釘選可能下載不到 | 乾淨建置 | 2027-01 前 | 改用 archive.org 的存檔或新的 MediaWiki Content File Exports，重釘 `sources.toml`（brief §12.1） |
 | 使用者的 Rime 學習資料遲遲沒到，個人集是空的 | M1 的品質判斷只剩公開語料 | M1 票 04 開工時 | 停下問使用者；其他票照常 |

@@ -23,6 +23,8 @@ pub struct Scheme {
 pub struct Packs {
     /// 詞庫資料包（[`crate::LexiconPack`]）。
     pub lexicon: Option<String>,
+    /// 語言模型資料包（[`crate::LanguageModelPack`]）；沒指名時打分只剩 β、γ。
+    pub language_model: Option<String>,
 }
 
 /// 連打的打分參數（方案檔的 `[ranking]`，plan §2.3）。
