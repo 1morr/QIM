@@ -428,8 +428,8 @@ impl Action {
         }
     }
 
-    /// 沒有標籤時給螢幕閱讀器念的說法。
-    fn spoken(&self) -> String {
+    /// 沒有標籤時給螢幕閱讀器念的說法；長按清單也用它當選項的標籤（文字、字母就是本身）。
+    pub fn spoken(&self) -> String {
         match self {
             Action::Letter(c) => c.to_string(),
             Action::Text(text) => text.clone(),

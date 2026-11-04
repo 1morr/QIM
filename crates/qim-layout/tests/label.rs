@@ -88,3 +88,12 @@ fn accessibility_label_defaults_to_the_shown_label_and_hint() {
     assert_eq!(page.keys[1].accessibility_label(""), "空白");
     assert_eq!(page.keys[2].accessibility_label("月"), "月，英文 b");
 }
+
+#[test]
+fn long_press_options_are_labelled_by_what_they_type_or_do() {
+    // 殼畫長按清單時，選項的標籤用 `Action::spoken`：文字與字母是本身，其他是動作的說法。
+    assert_eq!(Action::Text("q".into()).spoken(), "q");
+    assert_eq!(Action::Text("1".into()).spoken(), "1");
+    assert_eq!(Action::Letter('a').spoken(), "a");
+    assert_eq!(Action::Space.spoken(), "空白");
+}
