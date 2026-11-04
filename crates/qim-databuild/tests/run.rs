@@ -444,7 +444,8 @@ license_text = {{ upstream_file = "LICENSE" }}
 path = "LICENSE"
 url = "https://example.invalid/opencc-LICENSE"
 sha256 = "{apache}"
-{opencc}"#,
+{opencc}
+"#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
         unihan = sha256_hex(&unihan_zip()),
@@ -1118,6 +1119,10 @@ fn every_corpus_gets_bench_sentences_training_splits_and_character_counts() {
     }
     // 粵語用字只在 Common Voice 的夾具裡。
     assert!(shown.contains("[通過] 前處理保留粵語用字：晒 "), "{shown}");
+    assert!(
+        shown.contains("[通過] 字形用常見寫法：對照表 1 組（揾→搵）"),
+        "{shown}"
+    );
     for expected in ["Conversion: OpenCC s2hk", "Conversion: OpenCC t2hk"] {
         assert!(wiki.contains(expected), "缺 {expected}：\n{wiki}");
     }

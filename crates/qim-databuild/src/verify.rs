@@ -11,6 +11,7 @@ use qim_core::{
     RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
+use crate::common_forms::CommonForms;
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
@@ -56,6 +57,8 @@ pub enum CheckId {
     CorpusDeterministic,
     /// 前處理保留的粵語用字（`corpora::CANTONESE_KEPT`）在 train 的字頻都大於 0（M1 票 17b）。
     KeptCharacters,
+    /// 字形對照表（`common_forms`）換掉的香港寫法在 train 的字頻都是 0（M1 票 17b，brief §4.1）。
+    CommonForms,
 }
 
 impl fmt::Display for CheckId {
@@ -79,6 +82,7 @@ impl fmt::Display for CheckId {
             Self::CorpusNoLeak => "語料不洩漏",
             Self::CorpusDeterministic => "語料決定性",
             Self::KeptCharacters => "前處理保留粵語用字",
+            Self::CommonForms => "字形用常見寫法",
         })
     }
 }
@@ -654,6 +658,34 @@ pub fn kept_characters(frequency: &BTreeMap<char, u64>, kept: &[char]) -> Check 
             .map(|(ch, n)| format!("{ch} {n}"))
             .collect::<Vec<_>>()
             .join("、"),
+    }
+}
+
+/// `forms` 換掉的字在 `frequency`（各語料 train 乘上權重相加的字頻）都不出現：前處理確實接上了
+/// 對照表。
+pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Check {
+    let pairs: Vec<String> = forms
+        .pairs()
+        .map(|(from, to)| format!("{from}→{to}"))
+        .collect();
+    let pairs = format!("{} 組（{}）", pairs.len(), pairs.join("、"));
+    let left: Vec<String> = forms
+        .pairs()
+        .filter_map(|(from, _)| {
+            frequency
+                .get(&from)
+                .filter(|&&n| n > 0)
+                .map(|n| format!("{from} {n}"))
+        })
+        .collect();
+    Check {
+        id: CheckId::CommonForms,
+        passed: left.is_empty(),
+        detail: if left.is_empty() {
+            format!("對照表 {pairs}，換掉的寫法在 train 都沒有")
+        } else {
+            format!("對照表 {pairs}，換掉的寫法還在 train：{}", left.join("、"))
+        },
     }
 }
 

@@ -18,7 +18,7 @@ by spaces) and a tab.
 - File: data/hkcancor-utf8.zip (sha256 09223963b8756254e15353cad843f8a4b0cbc4b9223dc8a8fa27fb1cf846057e), https://raw.githubusercontent.com/fcbond/hkcancor/39aeadf920e0b5ca93d0ad7792c59e740e7bdd65/data/hkcancor-utf8.zip
 - License: CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/
 - Extraction: the words of each utterance joined in order, part-of-speech tags and Jyutping removed.
-- Conversion: OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then 揾 written as 搵.
+- Conversion: OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms.
 
 ## common-voice-yue.tsv
 
@@ -28,4 +28,4 @@ by spaces) and a tab.
 - File: server/data/zh-HK/sentence-collector.txt (sha256 0c537e9d65c1f1de10d70a1e0989d929b557628d975bf480d8b3b6fcc6291f26), https://raw.githubusercontent.com/common-voice/common-voice/ec845c798ead7144f2acc95fd8955e9d3995c7d0/server/data/zh-HK/sentence-collector.txt
 - License: CC0-1.0, https://creativecommons.org/publicdomain/zero/1.0/
 - Extraction: one sentence per line, used as is.
-- Conversion: OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then 揾 written as 搵.
+- Conversion: OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms.

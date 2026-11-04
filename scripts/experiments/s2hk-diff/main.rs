@@ -1,5 +1,5 @@
 //! 票 17b：四份語料的原文與 OpenCC 轉換後（預設 `s2hk`，`CONFIG=t2hk` 換設定）逐字比對，
-//! 列出被換掉的字與次數。不經前處理的 `USER_FORMS`，看的是 OpenCC 本身。
+//! 列出被換掉的字與次數。不經前處理的字形對照表（`common_forms`），看的是 OpenCC 本身。
 //! 跑法見同目錄的 README.md。只讀快取，不下載。
 
 use std::collections::HashMap;

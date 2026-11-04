@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use ferrous_opencc::OpenCC;
 use ferrous_opencc::config::BuiltinConfig;
 
+use crate::common_forms::CommonForms;
 use crate::corpus::BENCH_SENTENCES;
 use crate::sources::Source;
 use crate::{Error, hkcancor, wiki};
@@ -45,12 +46,12 @@ impl Group {
     }
 }
 
-/// 前處理的字形轉換（plan §4.3）：都轉成香港繁體，轉完再照 [`USER_FORMS`] 換成使用者的寫法。
+/// 前處理的字形轉換（plan §4.3）：都轉成香港繁體，轉完再照 [`CommonForms`] 換回常見寫法。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Conversion {
     /// 原文混有簡體（中文維基）：OpenCC `s2hk`。
     S2hk,
-    /// 原文已是繁體（粵語維基、HKCanCor、Common Voice）：只換香港字形的 OpenCC `t2hk`。
+    /// 原文已是繁體（粵語維基、HKCanCor、Common Voice）：只換香港寫法的 OpenCC `t2hk`。
     /// `s2hk` 會把繁體裡也是簡體的字再轉一次，「晒」→「曬」、「吓」→「嚇」、「布」→「佈」，
     /// 粵語維基 3,400 萬字裡換錯約 6.8 萬字（M1 票 17b Comments）。
     T2hk,
@@ -61,48 +62,38 @@ impl Conversion {
     fn description(self) -> &'static str {
         match self {
             Conversion::S2hk => {
-                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then 揾 written as 搵"
+                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms"
             }
             Conversion::T2hk => {
-                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then 揾 written as 搵"
+                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms"
             }
         }
     }
 }
 
-/// 轉換後換成使用者寫法的字（香港字形 → 使用者打的字）：OpenCC 把「搵」換成香港字形「揾」，
-/// HKCanCor、Common Voice 原文也有「揾」；兩字同碼，使用者打「搵」（M1 票 17b）。
-pub const USER_FORMS: [(char, char); 1] = [('揾', '搵')];
-
 /// `s2hk` 會換掉、粵語語料改用 `t2hk` 後保留的粵語用字（M1 票 17b 的統計）；
 /// `--verify` 檢查它們在 train 的字頻都大於 0。
 pub const CANTONESE_KEPT: [char; 9] = ['晒', '搵', '吓', '郁', '喂', '涌', '咸', '响', '仆'];
 
-/// 一種 [`Conversion`] 的轉換器，建一次給整份語料用。
-pub struct Converter(OpenCC);
+/// 一種 [`Conversion`] 加上字形對照表的轉換器，建一次給整份語料用。
+pub struct Converter {
+    opencc: OpenCC,
+    forms: CommonForms,
+}
 
 impl Converter {
-    pub fn new(conversion: Conversion) -> Result<Self, Error> {
+    pub fn new(conversion: Conversion, forms: CommonForms) -> Result<Self, Error> {
         let (config, name) = match conversion {
             Conversion::S2hk => (BuiltinConfig::S2hk, "OpenCC s2hk"),
             Conversion::T2hk => (BuiltinConfig::T2hk, "OpenCC t2hk"),
         };
-        OpenCC::from_config(config)
-            .map(Self)
-            .map_err(|e| Error::invalid(name, e.to_string()))
+        let opencc =
+            OpenCC::from_config(config).map_err(|e| Error::invalid(name, e.to_string()))?;
+        Ok(Self { opencc, forms })
     }
 
     pub fn convert(&self, raw: &str) -> String {
-        self.0
-            .convert(raw)
-            .chars()
-            .map(|c| {
-                USER_FORMS
-                    .iter()
-                    .find(|(from, _)| *from == c)
-                    .map_or(c, |(_, to)| *to)
-            })
-            .collect()
+        self.forms.apply(&self.opencc.convert(raw))
     }
 }
 
@@ -197,14 +188,15 @@ pub const CORPORA: [Corpus; 4] = [
 ];
 
 impl Corpus {
-    /// 逐段交出經 [`Self::conversion`] 轉成香港繁體的文字。`paths` 是來源在 `sources.toml` 列的
+    /// 逐段交出經 [`Self::conversion`] 轉成香港繁體、再照 `forms` 換回常見寫法的文字。`paths` 是來源在 `sources.toml` 列的
     /// 每個檔在快取裡的位置，依列出的順序讀；換 dump 日期只改 `sources.toml`。
     pub fn texts(
         &self,
         paths: &[PathBuf],
+        forms: &CommonForms,
         mut text: impl FnMut(&str) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let converter = Converter::new(self.conversion)?;
+        let converter = Converter::new(self.conversion, forms.clone())?;
         self.raw_texts(paths, |raw| text(&converter.convert(raw)))
     }
 

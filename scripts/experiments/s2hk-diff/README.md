@@ -13,7 +13,7 @@ TOP=100000 SAMPLES=2 cargo run --release -q -p qim-databuild --example s2hk-diff
 ONLY='晒搵吓' SAMPLES=5 cargo run --release -q -p qim-databuild --example s2hk-diff # 只看這幾個原字
 ```
 
-每份語料一段：原字、轉成的字、次數、原字在不在連打字集、轉成的字在原文出現幾次、前後各 6 字的例子。讀的是 `qim_databuild::corpora` 的 `raw_texts`（來源抽出、還沒轉換的文字），比的是 OpenCC 本身，不含前處理轉完後的 `USER_FORMS`（「揾」寫成「搵」）。換 OpenCC 或語料版本時要重跑。
+每份語料一段：原字、轉成的字、次數、原字在不在連打字集、轉成的字在原文出現幾次、前後各 6 字的例子。讀的是 `qim_databuild::corpora` 的 `raw_texts`（來源抽出、還沒轉換的文字），比的是 OpenCC 本身，不含前處理轉完後的字形對照表（`common_forms`，換回常見寫法）。換 OpenCC 或語料版本時要重跑。
 
 ## 上次結果（2026-11-04，ferrous-opencc 0.4.0）
 
