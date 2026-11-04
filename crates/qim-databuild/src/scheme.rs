@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use qim_core::{Packs, Scheme};
+use qim_core::{Packs, Ranking, Scheme};
 use serde::Deserialize;
 
 use crate::Error;
@@ -18,6 +18,7 @@ struct SchemeFile {
     radicals: BTreeMap<String, String>,
     #[serde(default)]
     packs: PacksTable,
+    ranking: RankingTable,
 }
 
 /// 方案檔的 `[packs]`：另外的資料包的 id。
@@ -27,12 +28,36 @@ struct PacksTable {
     lexicon: Option<String>,
 }
 
-/// 字母表的每個鍵剛好一個字根，字根表沒有字母表以外的鍵。
+/// 方案檔的 `[ranking]`：連打的打分參數（plan §2.3），每個方案自己調，所以必填。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RankingTable {
+    word_bonus: f64,
+    segment_penalty: f64,
+    beam: u16,
+    sentences: u16,
+}
+
+/// 字母表是 ASCII 字母、每個鍵剛好一個字根，字根表沒有字母表以外的鍵。
 pub fn parse(text: &str) -> Result<Scheme, Error> {
     let file: SchemeFile =
         toml::from_str(text).map_err(|e| Error::invalid("方案檔", e.to_string()))?;
     let invalid = |reason: String| Error::invalid(format!("方案檔 {}", file.id), reason);
 
+    if !file.alphabet.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Err(invalid(format!(
+            "alphabet 只能有 ASCII 字母：{}",
+            file.alphabet
+        )));
+    }
+    if file.ranking.beam == 0 {
+        return Err(invalid("ranking.beam 至少是 1".into()));
+    }
+    if !(file.ranking.word_bonus.is_finite() && file.ranking.segment_penalty.is_finite()) {
+        return Err(invalid(
+            "ranking.word_bonus、segment_penalty 要是有限的數".into(),
+        ));
+    }
     let keys: BTreeSet<char> = file.alphabet.chars().collect();
     if keys.len() != file.alphabet.chars().count() {
         return Err(invalid(format!("alphabet 有重複的鍵：{}", file.alphabet)));
@@ -61,6 +86,12 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
         radicals,
         packs: Packs {
             lexicon: file.packs.lexicon,
+        },
+        ranking: Ranking {
+            word_bonus: file.ranking.word_bonus,
+            segment_penalty: file.ranking.segment_penalty,
+            beam: file.ranking.beam,
+            sentences: file.ranking.sentences,
         },
     })
 }

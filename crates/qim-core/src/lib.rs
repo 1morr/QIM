@@ -4,6 +4,7 @@
 
 mod code_table;
 mod engine;
+mod lattice;
 mod lexicon;
 mod pack;
 mod scheme;
@@ -13,7 +14,7 @@ pub use code_table::{CodeEntry, CodeTable};
 pub use engine::Engine;
 pub use lexicon::{Lexicon, Word};
 pub use pack::{FORMAT_VERSION, LexiconPack, Pack, PackError};
-pub use scheme::{Packs, Scheme};
+pub use scheme::{Packs, Ranking, Scheme};
 pub use session::{
     Candidate, Composition, Key, Options, PAGE_SIZE, Segment, Session, Snapshot, UserModel,
 };

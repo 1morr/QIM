@@ -32,7 +32,7 @@ pub enum CheckId {
     RiIsTopForA,
     /// 詞庫的每個碼都由詞裡每個字的一個速成碼接成（plan §4.5）。
     WordCodesFromCharacters,
-    /// `anr` 的候選有「門口」。
+    /// 詞庫的 `anr` 有「門口」；連打用「門」+「口」也拼得出，所以直接查詞庫，首選由 `bench/fixed.tsv` 擋。
     MenKouForAnr,
     /// 同樣的來源建兩次，兩份資料包的 sha256 都相同。
     Deterministic,
@@ -55,7 +55,7 @@ impl fmt::Display for CheckId {
             Self::DiuHasHiAndMi => "抽查：「丟」同時有 hi 與 mi",
             Self::RiIsTopForA => "抽查：a 的首選是「日」",
             Self::WordCodesFromCharacters => "詞的碼由字的速成碼組成",
-            Self::MenKouForAnr => "抽查：anr 的候選有「門口」",
+            Self::MenKouForAnr => "抽查：詞庫的 anr 有「門口」",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
@@ -318,7 +318,7 @@ fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon
         word_codes(&pack.code_table, lexicon),
         spot(
             CheckId::MenKouForAnr,
-            engine.candidates("anr").iter().any(|c| c == "門口"),
+            lexicon.lookup("anr").iter().any(|w| w.text == "門口"),
         ),
     ]);
 }

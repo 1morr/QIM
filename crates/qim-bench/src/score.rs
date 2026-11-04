@@ -245,11 +245,12 @@ struct Typing {
 }
 
 /// 修正次數的模擬（plan §5.2）：打完整題的輸入碼，接著反覆
-/// 1. 第一頁的首選接得上還沒打出的文字就按空白；
+/// 1. 第一頁的首選接得上還沒打出的文字（已選定的分段之後）就按空白；
 /// 2. 否則選這頁接得上的最長候選（數字鍵）；
 /// 3. 這頁都接不上就翻頁。
 ///
-/// 選字、翻頁各算一次修正。上屏後組字清空、題目還沒打完，就把剩下的單位的碼再打一次。
+/// 選字、翻頁各算一次修正。選的候選只蓋住剩下輸入碼的開頭時，那段固定、其餘繼續組字；
+/// 蓋滿時連同固定的分段一起上屏。上屏後組字清空、題目還沒打完，就把剩下的單位的碼再打一次。
 /// 翻完所有頁都接不上（卡住）時：還剩兩個以上單位就按 Esc 清掉（算一次修正），
 /// 之後一個單位一個單位打；只剩一個單位，或已經一個一個打了還卡住，就是打不出這題。
 fn simulate(engine: &Engine, units: &[Unit]) -> Typing {
@@ -293,31 +294,40 @@ fn simulate(engine: &Engine, units: &[Unit]) -> Typing {
             }
             continue;
         }
-        let connects = |c: &Candidate| !c.text.is_empty() && rest.starts_with(&c.text);
-        let key = if snapshot.page == 0 && snapshot.candidates.first().is_some_and(connects) {
-            Key::Space
+        let selected = snapshot.composition.selected_text();
+        // 只選接得上的候選，所以固定的分段一定是 `rest` 的開頭。
+        let Some(open) = rest.strip_prefix(selected.as_str()) else {
+            return typing;
+        };
+        let connects = |c: &Candidate| !c.text.is_empty() && open.starts_with(&c.text);
+        let chosen = |index: usize| snapshot.candidates[index].text.clone();
+        let (key, text) = if snapshot.page == 0 && snapshot.candidates.first().is_some_and(connects)
+        {
+            (Key::Space, Some(chosen(0)))
         } else if let Some(index) = longest_connecting(&snapshot.candidates, connects) {
             typing.correction_count += 1;
-            Key::Digit(u8::try_from(index + 1).expect("每頁最多 9 個候選"))
+            let digit = u8::try_from(index + 1).expect("每頁最多 9 個候選");
+            (Key::Digit(digit), Some(chosen(index)))
         } else if snapshot.has_more {
             typing.correction_count += 1;
-            Key::PageDown
+            (Key::PageDown, None)
         } else if !one_by_one && starts.iter().filter(|&&s| s >= done).count() > 1 {
             typing.correction_count += 1;
             one_by_one = true;
-            Key::Escape
+            (Key::Escape, None)
         } else {
             return typing;
         };
         snapshot = press(key, &mut typing);
-        if matches!(key, Key::Space | Key::Digit(_)) {
-            match &snapshot.commit {
-                Some(text) if !text.is_empty() && rest.starts_with(text.as_str()) => {
-                    done += text.chars().count();
-                }
-                // 選了字卻沒上屏、或上屏的不是選的字：核心的行為變了，模擬要跟著改。
-                _ => return typing,
-            }
+        let Some(text) = text else {
+            continue;
+        };
+        let expected = format!("{selected}{text}");
+        match &snapshot.commit {
+            Some(commit) if *commit == expected => done += commit.chars().count(),
+            None if snapshot.composition.selected_text() == expected => {}
+            // 上屏或固定的不是選的字：核心的行為變了，模擬要跟著改。
+            _ => return typing,
         }
     }
 }

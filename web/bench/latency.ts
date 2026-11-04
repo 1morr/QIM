@@ -2,7 +2,7 @@
 //
 // 用法：node bench/latency.ts <資料包路徑> [<詞庫資料包路徑>]，stdin 一行一個輸入碼。
 // stdout 第一行是 runtime，之後每個輸入一行、各鍵的毫秒數以空白分隔。
-// 用網頁同一份綁定（`web/src/wasm/`）；每鍵計時含網頁畫候選要讀的欄位（輸入碼、候選）。
+// 用網頁同一份綁定（`web/src/wasm/`）；每鍵計時含網頁畫組字與候選要讀的欄位。
 
 import { readFileSync } from "node:fs";
 import { initSync, Session } from "../src/wasm/qim_wasm.js";
@@ -34,7 +34,8 @@ for (const input of inputs) {
 	for (const c of input) {
 		const start = performance.now();
 		const snapshot = session.letter(c);
-		void snapshot.input;
+		void snapshot.selected;
+		void snapshot.unselected;
 		void snapshot.candidates;
 		times.push(String(performance.now() - start));
 		snapshot.free();

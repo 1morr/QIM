@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, PackError, Packs, Scheme,
-    Session, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, PackError, Packs, Ranking,
+    Scheme, Session, Snapshot, UserModel, Word,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -32,6 +32,7 @@ fn scheme(lexicon: Option<&str>) -> Scheme {
         packs: Packs {
             lexicon: lexicon.map(Into::into),
         },
+        ranking: Ranking::default(),
     }
 }
 
@@ -116,8 +117,12 @@ fn scheme_pack_and_lexicon_pack_are_not_mistaken_for_each_other() {
 }
 
 #[test]
-fn whole_input_longer_than_a_character_code_lists_the_words_of_that_code() {
-    assert_eq!(texts(&type_input(&engine(&[]), "anr")), ["門口", "明叩"]);
+fn whole_input_longer_than_a_character_code_lists_its_words_then_the_characters_of_its_beginning() {
+    // 「門」+「口」拼出的句子和詞「門口」同文字，只列一次。
+    assert_eq!(
+        texts(&type_input(&engine(&[]), "anr")),
+        ["門口", "明叩", "門", "日", "曰", "旦"]
+    );
 }
 
 #[test]
@@ -137,10 +142,11 @@ fn characters_without_a_frequency_keep_the_code_table_order() {
 }
 
 #[test]
-fn characters_come_before_words_and_extension_characters_come_last() {
+fn extension_characters_follow_everything_covering_the_whole_input() {
+    // 擴展區的字頻再高也不進 lattice、不和整串的候選比分數（plan §2.3）。
     assert_eq!(
         texts(&type_input(&engine(&[('𠀀', 1000)]), "ar")),
-        ["問", "日口", "𠀀"]
+        ["問", "日口", "曰口", "旦口", "𠀀", "日", "曰", "旦"]
     );
 }
 

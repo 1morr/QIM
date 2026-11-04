@@ -1,0 +1,274 @@
+//! 連打（plan §2.2、§2.3）經公開介面的行為：輸入碼切成字與詞的 lattice，用同一把尺打分。
+
+use std::collections::BTreeMap;
+
+use qim_core::{
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Session,
+    Snapshot, UserModel, Word,
+};
+
+/// 碼表的一列：碼、字（依建置時的字序），`+` 之後的字是擴展區。
+type Row<'a> = (&'a str, &'a str);
+
+struct Data<'a> {
+    table: Vec<Row<'a>>,
+    words: Vec<(&'a str, &'a str, u64)>,
+    chars: Vec<(char, u64)>,
+    ranking: Ranking,
+}
+
+fn engine(data: &Data) -> Engine {
+    let scheme = Scheme {
+        id: "quick".into(),
+        name: "速成".into(),
+        version: "1".into(),
+        alphabet: "abcdefghijklmnopqrstuvwxy".into(),
+        max_code_length: 2,
+        radicals: BTreeMap::new(),
+        packs: Packs {
+            lexicon: Some("lexicon".into()),
+        },
+        ranking: data.ranking,
+    };
+    let code_table = CodeTable::from_entries(data.table.iter().map(|(code, chars)| {
+        let (continuous, extension) = chars.split_once('+').unwrap_or((chars, ""));
+        let entries = continuous
+            .chars()
+            .map(|text| (text, false))
+            .chain(extension.chars().map(|text| (text, true)))
+            .map(|(text, extension)| CodeEntry { text, extension })
+            .collect();
+        (code.to_string(), entries)
+    }));
+    let mut words: BTreeMap<String, Vec<Word>> = BTreeMap::new();
+    for &(code, text, frequency) in &data.words {
+        words.entry(code.into()).or_default().push(Word {
+            text: text.into(),
+            frequency,
+        });
+    }
+    let lexicon = LexiconPack {
+        id: "lexicon".into(),
+        lexicon: Lexicon::new(words, data.chars.iter().copied()),
+    };
+    Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
+}
+
+struct Ime {
+    engine: Engine,
+    user: UserModel,
+    session: Session,
+}
+
+impl Ime {
+    fn new(data: &Data) -> Self {
+        Self {
+            engine: engine(data),
+            user: UserModel::default(),
+            session: Session::default(),
+        }
+    }
+
+    fn press(&mut self, key: Key) -> Snapshot {
+        self.session.handle(&self.engine, &mut self.user, key)
+    }
+
+    /// 按數字鍵選 `shown` 這頁上文字是 `text` 的候選。
+    fn select(&mut self, shown: &Snapshot, text: &str) -> Snapshot {
+        let at = shown.candidates.iter().position(|c| c.text == text);
+        let at = at.unwrap_or_else(|| panic!("這頁沒有「{text}」：{:?}", texts(shown)));
+        self.press(Key::Digit(u8::try_from(at + 1).unwrap()))
+    }
+
+    fn type_code(&mut self, code: &str) -> Snapshot {
+        let mut snapshot = Snapshot::default();
+        for c in code.chars() {
+            snapshot = self.press(Key::Letter(c));
+        }
+        snapshot
+    }
+}
+
+fn texts(snapshot: &Snapshot) -> Vec<String> {
+    snapshot.candidates.iter().map(|c| c.text.clone()).collect()
+}
+
+fn top(snapshot: &Snapshot) -> &str {
+    snapshot.candidates.first().map_or("", |c| c.text.as_str())
+}
+
+#[test]
+fn letters_with_no_character_of_their_own_compose_one_character_each() {
+    let data = Data {
+        table: vec![("a", "日"), ("b", "月")],
+        words: vec![],
+        chars: vec![],
+        ranking: Ranking::default(),
+    };
+    let mut ime = Ime::new(&data);
+    let snapshot = ime.type_code("ab");
+    assert_eq!(top(&snapshot), "日月");
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("日月"));
+}
+
+/// `anr`（日弓口）的小資料：「問」的速成碼是 `ar`、字頻高；「門口」是詞（brief §12.2 的案例 2）。
+fn men_kou() -> Data<'static> {
+    Data {
+        table: vec![
+            ("a", "日曰"),
+            ("n", "弓"),
+            ("r", "口"),
+            ("an", "門"),
+            ("ar", "問"),
+            ("nr", "弔"),
+        ],
+        words: vec![("anr", "門口", 9435), ("anr", "明叩", 3)],
+        chars: vec![
+            ('日', 900),
+            ('曰', 10),
+            ('弓', 20),
+            ('口', 500),
+            ('門', 300),
+            ('問', 1200),
+            ('弔', 5),
+        ],
+        ranking: Ranking::default(),
+    }
+}
+
+#[test]
+fn anr_tops_men_kou_over_characters_that_split_the_code() {
+    let mut ime = Ime::new(&men_kou());
+    assert_eq!(top(&ime.type_code("anr")), "門口");
+}
+
+#[test]
+fn candidates_cover_the_whole_input_first_then_the_beginning_longest_first() {
+    let mut ime = Ime::new(&men_kou());
+    let all = texts(&ime.type_code("anr"));
+    let men = all.iter().position(|t| t == "門").unwrap();
+    let ri = all.iter().position(|t| t == "日").unwrap();
+    let ming_kou = all.iter().position(|t| t == "明叩").unwrap();
+    assert!(ming_kou < men && men < ri, "{all:?}");
+}
+
+#[test]
+fn selecting_a_beginning_fixes_that_segment_and_composes_the_rest_again() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    let selected = ime.select(&typed, "門");
+    assert_eq!(selected.commit, None);
+    assert_eq!(selected.composition.input, "anr");
+    let segments: Vec<(&str, &str, bool)> = selected
+        .composition
+        .segments
+        .iter()
+        .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
+        .collect();
+    assert_eq!(segments, [("an", "門", true), ("r", "口", false)]);
+    assert_eq!(selected.composition.focus, 1);
+    assert_eq!(texts(&selected), ["口"]);
+
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
+}
+
+#[test]
+fn letters_typed_after_selecting_a_beginning_extend_the_rest() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("an");
+    // 「門」是 `an` 的首選，選第一個就把整串選完上屏；所以先多打一碼再選開頭。
+    let typed = ime.type_code("r");
+    ime.select(&typed, "門");
+    let more = ime.type_code("a");
+    assert_eq!(more.composition.input, "anra");
+    assert_eq!(top(&more), "口日");
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口日"));
+}
+
+#[test]
+fn backspace_after_the_rest_is_gone_puts_the_selected_segment_back() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    ime.select(&typed, "門");
+
+    let back = ime.press(Key::Backspace);
+    assert_eq!(back.composition.input, "an");
+    assert!(back.composition.segments.iter().all(|s| !s.selected));
+    assert_eq!(top(&back), "門");
+}
+
+#[test]
+fn escape_drops_selected_segments_too() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    ime.select(&typed, "門");
+    let cleared = ime.press(Key::Escape);
+    assert_eq!(cleared.composition.input, "");
+    assert!(cleared.composition.segments.is_empty());
+    assert_eq!(ime.press(Key::Space).commit, None);
+}
+
+#[test]
+fn extension_characters_stay_out_of_paths_and_only_follow_an_exact_code() {
+    let data = Data {
+        table: vec![("a", "日+𠀀"), ("b", "月")],
+        words: vec![],
+        chars: vec![('日', 1), ('月', 1), ('𠀀', 1_000_000)],
+        ranking: Ranking::default(),
+    };
+    let mut ime = Ime::new(&data);
+    assert_eq!(texts(&ime.type_code("a")), ["日", "𠀀"]);
+    let two = ime.type_code("b");
+    assert!(
+        texts(&two).iter().all(|t| !t.contains('𠀀')),
+        "{:?}",
+        texts(&two)
+    );
+    assert_eq!(top(&two), "日月");
+}
+
+#[test]
+fn word_bonus_and_segment_penalty_from_the_scheme_decide_between_a_word_and_characters() {
+    let mut data = Data {
+        table: vec![("a", "日"), ("b", "月")],
+        words: vec![("ab", "明月", 1), ("ab", "日夜", 1000)],
+        chars: vec![('日', 1000), ('月', 1000)],
+        ranking: Ranking::default(),
+    };
+    // β、γ 為 0：「日夜」佔詞頻的絕大部分，分數接近 0，勝過兩個字。
+    assert_eq!(top(&Ime::new(&data).type_code("ab")), "日夜");
+    // β 為負：兩個字勝；再加上很大的 γ：一段的詞扣得少，又勝回來。
+    data.ranking.word_bonus = -10.0;
+    assert_eq!(top(&Ime::new(&data).type_code("ab")), "日月");
+    data.ranking.segment_penalty = 10.0;
+    assert_eq!(top(&Ime::new(&data).type_code("ab")), "日夜");
+}
+
+#[test]
+fn input_no_path_can_cover_is_one_unselected_segment_without_text() {
+    // `d` 沒有字：沒有路徑蓋得滿 `ad`，候選只剩開頭的 `a`，目前分段仍指得到。
+    let mut ime = Ime::new(&men_kou());
+    let snapshot = ime.type_code("ad");
+    let segments: Vec<(&str, &str, bool)> = snapshot
+        .composition
+        .segments
+        .iter()
+        .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
+        .collect();
+    assert_eq!(segments, [("ad", "", false)]);
+    assert_eq!(snapshot.composition.focus, 0);
+    assert_eq!(top(&snapshot), "日");
+
+    // 空白選了開頭的「日」：固定下來，`d` 自己成一段。
+    let selected = ime.press(Key::Space);
+    assert_eq!(selected.commit, None);
+    let segments: Vec<(&str, &str, bool)> = selected
+        .composition
+        .segments
+        .iter()
+        .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
+        .collect();
+    assert_eq!(segments, [("a", "日", true), ("d", "", false)]);
+    assert_eq!(selected.composition.focus, 1);
+    assert!(selected.candidates.is_empty());
+}

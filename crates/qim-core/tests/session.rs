@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Scheme, Session, Snapshot, UserModel,
+    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, Scheme, Session, Snapshot, UserModel,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -14,7 +14,7 @@ fn entry(text: char) -> CodeEntry {
 }
 
 /// 測試用的小資料包：`a` 有 10 個字（比一頁多一個），`b` 有一個字；
-/// `aaa` 超過方案的 `max_code_length`，用來確認核心不查超長的碼。
+/// `aaa` 超過方案的 `max_code_length`，用來確認核心不把超長的碼當字的碼。
 fn pack_bytes() -> Vec<u8> {
     let scheme = Scheme {
         id: "quick".into(),
@@ -24,12 +24,13 @@ fn pack_bytes() -> Vec<u8> {
         max_code_length: 2,
         radicals: BTreeMap::from([('a', "日".into()), ('b', "月".into())]),
         packs: Packs::default(),
+        ranking: Ranking::default(),
     };
     let a = "日曰昌晶昍旦早旭旨旬".chars().map(entry).collect();
     let code_table = CodeTable::from_entries([
         ("a".to_string(), a),
         ("b".to_string(), vec![entry('月')]),
-        ("aaa".to_string(), vec![entry('晶')]),
+        ("aaa".to_string(), vec![entry('品')]),
     ]);
     Pack { scheme, code_table }.to_bytes().unwrap()
 }
@@ -134,8 +135,7 @@ fn escape_clears_the_composition() {
 fn backspace_removes_the_last_letter_and_updates_candidates() {
     let mut ime = Ime::new();
     ime.press(Key::Letter('a'));
-    ime.press(Key::Letter('b'));
-    assert_eq!(texts(&ime.press(Key::Space)), Vec::<String>::new());
+    assert_eq!(texts(&ime.press(Key::Letter('b')))[0], "日月");
     let snapshot = ime.press(Key::Backspace);
     assert!(snapshot.handled);
     assert_eq!(snapshot.composition.input, "a");
@@ -242,19 +242,16 @@ fn editing_and_paging_keys_without_composition_are_left_to_the_host() {
 }
 
 #[test]
-fn input_longer_than_max_code_length_has_no_candidates_and_space_does_not_commit() {
+fn a_code_longer_than_max_code_length_is_not_a_character_code() {
     let mut ime = Ime::new();
-    for c in "aaa".chars() {
+    for c in "aa".chars() {
         ime.press(Key::Letter(c));
     }
-    let snapshot = ime.press(Key::Space);
-    assert!(snapshot.handled);
+    let snapshot = ime.press(Key::Letter('a'));
     assert_eq!(snapshot.composition.input, "aaa");
-    assert!(snapshot.candidates.is_empty());
-    assert_eq!(snapshot.commit, None);
-
-    let back = ime.press(Key::Backspace);
-    assert_eq!(back.composition.input, "aa");
+    assert!(!ime.engine.candidates("aaa").contains(&"品".to_string()));
+    assert_eq!(texts(&snapshot)[0], "日日日");
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("日日日"));
 }
 
 #[test]

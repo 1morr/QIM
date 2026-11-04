@@ -197,8 +197,10 @@ score(path) = log P_bigram(輸出文字)
 - `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看輸出文字，與切法無關；所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；初值由首選字基準的開發集調出，寫進方案檔。
 - `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` 初值 0.2（`docs/research/open-source-imes.md` §5）；沒學過的段為 0。個人機率由衰減值換算，公式在 M1 票 13 定。M3 再加個人 bigram（前一字詞 → 這一段）。
-- 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4）；每按一鍵只補算新增的位置。
+- bigram 接上之前（M1 票 07–10）用 unigram：字一段是 ln 字頻機率（加一平滑），詞一段是 ln 詞頻在詞庫裡的機率；兩個分佈的尺度差由 β 吸收。粗調結果 β = 2、γ = 0（票 07）。
+- 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
 - Unicode 擴展區的字不進 lattice；整串輸入碼就是一個字的碼時，排在一般字之後（brief §4.1）。
+- 候選列：蓋滿整串的字、詞與分數最高的幾條多段路徑（方案檔 `ranking.sentences`，速成 3 條）依分數排 → 擴展區的字 → 只蓋住開頭一段的字詞，蓋得長的在前、同長依分數；文字重複的只留第一個。多段路徑放多：維基集修正次數降、口語集升（票 07 Comments）。
 
 ### 2.4 學習與排位（brief §4.5）
 
@@ -238,6 +240,7 @@ radical_hint = "cangjie-hint"   # 字根提示用的倉頡碼，不進 lattice�
 word_bonus = 0.0      # β，M1 由基準調出
 segment_penalty = 0.0 # γ
 beam = 20
+sentences = 3         # 候選列最多放幾條多段路徑
 ```
 
 核心只認方案檔與資料包。新增輸入方案時，各部分這樣處理：
@@ -402,7 +405,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 | 檔案 | 內容 | 授權 / 位置 |
 | --- | --- | --- |
-| `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`；`anr 門口` 由 M1 票 06（詞庫整串查詢）加入，`mir 一台` 由 M1 票 11（bigram 訓練）通過時加入 | 進 git |
+| `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`；`anr 門口` 由 M1 票 06（詞庫整串查詢）加入，`mir 一台` 由 M1 票 07（unigram 連打）加入 | 進 git |
 | `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼）；每個語料一個 `<名>.tsv`，一行「逐字速成碼（空格分隔）<TAB>句子」，由 `cargo xtask data` 產生 | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
 | `bench/colloquial/` | 口語語料 test 切分的句子，轉碼方式與格式同上（HKCanCor、Common Voice）；口語集的開發切分只用來調參 | 依來源（CC BY 4.0、CC0），附 `ATTRIBUTION.md`，進 git |
 | `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料（brief §12.2 的 `.userdb.txt`；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
@@ -597,7 +600,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 | 風險 | 影響 | 何時確認 | 回寫 |
 | --- | --- | --- | --- |
-| 字級 bigram 不足以讓 `mir` 選「一台」 | M1 驗收 | M1 票 11 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
+| 換成字級 bigram 後 `mir` 不再選「一台」（M1 票 07 的 unigram 已選對） | M1 驗收 | M1 票 11 | 改用詞級 bigram 或其他資料，記偏差；必要時改 brief §5.2 |
 | 口語語料太小（M1 票 03：HKCanCor 加 Common Voice 約 5.6 萬句 train、2,630 句 test） | 口語集代表性、bigram 品質 | M1 票 12 調權重時 | 先靠個人集；再不足時請使用者決定其他來源（例如自存一份 Tatoeba），寫回 brief §5.2 |
 | Wikimedia 的 XML dump 預告 2027-01 停用，粵語維基的釘選可能下載不到 | 乾淨建置 | 2027-01 前 | 改用 archive.org 的存檔或新的 MediaWiki Content File Exports，重釘 `sources.toml`（brief §12.1） |
 | 使用者的 Rime 學習資料遲遲沒到，個人集是空的 | M1 的品質判斷只剩公開語料 | M1 票 04 開工時 | 停下問使用者；其他票照常 |

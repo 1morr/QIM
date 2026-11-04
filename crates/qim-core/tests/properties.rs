@@ -4,9 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, Packs, Scheme, Session,
-    UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, PAGE_SIZE, Pack, Packs, Ranking,
+    Scheme, Session, UserModel, Word,
 };
+
+/// 測試方案的最長碼；碼表裡有更長的碼，那些不是字的碼。
+const MAX_CODE_LENGTH: u8 = 2;
 
 /// 輸入碼 → 字；碼含超過 `max_code_length` 的，字有重複的。
 fn random_table() -> impl Strategy<Value = BTreeMap<String, Vec<char>>> {
@@ -44,11 +47,12 @@ fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<Stri
         name: "速成".into(),
         version: "1".into(),
         alphabet: "abc".into(),
-        max_code_length: 2,
+        max_code_length: MAX_CODE_LENGTH,
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
         },
+        ranking: Ranking::default(),
     };
     let code_table = CodeTable::from_entries(table.iter().map(|(code, chars)| {
         let entries = chars
@@ -81,24 +85,41 @@ fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<Stri
     Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
 }
 
+/// `text` 能拆成一串字詞（`pieces` 的「文字, 碼」），碼接起來是 `input` 開頭的一段（至少一碼）。
+fn composes(text: &str, input: &str, pieces: &[(String, String)]) -> bool {
+    let mut seen = BTreeSet::new();
+    let mut todo = vec![(0, 0)];
+    while let Some((t, c)) = todo.pop() {
+        if t == text.len() && c > 0 {
+            return true;
+        }
+        for (piece, code) in pieces {
+            if text[t..].starts_with(piece.as_str())
+                && input[c..].starts_with(code.as_str())
+                && seen.insert((t + piece.len(), c + code.len()))
+            {
+                todo.push((t + piece.len(), c + code.len()));
+            }
+        }
+    }
+    false
+}
+
 proptest! {
     #[test]
-    fn every_candidate_has_a_code_equal_to_the_current_input(
+    fn every_candidate_can_be_typed_with_the_beginning_of_the_unselected_input(
         table in random_table(),
         words in random_words(),
         keys in prop::collection::vec(key(), 0..40),
     ) {
-        // 字詞 → 它的所有碼，直接由生成的碼表與詞庫建，不經核心。
-        let mut codes: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
-        for (code, chars) in &table {
-            for c in chars {
-                codes.entry(c.to_string()).or_default().insert(code);
-            }
+        // 字詞與它的碼，直接由生成的碼表與詞庫建，不經核心；碼超過方案最長碼的字打不出。
+        let mut pieces: Vec<(String, String)> = Vec::new();
+        let long = |code: &&String| code.len() <= usize::from(MAX_CODE_LENGTH);
+        for (code, chars) in table.iter().filter(|(code, _)| long(code)) {
+            pieces.extend(chars.iter().map(|c| (c.to_string(), code.clone())));
         }
         for (code, texts) in &words {
-            for text in texts {
-                codes.entry(text.clone()).or_default().insert(code);
-            }
+            pieces.extend(texts.iter().map(|text| (text.clone(), code.clone())));
         }
 
         let engine = engine(&table, &words);
@@ -106,11 +127,36 @@ proptest! {
         let mut session = Session::default();
         for key in keys {
             let snapshot = session.handle(&engine, &mut user, key);
-            let input = snapshot.composition.input.as_str();
+            let input = snapshot.composition.unselected_input();
             for candidate in &snapshot.candidates {
-                let has_code = codes.get(&candidate.text).is_some_and(|c| c.contains(input));
-                prop_assert!(has_code, "{key:?} 後候選 {} 沒有碼 {input:?}", candidate.text);
+                prop_assert!(
+                    composes(&candidate.text, input, &pieces),
+                    "{key:?} 後候選 {} 打不出 {input:?} 的開頭",
+                    candidate.text
+                );
             }
+        }
+    }
+
+    #[test]
+    fn candidates_computed_key_by_key_equal_those_computed_from_scratch(
+        table in random_table(),
+        words in random_words(),
+        keys in prop::collection::vec(key(), 0..40),
+    ) {
+        let engine = engine(&table, &words);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for key in keys {
+            let snapshot = session.handle(&engine, &mut user, key);
+            let from_scratch = engine.candidates(snapshot.composition.unselected_input());
+            let page: Vec<String> = from_scratch
+                .into_iter()
+                .skip(snapshot.page * PAGE_SIZE)
+                .take(PAGE_SIZE)
+                .collect();
+            let texts: Vec<String> = snapshot.candidates.iter().map(|c| c.text.clone()).collect();
+            prop_assert_eq!(texts, page, "{:?} 後", key);
         }
     }
 }

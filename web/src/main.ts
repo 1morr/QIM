@@ -47,7 +47,7 @@ function press(session: Session, key: Key): Snapshot {
 }
 
 function render(snapshot: Snapshot): void {
-	composition.textContent = snapshot.input;
+	composition.textContent = snapshot.selected + snapshot.unselected;
 	candidates.replaceChildren(
 		...snapshot.candidates.map((candidate, i) => {
 			const item = document.createElement("li");
