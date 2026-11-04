@@ -13,10 +13,12 @@ use crate::transcode::Transcoder;
 use crate::verify::{
     self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
 };
-use crate::{Error, build_pack, lexicon, libcangjie, packing, personal, scheme, unihan};
+use crate::{Error, build_pack, gboard, lexicon, libcangjie, packing, personal, scheme, unihan};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 const PACKS: &str = "build/packs";
+/// 由排列算出的預設佈局，網頁載入（plan §2.6）。
+const LAYOUTS: &str = "build/layouts";
 pub(crate) const LIBCANGJIE: &str = "libcangjie";
 const TABLE: &str = "data/table.txt";
 pub(crate) const UNIHAN: &str = "unihan";
@@ -53,6 +55,8 @@ pub struct Outcome {
     pub lexicon_path: PathBuf,
     pub lexicon_sha256: String,
     pub lexicon: LexiconSummary,
+    /// 預設 Gboard 速成佈局（[`gboard::layout`]）。
+    pub layout_path: PathBuf,
     /// 各語料的句數。
     pub corpora: Vec<CorpusSummary>,
     /// 個人集轉出的統計；沒有 [`personal::USERDB`] 時是 `None`。
@@ -63,6 +67,7 @@ pub struct Outcome {
 
 /// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`、建各語料，再用語料的字頻
 /// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
+/// 另把預設 Gboard 速成佈局寫到 `build/layouts/`。
 /// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     let read = |rel: &str| {
@@ -226,6 +231,11 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     )?;
     let lexicon_path = lexicon_dir.join(format!("{lexicon_id}.pack"));
 
+    let layouts = root.join(LAYOUTS);
+    std::fs::create_dir_all(&layouts).map_err(Error::io(&layouts))?;
+    let layout_path = layouts.join(gboard::FILE);
+    write(layout_path.clone(), gboard::layout().to_json().as_bytes())?;
+
     let personal = build_personal(root, &transcoder)?;
     if verify {
         let benches: Vec<(&str, &str)> = benches.iter().map(|(n, b)| (*n, b.as_str())).collect();
@@ -278,6 +288,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         lexicon_path,
         lexicon_sha256: sha256_hex(&lexicon_bytes),
         lexicon: lexicon_summary,
+        layout_path,
         corpora,
         personal,
         report,

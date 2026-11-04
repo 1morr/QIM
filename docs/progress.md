@@ -35,6 +35,7 @@
 | 2026-11-04 | M1 08 | macOS、iOS 內建速成 T1–T18 寫進 `docs/research/blackbox-baseline.md`；brief §1.3 更新，5 題進 `fixed.tsv`；細節見票 08 | 新 session 下 `/implement .scratch/m1/issues/09-blackbox-gboard.md` |
 | 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
 | 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
+| 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
 
 ## 偏差與決定
 
@@ -72,3 +73,4 @@
 - 2026-11-04 M1 10：`Key` 加 `Punct`、`Other`；亂按找到組字中 Tab、Delete、方向鍵改到輸入框，網頁沒對應的鍵都轉成 `Other`，組字中吃下（plan §2.1）。
 - 2026-11-04 M1 10：網頁加 `node:test` 單元測試與 `check` 的 `unit` 步驟，不加測試框架依賴（`docs/development.md`、plan §1.4）。
 - 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。
+- 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。

@@ -739,6 +739,7 @@ dependencies = [
  "dirs",
  "ferrous-opencc",
  "qim-core",
+ "qim-layout",
  "quick-xml",
  "serde",
  "sha2",
@@ -749,10 +750,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "qim-layout"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "qim-wasm"
 version = "0.0.0"
 dependencies = [
  "qim-core",
+ "qim-layout",
  "wasm-bindgen",
 ]
 
