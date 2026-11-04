@@ -40,7 +40,7 @@
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
 | 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
-| 2026-11-04 | M1 20 | 長按、符號頁、自訂頁、放大預覽、深色、橫向；核心加 `Session::text`；Gboard 佈局直橫兩版過嚴格檢查；細節見票 20 | 新 session 下 `/implement .scratch/m1/issues/21-edit-segments-in-composition.md` |
+| 2026-11-04 | M1 20 | 長按、符號頁、自訂頁、放大預覽、深色、橫向；核心加 `Session::text`；Gboard 佈局直橫兩版過嚴格檢查；細節見票 20 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md` |
 | 2026-11-04 | M1 16 | 簡體模式：OpenCC `fae2a0a` 建簡繁資料包，排序後轉換、去重，學習記繁體；網頁開關，`anr` 首選「门口」；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 21 | ← / →、`focus_segment`、`select`；網頁點分段、點候選；改選中間段時前面固定、後面重算；bench 不變；細節見票 21 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等票 20 合併；22 另在並行） |
 | 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |

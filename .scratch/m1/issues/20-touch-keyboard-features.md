@@ -75,3 +75,15 @@ Blocked by: 19
     - `bench --check`：exit 0，公開語料四集沒有翻盤，固定題 15/15。個人集的數字和上次合併相同。
     - `cargo xtask check`：通過（e2e `60 passed`）。
   - 觸控亂按兩輪，各 4 個種子 × 150 步，加了點候選與點分段，第二輪加重這兩項：共點候選 55 次、點分段 44 次，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 16，`3ce5440`）：三個檔衝突。
+  - `crates/qim-wasm/src/lib.rs`：`WebSnapshot` 兩邊的欄位都留（本票 `action`、`letter`，票 16 `commitOriginal`）。
+  - `docs/development.md`：資料包說明取 main，預設佈局取本票。
+  - `docs/plan.md`：§2.1 本票的 `text` 與票 16 的簡體模式兩段都留。
+  - 語意衝突：票 16 把 `snapshot` 改成收 `engine` 與 `Commit`（帶原文），`Session::text` 沒組字的那條路編不過。改成 `Commit::plain`，和標點相同，修正放在合併 commit 裡，合併 commit 本身就編得過。文字鍵照原樣不轉簡體（plan §2.1「文字照原樣」）：組字照簡體上屏，原文是繁體。
+  - 補 `tests/simplified.rs` 一例（組字中按文字鍵、沒組字時按文字鍵的上屏與原文），補 Playwright「簡體模式下觸控打字」。
+  - progress.md 本票那一列的下一步照協調者要求改成票 23。
+  - 合併後的檢查：
+    - `cargo xtask data`：通過（簡繁資料包 sha256 `1c5ab2aa21e6`，其餘同上次合併）。
+    - `bench --check`：exit 0，公開語料四集沒有翻盤，固定題 15/15，個人集的數字同上次合併。
+    - `cargo xtask check`：通過（e2e `66 passed`）。
+  - 觸控亂按：4 個種子 × 150 步，加點候選、點分段、切無痕與簡體（簡體 12 次、無痕 11 次、點候選 24 次、點分段 36 次），三頁都走到，沒有錯誤。
