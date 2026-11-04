@@ -3,7 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, Engine, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SimplifierPack,
+    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack,
+    SimplifierPack,
 };
 use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
@@ -16,6 +17,9 @@ const TABLE: &str = "\
 門 门 1 1 0 0 1 0 0 0 0 an an NA 20000
 口 口 1 1 0 0 1 0 0 0 0 r r NA 20100
 𠀀 𠀀 1 0 0 0 0 0 0 0 0 a NA NA 0
+廿 廿 1 1 0 0 1 0 0 0 0 t t NA 23000
+竹 竹 1 1 0 0 1 0 0 0 0 h h NA 23001
+水 水 1 1 0 0 1 0 0 0 0 e e NA 23002
 ";
 
 /// 聲明原文在上游檔裡換了行，sources.toml 照抄成一行。
@@ -94,6 +98,26 @@ const APACHE: &str = "\
                                  Apache License
                            Version 2.0, January 2004
 ";
+
+/// ESDB release 的 Hunspell 字典（這裡只取幾個詞）：`the`、`walk` 展開出 `walked`，
+/// `damn` 是禁忌詞，`zoo` 打不出（`z`）。
+const EN_US_AFF: &str = "SET UTF-8\nNOSUGGEST !\n\nSFX D Y 1\nSFX D   0     ed         [^ey]\n";
+const EN_US_DIC: &str = "4\nthe\nwalk/D\ndamn/D!\nzoo\n";
+
+/// ESDB 的 `Copyright`（這裡只取開頭）。
+const SCOWL_COPYRIGHT: &str = "Copyright 2000-2026 by Kevin Atkinson\n";
+
+const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
+
+fn scowl_zip() -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, text) in [("en_US.aff", EN_US_AFF), ("en_US.dic", EN_US_DIC)] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(text.as_bytes()).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+}
 
 const DUMP_FILE: &str = "zh_yuewiki-20261101-pages-articles.xml.bz2";
 const ZH_DUMP_FILE: &str = "zhwiki-20220501-pages-articles1.xml-p1p187712.bz2";
@@ -291,6 +315,11 @@ fn upstream(readme: &str) -> Files {
                 "https://example.invalid/opencc-LICENSE".into(),
                 APACHE.into(),
             ),
+            (format!("https://example.invalid/{SCOWL_ZIP}"), scowl_zip()),
+            (
+                "https://example.invalid/scowl-Copyright".into(),
+                SCOWL_COPYRIGHT.into(),
+            ),
         ])
         .into_iter()
         .chain(OPENCC_DICTIONARIES.iter().map(|(path, text)| {
@@ -425,7 +454,23 @@ license_text = {{ upstream_file = "LICENSE" }}
 path = "LICENSE"
 url = "https://example.invalid/opencc-LICENSE"
 sha256 = "{apache}"
-{opencc}"#,
+{opencc}
+[source.scowl]
+repository = "https://example.invalid/wordlist"
+version = "rel-2026.02.25"
+license = "LicenseRef-SCOWL"
+license_text = {{ upstream_file = "Copyright" }}
+
+[[source.scowl.files]]
+path = "{SCOWL_ZIP}"
+url = "https://example.invalid/{SCOWL_ZIP}"
+sha256 = "{scowl}"
+
+[[source.scowl.files]]
+path = "Copyright"
+url = "https://example.invalid/scowl-Copyright"
+sha256 = "{scowl_copyright}"
+"#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
         unihan = sha256_hex(&unihan_zip()),
@@ -437,6 +482,8 @@ sha256 = "{apache}"
         essay = sha256_hex(ESSAY.as_bytes()),
         lgpl = sha256_hex(LGPL.as_bytes()),
         apache = sha256_hex(APACHE.as_bytes()),
+        scowl = sha256_hex(&scowl_zip()),
+        scowl_copyright = sha256_hex(SCOWL_COPYRIGHT.as_bytes()),
         opencc = OPENCC_DICTIONARIES
             .iter()
             .map(|(path, text)| {
@@ -478,7 +525,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (6, 1));
+    assert_eq!((report.continuous, report.extension), (9, 1));
 }
 
 #[test]
@@ -636,6 +683,41 @@ fn builds_the_simplifier_pack_with_its_own_license_and_notice() {
     }
     assert!(notice.contains("hk2s"), "{notice}");
     assert!(notice.contains("@tofu-risk"), "{notice}");
+}
+
+#[test]
+fn builds_the_english_pack_with_its_own_license_and_notice() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/scowl-en-us");
+    assert_eq!(outcome.english_path, dir.join("scowl-en-us.pack"));
+    let bytes = std::fs::read(&outcome.english_path).unwrap();
+    assert_eq!(outcome.english_sha256, sha256_hex(&bytes));
+    let pack = EnglishPack::from_bytes(&bytes).unwrap();
+    assert_eq!(pack.id, "scowl-en-us");
+    assert_eq!(
+        pack.words.iter().collect::<Vec<_>>(),
+        ["the", "walk", "walked"]
+    );
+    assert_eq!(
+        (
+            outcome.english.stems,
+            outcome.english.taboo,
+            outcome.english.untypable
+        ),
+        (4, 1, 1)
+    );
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains("LicenseRef-SCOWL"), "{license}");
+    assert!(license.contains(SCOWL_COPYRIGHT.trim_end()), "{license}");
+    assert!(!license.contains("Apache"), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(notice.contains("rel-2026.02.25"), "{notice}");
+    assert!(notice.contains(&sha256_hex(&scowl_zip())), "{notice}");
+    assert!(notice.contains("NOSUGGEST"), "{notice}");
 }
 
 #[test]

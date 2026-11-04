@@ -21,6 +21,8 @@ const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
 const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
 /** 簡繁資料包（OpenCC `hk2s`），簡體模式用。 */
 const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
+/** 英文資料包（ESDB），中文狀態的英文候選用。 */
+const ENGLISH_URL = "/packs/scowl-en-us/scowl-en-us.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 
@@ -30,6 +32,7 @@ const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
+const englishCandidates = element<HTMLInputElement>("#english-candidates");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const darkToggle = element<HTMLButtonElement>("#dark-toggle");
@@ -309,17 +312,32 @@ function setTouch(on: boolean): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon, languageModel, radicalHint, simplifier, layoutJson] =
-		await Promise.all([
-			init(),
-			loadPack(PACK_URL),
-			loadPack(LEXICON_URL),
-			loadPack(LANGUAGE_MODEL_URL),
-			loadPack(RADICAL_HINT_URL),
-			loadPack(SIMPLIFIER_URL),
-			load(LAYOUT_URL).then((response) => response.text()),
-		]);
-	const session = new Session(pack, lexicon, languageModel, simplifier);
+	const [
+		,
+		pack,
+		lexicon,
+		languageModel,
+		radicalHint,
+		simplifier,
+		english,
+		layoutJson,
+	] = await Promise.all([
+		init(),
+		loadPack(PACK_URL),
+		loadPack(LEXICON_URL),
+		loadPack(LANGUAGE_MODEL_URL),
+		loadPack(RADICAL_HINT_URL),
+		loadPack(SIMPLIFIER_URL),
+		loadPack(ENGLISH_URL),
+		load(LAYOUT_URL).then((response) => response.text()),
+	]);
+	const session = new Session(
+		pack,
+		lexicon,
+		languageModel,
+		simplifier,
+		english,
+	);
 	userDict = mountUserDict(session, () => text.focus());
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
@@ -373,6 +391,20 @@ async function start(): Promise<void> {
 	applySimplified();
 	simplified.addEventListener("change", () => {
 		applySimplified();
+		text.focus();
+	});
+	// 英文候選（預設開）：組字中切換也立刻重列候選。
+	const applyEnglishCandidates = (): void => {
+		const snapshot = session.setEnglishCandidates(englishCandidates.checked);
+		try {
+			apply(snapshot, false);
+		} finally {
+			snapshot.free();
+		}
+	};
+	applyEnglishCandidates();
+	englishCandidates.addEventListener("change", () => {
+		applyEnglishCandidates();
 		text.focus();
 	});
 	const layout = new Layout(layoutJson, device(), orientation());

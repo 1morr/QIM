@@ -3,7 +3,7 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{CodeTable, LanguageModel, Lexicon, RadicalHints, Scheme, Simplifier};
+use crate::{CodeTable, EnglishWords, LanguageModel, Lexicon, RadicalHints, Scheme, Simplifier};
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
 pub const FORMAT_VERSION: u32 = 5;
@@ -18,6 +18,8 @@ const LANGUAGE_MODEL_MAGIC: &[u8; 4] = b"QIMB";
 const SIMPLIFIER_MAGIC: &[u8; 4] = b"QIMS";
 /// 字根提示資料包檔頭的魔數。
 const RADICAL_HINT_MAGIC: &[u8; 4] = b"QIMH";
+/// 英文資料包檔頭的魔數。
+const ENGLISH_MAGIC: &[u8; 4] = b"QIME";
 
 /// 一個輸入方案的資料包：方案與它的碼表。
 ///
@@ -64,6 +66,16 @@ pub struct SimplifierPack {
 pub struct RadicalHintPack {
     pub id: String,
     pub hints: RadicalHints,
+}
+
+/// 英文資料包：中文狀態的英文候選用的詞表（plan §4.4），由 [`crate::Engine::with_english`]
+/// 掛上，不由方案指名，各方案共用。
+///
+/// 位元組格式：魔數 `QIME`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnglishPack {
+    pub id: String,
+    pub words: EnglishWords,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,5 +215,15 @@ impl RadicalHintPack {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
         decode(RADICAL_HINT_MAGIC, bytes)
+    }
+}
+
+impl EnglishPack {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
+        encode(ENGLISH_MAGIC, self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
+        decode(ENGLISH_MAGIC, bytes)
     }
 }

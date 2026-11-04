@@ -1,13 +1,14 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, Key, Options, RadicalHintPack, RadicalHints, Scheme, Session,
-    SimplifierPack, Snapshot, UserModel,
+    CangjieVersion, Engine, EnglishPack, Key, Options, RadicalHintPack, RadicalHints, Scheme,
+    Session, SimplifierPack, Snapshot, UserModel,
 };
 use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
 
-/// 網頁的一個輸入框：速成、詞庫、語言模型與簡繁資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
+/// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁與英文資料包、一個個人模型、一個 `Session`。
+/// JS 端叫 `Session`。
 #[wasm_bindgen(js_name = Session)]
 pub struct WebSession {
     engine: Engine,
@@ -21,13 +22,14 @@ pub struct WebSession {
 #[wasm_bindgen(js_class = Session)]
 impl WebSession {
     /// 由速成資料包與方案指名的詞庫、語言模型資料包，加上簡繁資料包（沒有時簡體模式照原樣
-    /// 輸出）的位元組建立；資料包由網頁 fetch。
+    /// 輸出）、英文資料包（沒有時沒有英文候選）的位元組建立；資料包由網頁 fetch。
     #[wasm_bindgen(constructor)]
     pub fn new(
         pack: &[u8],
         lexicon: Option<Vec<u8>>,
         language_model: Option<Vec<u8>>,
         simplifier: Option<Vec<u8>>,
+        english: Option<Vec<u8>>,
     ) -> Result<WebSession, JsError> {
         let error = |e: qim_core::PackError| JsError::new(&e.to_string());
         let mut engine =
@@ -35,6 +37,9 @@ impl WebSession {
                 .map_err(error)?;
         if let Some(bytes) = simplifier {
             engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(error)?);
+        }
+        if let Some(bytes) = english {
+            engine = engine.with_english(EnglishPack::from_bytes(&bytes).map_err(error)?);
         }
         Ok(Self {
             engine,
@@ -94,6 +99,15 @@ impl WebSession {
     #[wasm_bindgen(js_name = setSimplified)]
     pub fn set_simplified(&mut self, on: bool) -> WebSnapshot {
         self.options.simplified = on;
+        self.session.set_options(self.options);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
+    /// 中文狀態的英文候選（M1 票 15）：整串輸入碼剛好是英文單字時排第 2 位，預設開。組字中
+    /// 切換也立刻重列候選。
+    #[wasm_bindgen(js_name = setEnglishCandidates)]
+    pub fn set_english_candidates(&mut self, on: bool) -> WebSnapshot {
+        self.options.english_candidates = on;
         self.session.set_options(self.options);
         self.session.refresh(&self.engine, &self.user).into()
     }

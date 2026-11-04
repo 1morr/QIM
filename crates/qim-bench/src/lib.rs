@@ -11,7 +11,7 @@ mod score;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use qim_core::{Engine, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking};
+use qim_core::{Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking};
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
@@ -25,6 +25,8 @@ pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Met
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const PACK: &str = "build/packs/quick/quick.pack";
 pub const PACKS: &str = "build/packs";
+/// 英文資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著英文候選，基準照網頁掛上。
+pub const ENGLISH_PACK: &str = "build/packs/scowl-en-us/scowl-en-us.pack";
 pub const FIXED: &str = "bench/fixed.tsv";
 /// 語料目錄，依序跑：每個 `<名>.tsv` 是一個集合，集合名在所有目錄間不能重複。
 /// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
@@ -433,7 +435,12 @@ fn load_engine(
         })
         .transpose()?;
     let copy = lexicon.as_ref().map(|l| l.lexicon.clone());
-    let engine = Engine::new(pack, lexicon, language_model).map_err(|e| format!("{PACK}：{e}"))?;
+    let (bytes, loaded) = load(ENGLISH_PACK.into())?;
+    let english = EnglishPack::from_bytes(&bytes).map_err(|e| format!("{ENGLISH_PACK}：{e}"))?;
+    packs.push(loaded);
+    let engine = Engine::new(pack, lexicon, language_model)
+        .map_err(|e| format!("{PACK}：{e}"))?
+        .with_english(english);
     Ok((engine, packs, copy))
 }
 

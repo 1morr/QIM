@@ -97,7 +97,7 @@ QIM（暫名）。
 - 「上屏整個組字」和一直按空白相同：已選定的分段，接著逐次取剩下的輸入碼的首選，沒有字的碼原樣上屏。移到某一段時按空白也是上屏整個組字。
 - 參考：組字中按標點，macOS、iOS 速成與 Gboard 都先上屏首選再出標點（[黑箱基線](research/blackbox-baseline.md) T18）。Enter、大寫字母照 librime express_editor：Return 是 `CommitRawInput`（選定的段上屏字、其餘上屏原碼），方案以外的可見字元是 `DirectCommit`（先上屏組字、字元照打）。macOS、Gboard 的 Enter 上屏首選，macOS 的 Shift＋字母把整串改成英文，都不學：要首選有空白，要英文有 Enter。
 - 標點預設全形：`,` `.` `?` `!` `;` `:` `(` `)` `[` `]` `{` `}` `<` `>` `\` `^` `_` 依序轉成 ， 。 ？ ！ ； ： （ ） 「 」 『 』 《 》 、 …… ——，取 rime-prelude `punctuation.yaml` `half_shape` 每鍵第一個是全形的選項，不出標點選單。其他符號上屏半形：引號要配對（智慧標點，§4.7）；`/`（Rime 是「、」，和 `\` 重複，留給網址與分數）、`$`（Rime 是「￥」，香港用 $）不學 Rime；其餘 Rime 的第一個選項就是半形。`-` / `=` 是翻頁鍵，沒有組字時照打。
-- 英文候選：輸入碼剛好是完整英文單字時放第 2 位，不搶首選；不容錯、不補全，糾錯與預測只在英文模式（§4.7）。
+- 英文候選：輸入碼剛好是完整英文單字時放第 2 位，不搶首選；不容錯、不補全，糾錯與預測只在英文模式（§4.7）。第 3 碼起才出（1–2 碼的英文字和單字的碼撞得太常，macOS 速成也是第 3 碼起，[黑箱基線](research/blackbox-baseline.md) T7）；專有名詞照大小寫顯示（English）。選它和 Enter 一樣原樣上屏、不學，選幾次都不會變首選。
 - 組字中顯示已打的字根（如「日弓口」），已選定的分段顯示字詞；候選旁平常不顯示碼。
 - 字根提示：組字中按 Tab，目前頁每個候選旁逐字列出倉頡碼的字根與字母（「日弓(an) 口(r)」，多個碼以「／」分隔），再按一次收起，組字結束也收起；預設五代、可改三代（§4.2）。參考 fcitx5 table 引擎：組字列顯示字根、候選旁以「~ 」接提示，但它是設定開關、沒有快捷鍵（§12.4）；黑箱基線沒有測競品的字根提示。選 Tab：組字中它本來就吃下不動作，不必加修飾鍵，也不佔分段用的 ← / →。
 
@@ -170,7 +170,7 @@ QIM（暫名）。
 | 粵語口語小詞表 | 自行整理 | CC0 | 不從 rime-cantonese、粵典複製 |
 | 口語語料 | HKCanCor（fcbond/hkcancor）、Common Voice 粵語句子（GitHub 的 Sentence Collector 句子檔，不用 Mozilla Data Collective 的資料集） | CC BY 4.0、CC0 1.0（§12.1） | 維基偏書面語，要補口語，訓練 bigram 與基準都用；Tatoeba 沒有版本化的下載又要逐句署名，M1 不用；LIHKG、OpenSubtitles 權利來源不清，不用 |
 | 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
-| 英文詞表 | SCOWL | MIT 類寬鬆授權 | — |
+| 英文詞表 | ESDB（舊名 SCOWL）的 Hunspell en_US 字典（§12.1） | MIT 類寬鬆授權 | 中文狀態的英文候選用 |
 | 簡繁轉換 | OpenCC | Apache-2.0 | — |
 
 不用 Rime 的倉頡 / 速成碼表（授權標示矛盾，§12.1）。
@@ -261,6 +261,7 @@ QIM（暫名）。
 - ferrous-opencc 0.4.0 只開 `t2s-conversion` 能編成 `wasm32-unknown-unknown`（含它內嵌的字典約 0.52 MB）；字典由 build.rs 從 crate 內的 `assets/` 編進程式，與 OpenCC `fae2a0a` 的同名字典 sha256 不同；載入字典的公開 API 只有內建設定與讀檔的 `OpenCC::new(路徑)`，`Dictionary` trait 不公開，不能從記憶體的位元組載入。本機實驗與原始碼（`src/lib.rs`、`src/dictionary/mod.rs`），2026-11-04；M1 票 16 Comments。
 - CLDR annotations（yue、zh_Hant、zh_Hant_HK）為 Unicode-3.0。[CLDR](https://github.com/unicode-org/cldr/tree/main/common/annotations)。
 - HKSCS 資料集（含倉頡碼、粵拼）商用免費，須署名，有賠償條款。[data.gov.hk 條款](https://data.gov.hk/en/terms-and-conditions)。
+- ESDB（English Speller Database，舊名 SCOWL）的詞表要用 repo 裡的 Python + SQLite 工具（`combine.py` 合併 `data/` 下十幾份檔）組出；release `rel-2026.02.25`（commit `7e99eda`）附 `hunspell-en_US-2026.02.25.zip`，README 寫明是 size 60、美式的預設字典（`mk-list --accents=strip en_US 60`），`en_US.dic` 47,551 個詞幹，最強烈的禁忌詞標 NOSUGGEST（27 個）。`Copyright` 寫官方拼字字典（非澳式）只需保留 `===` 前那段聲明。展開字尾後 109,863 個詞形，速成打得出、依小寫歸併後 85,959 詞（本機統計，`cargo xtask data --verify`）。[en-wl/wordlist](https://github.com/en-wl/wordlist)（README、`Copyright`、release 頁），2026-11-04 查。
 - 隨機速成字母串（a–y）對 macOS `/usr/share/dict/words` 的 210,773 個小寫詞：4 個字母剛好是英文詞 0.9%、差一處（插入、刪除、替換、對調）38.5%；5 個字母 0.1%、8.7%；6 個字母 0%、1.1%。隨機字母不代表真實速成碼的分佈，詞表含冷僻詞，只看量級。本機實驗 `scripts/experiments/english-edit1/`，2026-11-03。
 - Wikimedia 的 CirrusSearch dump 已停在 `other/cirrussearch/`（最後 20251229），改到 `other/cirrus_search_index/`、依索引分片成 `.json.bz2`，2026-11-04 只列最近 5 週（20261004–20261101）；`pages-articles` dump 的舊版仍可下載（粵語維基 20240101 回 200）。[DEPRECATED.txt](https://dumps.wikimedia.org/other/cirrussearch/DEPRECATED.txt)、[cirrus_search_index](https://dumps.wikimedia.org/other/cirrus_search_index/)、[zh_yuewiki](https://dumps.wikimedia.org/zh_yuewiki/)，2026-11-04 查。
 - HKCanCor：1997–1998 年的自發對話與電台節目轉寫，約 23 萬詞。原始 repo `fcbond/hkcancor` 的 README 與 `data/LICENSE` 聲明 CC BY 4.0，要求引用 Luke & Wong (2015)；`data/hkcancor-utf8.zip` 有 58 個轉寫檔，一行一詞 `詞/詞性/粵拼/`。PyCantonese 內建的版本另有改動。[fcbond/hkcancor](https://github.com/fcbond/hkcancor)（`39aeadf`）、[PyCantonese](https://github.com/jacksonllee/pycantonese)，2026-11-04 查。

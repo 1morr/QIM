@@ -7,19 +7,19 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::{
-    CangjieVersion, CodeTable, Engine, Key, LanguageModelPack, Lexicon, LexiconPack, Options, Pack,
-    RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
+    CangjieVersion, CodeTable, Engine, EnglishPack, Key, LanguageModelPack, Lexicon, LexiconPack,
+    Options, Pack, RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
 use crate::transcode::Transcoder;
-use crate::{bigram, lexicon};
+use crate::{bigram, english, lexicon};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
-    /// `qim-core` 解得開建出的速成、詞庫、語言模型、字根提示與簡繁資料包，詞庫、語言模型與
+    /// `qim-core` 解得開建出的速成、詞庫、語言模型、字根提示、簡繁與英文資料包，詞庫、語言模型與
     /// 字根提示是方案指名的那份。
     Decodes,
     /// 連打字集與擴展區的字數都等於來源中有倉頡碼的漢字數。
@@ -44,9 +44,11 @@ pub enum CheckId {
     RadicalHintByVersion,
     /// 簡體模式打 `anr` 的候選有「门口」、沒有「門口」：簡繁資料包接得上核心（首選由核心測試擋）。
     SimplifiedMenKou,
+    /// 中文狀態打 `the`，第 2 個候選是 `the`：英文資料包接得上核心（排位規則 4）。
+    EnglishThe,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
-    /// 同樣的來源建兩次，五份資料包的 sha256 都相同。
+    /// 同樣的來源建兩次，六份資料包的 sha256 都相同。
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
@@ -71,6 +73,7 @@ impl fmt::Display for CheckId {
             Self::RadicalHintCoversCharacters => "字根提示涵蓋碼表的字",
             Self::RadicalHintByVersion => "抽查：字根提示的三代與五代碼",
             Self::SimplifiedMenKou => "抽查：簡體模式 anr 有「门口」",
+            Self::EnglishThe => "抽查：the 的第 2 個候選是 the",
             Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
             Self::CorpusTranscodes => "語料轉碼",
@@ -101,6 +104,9 @@ pub struct Report {
     pub language_model_sha256: String,
     pub radical_hint_sha256: String,
     pub simplifier_sha256: String,
+    pub english_sha256: String,
+    /// 英文詞表的建置統計；[`run`] 不算，由呼叫端填。
+    pub english: Option<english::Counts>,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
     /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
@@ -203,11 +209,15 @@ impl fmt::Display for Report {
         writeln!(f, "bigram sha256：{}", self.language_model_sha256)?;
         writeln!(f, "字根提示 sha256：{}", self.radical_hint_sha256)?;
         writeln!(f, "簡繁 sha256：{}", self.simplifier_sha256)?;
+        writeln!(f, "英文 sha256：{}", self.english_sha256)?;
         if let Some(lexicon) = &self.lexicon {
             writeln!(f, "{lexicon}")?;
         }
         if let Some(language_model) = &self.language_model {
             writeln!(f, "{language_model}")?;
+        }
+        if let Some(english) = &self.english {
+            writeln!(f, "{}", english_summary(english))?;
         }
         if let Some(u) = &self.unihan {
             writeln!(
@@ -230,7 +240,16 @@ impl fmt::Display for Report {
     }
 }
 
-/// 一次建置寫出的五份資料包的位元組。
+/// 英文詞表的統計一行；`cargo xtask data` 不驗證時也印。
+pub fn english_summary(c: &english::Counts) -> String {
+    format!(
+        "英文：詞幹 {} 個，禁忌詞 {} 個不收；展開 {} 個詞形，打不出（z、撇號、重音…）{} 個不收；\
+         依小寫歸併後收 {} 詞",
+        c.stems, c.taboo, c.forms, c.untypable, c.words
+    )
+}
+
+/// 一次建置寫出的六份資料包的位元組。
 #[derive(Debug, Clone, Copy)]
 pub struct PackBytes<'a> {
     pub quick: &'a [u8],
@@ -238,6 +257,7 @@ pub struct PackBytes<'a> {
     pub language_model: &'a [u8],
     pub radical_hint: &'a [u8],
     pub simplifier: &'a [u8],
+    pub english: &'a [u8],
 }
 
 /// `first` 是寫出的資料包，`second` 是由同樣的來源再建一次的結果。
@@ -249,6 +269,7 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
             sha256_hex(p.language_model),
             sha256_hex(p.radical_hint),
             sha256_hex(p.simplifier),
+            sha256_hex(p.english),
         )
     };
     let (first_sha256, second_sha256) = (sha256(first), sha256(second));
@@ -261,6 +282,8 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         language_model_sha256: first_sha256.2.clone(),
         radical_hint_sha256: first_sha256.3.clone(),
         simplifier_sha256: first_sha256.4.clone(),
+        english_sha256: first_sha256.5.clone(),
+        english: None,
         lexicon: None,
         language_model: None,
         checks: Vec::new(),
@@ -293,14 +316,20 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         id: CheckId::Deterministic,
         passed: first_sha256 == second_sha256,
         detail: format!(
-            "第二次速成 {}、詞庫 {}、bigram {}、字根提示 {}、簡繁 {}",
-            second_sha256.0, second_sha256.1, second_sha256.2, second_sha256.3, second_sha256.4
+            "第二次速成 {}、詞庫 {}、bigram {}、字根提示 {}、簡繁 {}、英文 {}",
+            second_sha256.0,
+            second_sha256.1,
+            second_sha256.2,
+            second_sha256.3,
+            second_sha256.4,
+            second_sha256.5
         ),
     });
     report
 }
 
-/// 解開的資料包；字根提示經殼用的 [`RadicalHints::for_scheme`] 取出，簡繁資料包掛在 `engine` 上。
+/// 解開的資料包；字根提示經殼用的 [`RadicalHints::for_scheme`] 取出，簡繁與英文資料包掛在
+/// `engine` 上。
 struct Decoded {
     pack: Pack,
     lexicon: Lexicon,
@@ -317,8 +346,10 @@ fn decode(bytes: PackBytes) -> Result<Decoded, qim_core::PackError> {
         &pack.scheme,
     )?;
     let simplifier = SimplifierPack::from_bytes(bytes.simplifier)?;
+    let english = EnglishPack::from_bytes(bytes.english)?;
     let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))?
-        .with_simplifier(simplifier);
+        .with_simplifier(simplifier)
+        .with_english(english);
     Ok(Decoded {
         pack,
         lexicon: lexicon.lexicon,
@@ -379,7 +410,7 @@ fn pack_checks(
             id: CheckId::Decodes,
             passed: true,
             detail: format!(
-                "格式版本 {}，速成、詞庫、bigram、字根提示與簡繁",
+                "格式版本 {}，速成、詞庫、bigram、字根提示、簡繁與英文",
                 qim_core::FORMAT_VERSION
             ),
         },
@@ -415,7 +446,28 @@ fn pack_checks(
         hint_coverage(&continuous, &extension, hints),
         hint_by_version(hints),
         simplified_men_kou(engine),
+        english_the(engine),
     ]);
+}
+
+/// 中文狀態（預設選項）經 `Session` 打 `the`，看第 2 個候選。
+fn english_the(engine: &Engine) -> Check {
+    let mut session = Session::default();
+    session.set_options(Options {
+        incognito: true,
+        ..Options::default()
+    });
+    let mut user = UserModel::default();
+    let mut candidates = Vec::new();
+    for c in "the".chars() {
+        candidates = session.handle(engine, &mut user, Key::Letter(c)).candidates;
+    }
+    let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
+    Check {
+        id: CheckId::EnglishThe,
+        passed: texts.get(1) == Some(&"the"),
+        detail: format!("第一頁：{}", texts.join(" ")),
+    }
 }
 
 /// 簡體模式經 `Session` 打 `anr`，看第一頁的候選。

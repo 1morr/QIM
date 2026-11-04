@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::Error;
 use crate::corpora::CORPORA;
 use crate::lexicon;
-use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, UNIHAN};
+use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, SCOWL, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
 
 /// 進資料包的一個來源。
@@ -38,6 +38,14 @@ pub(crate) const SIMPLIFIER: [PackedSource; 1] = [PackedSource {
     source_id: OPENCC,
     used: "data/dictionary/CJK_Compatibility_Ideographs.txt, TSPhrases.txt, TSCharacters.txt, \
            HKVariants.txt and HKVariantsRevPhrases.txt: the dictionaries of the hk2s configuration",
+}];
+
+/// 英文資料包：ESDB（SCOWL）的 Hunspell en_US 字典（plan §4.4）。
+pub(crate) const ENGLISH: [PackedSource; 1] = [PackedSource {
+    name: "ESDB (SCOWL)",
+    source_id: SCOWL,
+    used: "en_US.dic and en_US.aff in hunspell-en_US-2026.02.25.zip: the words of the size 60 \
+           American English speller dictionary",
 }];
 
 /// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。

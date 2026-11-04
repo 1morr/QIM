@@ -1,9 +1,10 @@
-//! QIM 的核心：輸入方案、資料包讀取（碼表、詞庫、語言模型、字根提示與簡繁）、候選與 `Session`。
+//! QIM 的核心：輸入方案、資料包讀取（碼表、詞庫、語言模型、字根提示、簡繁與英文）、候選與 `Session`。
 //!
 //! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
 
 mod code_table;
 mod engine;
+mod english;
 mod language_model;
 mod lattice;
 mod lexicon;
@@ -17,10 +18,11 @@ mod user;
 
 pub use code_table::{CodeEntry, CodeTable};
 pub use engine::Engine;
+pub use english::EnglishWords;
 pub use language_model::{CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
 pub use pack::{
-    FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError, RadicalHintPack,
+    EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError, RadicalHintPack,
     SimplifierPack,
 };
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};

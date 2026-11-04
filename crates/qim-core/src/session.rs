@@ -9,15 +9,33 @@ use crate::{Engine, UserModel, punctuation};
 pub const PAGE_SIZE: usize = 9;
 
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
     /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體（plan §2.2 的後處理）；
     /// 引擎要掛上簡繁資料包（[`Engine::with_simplifier`]）。
     pub simplified: bool,
     /// 無痕模式：不寫任何學習資料（plan §2.4）。
     pub incognito: bool,
-    /// 英文候選（M1 票 15）；還沒有作用。
+    /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
+    /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
+}
+
+impl Options {
+    /// 兩份選項列出的候選相同：無痕只影響學習。
+    fn lists_like(&self, other: &Options) -> bool {
+        self.simplified == other.simplified && self.english_candidates == other.english_candidates
+    }
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            simplified: false,
+            incognito: false,
+            english_candidates: true,
+        }
+    }
 }
 
 /// 殼轉過來的按鍵。
@@ -167,8 +185,8 @@ pub struct Session {
     focus: Option<usize>,
     /// 目前的全部候選，已經過後處理：有目前分段時是那一段的碼的，否則是剩下的輸入碼的。
     candidates: Vec<ShownCandidate>,
-    /// `candidates` 是在簡體模式下列的；和選項不同時下一個鍵先重列。
-    candidates_simplified: bool,
+    /// 列 `candidates` 時的選項；影響候選的選項不同時下一個鍵先重列。
+    listed_with: Options,
     /// 目前頁，從 0 起。
     page: usize,
     generation: u64,
@@ -219,7 +237,7 @@ impl Session {
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
-        if self.candidates_simplified != self.options.simplified && self.composing() {
+        if !self.listed_with.lists_like(&self.options) && self.composing() {
             self.refresh_candidates(engine, user);
         }
         let snapshot = self.handle_key(engine, user, key);
@@ -385,9 +403,14 @@ impl Session {
             commit.original.push_str(&choice.text);
             segments.extend(owned_segments(&rest, &choice));
             rest.drain(..choice.len);
-            top = lattice::candidates(engine, user, &Lattice::from_input(engine, user, &rest))
-                .into_iter()
-                .next();
+            top = lattice::candidates(
+                engine,
+                user,
+                &Lattice::from_input(engine, user, &rest),
+                false,
+            )
+            .into_iter()
+            .next();
         }
         if raw.is_empty() {
             self.learn(engine, user, &segments);
@@ -482,6 +505,14 @@ impl Session {
         let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
             return self.snapshot(engine, true, None);
         };
+        // 英文候選蓋住剩下的整串（分段的候選列沒有它）：和 Enter 一樣，選定的分段上屏字詞、
+        // 其餘上屏英文字，整次不學也不造詞（plan §2.4）。
+        if choice.english {
+            let mut commit = self.selected_commit(engine);
+            commit.text.push_str(&choice.text);
+            commit.original.push_str(&choice.text);
+            return self.commit(engine, commit);
+        }
         let segments = self.segments();
         // 分段在 `Session` 裡記原文（繁體），學習用；顯示與上屏時再轉換。
         // 候選列的是從第 `at` 段起的 `code`，`after` 是它後面的輸入碼。
@@ -551,14 +582,22 @@ impl Session {
     }
 
     /// 輸入碼、目前分段或選項變了：重列候選、回到第一頁。目前分段的候選從頭建，和單打它的碼
-    /// 相同。後處理（plan §2.2）在排序之後：簡體模式轉成簡體，轉換後文字重複的只留第一個。
+    /// 相同，但沒有英文候選：它只給剩下的整串輸入碼。後處理（plan §2.2）在排序之後：簡體模式
+    /// 轉成簡體，轉換後文字重複的只留第一個。
     fn refresh_candidates(&mut self, engine: &Engine, user: &UserModel) {
         let spans = match self.focus {
             Some(i) => {
                 let code = &self.segments()[i].code;
-                lattice::candidates(engine, user, &Lattice::from_input(engine, user, code))
+                lattice::candidates(
+                    engine,
+                    user,
+                    &Lattice::from_input(engine, user, code),
+                    false,
+                )
             }
-            None => lattice::candidates(engine, user, &self.lattice),
+            None => {
+                lattice::candidates(engine, user, &self.lattice, self.options.english_candidates)
+            }
         };
         // 排序時已去掉原文重複的，沒轉換的不必再比。
         let mut seen = HashSet::new();
@@ -570,7 +609,7 @@ impl Session {
             })
             .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
             .collect();
-        self.candidates_simplified = self.options.simplified;
+        self.listed_with = self.options;
         self.page = 0;
         self.generation += 1;
     }
