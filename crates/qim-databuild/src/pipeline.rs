@@ -127,7 +127,7 @@ pub struct Outcome {
 /// `build/packs/<字根提示 id>/`、OpenCC 的字典建簡繁資料包到 `build/packs/opencc-hk2s/`、
 /// ESDB 的 Hunspell 字典建英文資料包到 `build/packs/scowl-en-us/`；
 /// 每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
-/// 另把預設 Gboard 速成佈局寫到 `build/layouts/`。
+/// 另把預設 Gboard 速成佈局（數字列關與開兩份）寫到 `build/layouts/`。
 /// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     let read = |rel: &str| {
@@ -417,6 +417,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     std::fs::create_dir_all(&layouts).map_err(Error::io(&layouts))?;
     let layout_path = layouts.join(gboard::FILE);
     write(layout_path.clone(), gboard::layout().to_json().as_bytes())?;
+    write(
+        layouts.join(gboard::NUMBER_ROW_FILE),
+        gboard::number_row_layout().to_json().as_bytes(),
+    )?;
 
     let personal = build_personal(root, &transcoder)?;
     if verify {

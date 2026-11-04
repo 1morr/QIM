@@ -757,6 +757,16 @@ fn writes_the_default_gboard_layout_for_the_web() {
         qim_layout::Layout::from_json(&text).unwrap(),
         qim_databuild::gboard::layout()
     );
+    // 數字列打開時讀的那份放在旁邊（M1 票 27）。
+    let number_row = std::fs::read_to_string(
+        root.path()
+            .join("build/layouts/gboard-quick-number-row.json"),
+    )
+    .unwrap();
+    assert_eq!(
+        qim_layout::Layout::from_json(&number_row).unwrap(),
+        qim_databuild::gboard::number_row_layout()
+    );
 }
 
 #[test]

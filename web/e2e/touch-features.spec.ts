@@ -75,17 +75,36 @@ test("長按字母鍵彈出英文字母，放開上屏預設的那個", async ({
 	await expect(page.getByTestId("composition")).toHaveText("");
 });
 
-test("長按第一排另含數字，滑到數字放開上屏數字", async ({ page }, testInfo) => {
+// 使用者 2026-11-05 決定（M1 票 27）：長按只出字母，數字改由設定的數字列。
+test("長按第一排的 q 只有字母、沒有數字", async ({ page }) => {
 	const hand = await finger(page);
 	const popup = page.getByTestId("long-press");
 	await hand.down(...(await centre(page, "key-q")));
-	await expect(popup.getByRole("option")).toHaveText(["q", "1"]);
-	const [x, y] = await centre(page, "long-press-1");
-	await hand.move(x, y);
-	await expect(popup.getByRole("option", { selected: true })).toHaveText("1");
-	await page.screenshot({ path: testInfo.outputPath("long-press-q-1.png") });
+	await expect(popup.getByRole("option")).toHaveText(["q"]);
 	await hand.up();
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("1");
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("q");
+});
+
+test("數字列預設關；打開後字母頁上方多一排數字，點「1」輸入 1，關掉就不見", async ({
+	page,
+}, testInfo) => {
+	const numberRow = page.getByRole("checkbox", { name: "數字列" });
+	await expect(numberRow).not.toBeChecked();
+	await expect(page.getByTestId("key-1")).toHaveCount(0);
+	const keyboard = page.getByTestId("keyboard");
+	const before = await keyboard.boundingBox();
+	await numberRow.check();
+	await tapKeys(page, ["1", "a", "space"]);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
+		"1日",
+	);
+	const after = await keyboard.boundingBox();
+	expect(after?.height).toBeGreaterThan(before?.height ?? Infinity);
+	await page.screenshot({ path: testInfo.outputPath("number-row.png") });
+	await numberRow.uncheck();
+	await expect(page.getByTestId("key-1")).toHaveCount(0);
+	await tapKeys(page, ["a"]);
+	await expect(page.getByTestId("composition")).toHaveText("日");
 });
 
 test("組字中長按選字母：先上屏組字再接字母", async ({ page }) => {
@@ -349,7 +368,6 @@ test("點候選選字之後，長按與放大預覽照常", async ({ page }) => 
 	await hand.down(...(await centre(page, "key-q")));
 	await expect(page.getByTestId("long-press").getByRole("option")).toHaveText([
 		"q",
-		"1",
 	]);
 	await hand.up();
 	await expect(page.getByTestId("long-press")).toBeHidden();

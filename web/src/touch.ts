@@ -6,6 +6,8 @@ export interface Keyboard {
 	refresh(): void;
 	/** 佈局版本換了（轉向）時整個重畫。 */
 	relayout(): void;
+	/** 換一份佈局（例如打開數字列），整個重畫；舊的由呼叫端釋放。 */
+	setLayout(layout: Layout): void;
 }
 
 /** 按住多久算長按。 */
@@ -39,11 +41,12 @@ function themed(light: string | undefined, dark: string | undefined) {
  */
 export function mountKeyboard(
 	container: HTMLElement,
-	layout: Layout,
+	initialLayout: Layout,
 	session: Session,
 	onSnapshot: (snapshot: Snapshot) => void,
 	onUnhandled: (snapshot: Snapshot) => void,
 ): Keyboard {
+	let layout = initialLayout;
 	let keys: LayoutKey[] = [];
 	let elements: HTMLElement[] = [];
 	let press: Press | undefined;
@@ -314,5 +317,9 @@ export function mountKeyboard(
 			});
 		},
 		relayout: render,
+		setLayout(next) {
+			layout = next;
+			render();
+		},
 	};
 }

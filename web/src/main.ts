@@ -26,6 +26,8 @@ const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
 const ENGLISH_URL = "/packs/scowl-en-us/scowl-en-us.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
+/** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief §4.4）。 */
+const NUMBER_ROW_LAYOUT_URL = "/layouts/gboard-quick-number-row.json";
 
 const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
@@ -41,6 +43,7 @@ const englishCandidates = element<HTMLInputElement>("#english-candidates");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const darkToggle = element<HTMLButtonElement>("#dark-toggle");
+const numberRow = element<HTMLInputElement>("#number-row");
 const reportButton = element<HTMLButtonElement>("#report");
 const reports = element<HTMLTextAreaElement>("#reports");
 const copyReports = element<HTMLButtonElement>("#copy-reports");
@@ -409,6 +412,7 @@ async function start(): Promise<void> {
 		simplifier,
 		english,
 		layoutJson,
+		numberRowLayoutJson,
 	] = await Promise.all([
 		init(),
 		loadPack(PACK_URL),
@@ -418,6 +422,7 @@ async function start(): Promise<void> {
 		loadPack(SIMPLIFIER_URL),
 		loadPack(ENGLISH_URL),
 		load(LAYOUT_URL).then((response) => response.text()),
+		load(NUMBER_ROW_LAYOUT_URL).then((response) => response.text()),
 	]);
 	const session = new Session(
 		pack,
@@ -508,10 +513,19 @@ async function start(): Promise<void> {
 		applyEnglishCandidates();
 		text.focus();
 	});
-	const layout = new Layout(layoutJson, device(), orientation());
-	for (const warning of layout.warnings) {
-		console.warn(`佈局：${warning}`);
-	}
+	/** 依「數字列」開關讀佈局，選目前裝置與方向的版本。 */
+	const readLayout = (): Layout => {
+		const read = new Layout(
+			numberRow.checked ? numberRowLayoutJson : layoutJson,
+			device(),
+			orientation(),
+		);
+		for (const warning of read.warnings) {
+			console.warn(`佈局：${warning}`);
+		}
+		return read;
+	};
+	let layout = readLayout();
 	touchKeyboard = mountKeyboard(
 		keyboard,
 		layout,
@@ -531,6 +545,13 @@ async function start(): Promise<void> {
 			}
 			mounted.relayout();
 		});
+	numberRow.addEventListener("change", () => {
+		const old = layout;
+		layout = readLayout();
+		mounted.setLayout(layout);
+		old.free();
+		text.focus();
+	});
 	// 頁面底部留出鍵盤實際的高度，鍵盤才不會蓋住輸入框；高度隨佈局版本的畫布比例與寬度變。
 	new ResizeObserver(([entry]) => {
 		document.body.style.setProperty(

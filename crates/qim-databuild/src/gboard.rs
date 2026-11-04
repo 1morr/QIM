@@ -12,6 +12,8 @@ use qim_layout::{
 
 /// 寫到 `build/layouts/` 的檔名。
 pub const FILE: &str = "gboard-quick.json";
+/// 數字列打開時的佈局（[`number_row_layout`]）。
+pub const NUMBER_ROW_FILE: &str = "gboard-quick-number-row.json";
 
 /// 頁的 id。
 pub const LETTERS: &str = "letters";
@@ -109,14 +111,13 @@ impl Cell {
     }
 }
 
-/// 字母鍵：角標是字母，長按出英文字母（brief §4.4）；`digit` 是第一排長按另含的數字。
-fn letter(c: char, digit: Option<char>) -> Cell {
-    let mut cell = Cell::new(&c.to_string(), Action::Letter(c), 1.0, None);
+/// 字母鍵：角標是字母，長按只出英文字母（brief §4.4）。標籤省略時用方案的字根；
+/// 方案沒有字根的鍵（`z`）照 Gboard 寫死。
+fn letter(c: char) -> Cell {
+    let label = (c == 'z').then_some("重");
+    let mut cell = Cell::new(&c.to_string(), Action::Letter(c), 1.0, label);
     cell.hint = Some(c.to_string());
-    cell.long_press = std::iter::once(c)
-        .chain(digit)
-        .map(|c| Action::Text(c.to_string()))
-        .collect();
+    cell.long_press = vec![Action::Text(c.to_string())];
     cell
 }
 
@@ -164,18 +165,13 @@ fn bottom_row(switch_to: Cell) -> Row {
 
 /// 字母頁照 Gboard：QWERTY 三排，第二排錯開半鍵；第三排左邊留給之後的分隔鍵，右邊是刪除。
 fn letters_page() -> Vec<Row> {
-    let first = "qwertyuiop"
-        .chars()
-        .zip("1234567890".chars())
-        .map(|(c, digit)| letter(c, Some(digit)))
-        .collect();
-    let row = |row: &str| row.chars().map(|c| letter(c, None)).collect::<Vec<_>>();
+    let row = |row: &str| row.chars().map(letter).collect::<Vec<_>>();
     let mut third = row("zxcvbnm");
     third.push(backspace());
     vec![
         Row {
             indent: 0.0,
-            cells: first,
+            cells: row("qwertyuiop"),
         },
         Row {
             indent: 0.5,
@@ -235,12 +231,13 @@ fn phrases_page() -> Vec<Row> {
     ]
 }
 
-/// 依 `geometry` 把排列算成一頁按鍵。
-fn page(id: &str, rows: Vec<Row>, geometry: &Geometry) -> Page {
+/// 依 `geometry` 把排列算成一頁按鍵；各排平分畫布高 `height`。
+fn page(id: &str, rows: Vec<Row>, geometry: &Geometry, height: f64) -> Page {
     let unit = geometry.width / UNITS_PER_ROW;
+    let row_height = height / rows.len() as f64;
     let mut keys = Vec::new();
     for (index, row) in rows.into_iter().enumerate() {
-        let top = index as f64 * geometry.row_height;
+        let top = index as f64 * row_height;
         let mut left = row.indent * unit;
         for cell in row.cells {
             let width = cell.units * unit;
@@ -250,7 +247,7 @@ fn page(id: &str, rows: Vec<Row>, geometry: &Geometry) -> Page {
                     x: left + geometry.gap_x,
                     y: top + geometry.gap_y,
                     w: width - 2.0 * geometry.gap_x,
-                    h: geometry.row_height - 2.0 * geometry.gap_y,
+                    h: row_height - 2.0 * geometry.gap_y,
                 },
                 rotate: 0.0,
                 z: 0,
@@ -276,10 +273,25 @@ fn page(id: &str, rows: Vec<Row>, geometry: &Geometry) -> Page {
     }
 }
 
-/// 每頁都是四排。
-const ROWS: f64 = 4.0;
+/// 字母頁上方要不要多一排數字（brief §4.4 的數字列，同 Gboard 的 Number row）。
+#[derive(Clone, Copy, PartialEq)]
+enum NumberRow {
+    Off,
+    On,
+}
 
-fn variant(geometry: &Geometry) -> LayoutVariant {
+fn variant(geometry: &Geometry, number_row: NumberRow) -> LayoutVariant {
+    let mut letters = letters_page();
+    if number_row == NumberRow::On {
+        letters.insert(
+            0,
+            Row {
+                indent: 0.0,
+                cells: texts("1 2 3 4 5 6 7 8 9 0"),
+            },
+        );
+    }
+    let height = letters.len() as f64 * geometry.row_height;
     LayoutVariant {
         when: When {
             device: Device::Phone,
@@ -287,22 +299,34 @@ fn variant(geometry: &Geometry) -> LayoutVariant {
         },
         canvas: Size {
             width: geometry.width,
-            height: ROWS * geometry.row_height,
+            height,
         },
         grid: None,
         initial_page: None,
         pages: vec![
-            page(LETTERS, letters_page(), geometry),
-            page(SYMBOLS, symbols_page(), geometry),
-            page(PHRASES, phrases_page(), geometry),
+            page(LETTERS, letters, geometry, height),
+            page(SYMBOLS, symbols_page(), geometry, height),
+            page(PHRASES, phrases_page(), geometry, height),
         ],
     }
 }
 
-/// 預設的 Gboard 速成佈局：手機直向與橫向。
-pub fn layout() -> Layout {
+fn build(number_row: NumberRow) -> Layout {
     Layout {
         format: FORMAT.into(),
-        variants: vec![variant(&PORTRAIT), variant(&LANDSCAPE)],
+        variants: vec![
+            variant(&PORTRAIT, number_row),
+            variant(&LANDSCAPE, number_row),
+        ],
     }
+}
+
+/// 預設的 Gboard 速成佈局：手機直向與橫向，數字列關（Gboard 的預設）。
+pub fn layout() -> Layout {
+    build(NumberRow::Off)
+}
+
+/// 同 [`layout`]，字母頁上方多一排數字；設定打開數字列時殼改讀這份（[`NUMBER_ROW_FILE`]）。
+pub fn number_row_layout() -> Layout {
+    build(NumberRow::On)
 }

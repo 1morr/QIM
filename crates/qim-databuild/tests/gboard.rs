@@ -141,7 +141,9 @@ fn letter_keys_carry_the_letter_as_hint_and_leave_the_label_to_the_scheme() {
     for variant in &layout().variants {
         for key in &page(variant, gboard::LETTERS).keys {
             if let Action::Letter(c) = key.tap {
-                assert_eq!(key.label, None, "{}", key.id);
+                if c != 'z' {
+                    assert_eq!(key.label, None, "{}", key.id);
+                }
                 assert_eq!(key.hint.as_deref(), Some(c.to_string().as_str()));
             }
         }
@@ -149,20 +151,29 @@ fn letter_keys_carry_the_letter_as_hint_and_leave_the_label_to_the_scheme() {
 }
 
 #[test]
-fn long_press_on_a_letter_types_the_english_letter_and_the_first_row_also_the_digit() {
-    // brief §4.4：長按字母鍵彈出英文字母（直接輸入，不經組字）；第一排另含數字。
+fn long_press_on_a_letter_types_only_the_english_letter() {
+    // brief §4.4：長按字母鍵只彈出英文字母（直接輸入，不經組字）；數字改由數字列（M1 票 27）。
     let text = |s: &str| Action::Text(s.into());
     for variant in &layout().variants {
         let page = page(variant, gboard::LETTERS);
-        assert_eq!(key(page, "q").long_press, [text("q"), text("1")]);
-        assert_eq!(key(page, "p").long_press, [text("p"), text("0")]);
-        assert_eq!(key(page, "a").long_press, [text("a")]);
-        assert_eq!(key(page, "m").long_press, [text("m")]);
+        assert_eq!(key(page, "q").long_press, [text("q")]);
+        assert_eq!(key(page, "p").long_press, [text("p")]);
         for key in &page.keys {
             if let Action::Letter(c) = key.tap {
-                assert_eq!(key.long_press.first(), Some(&text(&c.to_string())));
+                assert_eq!(key.long_press, [text(&c.to_string())], "{}", key.id);
             }
         }
+    }
+}
+
+/// `z` 照 Gboard 標「重」：方案沒有它的字根，不寫的話標籤會是字母（M1 票 27）。
+#[test]
+fn z_is_labelled_like_gboard() {
+    for variant in &layout().variants {
+        let z = key(page(variant, gboard::LETTERS), "z");
+        assert_eq!(z.label.as_deref(), Some("重"));
+        assert_eq!(z.hint.as_deref(), Some("z"));
+        assert_eq!(z.tap, Action::Letter('z'));
     }
 }
 
@@ -235,4 +246,36 @@ fn glyph_labelled_edit_keys_have_spoken_accessibility_labels_on_every_page() {
     }
     let letters = &layout().variants[0].pages[0];
     assert_eq!(key(letters, "a").a11y_label, None);
+}
+
+/// 數字列（brief §4.4、§7，同 Gboard 的 Number row）：另一份佈局，字母頁上方多一排數字，
+/// 點一下直接輸入數字；其他排不變（M1 票 27）。
+#[test]
+fn number_row_layout_adds_a_row_of_digits_above_the_letters() {
+    assert_eq!(check_builtin(&gboard::number_row_layout().to_json()), []);
+    let plain = layout();
+    let with_row = Layout::from_json(&gboard::number_row_layout().to_json()).unwrap();
+    for (plain, with_row) in plain.variants.iter().zip(&with_row.variants) {
+        assert_eq!(plain.when, with_row.when);
+        assert_eq!(plain.canvas.width, with_row.canvas.width);
+        assert!(with_row.canvas.height > plain.canvas.height);
+        let letters = page(with_row, gboard::LETTERS);
+        let digits: Vec<&str> = "1234567890".split("").filter(|s| !s.is_empty()).collect();
+        for pair in digits.windows(2) {
+            let (left, right) = (frame(letters, pair[0]), frame(letters, pair[1]));
+            assert_eq!(left.y, right.y, "{pair:?}");
+            assert!(left.x < right.x, "{pair:?}");
+        }
+        for digit in &digits {
+            assert_eq!(key(letters, digit).tap, Action::Text((*digit).into()));
+            assert!(frame(letters, digit).y < frame(letters, "q").y);
+        }
+        // 只多了數字列：字母鍵的數量與其他頁的 id 不變。
+        assert_eq!(
+            letters.keys.len(),
+            page(plain, gboard::LETTERS).keys.len() + 10
+        );
+        let ids = |v: &LayoutVariant| v.pages.iter().map(|p| p.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(plain), ids(with_row));
+    }
 }
