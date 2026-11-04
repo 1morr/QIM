@@ -17,6 +17,8 @@ const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
 const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
 /** 速成方案檔 `[packs]` 指名的字根提示資料包（倉頡三代 / 五代碼）。 */
 const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
+/** 簡繁資料包（OpenCC `hk2s`），簡體模式用。 */
+const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 
@@ -33,6 +35,7 @@ const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
+const simplified = element<HTMLInputElement>("#simplified");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const darkToggle = element<HTMLButtonElement>("#dark-toggle");
@@ -98,6 +101,8 @@ let page = 0;
 const shown = {
 	composing: false,
 	candidates: [] as string[],
+	/** 候選的繁體原文，字根提示用：簡體模式下要提示的是打得出的繁體字。 */
+	originals: [] as string[],
 	/** 候選旁顯示字根提示；組字結束就關掉（brief §4.3）。 */
 	hints: false,
 };
@@ -148,6 +153,7 @@ function render(snapshot: Snapshot): void {
 	}
 	page = snapshot.page;
 	shown.candidates = snapshot.candidates;
+	shown.originals = snapshot.candidatesOriginal;
 	if (!shown.composing) {
 		shown.hints = false;
 	}
@@ -163,7 +169,7 @@ function renderCandidates(): void {
 			index.className = "index";
 			index.textContent = String(i + 1);
 			item.append(index, candidate);
-			const text = shown.hints ? hintText(candidate) : "";
+			const text = shown.hints ? hintText(shown.originals[i] ?? candidate) : "";
 			if (text !== "") {
 				const hint = document.createElement("span");
 				hint.className = "radical-hint";
@@ -215,13 +221,16 @@ function applyHandled(snapshot: Snapshot, chosen: boolean): void {
 	}
 }
 
-/** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
+/**
+ * `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。
+ * 候選與上屏取繁體原文：`fixed.tsv` 的期望首選是繁體，簡體模式下也一樣。
+ */
 function readReported(snapshot: Snapshot) {
 	return {
 		input: snapshot.input,
 		selected: snapshot.selected,
-		candidates: snapshot.candidates,
-		commit: snapshot.commit,
+		candidates: snapshot.candidatesOriginal,
+		commit: snapshot.commitOriginal,
 	};
 }
 
@@ -302,16 +311,17 @@ function setTouch(on: boolean): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon, languageModel, radicalHint, layoutJson] =
+	const [, pack, lexicon, languageModel, radicalHint, simplifier, layoutJson] =
 		await Promise.all([
 			init(),
 			loadPack(PACK_URL),
 			loadPack(LEXICON_URL),
 			loadPack(LANGUAGE_MODEL_URL),
 			loadPack(RADICAL_HINT_URL),
+			loadPack(SIMPLIFIER_URL),
 			load(LAYOUT_URL).then((response) => response.text()),
 		]);
-	const session = new Session(pack, lexicon, languageModel);
+	const session = new Session(pack, lexicon, languageModel, simplifier);
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
 	// 點候選選字，長按叫出字根提示（brief §4.4）：放開時還沒到長按的門檻才選字。
@@ -349,6 +359,21 @@ async function start(): Promise<void> {
 	session.setIncognito(incognito.checked);
 	incognito.addEventListener("change", () => {
 		session.setIncognito(incognito.checked);
+		text.focus();
+	});
+	// 組字中切換也立刻重列候選。
+	const applySimplified = (): void => {
+		const snapshot = session.setSimplified(simplified.checked);
+		try {
+			// 切換不是選字。
+			apply(snapshot, false);
+		} finally {
+			snapshot.free();
+		}
+	};
+	applySimplified();
+	simplified.addEventListener("change", () => {
+		applySimplified();
 		text.focus();
 	});
 	const layout = new Layout(layoutJson, device(), orientation());
