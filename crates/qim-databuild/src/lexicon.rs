@@ -156,11 +156,11 @@ fn combinations(per_char: &[&[&str]]) -> (BTreeSet<String>, bool) {
     (codes, false)
 }
 
-/// 各語料 train 切分的字頻（`build/corpus/<名>/chars.tsv`，一行「字<TAB>次數」）直接相加。
-/// 口語語料的權重留給票 12。
-pub fn char_frequency(tables: &[&str]) -> Result<BTreeMap<char, u64>, Error> {
+/// 各語料 train 切分的字頻（`build/corpus/<名>/chars.tsv`，一行「字<TAB>次數」）乘上語料的
+/// 權重再相加；權重和 bigram 的次數用同一個（`corpora.rs` 的 `weight`，plan §4.3）。
+pub fn char_frequency(tables: &[(&str, u64)]) -> Result<BTreeMap<char, u64>, Error> {
     let mut total = BTreeMap::new();
-    for table in tables {
+    for &(table, weight) in tables {
         for (i, line) in table.lines().enumerate() {
             let parsed = line.split_once('\t').and_then(|(ch, count)| {
                 let mut chars = ch.chars();
@@ -172,7 +172,7 @@ pub fn char_frequency(tables: &[&str]) -> Result<BTreeMap<char, u64>, Error> {
             let (ch, count) = parsed.ok_or_else(|| {
                 Error::invalid(format!("chars.tsv 第 {} 行", i + 1), "應是「字<TAB>次數」")
             })?;
-            *total.entry(ch).or_insert(0) += count;
+            *total.entry(ch).or_insert(0) += count * weight;
         }
     }
     Ok(total)

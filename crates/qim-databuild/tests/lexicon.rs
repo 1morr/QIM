@@ -126,11 +126,12 @@ fn combinations_spelling_the_same_code_count_once_toward_the_limit() {
 }
 
 #[test]
-fn character_frequency_from_every_corpus_is_summed_into_the_lexicon() {
-    let frequency = lexicon::char_frequency(&["日\t3\n口\t1\n", "日\t2\n"]).unwrap();
-    assert_eq!(frequency, BTreeMap::from([('日', 5), ('口', 1)]));
+fn character_frequency_from_every_corpus_is_weighted_and_summed_into_the_lexicon() {
+    // 第二份語料權重 10，和 bigram 的次數乘同一個權重（corpora.rs 的 `weight`）。
+    let frequency = lexicon::char_frequency(&[("日\t3\n口\t1\n", 1), ("日\t2\n", 10)]).unwrap();
+    assert_eq!(frequency, BTreeMap::from([('日', 23), ('口', 1)]));
     let (lexicon, _) = build_with("門口\t9435\n", frequency);
-    assert_eq!(lexicon.char_frequency('日'), 5);
+    assert_eq!(lexicon.char_frequency('日'), 23);
     assert_eq!(lexicon.char_frequency('門'), 0);
 }
 
@@ -143,5 +144,5 @@ fn malformed_lines_are_errors() {
         let err = lexicon::build(essay, &code_table, &transcoder, BTreeMap::new()).unwrap_err();
         assert!(err.to_string().contains("第 1 行"), "{essay:?}：{err}");
     }
-    assert!(lexicon::char_frequency(&["日 3\n"]).is_err());
+    assert!(lexicon::char_frequency(&[("日 3\n", 1)]).is_err());
 }

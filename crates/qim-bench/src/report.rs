@@ -3,23 +3,17 @@
 
 use crate::baseline::SetBaseline;
 use crate::score::{LENGTH_GROUPS, Metrics, SetResult};
-use crate::{Latency, Outcome, PERSONAL, PERSONAL_USERDB, Personal, WASM_BINDINGS};
+use crate::{
+    DevOutcome, Latency, LoadedPack, Outcome, PERSONAL, PERSONAL_USERDB, Personal, SHORT_INPUTS,
+    WASM_BINDINGS,
+};
 
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
 
 pub fn render(outcome: &Outcome) -> String {
-    // 前 12 碼足以分辨；`cargo xtask data` 印的是完整 sha256，開頭對得上就是同一份。
-    let packs: Vec<String> = outcome
-        .packs
-        .iter()
-        .map(|p| format!("{}（sha256 {}）", p.path, &p.sha256[..12]))
-        .collect();
-    let mut out = format!("資料包 {}\n\n", packs.join("、"));
-    out.push_str(
-        "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 | 修正/句 | 修正 | baseline 修正 | KSPC | 跳動/句 | 打不出 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
-    );
+    let mut out = packs_line(&outcome.packs);
+    out.push_str(METRICS_HEADER);
     out.push_str(&row(&outcome.fixed, None));
     for set in outcome.scored_sets() {
         out.push_str(&row(set, outcome.baseline_of(set)));
@@ -36,29 +30,7 @@ pub fn render(outcome: &Outcome) -> String {
             "\n個人集：{PERSONAL} 不是由現在的 {PERSONAL_USERDB} 轉出（還沒轉，或資料換過），跳過；先跑 `cargo xtask data`\n"
         )),
     }
-
-    out.push_str("\n依長度分組（整句首選正確率 · 修正/句（題數））\n\n| 集合 |");
-    for (_, label) in LENGTH_GROUPS {
-        out.push_str(&format!(" {label} |"));
-    }
-    out.push_str("\n| --- |");
-    out.push_str(&" ---: |".repeat(LENGTH_GROUPS.len()));
-    out.push('\n');
-    for set in outcome.scored_sets() {
-        out.push_str(&format!("| {} |", set.name));
-        for group in set.length_groups() {
-            match group {
-                Some(g) => out.push_str(&format!(
-                    " {} · {:.2}（{}） |",
-                    percent(g.sentence_accuracy),
-                    g.correction_count,
-                    g.total
-                )),
-                None => out.push_str(" — |"),
-            }
-        }
-        out.push('\n');
-    }
+    out.push_str(&length_groups(outcome.scored_sets()));
 
     out.push_str("\n翻盤清單（和 baseline 比）\n");
     for set in outcome.scored_sets() {
@@ -106,6 +78,81 @@ pub fn render(outcome: &Outcome) -> String {
         out.push_str(&format!("- 沒過：{failure}\n"));
     }
     out.push_str(&latency(&outcome.latency));
+    out
+}
+
+/// dev 模式：打分參數、指標表（沒有 baseline 欄的值）、依長度分組；不比 baseline，沒有翻盤與延遲。
+pub fn render_dev(outcome: &DevOutcome) -> String {
+    let r = &outcome.ranking;
+    let mut out = packs_line(&outcome.packs);
+    out.push_str(&format!(
+        "dev 切分；打分參數 word_bonus = {}、segment_penalty = {}、beam = {}、sentences = {}\n\n",
+        r.word_bonus, r.segment_penalty, r.beam, r.sentences
+    ));
+    out.push_str(METRICS_HEADER);
+    out.push_str(&row(&outcome.fixed, None));
+    for set in &outcome.sets {
+        out.push_str(&row(set, None));
+        // 短輸入依出現次數加權，才是照語料打時的首選正確率。
+        if is_short(set) {
+            out.push_str(&weighted_row(set));
+        }
+    }
+    // 短輸入都在 1–4 字的組，分組沒有什麼可看。
+    out.push_str(&length_groups(outcome.sets.iter().filter(|s| !is_short(s))));
+    let fixed = &outcome.fixed;
+    out.push_str(&format!(
+        "\n固定題 {}/{} 通過\n",
+        fixed.correct(),
+        fixed.total()
+    ));
+    for failure in &fixed.failures {
+        out.push_str(&format!("- 沒過：{failure}\n"));
+    }
+    out
+}
+
+/// dev 模式由句子取出的短輸入集合（[`SHORT_INPUTS`]）。
+fn is_short(set: &SetResult) -> bool {
+    SHORT_INPUTS.iter().any(|suffix| set.name.ends_with(suffix))
+}
+
+const METRICS_HEADER: &str = "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 | 修正/句 | 修正 | baseline 修正 | KSPC | 跳動/句 | 打不出 |\n\
+     | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n";
+
+/// 資料包與 sha256 的前 12 碼：足以分辨；`cargo xtask data` 印的是完整 sha256，開頭對得上就是同一份。
+fn packs_line(packs: &[LoadedPack]) -> String {
+    let packs: Vec<String> = packs
+        .iter()
+        .map(|p| format!("{}（sha256 {}）", p.path, &p.sha256[..12]))
+        .collect();
+    format!("資料包 {}\n\n", packs.join("、"))
+}
+
+/// 依長度分組表：每格「整句首選正確率 · 修正/句（題數）」。
+fn length_groups<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {
+    let mut out = String::from("\n依長度分組（整句首選正確率 · 修正/句（題數））\n\n| 集合 |");
+    for (_, label) in LENGTH_GROUPS {
+        out.push_str(&format!(" {label} |"));
+    }
+    out.push_str("\n| --- |");
+    out.push_str(&" ---: |".repeat(LENGTH_GROUPS.len()));
+    out.push('\n');
+    for set in sets {
+        out.push_str(&format!("| {} |", set.name));
+        for group in set.length_groups() {
+            match group {
+                Some(g) => out.push_str(&format!(
+                    " {} · {:.2}（{}） |",
+                    percent(g.sentence_accuracy),
+                    g.correction_count,
+                    g.total
+                )),
+                None => out.push_str(" — |"),
+            }
+        }
+        out.push('\n');
+    }
     out
 }
 

@@ -141,7 +141,7 @@ impl fmt::Display for LexiconSummary {
             f,
             "詞庫：rime-essay {} 列，單字 {} 列不收；詞頻 < {} 濾掉 {} 詞、含連打字集以外的字濾掉 {} 詞；\
              收 {} 詞，碼 {} 個、詞條 {} 個（{} 詞的碼組合超過 {} 個，只收前 {} 個）\n\
-             字頻：{} 字（各語料 train 切分相加）",
+             字頻：{} 字（各語料 train 切分乘上權重相加）",
             c.entries,
             c.single_characters,
             lexicon::MIN_FREQUENCY,

@@ -16,7 +16,8 @@ use sha2::{Digest, Sha256};
 
 use crate::transcode::Transcoder;
 
-/// 每個語料進 `bench/` 的 test 句數上限：句子進 git，夠量出正確率的變化就好。
+/// 每個語料進 `bench/` 的 test 句數上限：句子進 git，夠量出正確率的變化就好。dev 切分的調參題
+/// （`build/corpus/<名>/dev.tsv`）用同樣的上限與取法。
 pub const BENCH_SENTENCES: usize = 2000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,12 +59,13 @@ pub struct Counts {
     pub dropped: usize,
 }
 
-/// 一句一行寫出 train 與 dev，留下 test 句最後取樣。
+/// 一句一行寫出 train 與 dev，留下 test 與 dev 的不重複句最後取樣。
 pub struct Builder<'t, W> {
     transcoder: &'t Transcoder,
     train: W,
     dev: W,
     test: HashSet<String>,
+    dev_sentences: HashSet<String>,
     chars: HashMap<char, u64>,
     counts: Counts,
 }
@@ -75,6 +77,7 @@ impl<'t, W: Write> Builder<'t, W> {
             train,
             dev,
             test: HashSet::new(),
+            dev_sentences: HashSet::new(),
             chars: HashMap::new(),
             counts: Counts::default(),
         }
@@ -98,6 +101,7 @@ impl<'t, W: Write> Builder<'t, W> {
                 Split::Dev => {
                     self.counts.dev += 1;
                     writeln!(self.dev, "{clause}")?;
+                    self.dev_sentences.insert(clause.to_string());
                 }
                 Split::Test => {
                     self.test.insert(clause.to_string());
@@ -107,15 +111,32 @@ impl<'t, W: Write> Builder<'t, W> {
         Ok(())
     }
 
-    /// 回傳句數、基準的內容（`bench/` 的 TSV）、字頻與兩個 writer。基準取雜湊最小的
-    /// [`BENCH_SENTENCES`] 句、依雜湊排序，和來源的順序無關。
+    /// 回傳句數、基準的內容（`bench/` 的 TSV）、dev 的調參題（同格式）、字頻與兩個 writer。
+    /// 基準與調參題各取雜湊最小的 [`BENCH_SENTENCES`] 句、依雜湊排序，和來源的順序無關。
     pub fn finish(mut self) -> io::Result<Finished<W>> {
         self.train.flush()?;
         self.dev.flush()?;
         self.counts.test = self.test.len();
-        let mut test: Vec<(u64, String)> = self.test.into_iter().map(|s| (key(&s), s)).collect();
-        test.sort_unstable();
-        let bench = test
+        let bench = self.sample(&self.test);
+        let dev_items = self.sample(&self.dev_sentences);
+        let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
+        chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
+        Ok(Finished {
+            counts: self.counts,
+            bench,
+            dev_items,
+            chars,
+            train: self.train,
+            dev: self.dev,
+        })
+    }
+
+    /// 雜湊最小的 [`BENCH_SENTENCES`] 句，依雜湊排序，一行「逐字速成碼<TAB>句子」。
+    fn sample(&self, sentences: &HashSet<String>) -> String {
+        let mut keyed: Vec<(u64, &str)> = sentences.iter().map(|s| (key(s), s.as_str())).collect();
+        keyed.sort_unstable();
+        keyed
             .iter()
             .take(BENCH_SENTENCES)
             .map(|(_, sentence)| {
@@ -125,17 +146,7 @@ impl<'t, W: Write> Builder<'t, W> {
                     .expect("加入時已確認轉得了碼");
                 format!("{}\t{sentence}\n", codes.join(" "))
             })
-            .collect();
-        let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
-        chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-        let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
-        Ok(Finished {
-            counts: self.counts,
-            bench,
-            chars,
-            train: self.train,
-            dev: self.dev,
-        })
+            .collect()
     }
 }
 
@@ -143,6 +154,8 @@ pub struct Finished<W> {
     pub counts: Counts,
     /// 一行一句：逐字速成碼以空格分隔，tab，句子。
     pub bench: String,
+    /// dev 切分的調參題，格式同 `bench`（`cargo xtask bench --dev` 讀）。
+    pub dev_items: String,
     /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
     pub chars: String,
     pub train: W,

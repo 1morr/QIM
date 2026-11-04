@@ -936,3 +936,115 @@ fn a_wasm_timer_that_misses_keys_is_an_error() {
     .unwrap_err();
     assert!(error.contains("WebAssembly"), "{error}");
 }
+
+/// dev 模式（`--dev`）：題目換成 `build/corpus/<名>/dev.tsv`；toy 的 dev 只有一句 `a b 日月`，
+/// 詞庫有 `ab` → 日月。β = 0 時同分，字「明」在詞前，首選錯；β > 0 時詞勝。
+fn repo_with_dev() -> TempDir {
+    let repo = repo();
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &pack_bytes_with(TABLE, Some("quick-lexicon"), None),
+    );
+    write(
+        repo.path(),
+        "build/packs/quick-lexicon/quick-lexicon.pack",
+        &lexicon_bytes(&[("ab", "日月")]),
+    );
+    write(
+        repo.path(),
+        "build/corpus/toy/dev.tsv",
+        "a b\t日月\n".as_bytes(),
+    );
+    repo
+}
+
+fn dev(repo: &TempDir, overrides: &[&str]) -> Result<qim_bench::DevOutcome, String> {
+    let overrides: Vec<String> = overrides.iter().map(|s| s.to_string()).collect();
+    qim_bench::run_dev(repo.path(), &overrides)
+}
+
+#[test]
+fn dev_mode_scores_the_dev_split_of_each_set_instead_of_the_test_split() {
+    let repo = repo_with_dev();
+    let outcome = dev(&repo, &[]).unwrap();
+    let [toy, _, _] = outcome.sets.as_slice() else {
+        panic!("應該只有 toy 與它的單字、詞：{:?}", outcome.sets);
+    };
+    assert_eq!((toy.name.as_str(), toy.total(), toy.wrong()), ("toy", 1, 1));
+    assert_eq!(outcome.fixed.total(), 1, "固定題照跑");
+    assert!(
+        outcome.report().contains("| toy | 1 |"),
+        "{}",
+        outcome.report()
+    );
+}
+
+#[test]
+fn dev_mode_overrides_ranking_parameters_without_touching_the_pack() {
+    let repo = repo_with_dev();
+    let outcome = dev(&repo, &["word_bonus=1.5", "segment_penalty=0.25"]).unwrap();
+    assert_eq!(outcome.sets[0].wrong(), 0, "{}", outcome.report());
+    assert_eq!(outcome.ranking.word_bonus, 1.5);
+    assert_eq!(outcome.ranking.segment_penalty, 0.25);
+    let report = outcome.report();
+    assert!(report.contains("word_bonus = 1.5"), "{report}");
+    // 方案檔的值沒變：不覆寫時照舊答錯。
+    assert_eq!(dev(&repo, &[]).unwrap().sets[0].wrong(), 1);
+}
+
+#[test]
+fn dev_mode_rejects_unknown_keys_and_bad_values() {
+    let repo = repo_with_dev();
+    for (bad, expected) in [
+        ("bonus=1", "bonus"),
+        ("word_bonus", "key=value"),
+        ("word_bonus=x", "word_bonus"),
+        ("beam=-1", "beam"),
+    ] {
+        let err = dev(&repo, &[bad]).unwrap_err();
+        assert!(err.contains(expected), "{bad}：{err}");
+    }
+}
+
+#[test]
+fn dev_mode_needs_the_dev_file_of_every_set() {
+    let repo = repo_with_dev();
+    fs::remove_file(repo.path().join("build/corpus/toy/dev.tsv")).unwrap();
+    let err = dev(&repo, &[]).unwrap_err();
+    assert!(
+        err.contains("build/corpus/toy/dev.tsv") && err.contains("cargo xtask data"),
+        "{err}"
+    );
+}
+
+#[test]
+fn dev_mode_adds_the_short_inputs_taken_from_the_sentences_of_each_set() {
+    let repo = repo_with_dev();
+    write(
+        repo.path(),
+        "build/corpus/toy/dev.tsv",
+        "a b\t曰月\na\t曰\na b a\t日月日\n".as_bytes(),
+    );
+    let outcome = dev(&repo, &[]).unwrap();
+    let [_, chars, words] = outcome.sets.as_slice() else {
+        panic!("toy 之後應有它的單字、詞：{:?}", outcome.sets);
+    };
+    // 單字：`a 曰` 兩次（首選是日，錯）、`b 月` 兩次、`a 日` 兩次（對）：不重複的 3 題，依次數加權。
+    assert_eq!(chars.name, "toy·單字");
+    assert_eq!((chars.total(), chars.wrong()), (3, 1));
+    assert!((chars.metrics(true).sentence_accuracy - 4.0 / 6.0).abs() < 1e-9);
+    // 詞：連續兩字以上、詞庫裡有的只有 `ab 日月`（曰月、月日、日月日都不是詞）；β = 0 時
+    // 字「明」排在詞前，答錯。
+    assert_eq!(words.name, "toy·詞");
+    assert_eq!(
+        (words.total(), words.wrong()),
+        (1, 1),
+        "{}",
+        outcome.report()
+    );
+    assert_eq!(words.items[0].weight, 1);
+    let report = outcome.report();
+    assert!(report.contains("| toy·單字（加權） | 6 次 |"), "{report}");
+    assert!(report.contains("| toy·詞（加權） | 1 次 |"), "{report}");
+}
