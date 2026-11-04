@@ -85,6 +85,7 @@
 | [23](issues/23-panel-keys-and-rerank-stub.md) | 20, 21 | 候選展開面板、實體鍵位補齊、重排假實作與 `generation` |
 | [24](issues/24-m1-close.md) | 01–23 | 里程碑 code-review、重驗〈驗收〉、黑箱在 QIM 重跑、封存 M1 |
 | [25](issues/25-shift-rime-default.md) | — | M1 封存後補（使用者試用）：單按 Shift 照 Rime，設定可改 |
+| [25b](issues/25b-inline-ascii-space-joins.md) | 25 | M1 封存後補：留碼接英文時空白接進英文（舊版 Rime，使用者決定） |
 | [26](issues/26-half-width-after-digits.md) | — | M1 封存後補：數字後的句點與逗號用半形，可關 |
 | [27](issues/27-touch-layout-match-gboard.md) | — | M1 封存後補：觸控佈局對齊 Gboard 速成、數字列開關 |
 
