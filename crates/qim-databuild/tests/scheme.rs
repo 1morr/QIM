@@ -55,3 +55,15 @@ fn quick_scheme_in_repo_has_the_25_quick_radicals() {
         "日月金木水火土竹戈十大中一弓人心手口尸廿山女田難卜"
     );
 }
+
+#[test]
+fn packs_table_names_the_lexicon_pack() {
+    assert_eq!(scheme::parse(MINIMAL).unwrap().packs.lexicon, None);
+    let with = format!("{MINIMAL}\n[packs]\nlexicon = \"t-lexicon\"\n");
+    assert_eq!(
+        scheme::parse(&with).unwrap().packs.lexicon.as_deref(),
+        Some("t-lexicon")
+    );
+    let typo = format!("{MINIMAL}\n[packs]\nlexicons = \"t-lexicon\"\n");
+    assert!(scheme::parse(&typo).is_err());
+}

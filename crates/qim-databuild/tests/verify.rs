@@ -1,14 +1,18 @@
 use std::collections::BTreeMap;
 
-use qim_core::{CodeEntry, CodeTable, Pack};
+use qim_core::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Word};
 use qim_databuild::libcangjie::{self, Row};
-use qim_databuild::verify::{self, CheckId, Report};
-use qim_databuild::{build_pack, scheme};
+use qim_databuild::transcode::Transcoder;
+use qim_databuild::verify::{self, CheckId, PackBytes, Report};
+use qim_databuild::{build_pack, lexicon, scheme};
 
-/// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字，加一個擴展區的字。
+/// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字。
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
+曰 曰 1 1 0 0 1 0 0 0 0 a a NA 23060
 問 问 1 1 0 0 1 0 0 0 0 anr anr NA 20001
+門 门 1 1 0 0 1 0 0 0 0 an an NA 20000
+口 口 1 1 0 0 1 0 0 0 0 r r NA 20100
 丟 丢 1 1 0 0 1 0 0 0 0 hgi mgi,xxmgi NA 22813
 嘅 嘅 1 0 1 0 1 0 0 0 0 rhpu rhpu NA 0
 ° NA 0 0 0 0 0 0 0 0 1 yyycg yyycg NA 0
@@ -21,22 +25,59 @@ name = "測試"
 version = "1"
 alphabet = "ab"
 max_code_length = 2
+[packs]
+lexicon = "t-lexicon"
 [radicals]
 a = "日"
 b = "月"
 "#;
 
+const ESSAY: &str = "門口\t9435\n丟丟\t200\n";
+
 fn rows() -> Vec<Row> {
     libcangjie::parse(TABLE).unwrap()
 }
 
+/// 日有年級，排在 Big5 排序值較小的曰前面。
 fn pack() -> Pack {
-    build_pack(&rows(), &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
+    build_pack(
+        &rows(),
+        &BTreeMap::from([('日', 1)]),
+        scheme::parse(SCHEME).unwrap(),
+    )
+}
+
+fn lexicon_with(char_frequency: BTreeMap<char, u64>) -> LexiconPack {
+    let rows = rows();
+    let (lexicon, _) = lexicon::build(
+        ESSAY,
+        &pack().code_table,
+        &Transcoder::new(&rows),
+        char_frequency,
+    )
+    .unwrap();
+    LexiconPack {
+        id: "t-lexicon".into(),
+        lexicon,
+    }
+}
+
+fn lexicon() -> LexiconPack {
+    lexicon_with(BTreeMap::from([('日', 10), ('曰', 3)]))
+}
+
+fn run_with(pack: &Pack, lexicon: &LexiconPack) -> Report {
+    let quick = pack.to_bytes().unwrap();
+    let lexicon = lexicon.to_bytes().unwrap();
+    let bytes = PackBytes {
+        quick: &quick,
+        lexicon: &lexicon,
+    };
+    verify::run(&rows(), bytes, bytes)
 }
 
 fn run(pack: &Pack) -> Report {
-    let bytes = pack.to_bytes().unwrap();
-    verify::run(&rows(), &bytes, &bytes)
+    run_with(pack, &lexicon())
 }
 
 /// 改動碼表後重建資料包。
@@ -49,6 +90,19 @@ fn edited(edit: impl FnOnce(&mut BTreeMap<String, Vec<CodeEntry>>)) -> Pack {
         .collect();
     edit(&mut entries);
     pack.code_table = CodeTable::from_entries(entries);
+    pack
+}
+
+/// 改動詞庫的碼索引，字頻照舊。
+fn edited_lexicon(edit: impl FnOnce(&mut BTreeMap<String, Vec<Word>>)) -> LexiconPack {
+    let mut pack = lexicon();
+    let mut words: BTreeMap<String, Vec<Word>> = pack
+        .lexicon
+        .iter()
+        .map(|(code, w)| (code.to_string(), w.to_vec()))
+        .collect();
+    edit(&mut words);
+    pack.lexicon = Lexicon::new(words, [('日', 10), ('曰', 3)]);
     pack
 }
 
@@ -68,12 +122,19 @@ const fn entry(text: char) -> CodeEntry {
     }
 }
 
+fn word(text: &str) -> Word {
+    Word {
+        text: text.into(),
+        frequency: 100,
+    }
+}
+
 #[test]
-fn pack_built_from_the_source_passes_every_check() {
+fn packs_built_from_the_source_pass_every_check() {
     let report = run(&pack());
     assert_eq!(failed(&report), []);
     assert!(report.passed());
-    assert_eq!((report.continuous, report.extension), (4, 1));
+    assert_eq!((report.continuous, report.extension), (7, 1));
 }
 
 #[test]
@@ -89,6 +150,8 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::WenHasAr,
             CheckId::DiuHasHiAndMi,
             CheckId::RiIsTopForA,
+            CheckId::WordCodesFromCharacters,
+            CheckId::MenKouForAnr,
             CheckId::Deterministic,
         ]
     );
@@ -103,9 +166,14 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     let bytes = build_pack(&rows, &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
         .to_bytes()
         .unwrap();
-    let report = verify::run(&rows, &bytes, &bytes);
+    let lexicon = lexicon().to_bytes().unwrap();
+    let both = PackBytes {
+        quick: &bytes,
+        lexicon: &lexicon,
+    };
+    let report = verify::run(&rows, both, both);
     assert_eq!(failed(&report), []);
-    assert_eq!((report.continuous, report.extension), (5, 1));
+    assert_eq!((report.continuous, report.extension), (8, 1));
 }
 
 #[test]
@@ -142,33 +210,109 @@ fn missing_spot_check_codes_fail() {
     });
     assert_eq!(
         failed(&run(&pack)),
-        [CheckId::WenHasAr, CheckId::DiuHasHiAndMi]
+        // 詞庫的「丟丟」還用著丟的 mi。
+        [
+            CheckId::WenHasAr,
+            CheckId::DiuHasHiAndMi,
+            CheckId::WordCodesFromCharacters
+        ]
     );
 }
 
 #[test]
 fn another_character_before_ri_on_a_fails_the_top_candidate_check() {
+    // 字頻相同時照碼表的順序，曰排到日前面就不對。
     let pack = edited(|t| {
-        // `a` 是「日𠀀」，倒過來就是別的字在前。
-        t.get_mut("a").unwrap().reverse();
+        t.get_mut("a").unwrap().swap(0, 1);
     });
-    assert_eq!(failed(&run(&pack)), [CheckId::RiIsTopForA]);
+    let same = lexicon_with(BTreeMap::from([('日', 3), ('曰', 3)]));
+    assert_eq!(failed(&run_with(&pack, &same)), [CheckId::RiIsTopForA]);
+}
+
+#[test]
+fn a_higher_frequency_for_another_character_fails_the_top_candidate_check() {
+    let yue_first = lexicon_with(BTreeMap::from([('日', 3), ('曰', 10)]));
+    assert_eq!(
+        failed(&run_with(&pack(), &yue_first)),
+        [CheckId::RiIsTopForA]
+    );
+}
+
+#[test]
+fn word_code_not_made_of_its_characters_quick_codes_fails() {
+    // 問的倉頡碼 anr 不是速成碼；anx 拼不出門口。
+    for (code, text) in [("anra", "問日"), ("anx", "門口")] {
+        let lexicon = edited_lexicon(|w| {
+            w.entry(code.into()).or_default().push(word(text));
+        });
+        let report = run_with(&pack(), &lexicon);
+        assert_eq!(
+            failed(&report),
+            [CheckId::WordCodesFromCharacters],
+            "{code} {text}"
+        );
+        let detail = &report
+            .checks
+            .iter()
+            .find(|c| c.id == CheckId::WordCodesFromCharacters)
+            .unwrap()
+            .detail;
+        assert!(detail.contains(&format!("{code} {text}")), "{detail}");
+    }
+}
+
+#[test]
+fn missing_men_kou_for_anr_fails() {
+    let lexicon = edited_lexicon(|w| {
+        w.remove("anr");
+    });
+    assert_eq!(
+        failed(&run_with(&pack(), &lexicon)),
+        [CheckId::MenKouForAnr]
+    );
 }
 
 #[test]
 fn different_bytes_from_the_second_build_fail_determinism() {
-    let bytes = pack().to_bytes().unwrap();
-    let mut other = bytes.clone();
-    *other.last_mut().unwrap() ^= 1;
-    let report = verify::run(&rows(), &bytes, &other);
-    assert_eq!(failed(&report), [CheckId::Deterministic]);
+    let quick = pack().to_bytes().unwrap();
+    let lexicon = lexicon().to_bytes().unwrap();
+    for changed in [0, 1] {
+        let (mut other_quick, mut other_lexicon) = (quick.clone(), lexicon.clone());
+        let other = if changed == 0 {
+            &mut other_quick
+        } else {
+            &mut other_lexicon
+        };
+        *other.last_mut().unwrap() ^= 1;
+        let report = verify::run(
+            &rows(),
+            PackBytes {
+                quick: &quick,
+                lexicon: &lexicon,
+            },
+            PackBytes {
+                quick: &other_quick,
+                lexicon: &other_lexicon,
+            },
+        );
+        assert_eq!(failed(&report), [CheckId::Deterministic]);
+    }
 }
 
 #[test]
 fn undecodable_pack_fails_without_panicking() {
-    let report = verify::run(&rows(), b"garbage", b"garbage");
-    assert!(failed(&report).contains(&CheckId::Decodes));
-    assert!(!report.passed());
+    let quick = pack().to_bytes().unwrap();
+    let lexicon = lexicon().to_bytes().unwrap();
+    for (quick, lexicon) in [
+        (&b"garbage"[..], &lexicon[..]),
+        (&quick[..], &b"garbage"[..]),
+        // 兩份都解得開，但詞庫不是方案指名的那份。
+        (&quick[..], &quick[..]),
+    ] {
+        let bytes = PackBytes { quick, lexicon };
+        let report = verify::run(&rows(), bytes, bytes);
+        assert_eq!(failed(&report), [CheckId::Decodes]);
+    }
 }
 
 mod corpus {

@@ -13,4 +13,13 @@ pub struct Scheme {
     pub max_code_length: u8,
     /// 鍵 → 字根，組字與鍵盤標籤用。
     pub radicals: BTreeMap<char, String>,
+    /// 方案要搭配的其他資料包。
+    pub packs: Packs,
+}
+
+/// 方案要搭配的其他資料包的 id（方案檔的 `[packs]`）。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Packs {
+    /// 詞庫資料包（[`crate::LexiconPack`]）。
+    pub lexicon: Option<String>,
 }

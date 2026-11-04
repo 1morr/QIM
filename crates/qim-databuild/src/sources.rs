@@ -27,14 +27,21 @@ pub struct Source {
     /// git 來源填 commit，其他填上游的版本號。
     pub version: String,
     pub license: String,
-    /// 授權聲明所在的檔，是 [`Source::files`] 之一；進資料包的來源才要。
-    pub license_file: Option<String>,
-    /// 照抄 [`Source::license_file`] 裡的聲明原文；進資料包的來源才要。
-    pub license_statement: Option<String>,
-    /// repo 裡存的授權全文檔，相對 repo 根目錄；上游的授權檔不釘版本時用它，
-    /// 不和 [`Source::license_file`] 並用。進資料包的來源才要。
-    pub license_text: Option<String>,
+    /// 資料包 `LICENSE` 裡這個來源的授權從哪裡來；進資料包的來源才要。
+    pub license_text: Option<LicenseText>,
     pub files: Vec<SourceFile>,
+}
+
+/// 授權寫進資料包 `LICENSE` 的三種方式，一個來源只能選一種。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum LicenseText {
+    /// 照抄上游檔裡的授權聲明：`file` 是 [`Source::files`] 之一，建置時核對 `quote` 確實在檔內。
+    Statement { file: String, quote: String },
+    /// 上游的授權檔整份照用，是 [`Source::files`] 之一（sha256 已釘住）。
+    UpstreamFile(String),
+    /// repo 裡存的授權全文，相對 repo 根目錄；上游的授權檔沒有版本化的網址、會改內容時用。
+    RepoFile(String),
 }
 
 #[derive(Debug, Clone, Deserialize)]

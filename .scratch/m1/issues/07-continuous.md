@@ -31,3 +31,5 @@ Blocked by: 06
 - [ ] 〈M0 留下的〉每條有結果。
 
 ## Comments
+
+- 2026-11-04 票 06 已做：查詢搬進 `Engine::candidates`（`crates/qim-core/src/engine.rs`），`Engine` 不再與 `Pack` 同欄位（多了詞庫、碼表依字頻重排）；`anr 門口` 已在 `fixed.tsv`。本票的〈M0 留下的〉剩碼的型別（`QuickCode` / `CangjieCode`）。

@@ -2,7 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use qim_core::{CodeEntry, CodeTable, Engine, Key, Pack, Scheme, Session, Snapshot, UserModel};
+use qim_core::{
+    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Scheme, Session, Snapshot, UserModel,
+};
 
 fn entry(text: char) -> CodeEntry {
     CodeEntry {
@@ -21,6 +23,7 @@ fn pack_bytes() -> Vec<u8> {
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
         radicals: BTreeMap::from([('a', "日".into()), ('b', "月".into())]),
+        packs: Packs::default(),
     };
     let a = "日曰昌晶昍旦早旭旨旬".chars().map(entry).collect();
     let code_table = CodeTable::from_entries([
@@ -40,7 +43,7 @@ struct Ime {
 impl Ime {
     fn new() -> Self {
         Self {
-            engine: Engine::from_pack_bytes(&pack_bytes()).unwrap(),
+            engine: Engine::from_pack_bytes(&pack_bytes(), None).unwrap(),
             user: UserModel::default(),
             session: Session::default(),
         }

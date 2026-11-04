@@ -157,7 +157,7 @@ QIM（暫名）。
 | --- | --- | --- | --- |
 | 倉頡碼表（三代、五代） | libcangjie `data/table.txt` | Public Domain（聲明的源頭未獨立查證，使用者接受） | 速成碼由此推導 |
 | 字序、碼表交叉驗證 | Unihan `kGradeLevel`、`kCangjie` | Unicode License v3 | `kGradeLevel` 排單字字序（有字頻前用，見 plan §4.1），進速成資料包；`kCangjie` 只用來抓錯碼，不打包 |
-| 詞頻 | rime-essay | LGPL-3.0 | 獨立資料包；建置時設最低詞頻門檻；之後可換成自建詞頻 |
+| 詞頻 | rime-essay | LGPL-3.0 | 獨立的詞庫資料包；建置時設最低詞頻門檻；之後可換成自建詞頻。同一包另帶由口語與維基語料統計的字頻（plan §4.2），所以也帶語料的授權（CC BY-SA 4.0、CC BY 4.0、CC0） |
 | 粵語口語小詞表 | 自行整理 | CC0 | 不從 rime-cantonese、粵典複製 |
 | 口語語料 | HKCanCor（fcbond/hkcancor）、Common Voice 粵語句子（GitHub 的 Sentence Collector 句子檔，不用 Mozilla Data Collective 的資料集） | CC BY 4.0、CC0 1.0（§12.1） | 維基偏書面語，要補口語，訓練 bigram 與基準都用；Tatoeba 沒有版本化的下載又要逐句署名，M1 不用；LIHKG、OpenSubtitles 權利來源不清，不用 |
 | 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
@@ -224,7 +224,7 @@ QIM（暫名）。
 
 - 語言模型升級、小型神經重排、LLM 候選優化各接入到什麼程度：模型階梯實驗後決定（plan §7.8）。
 - 已決（M1 票 03）：Common Voice 粵語句子可用於訓練與基準，但只用 GitHub 上 CC0 的 Sentence Collector 句子檔；Mozilla Data Collective 的資料集要登入、禁止 re-host，不用（§5.2、§12.1）。
-- LGPL 資料、以 CC BY-SA 語料訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
+- LGPL 資料、以 CC BY-SA 語料統計的字頻（詞庫資料包，M1 票 06）與訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 沒有付費帳號時，iOS 鍵盤擴充能否用免費佈建在實機上跑、App Group 能否使用：平台可行性實驗開工時查證（plan §7.3）。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
 
@@ -243,6 +243,7 @@ QIM（暫名）。
 - Unicode License V3 的全文在 `https://www.unicode.org/license.txt`，沒有隨 UCD 版本化的網址，版權年份每年改（2026-01-05 版為 1991-2026），所以 QIM 把全文存在 `data/licenses/Unicode-3.0.txt`，不釘下載。[license.txt](https://www.unicode.org/license.txt)，2026-11-03 查。
 - Unihan 18.0.0 `kCangjie` 與 libcangjie `346026b` 的三代碼：兩邊都有碼 29,121 字，2,744 字不同；其中 2,246 字的 Unihan 碼等於 libcangjie 的五代碼，其餘 498 字才是疑似錯碼。本機統計，`cargo xtask data --verify` 的報表，2026-11-03。
 - rime-cangjie、rime-quick、rime-essay 為 LGPL-3.0；`cangjie5.base.dict.yaml` 檔頭卻寫 GPL，上游《五倉世紀》權利人未查明。各 repo LICENSE；`docs/research/rime.md` §3。
+- rime-essay `054920d`（2026-09-23）的 `essay.txt`：442,688 列「詞<TAB>詞頻」，單字 20,746 列；「簽合同」「簽押」「軟麪筋」各列兩次（「簽押」0 與 434）。兩字以上、詞頻 ≥ 100、字都在連打字集的有 250,202 詞，其中 99.4% 的速成碼組合不超過 4 個。`LICENSE` 是 LGPL-3.0 全文。[rime-essay](https://github.com/rime/rime-essay)；詞數為本機統計（`cargo xtask data --verify`），2026-11-04。
 - 繁體詞頻只找到 LGPL 來源：rime-essay（442,688 筆）、libchewing-data（160,462 筆）。教育部國語辭典為 CC BY-ND 3.0 台灣、無頻次。`docs/research/data-sources.md` §5。
 - rime-cantonese 為 CC BY 4.0（`maps` 為 ODbL），但詞條參考了非商業授權的粵典及商業輸入法詞庫，授權鏈未查明；粵典 `wordslist`（字 → 讀音）為 Public Domain。[rime-cantonese](https://github.com/rime/rime-cantonese)、[粵典授權](https://words.hk/base/hoifong/)。
 - OpenCC（含字典）為 Apache-2.0；純 Rust 實作 ferrous-opencc 亦為 Apache-2.0。[OpenCC](https://github.com/BYVoid/OpenCC)。

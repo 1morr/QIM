@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use qim_core::Scheme;
+use qim_core::{Packs, Scheme};
 use serde::Deserialize;
 
 use crate::Error;
@@ -16,6 +16,15 @@ struct SchemeFile {
     alphabet: String,
     max_code_length: u8,
     radicals: BTreeMap<String, String>,
+    #[serde(default)]
+    packs: PacksTable,
+}
+
+/// 方案檔的 `[packs]`：另外的資料包的 id。
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct PacksTable {
+    lexicon: Option<String>,
 }
 
 /// 字母表的每個鍵剛好一個字根，字根表沒有字母表以外的鍵。
@@ -50,5 +59,8 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
         alphabet: file.alphabet,
         max_code_length: file.max_code_length,
         radicals,
+        packs: Packs {
+            lexicon: file.packs.lexicon,
+        },
     })
 }

@@ -5,7 +5,7 @@
 
 use std::hint::black_box;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
@@ -29,9 +29,9 @@ pub struct Timing {
     pub per_key_ms: Vec<Vec<f64>>,
 }
 
-/// 在 WebAssembly 上量時間的方式：給資料包路徑與輸入碼，逐鍵打每個輸入。
+/// 在 WebAssembly 上量時間的方式：給資料包路徑（速成，有詞庫時接著詞庫）與輸入碼，逐鍵打每個輸入。
 /// 實際用 [`node_wasm_timer`]；測試可以換成假的。
-pub type WasmTimer<'a> = &'a dyn Fn(&Path, &[String]) -> Result<Timing, String>;
+pub type WasmTimer<'a> = &'a dyn Fn(&[PathBuf], &[String]) -> Result<Timing, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Latency {
@@ -82,12 +82,12 @@ fn summary(timing: &Timing, skip: usize) -> Option<Summary> {
 /// 原生與 WebAssembly 各量一次 `inputs`：固定題與各語料集合的每一題（個人集不量，各機器才比得起來）。
 pub fn measure(
     engine: &Engine,
-    pack: &Path,
+    packs: &[PathBuf],
     inputs: &[String],
     wasm: WasmTimer,
 ) -> Result<Latency, String> {
     let native = native(engine, inputs);
-    let wasm = wasm(pack, inputs)?;
+    let wasm = wasm(packs, inputs)?;
     let shape = |timing: &Timing| timing.per_key_ms.iter().map(Vec::len).collect::<Vec<_>>();
     let keys: Vec<usize> = inputs.iter().map(|input| input.chars().count()).collect();
     if shape(&wasm) != keys {
@@ -144,10 +144,12 @@ fn native(engine: &Engine, inputs: &[String]) -> Timing {
     }
 }
 
-/// 用 Node 跑 [`WASM_SCRIPT`]：輸入碼一行一個從 stdin 送進去；stdout 第一行是 runtime，
+/// 用 Node 跑 [`WASM_SCRIPT`]：資料包路徑當參數，輸入碼一行一個從 stdin 送進去；stdout 第一行是 runtime，
 /// 之後每個輸入一行、各鍵的毫秒數以空白分隔。`root` 是 repo 根目錄。
-pub fn node_wasm_timer(root: &Path) -> impl Fn(&Path, &[String]) -> Result<Timing, String> + '_ {
-    move |pack, inputs| {
+pub fn node_wasm_timer(
+    root: &Path,
+) -> impl Fn(&[PathBuf], &[String]) -> Result<Timing, String> + '_ {
+    move |packs, inputs| {
         if !root.join(WASM_BINDINGS).exists() {
             return Err(format!(
                 "沒有 {WASM_BINDINGS}：用 `cargo xtask bench` 跑（會先編綁定），或先跑 `cargo xtask web`"
@@ -155,7 +157,7 @@ pub fn node_wasm_timer(root: &Path) -> impl Fn(&Path, &[String]) -> Result<Timin
         }
         let mut child = Command::new("node")
             .arg(root.join(WASM_SCRIPT))
-            .arg(pack)
+            .args(packs)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
