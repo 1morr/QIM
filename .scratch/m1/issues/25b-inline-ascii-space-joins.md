@@ -20,3 +20,8 @@ Blocked by: None (can start immediately)
 - [ ] brief §4.3、§12.2 已更新；`cargo xtask check`、`bench --check` 綠燈。
 
 ## Comments
+- 進度（2026-11-05，額度用完中斷）：只做完查證，核心、網頁、文件都還沒改。
+- 查證：librime `74bd5dc4`（2026-09-15，`feat(ascii_composer): commit_raw_input`）改寫 `inline_ascii`；改寫前的最後發佈版是 1.17.0（`33e78140`），`ascii_composer.cc` 從 1.16.0 到 `74bd5dc4^` 沒變。舊版 `ProcessKeyEvent`：`ascii_mode` 且組字中時 0x20–0x7f（含空白）一律 `PushInput`，其餘鍵交給後面的 processor；組字清空時 `OnContextUpdate` 關 `ascii_mode`。
+- 實測（鼠鬚管內建 librime 1.16.0、quick5，`scripts/experiments/rime-inline-ascii/run.sh`）：`anr`、左 Shift、`hello`、空白、`world`、Enter → 上屏 `anrhello world`、回中文。空白可連打兩個；數字、標點、`-` `=`、大寫都接上；退格逐字刪，刪光回中文；Esc 清空回中文；右 Shift（`commit_text`）上屏英文回中文；再按左 Shift 一律把目前整串當中文輸入碼重新組字（`anrx` → 中文「問的」組字、`anrx y` 的空白當分隔），不看打過字或退格過。已選定的分段留著（同 QIM 票 25 的偏離）。← / Home 移游標、Delete 刪游標後的字；Tab、PageDown、↑ ↓ 無作用。
+- 與票 25 不同、要改的：空白接進英文不結束；再按留碼的 Shift 一律回中文組字（英文全是方案字母時用它重建 lattice；含數字、空白、大寫、標點、`z` 時 QIM 的中文組字裝不下，改上屏英文回中文，brief 寫成偏離）；`InlineAscii.edited` 可刪。維持 QIM 的：方向鍵等吃下不動作（QIM 沒有輸入碼內的游標）、選定分段遇退格 / Esc 照票 25（舊版會把選定分段拆回英文、Esc 只清最後一段，不學）。
+- 要動的地方：`crates/qim-core/src/session.rs` 的 `toggle_ascii`、`handle_inline`（`Key::Space` 改成接 `' '`）；`crates/qim-core/tests/session.rs` 加驗收那條與再按 Shift 的測試；`web/e2e/key-table.spec.ts:183` 那條改成空白接進英文、加驗收的 Playwright；`web/src/main.ts:629` 的回報判斷確認仍對；brief §4.3 臨時英文那條、§12.2 加舊版一條（附 `74bd5dc4`、1.17.0）；plan §2.1 若有提空白也改。
