@@ -90,6 +90,10 @@ test("匯出、清空、匯入後讀回相同", async ({ page }, testInfo) => {
 	expect(await secondOfMir(page)).not.toBe("雲口");
 
 	await page.getByLabel("匯入學習資料（取代目前的）").setInputFiles(file);
+	await page
+		.getByRole("group", { name: "確認匯入" })
+		.getByRole("button", { name: "確定匯入" })
+		.click();
 	await expect(status).toHaveText(/已匯入/);
 	expect(await secondOfMir(page)).toBe("雲口");
 	await page.screenshot({ path: testInfo.outputPath("imported.png") });
@@ -108,7 +112,49 @@ test("匯入不是 qim-userdict v1 的檔時報錯，學習資料不動", async 
 		buffer: Buffer.from("# Rime user dictionary\n"),
 	});
 	await expect(status).toHaveText(/匯入失敗.*第 1 行/);
+	await expect(page.getByRole("group", { name: "確認匯入" })).toBeHidden();
 	expect(await secondOfMir(page)).toBe("雲口");
+});
+
+/** 只有一個手動詞的 v1 檔：匯入後「雲口」就不在了。 */
+const OTHER_DICT = [
+	"# qim-userdict v1",
+	"#@/tick/quick\t0",
+	"quick\t速成\tqim\t0\t0\t0\t0\tmanual\tqc",
+	"",
+].join("\n");
+
+test("匯入前在頁面上說明會覆蓋目前的學習資料，確定後才取代", async ({
+	page,
+}, testInfo) => {
+	await learnYunHau(page);
+	const { status } = await ready(page);
+	const confirm = page.getByRole("group", { name: "確認匯入" });
+	const choose = () =>
+		page.getByLabel("匯入學習資料（取代目前的）").setInputFiles({
+			name: "other.tsv",
+			mimeType: "text/plain",
+			buffer: Buffer.from(OTHER_DICT),
+		});
+	await expect(confirm).toBeHidden();
+
+	await choose();
+	await expect(confirm).toBeVisible();
+	await expect(confirm).toContainText("other.tsv");
+	await expect(confirm).toContainText(/會覆蓋目前的 \d+ 筆學習資料/);
+	await page.screenshot({ path: testInfo.outputPath("confirm-import.png") });
+	expect(await secondOfMir(page), "確定之前不動").toBe("雲口");
+
+	await confirm.getByRole("button", { name: "取消" }).click();
+	await expect(confirm).toBeHidden();
+	await expect(status).toHaveText("沒有匯入，學習資料沒動");
+	expect(await secondOfMir(page)).toBe("雲口");
+
+	await choose();
+	await confirm.getByRole("button", { name: "確定匯入" }).click();
+	await expect(confirm).toBeHidden();
+	await expect(status).toHaveText("已匯入 other.tsv");
+	expect(await secondOfMir(page)).not.toBe("雲口");
 });
 
 test("手動加的詞打觸發詞時是首選，重新整理後還在", async ({

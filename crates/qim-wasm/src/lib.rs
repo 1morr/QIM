@@ -61,6 +61,14 @@ impl WebSession {
         self.user.export()
     }
 
+    /// 檢查 `text` 是不是匯入得了的檔，不動目前的資料；網頁請使用者確認覆蓋之前先檢查。
+    #[wasm_bindgen(js_name = checkUserDict)]
+    pub fn check_user_dict(&self, text: &str) -> Result<(), JsError> {
+        UserModel::import(text)
+            .map(|_| ())
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
     /// 讀匯出的檔，取代目前的使用者詞與學習計數；不合格式時整份不收、原本的不動。
     #[wasm_bindgen(js_name = importUserDict)]
     pub fn import_user_dict(&mut self, text: &str) -> Result<(), JsError> {

@@ -10,6 +10,13 @@ const BROKEN_KEY = "qim.userdict.broken";
 /** 匯出檔名；副檔名照內容是 TSV。 */
 const EXPORT_NAME = "qim-userdict.tsv";
 
+/** `# qim-userdict v1` 檔的資料列數：`#` 開頭的行與空行以外的行。 */
+function rows(tsv: string): number {
+	return tsv
+		.split("\n")
+		.filter((line) => line.trim() !== "" && !line.startsWith("#")).length;
+}
+
 /** `JsError` 與其他例外的訊息。 */
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -75,22 +82,62 @@ export function mountUserDict(
 		},
 	);
 
+	// 匯入取代整份（plan §2.4）：先檢查格式，再在頁面上說明會覆蓋多少筆、請使用者確認，
+	// 不用瀏覽器原生的對話框。
 	const file = element<HTMLInputElement>("#import-user-dict");
+	const confirm = element<HTMLElement>("#confirm-import");
+	const confirmText = element<HTMLElement>("#confirm-import-text");
+	let pending: { name: string; text: string } | undefined;
+	const closeConfirm = () => {
+		pending = undefined;
+		confirm.hidden = true;
+	};
 	file.addEventListener("change", async () => {
 		const chosen = file.files?.[0];
 		file.value = "";
+		closeConfirm();
 		if (!chosen) {
 			return;
 		}
+		const text = await chosen.text();
 		try {
-			session.importUserDict(await chosen.text());
-			save();
-			status.textContent = `已匯入 ${chosen.name}`;
+			session.checkUserDict(text);
 		} catch (error) {
 			status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
+			return;
 		}
-		afterChange();
+		pending = { name: chosen.name, text };
+		const current = rows(session.exportUserDict());
+		confirmText.textContent = `匯入 ${chosen.name}（${rows(text)} 筆）會覆蓋目前的 ${current} 筆學習資料，原本的不會保留。確定匯入？`;
+		status.textContent = "";
+		confirm.hidden = false;
 	});
+	element<HTMLButtonElement>("#confirm-import-ok").addEventListener(
+		"click",
+		() => {
+			if (!pending) {
+				return;
+			}
+			const { name, text } = pending;
+			closeConfirm();
+			try {
+				session.importUserDict(text);
+				save();
+				status.textContent = `已匯入 ${name}`;
+			} catch (error) {
+				status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
+			}
+			afterChange();
+		},
+	);
+	element<HTMLButtonElement>("#confirm-import-cancel").addEventListener(
+		"click",
+		() => {
+			closeConfirm();
+			status.textContent = "沒有匯入，學習資料沒動";
+			afterChange();
+		},
+	);
 
 	element<HTMLButtonElement>("#clear-user-dict").addEventListener(
 		"click",
