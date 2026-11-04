@@ -7,6 +7,7 @@ mod engine;
 mod lattice;
 mod lexicon;
 mod pack;
+mod punctuation;
 mod scheme;
 mod session;
 

@@ -34,6 +34,7 @@
 | 2026-11-04 | M1 07 | lattice、Viterbi + beam、unigram（β 2、γ 0）、選開頭一段後其餘重算；`anr`、`mir` 首選都對，維基答錯少 1/4 以上，口語修正次數變多；細節見票 07 | 新 session 下 `/implement .scratch/m1/issues/08-blackbox-apple.md` |
 | 2026-11-04 | M1 08 | macOS、iOS 內建速成 T1–T18 寫進 `docs/research/blackbox-baseline.md`；brief §1.3 更新，5 題進 `fixed.tsv`；細節見票 08 | 新 session 下 `/implement .scratch/m1/issues/09-blackbox-gboard.md` |
 | 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
+| 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
 
 ## 偏差與決定
 
@@ -67,3 +68,7 @@
 - 2026-11-04 M1 07：口語兩集修正次數高於 baseline（連打錯一處就要選開頭一段），`--update-baseline` 只更新 `bench/baseline.json`，原因在票 07 Comments。
 - 2026-11-04 M1 09：iPhone 版 Gboard 沒測：使用者決定不在 iPhone 安裝，比照 plan §8 的備案只測 Android，有沒有速成記為未確認（票 09 Comments）。
 - 2026-11-04 M1 09 後（使用者決定）：會改寫打出的字或候選位置的行為都給開關，英文自動修正、英文句首自動大寫預設關，英文候選、容錯、聯想、雲端預設開（brief §4.7、§4.8、§7；plan §7.4、§7.5）。
+- 2026-11-04 M1 10：Enter 有選定分段時上屏「選定的字詞＋其餘輸入碼」，照 librime `CommitRawInput`；標點、大寫先上屏組字，不學 macOS 的英文串（brief §4.3）。
+- 2026-11-04 M1 10：`Key` 加 `Punct`、`Other`；亂按找到組字中 Tab、Delete、方向鍵改到輸入框，網頁沒對應的鍵都轉成 `Other`，組字中吃下（plan §2.1）。
+- 2026-11-04 M1 10：網頁加 `node:test` 單元測試與 `check` 的 `unit` 步驟，不加測試框架依賴（`docs/development.md`、plan §1.4）。
+- 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。

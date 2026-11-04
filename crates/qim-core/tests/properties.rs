@@ -31,13 +31,19 @@ fn random_words() -> impl Strategy<Value = BTreeMap<String, Vec<String>>> {
 
 fn key() -> impl Strategy<Value = Key> {
     prop_oneof![
-        4 => prop::sample::select(vec!['a', 'b', 'c', 'z']).prop_map(Key::Letter),
+        4 => prop::sample::select(vec!['a', 'b', 'c', 'z', 'A']).prop_map(Key::Letter),
         1 => Just(Key::Space),
+        1 => Just(Key::Enter),
         1 => Just(Key::Backspace),
         1 => Just(Key::Escape),
         1 => (0u8..=9).prop_map(Key::Digit),
         1 => Just(Key::PageUp),
         1 => Just(Key::PageDown),
+        1 => Just(Key::Left),
+        1 => Just(Key::Right),
+        1 => Just(Key::ToggleAscii),
+        1 => Just(Key::Other),
+        1 => prop::sample::select(vec![',', '.', '@', '-']).prop_map(Key::Punct),
     ]
 }
 
@@ -106,6 +112,25 @@ fn composes(text: &str, input: &str, pieces: &[(String, String)]) -> bool {
 }
 
 proptest! {
+    /// 交還宿主的鍵宿主會照打，組字還在就會漏字進輸入框、組字卻沒清。
+    #[test]
+    fn a_key_left_to_the_host_leaves_no_composition_behind(
+        table in random_table(),
+        words in random_words(),
+        keys in prop::collection::vec(key(), 0..40),
+    ) {
+        let engine = engine(&table, &words);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for key in keys {
+            let snapshot = session.handle(&engine, &mut user, key);
+            if !snapshot.handled {
+                prop_assert_eq!(&snapshot.composition.input, "", "{:?} 交還宿主，組字還在", key);
+                prop_assert_eq!(snapshot.commit, None, "{:?} 交還宿主，卻有要上屏的字", key);
+            }
+        }
+    }
+
     #[test]
     fn every_candidate_can_be_typed_with_the_beginning_of_the_unselected_input(
         table in random_table(),
