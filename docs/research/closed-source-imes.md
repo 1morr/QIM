@@ -79,7 +79,7 @@
 | 預測 | 輸入時顯示字、emoji、資訊建議，例如打「I'm at」會給目前位置 | [S10] |
 | 學習 | 拒絕同一建議幾次後會停止建議 | [S20]（Apple 社群頁引用支援文字，二手；支援頁原文未逐字核對） |
 | 模型大小、延遲、訓練資料 | **未查證**。Apple Machine Learning Research 上找到的是 Apple Intelligence 基礎模型（約 3B 參數端上模型）[S21]，與鍵盤 autocorrect 的 transformer 不是同一個，不可混用 |
-| 中文速成 | 後續建議詞、連選多字、不能連打、數字在二級選單、符號後跳回字母頁：這些是使用者觀察，我沒有找到 Apple 官方技術文件。內部：**未查證** |
+| 中文速成 | 後續建議詞、連選多字、不能連打、數字在二級選單、符號後跳回字母頁：這些是使用者觀察，我沒有找到 Apple 官方技術文件。內部：**未查證**。2026-11-04 黑箱實測（iOS 27.0.1）證實不做整串解碼（固定 2 碼一段）與打標點後跳回字根頁，見 `blackbox-baseline.md` |
 
 #### macOS（官方使用者文件）
 
@@ -95,7 +95,7 @@
 | 其他 | Undo the last substitution（Shift-Delete）、Show structural candidates（Shift-Space）、Find an input code、Facemarks & Punctuation、Specialized vocabularies、使用者詞典（文件另有一頁） | [S14][S23] |
 | 候選窗 | 顯示可能的字，某些語言含 emoji | [S14] |
 
-macOS 上我沒有找到連打（整句）的官方描述；使用者觀察「不能連打」與速成的設計一致（Sucheng 一碼對應一字，沒有分詞需求）[S22]。
+macOS 上我沒有找到連打（整句）的官方描述；使用者觀察「不能連打」與速成的設計一致（Sucheng 一碼對應一字，沒有分詞需求）[S22]。2026-11-04 黑箱實測（macOS 27.0.1）：第 3 碼起整串改當英文字母，見 `blackbox-baseline.md`。
 
 ### 1.3 Microsoft（Windows）
 
