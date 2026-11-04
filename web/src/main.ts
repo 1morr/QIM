@@ -123,11 +123,6 @@ function composingChinese(): boolean {
 	return shown.composing && !shown.inlineAscii;
 }
 
-/** 有候選可展開：中文組字中，且不是只有待定的數字分隔符。 */
-function canExpand(): boolean {
-	return composingChinese() && shown.candidates.length > 0;
-}
-
 /** 核心；載入完成前是 `undefined`。展開面板與重排要直接問它。 */
 let core: Session | undefined;
 /** 字根提示；載入完成前是 `undefined`。 */
@@ -182,13 +177,11 @@ function render(snapshot: Snapshot): void {
 	shown.originals = snapshot.candidatesOriginal;
 	if (!composingChinese()) {
 		shown.hints = false;
-	}
-	if (!canExpand()) {
 		shown.panel = false;
 	}
 	mode.textContent = snapshot.ascii ? "英" : "中";
 	mode.setAttribute("aria-label", snapshot.ascii ? "英文" : "中文");
-	expand.hidden = !canExpand();
+	expand.hidden = !composingChinese();
 	renderCandidates();
 	renderPanel();
 }
@@ -213,9 +206,9 @@ function renderPanel(): void {
 	);
 }
 
-/** 打開或收起展開面板；沒有候選（沒有組字、臨時英文、只有待定的數字分隔符）時不開。 */
+/** 打開或收起展開面板；沒有組字或臨時英文時不開。 */
 function setPanel(open: boolean): void {
-	shown.panel = open && canExpand();
+	shown.panel = open && composingChinese();
 	renderPanel();
 }
 
@@ -258,11 +251,7 @@ function insert(commit: string): void {
 /** 核心吃下的鍵：有上屏就插入，再畫組字與候選。`chosen` 是這個鍵是不是選字（空白、數字鍵）。 */
 function apply(snapshot: Snapshot, chosen: boolean): void {
 	const before = report.last;
-	// 畫面上沒有候選時空白、數字鍵不是選字（如待定的數字分隔符接數字）；`shown` 還是按鍵前的畫面。
-	report = observe(report, {
-		...readReported(snapshot),
-		chosen: chosen && shown.candidates.length > 0,
-	});
+	report = observe(report, { ...readReported(snapshot), chosen });
 	if (report.last !== before) {
 		reportButton.disabled = report.last === undefined;
 	}

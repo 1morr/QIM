@@ -1,5 +1,5 @@
-//! 數字後的句點、逗號、冒號用半形（brief §4.7，M1 票 26），照 librime `punctuator` 的
-//! `digit_separators`：分隔符先待定，接數字或空白就半形上屏，再按一次同一個鍵改回全形。
+//! 數字後的句點、逗號、冒號用半形（brief §4.7，M1 票 26）：前一個上屏的字是半形數字時直接
+//! 上屏半形，不待定、不出候選（使用者決定，同 librime `digit_separator_action: commit`）。
 
 use std::collections::BTreeMap;
 
@@ -88,6 +88,23 @@ impl Ime {
 }
 
 #[test]
+fn the_separator_commits_at_once_with_nothing_left_composing() {
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    let snapshot = ime.press(Key::Punct('.'));
+    assert!(snapshot.handled);
+    assert_eq!(snapshot.commit.as_deref(), Some("."));
+    assert_eq!(snapshot.composition.input, "");
+    assert!(snapshot.candidates.is_empty());
+}
+
+#[test]
+fn a_second_separator_is_full_width_because_it_no_longer_follows_a_digit() {
+    assert_eq!(Ime::typed("3.."), "3.。");
+    assert_eq!(Ime::typed("1,,"), "1,，");
+}
+
+#[test]
 fn a_period_between_digits_stays_half_width() {
     assert_eq!(Ime::typed("3.5"), "3.5");
 }
@@ -122,99 +139,6 @@ fn with_the_switch_off_a_period_after_a_digit_is_full_width() {
 }
 
 #[test]
-fn the_separator_waits_in_the_composition_until_the_next_key() {
-    let mut ime = Ime::new();
-    ime.type_keys("3");
-    let snapshot = ime.press(Key::Punct('.'));
-    assert!(snapshot.handled);
-    assert_eq!(snapshot.commit, None);
-    assert_eq!(snapshot.composition.input, ".");
-    assert_eq!(snapshot.composition.selected_text(), ".");
-    assert!(snapshot.candidates.is_empty());
-    assert_eq!(ime.text, "3");
-}
-
-#[test]
-fn pressing_the_same_separator_again_makes_it_full_width() {
-    assert_eq!(Ime::typed("1,,"), "1，");
-    assert_eq!(Ime::typed("3.."), "3。");
-}
-
-#[test]
-fn a_space_commits_the_separator_half_width_with_the_space() {
-    assert_eq!(Ime::typed("1. "), "1. ");
-}
-
-#[test]
-fn a_letter_commits_the_separator_half_width_and_starts_composing() {
-    let mut ime = Ime::new();
-    ime.type_keys("3.");
-    let snapshot = ime.press(Key::Letter('a'));
-    assert_eq!(snapshot.commit.as_deref(), Some("."));
-    assert_eq!(snapshot.composition.input, "a");
-    ime.type_keys(" ");
-    assert_eq!(ime.text, "3.日");
-}
-
-#[test]
-fn other_keys_commit_the_separator_half_width_then_act_as_usual() {
-    // 另一個標點照常轉全形；大寫字母和其他沒有全形的符號照打。
-    assert_eq!(Ime::typed("3.,"), "3.，");
-    assert_eq!(Ime::typed("3.A"), "3.A");
-    assert_eq!(Ime::typed("3.%"), "3.%");
-    let mut ime = Ime::new();
-    ime.type_keys("3.");
-    ime.press(Key::Enter);
-    assert_eq!(ime.text, "3.");
-}
-
-#[test]
-fn backspace_or_escape_drops_the_separator() {
-    for key in [Key::Backspace, Key::Escape] {
-        let mut ime = Ime::new();
-        ime.type_keys("3.");
-        let snapshot = ime.press(key);
-        assert!(snapshot.handled, "{key:?}");
-        assert_eq!(snapshot.composition.input, "", "{key:?}");
-        assert_eq!(ime.text, "3", "{key:?}");
-        // 還是緊接在數字後。
-        ime.type_keys(".5");
-        assert_eq!(ime.text, "3.5", "{key:?}");
-    }
-}
-
-#[test]
-fn keys_that_only_move_within_the_composition_keep_the_separator_waiting() {
-    let mut ime = Ime::new();
-    ime.type_keys("3.");
-    for key in [
-        Key::Left,
-        Key::Right,
-        Key::PageUp,
-        Key::PageDown,
-        Key::Other,
-        Key::Letter('z'),
-    ] {
-        let snapshot = ime.press(key);
-        assert!(snapshot.handled, "{key:?}");
-        assert_eq!(snapshot.composition.input, ".", "{key:?}");
-    }
-    ime.type_keys("5");
-    assert_eq!(ime.text, "3.5");
-}
-
-#[test]
-fn switching_to_english_commits_the_separator_half_width() {
-    for shift in [ShiftKey::Left, ShiftKey::Right] {
-        let mut ime = Ime::new();
-        ime.type_keys("3.");
-        let snapshot = ime.press(Key::ToggleAscii(shift));
-        assert!(snapshot.ascii, "{shift:?}");
-        assert_eq!(ime.text, "3.", "{shift:?}");
-    }
-}
-
-#[test]
 fn digits_and_punctuation_in_inline_english_stay_as_typed() {
     // 留碼接英文（左 Shift 的預設，brief §4.3）時字元照原樣接在英文後，不套數字後半形。
     let mut ime = Ime::new();
@@ -224,15 +148,6 @@ fn digits_and_punctuation_in_inline_english_stay_as_typed() {
     let snapshot = ime.press(Key::Enter);
     assert_eq!(snapshot.commit.as_deref(), Some("a3.5,0:1"));
     assert_eq!(ime.text, "a3.5,0:1");
-}
-
-#[test]
-fn text_from_the_touch_keyboard_commits_the_separator_half_width_first() {
-    let mut ime = Ime::new();
-    ime.type_keys("3.");
-    let snapshot = ime.session.text(&ime.engine, &mut ime.user, "5");
-    assert_eq!(snapshot.commit.as_deref(), Some(".5"));
-    assert_eq!(snapshot.composition.input, "");
 }
 
 #[test]
@@ -259,19 +174,6 @@ fn keys_passed_to_the_host_end_the_number() {
     ime.press(Key::Backspace);
     ime.type_keys(".");
     assert_eq!(ime.text, "。");
-}
-
-#[test]
-fn tapping_the_waiting_separator_or_a_candidate_keeps_it_waiting() {
-    let mut ime = Ime::new();
-    ime.type_keys("3.");
-    let snapshot = ime.session.focus_segment(&ime.engine, &mut ime.user, 0);
-    assert!(snapshot.handled);
-    assert_eq!(snapshot.composition.input, ".");
-    let snapshot = ime.session.select(&ime.engine, &mut ime.user, 0);
-    assert!(snapshot.handled);
-    assert_eq!(snapshot.commit, None);
-    assert_eq!(snapshot.composition.input, ".");
 }
 
 #[test]

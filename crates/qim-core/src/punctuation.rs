@@ -34,7 +34,7 @@ pub(crate) fn full_width(c: char) -> Option<&'static str> {
 /// 要的 `,`（M1 票 26）。
 const DIGIT_SEPARATORS: [char; 3] = ['.', ',', ':'];
 
-/// 緊接在半形數字後時，`c` 先待定、接數字就保持半形。
+/// 前一個上屏的字是半形數字時，`c` 上屏半形。
 pub(crate) fn is_digit_separator(c: char) -> bool {
     DIGIT_SEPARATORS.contains(&c)
 }
