@@ -1,7 +1,7 @@
 //! 預設 Gboard 速成佈局（plan §2.6）：由排列算出，經 `qim-layout` 讀回與點擊。
 
 use qim_databuild::gboard;
-use qim_layout::{Action, Device, Layout, Orientation};
+use qim_layout::{Action, Device, Layout, Orientation, StrictIssue, Warning, check_builtin};
 
 fn portrait() -> Layout {
     // 經過 JSON：網頁讀的是寫出去的檔。
@@ -84,30 +84,25 @@ fn letter_keys_carry_the_letter_as_hint_and_leave_the_label_to_the_scheme() {
     }
 }
 
+/// 內建佈局的嚴格檢查（plan §5.3），只有「缺橫向」先放過，由 [`has_portrait_and_landscape`] 管。
 #[test]
-fn keys_stay_on_the_canvas_without_overlapping() {
-    let layout = portrait();
-    let variant = &layout.variants[0];
-    let keys = &variant.pages[0].keys;
-    for key in keys {
-        let f = key.frame;
-        assert!(f.x >= 0.0 && f.y >= 0.0, "{}", key.id);
-        assert!(
-            f.x + f.w <= variant.canvas.width && f.y + f.h <= variant.canvas.height,
-            "{}",
-            key.id
-        );
-    }
-    for (i, a) in keys.iter().enumerate() {
-        for b in &keys[i + 1..] {
-            let (fa, fb) = (a.frame, b.frame);
-            let apart = fa.x + fa.w <= fb.x
-                || fb.x + fb.w <= fa.x
-                || fa.y + fa.h <= fb.y
-                || fb.y + fb.h <= fa.y;
-            assert!(apart, "{} 與 {} 重疊", a.id, b.id);
-        }
-    }
+fn passes_the_strict_check_for_builtin_layouts() {
+    let issues: Vec<StrictIssue> = check_builtin(&gboard::layout().to_json())
+        .into_iter()
+        .filter(|issue| {
+            !matches!(
+                issue,
+                StrictIssue::Warning(Warning::MissingOrientation { .. })
+            )
+        })
+        .collect();
+    assert_eq!(issues, []);
+}
+
+#[test]
+#[ignore = "M1 票 20 加橫向版本時拿掉 ignore"]
+fn has_portrait_and_landscape() {
+    assert_eq!(check_builtin(&gboard::layout().to_json()), []);
 }
 
 #[test]

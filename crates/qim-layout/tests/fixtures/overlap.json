@@ -1,0 +1,38 @@
+{
+  "format": "qim-layout/1",
+  "variants": [
+    {
+      "when": { "device": "phone", "orientation": "portrait" },
+      "canvas": { "width": 390, "height": 216 },
+      "pages": [
+        {
+          "id": "letters",
+          "keys": [
+            {
+              "id": "n",
+              "frame": { "x": 150, "y": 30, "w": 120, "h": 90 },
+              "z": 1,
+              "shape": { "type": "rect", "radius": 8 },
+              "hint": "n",
+              "style": { "fill": { "light": "#c2e7ff", "dark": "#004a77" }, "opacity": 0.85 },
+              "tap": { "letter": "n" }
+            },
+            {
+              "id": "a",
+              "frame": { "x": 30, "y": 30, "w": 180, "h": 90 },
+              "shape": { "type": "rect", "radius": 8 },
+              "hint": "a",
+              "tap": { "letter": "a" }
+            },
+            {
+              "id": "space",
+              "frame": { "x": 30, "y": 150, "w": 330, "h": 50 },
+              "tap": "space",
+              "composing": { "label": "選字" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

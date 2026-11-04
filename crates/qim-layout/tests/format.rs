@@ -1,4 +1,4 @@
-//! 佈局檔的格式（plan §2.6）：tracer 用到的最小子集（M1 票 18）。
+//! 佈局檔的格式（plan §2.6）：讀檔、存檔與動作的寫法。
 
 use qim_layout::{Action, Layout};
 
@@ -46,6 +46,7 @@ fn layout_without_variants_or_pages_is_rejected() {
 #[test]
 fn space_backspace_and_enter_are_bare_action_names() {
     let keys = r#"[
+        { "id": "a", "frame": { "x": 0, "y": 0, "w": 1, "h": 1 }, "tap": { "letter": "a" } },
         { "id": "space", "frame": { "x": 0, "y": 0, "w": 4, "h": 10 }, "tap": "space" },
         { "id": "backspace", "frame": { "x": 4, "y": 0, "w": 3, "h": 10 }, "tap": "backspace" },
         { "id": "enter", "frame": { "x": 7, "y": 0, "w": 3, "h": 10 }, "tap": "enter" }
@@ -57,6 +58,7 @@ fn space_backspace_and_enter_are_bare_action_names() {
     let taps: Vec<Action> = Layout::from_json(&text).unwrap().variants[0].pages[0]
         .keys
         .iter()
+        .skip(1)
         .map(|key| key.tap.clone())
         .collect();
     assert_eq!(taps, [Action::Space, Action::Backspace, Action::Enter]);
@@ -66,9 +68,13 @@ fn space_backspace_and_enter_are_bare_action_names() {
 fn action_names_match_the_json_tags() {
     for action in [
         Action::Letter('a'),
-        Action::Space,
+        Action::Text("，".into()),
         Action::Backspace,
+        Action::Space,
         Action::Enter,
+        Action::SwitchPage("symbols".into()),
+        Action::NextKeyboard,
+        Action::ToggleAscii,
     ] {
         let json = serde_json::to_value(&action).unwrap();
         let tag = json

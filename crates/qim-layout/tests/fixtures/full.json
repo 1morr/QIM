@@ -1,0 +1,99 @@
+{
+  "format": "qim-layout/1",
+  "variants": [
+    {
+      "when": { "device": "phone", "orientation": "portrait" },
+      "canvas": { "width": 390, "height": 216 },
+      "grid": { "columns": 40, "rows": 24, "snap": true },
+      "background": { "light": "#e8eaed", "dark": "#202124" },
+      "initialPage": "letters",
+      "pages": [
+        {
+          "id": "letters",
+          "keys": [
+            {
+              "id": "a",
+              "frame": { "x": 12, "y": 80, "w": 36, "h": 48 },
+              "rotate": 0,
+              "z": 0,
+              "shape": { "type": "rect", "radius": 6 },
+              "touchInset": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+              "hint": "a",
+              "a11yLabel": "日，英文 a",
+              "style": {
+                "fill": { "light": "#ffffff", "dark": "#3a3a3c" },
+                "labelColor": { "light": "#000000", "dark": "#ffffff" },
+                "opacity": 1,
+                "labelSize": 18,
+                "labelOffset": [0, 0]
+              },
+              "tap": { "letter": "a" },
+              "longPress": [{ "text": "a" }],
+              "swipe": { "up": { "text": "1" } },
+              "composing": null
+            },
+            {
+              "id": "symbols",
+              "frame": { "x": 60, "y": 80, "w": 36, "h": 48 },
+              "label": "?123",
+              "tap": { "switchPage": "symbols" }
+            },
+            {
+              "id": "globe",
+              "frame": { "x": 100, "y": 80, "w": 36, "h": 48 },
+              "label": "🌐",
+              "tap": "nextKeyboard"
+            },
+            {
+              "id": "enter",
+              "frame": { "x": 140, "y": 80, "w": 60, "h": 48 },
+              "label": "↵",
+              "tap": "enter",
+              "composing": { "label": "確定", "tap": "enter" }
+            },
+            {
+              "id": "ascii",
+              "frame": { "x": 210, "y": 80, "w": 36, "h": 48 },
+              "label": "中/英",
+              "tap": "toggleAscii"
+            },
+            {
+              "id": "space",
+              "frame": { "x": 250, "y": 80, "w": 60, "h": 48 },
+              "tap": "space"
+            },
+            {
+              "id": "backspace",
+              "frame": { "x": 320, "y": 80, "w": 60, "h": 48 },
+              "label": "⌫",
+              "tap": "backspace"
+            }
+          ]
+        },
+        {
+          "id": "symbols",
+          "keys": [
+            {
+              "id": "comma",
+              "frame": { "x": 12, "y": 80, "w": 36, "h": 48 },
+              "shape": { "type": "ellipse" },
+              "tap": { "text": "，" }
+            },
+            {
+              "id": "star",
+              "frame": { "x": 60, "y": 80, "w": 36, "h": 48 },
+              "shape": { "type": "polygon", "points": [[0.5, 0], [1, 1], [0, 1]] },
+              "tap": { "text": "★" }
+            },
+            {
+              "id": "back",
+              "frame": { "x": 100, "y": 80, "w": 36, "h": 48 },
+              "label": "ABC",
+              "tap": { "switchPage": "letters" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
