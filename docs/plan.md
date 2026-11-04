@@ -145,8 +145,8 @@ pub struct Snapshot {
     pub has_more: bool,
     pub commit: Option<String>,     // 這次事件要上屏的文字
     pub commit_original: Option<String>, // `commit` 的原文
-    pub ascii: bool,
-    pub generation: u64,            // 每次候選變動 +1，非同步重排用
+    pub ascii: bool,                // 英文直通（`ToggleAscii`）；開著時沒有組字，鍵都交還宿主
+    pub generation: u64,            // 每次候選變動 +1（翻頁不算），非同步重排用
 }
 
 impl Session {
@@ -156,13 +156,15 @@ impl Session {
     pub fn focus_segment(&mut self, engine: &Engine, user: &mut UserModel, segment: usize) -> Snapshot;
     pub fn set_options(&mut self, options: Options);
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot; // 換選項後依新選項重列候選
-    pub fn rerank_request(&self) -> Option<RerankRequest>;            // 上下文 + 前 k 個候選
-    pub fn apply_rerank(&mut self, generation: u64, order: &[usize]) -> Option<Snapshot>;
+    pub fn all_candidates(&self) -> Vec<Candidate>;                  // 不分頁，候選展開面板用
+    pub fn rerank_request(&self) -> Option<RerankRequest>;            // generation + 上下文 + 前 RERANK_LIMIT 個候選
+    pub fn apply_rerank(&mut self, engine: &Engine, generation: u64, order: &[usize]) -> Option<Snapshot>;
 }
 ```
 
-- `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
-- `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它；組字中和標點相同，先上屏整個組字再接它，文字照原樣不轉全形（M1 票 20）。
+- `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。只改殼的畫面、不動組字的鍵由殼攔下、不轉給核心：組字中 Tab 開關字根提示、↓ / ↑ 開關展開面板（§3.1）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
+- `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它；組字中和標點相同，先上屏整個組字再接它，文字不轉全形（M1 票 20）；簡體模式下文字也轉簡體，原文留繁體（使用者決定，M1 票 23）。
+- `ToggleAscii`（單按 Shift，brief §4.3）：切英文直通，`Snapshot.ascii` 跟著變；英文狀態下每個鍵都 `handled` 為假，沒有組字。組字中按下先上屏整個組字再切，同 Rime `ascii_composer` 的 `commit_text`，要上屏輸入碼有 Enter。單按的判定（按下到放開 500 ms 內、中間沒有別的鍵，librime 同值）在殼（M1 票 23）。
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
@@ -175,6 +177,10 @@ impl Session {
 - 觸控機率（M4）：`Key` 加 `Weighted(Vec<(char, f32)>)`，由 `qim-layout` 依點擊位置與按鍵幾何算出，殼轉交；`qim-core` 不知道佈局。當時平台殼還沒開工，只改網頁綁定。
 - 欄位類型（M4）：`Options` 加 `field: FieldKind`（一般、email、網址、數字），由殼依平台的欄位資訊給。
 - 重排：`apply_rerank` 只接受目前的 `generation`，過期結果丟棄；重排過的候選最高只到第 2 位（afm-ime 做法，brief §1.3）。M1 只有介面與網頁的假實作，M3 起接雲端 LLM。
+  - `order` 是要求裡候選的位置、好的在前：首選不動，其餘照它排在第 2 位起，沒提到的照原順序接在後面。要求最多帶第一頁（`RERANK_LIMIT` = 9），所以重排只動第一頁。上下文是候選前面的分段的原文，M3 再接輸入框的前文。
+  - 名次真的變了才算候選變動、`generation` +1：同一份要求的其他結果照舊順序排，要作廢；原樣回傳不作廢。殼只在按鍵等事件之後要求，不因套用了重排結果再要求。
+  - 翻頁不是候選變動，`generation` 不加；翻頁中收到的結果照樣套用，因為只動第一頁，看得到的那頁不變。加的話結果在翻頁時作廢，殼重要求後仍在翻頁中套用，沒有保護到什麼（M1 票 23，M0 票 09 留下的問題）。
+  - `apply_rerank` 要 `Engine` 才回得出快照（組字的簡繁與字根），比原本的簽章多一個參數。
 
 ### 2.2 資料流
 
@@ -374,6 +380,8 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 實體鍵盤：照 brief §4.3 的鍵位。
   - 觸控模擬：行動裝置尺寸的觸控鍵盤，照 brief §4.4。按鍵幾何由 `qim-layout` 算，網頁只畫。
 - 候選列、展開面板、無痕開關、簡繁開關；按鍵放大預覽、深色模式、直向與橫向的佈局版本。
+  - 展開面板：候選列右側的展開鍵，桌面組字中 ↓ 打開、↑ 收起；Microsoft 速成的 ↓ 進候選窗、Tab 與 → 展開成表格，Tab 與 → 這裡已給字根提示與分段。選了字就收起（M1 票 23）。
+  - 候選列左邊顯示中英狀態；「重排」選單是重排的開關（brief §7 的雲端候選）：關、原樣（預設）、第 5 個提前（測上限用）。
 - 使用者資料存 `localStorage`；提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 接雲端 LLM。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。網頁測試頁的 API key 只放開發機環境變數，由 Vite 開發伺服器轉發，不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。

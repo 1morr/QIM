@@ -12,11 +12,23 @@
 			<label><input type="checkbox" id="english-candidates" checked /> 英文候選</label>
 			<textarea id="text" aria-label="輸入框" rows="4" readonly></textarea>
 			<div id="composition" data-testid="composition"></div>
-			<ol id="candidates" aria-label="候選"></ol>
+			<div class="candidate-bar">
+				<span id="mode" data-testid="mode" title="單按 Shift 切換中英">中</span>
+				<ol id="candidates" aria-label="候選"></ol>
+				<button id="expand" type="button" aria-label="展開候選" aria-expanded="false" aria-controls="panel" hidden>⌄</button>
+			</div>
+			<ol id="panel" aria-label="全部候選" hidden></ol>
 			<p id="status" role="status">載入中…</p>
 			<div class="settings">
 				<button id="touch-toggle" type="button" aria-pressed="false">觸控鍵盤</button>
 				<button id="dark-toggle" type="button" aria-pressed="false">深色</button>
+				<label>重排
+					<select id="rerank">
+						<option value="off">關</option>
+						<option value="identity" selected>原樣（假實作）</option>
+						<option value="raise-fifth">第 5 個提前（測試）</option>
+					</select>
+				</label>
 				<label>字根提示
 					<select id="hint-version">
 						<option value="cangjie5" selected>倉頡五代</option>

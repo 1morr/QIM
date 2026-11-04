@@ -133,6 +133,41 @@ impl WebSession {
         self.handle(Key::Right)
     }
 
+    /// 單按 Shift：切中英（brief §4.3）；組字中先上屏整個組字。
+    #[wasm_bindgen(js_name = toggleAscii)]
+    pub fn toggle_ascii(&mut self) -> WebSnapshot {
+        self.handle(Key::ToggleAscii)
+    }
+
+    /// 全部候選，不分頁（候選展開面板用）；選字照位置呼叫 [`WebSession::select`]。
+    #[wasm_bindgen(js_name = allCandidates)]
+    pub fn all_candidates(&self) -> Vec<String> {
+        self.session
+            .all_candidates()
+            .into_iter()
+            .map(|c| c.text)
+            .collect()
+    }
+
+    /// 給背景模型的重排要求（plan §2.7）；沒有組字時是 `undefined`。
+    #[wasm_bindgen(js_name = rerankRequest)]
+    pub fn rerank_request(&self) -> Option<WebRerankRequest> {
+        self.session.rerank_request().map(|r| WebRerankRequest {
+            generation: r.generation,
+            context: r.context,
+            candidates: r.candidates.into_iter().map(|c| c.original).collect(),
+        })
+    }
+
+    /// 套用重排結果：`order` 是要求的候選的位置，好的在前；`generation` 過期時是 `undefined`。
+    #[wasm_bindgen(js_name = applyRerank)]
+    pub fn apply_rerank(&mut self, generation: u64, order: Vec<usize>) -> Option<WebSnapshot> {
+        let snapshot = self
+            .session
+            .apply_rerank(&self.engine, generation, &order)?;
+        Some(self.track_composing(snapshot))
+    }
+
     /// 網頁不轉成其他鍵的按鍵：組字中吃下，沒有組字時交還瀏覽器。
     pub fn other(&mut self) -> WebSnapshot {
         self.handle(Key::Other)
@@ -202,8 +237,8 @@ impl WebSession {
     }
 
     /// 做一個佈局動作：文字經 `Session::text`（組字中先上屏組字）；切頁換 `layout` 的目前頁，
-    /// 核心收到 `Key::Other`（組字中吃下、組字留著）；網頁沒有下一個鍵盤，也當 `Key::Other`；
-    /// 中英切換在票 23 接，現在也當 `Key::Other`。結果帶著做了的動作，核心沒吃下時網頁照它做。
+    /// 核心收到 `Key::Other`（組字中吃下、組字留著）；網頁沒有下一個鍵盤，也當 `Key::Other`。
+    /// 結果帶著做了的動作，核心沒吃下時網頁照它做。
     fn perform(&mut self, layout: &mut WebLayout, action: Action) -> WebSnapshot {
         let snapshot = match &action {
             Action::Text(text) => self.session.text(&self.engine, &mut self.user, text),
@@ -217,7 +252,8 @@ impl WebSession {
                         layout.switch_page(page);
                         Key::Other
                     }
-                    Action::NextKeyboard | Action::ToggleAscii | Action::Text(_) => Key::Other,
+                    Action::ToggleAscii => Key::ToggleAscii,
+                    Action::NextKeyboard | Action::Text(_) => Key::Other,
                 };
                 self.session.handle(&self.engine, &mut self.user, key)
             }
@@ -282,6 +318,25 @@ pub struct WebSnapshot {
     /// `commit` 的繁體原文；「回報」用。
     #[wasm_bindgen(readonly, js_name = commitOriginal)]
     pub commit_original: Option<String>,
+    /// 英文直通（單按 Shift 切換）；候選列旁顯示目前狀態。
+    #[wasm_bindgen(readonly)]
+    pub ascii: bool,
+    /// 每次候選變動加一；和上次要求重排時不同，才再要求（plan §2.7）。
+    #[wasm_bindgen(readonly)]
+    pub generation: u64,
+}
+
+/// 給背景模型的重排要求（`qim_core::RerankRequest`）。JS 端叫 `RerankRequest`。
+#[wasm_bindgen(js_name = RerankRequest, getter_with_clone)]
+pub struct WebRerankRequest {
+    #[wasm_bindgen(readonly)]
+    pub generation: u64,
+    /// 候選前面的字詞（繁體原文）。
+    #[wasm_bindgen(readonly)]
+    pub context: String,
+    /// 前幾個候選的繁體原文，依目前的順序；和 `context` 一樣用原文，簡體模式下模型也看繁體。
+    #[wasm_bindgen(readonly)]
+    pub candidates: Vec<String>,
 }
 
 impl From<Snapshot> for WebSnapshot {
@@ -309,6 +364,8 @@ impl From<Snapshot> for WebSnapshot {
             action: None,
             letter: None,
             commit_original: s.commit_original,
+            ascii: s.ascii,
+            generation: s.generation,
         }
     }
 }

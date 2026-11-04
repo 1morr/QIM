@@ -327,3 +327,26 @@ fn changing_the_option_without_refresh_takes_effect_on_the_next_key() {
     let shown = texts(&ime.press(Key::Other));
     assert!(!shown.contains(&"the".to_string()), "{shown:?}");
 }
+
+#[test]
+fn english_mode_lists_no_candidates_and_chinese_mode_still_has_the_english_candidate() {
+    // 單按 Shift 切英文直通（M1 票 23）：英文狀態下沒有組字、也沒有任何候選，字母交還宿主。
+    let mut ime = Ime::new();
+    assert!(ime.press(Key::ToggleAscii).ascii);
+    for c in "the".chars() {
+        let snapshot = ime.press(Key::Letter(c));
+        assert!(!snapshot.handled);
+        assert!(snapshot.candidates.is_empty(), "{:?}", texts(&snapshot));
+    }
+    assert!(!ime.press(Key::ToggleAscii).ascii);
+    assert_eq!(ime.candidates("the")[1], "the");
+}
+
+#[test]
+fn switching_to_english_mid_composition_commits_the_chinese_first_candidate() {
+    let mut ime = Ime::new();
+    let first = texts(&ime.type_code("the"))[0].clone();
+    let snapshot = ime.press(Key::ToggleAscii);
+    assert_eq!(snapshot.commit, Some(first));
+    assert!(snapshot.ascii);
+}

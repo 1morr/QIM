@@ -54,3 +54,25 @@ test("關掉英文候選就不出，組字中切換立刻重列", async ({ page 
 	await english.check();
 	await expect(items.nth(1)).toHaveText("2the");
 });
+
+test("單按 Shift 切英文時打 the 直接進輸入框、沒有候選；切回中文 the 仍在第 2 位", async ({
+	page,
+}) => {
+	const { text, english, items } = await ready(page);
+	await text.focus();
+	await page.keyboard.press("Shift");
+	await page.keyboard.type("the");
+	await expect(text).toHaveValue("the");
+	await expect(items).toHaveCount(0);
+	// 英文狀態下切英文候選開關也不出候選。
+	await english.uncheck();
+	await english.check();
+	await expect(items).toHaveCount(0);
+
+	await text.focus();
+	await page.keyboard.press("Shift");
+	await page.keyboard.type("the");
+	await expect(items.nth(1)).toHaveText("2the");
+	await page.keyboard.press("2");
+	await expect(text).toHaveValue("thethe");
+});
