@@ -1,14 +1,22 @@
 {
   "common-voice-yue": {
-    "wrong": 1635
+    "wrong": 1635,
+    "corrections": 16603,
+    "wrong_lines": "1-380,382-1232,1234-1430,1432-1638"
   },
   "hkcancor": {
-    "wrong": 990
+    "wrong": 990,
+    "corrections": 11374,
+    "wrong_lines": "1-155,157-254,256-992"
   },
   "yue-wiki": {
-    "wrong": 2000
+    "wrong": 2000,
+    "corrections": 24203,
+    "wrong_lines": "1-2000"
   },
   "zh-wiki": {
-    "wrong": 2000
+    "wrong": 2000,
+    "corrections": 21446,
+    "wrong_lines": "1-2000"
   }
 }

@@ -19,7 +19,7 @@ fn fixed_items_parse() {
     assert!(
         items
             .iter()
-            .any(|item| item.input == "a" && item.expected == "日")
+            .any(|item| item.input() == "a" && item.expected() == "日")
     );
 }
 

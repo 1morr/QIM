@@ -1,12 +1,36 @@
-//! 題目檔的格式：`bench/fixed.tsv` 與 `bench/corpus/<名>.tsv`（`docs/development.md`〈首選字基準〉）。
+//! 題目檔的格式：`bench/fixed.tsv`、`bench/corpus/<名>.tsv` 與個人集 `bench/personal/rime-userdb.tsv`
+//! （`docs/development.md`〈首選字基準〉）。
 
-/// 一題：把 `input` 逐鍵打進核心，首選應該是 `expected`。
+/// 一題：把輸入碼逐鍵打進核心，首選應該是期望的文字。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
-    pub input: String,
-    pub expected: String,
-    /// 回報時指出是哪一題：固定題是「來源」欄，語料是行號。
+    /// 依序的單位；語料一個字一個單位，固定題整題一個單位。修正次數的模擬卡住時一個單位一個單位重打。
+    pub units: Vec<Unit>,
+    /// 題目在檔裡的行號（從 1 起），翻盤清單與個人集只用它指出題目。
+    pub line: usize,
+    /// 回報時指出是哪一題：固定題是「來源」欄，其他是行號。
     pub label: String,
+    /// 依權重報數字時的權重：個人集是上屏次數，其他是 1。
+    pub weight: u64,
+}
+
+/// 一段輸入碼與它該打出的文字。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unit {
+    pub code: String,
+    pub text: String,
+}
+
+impl Item {
+    /// 整題的輸入碼。
+    pub fn input(&self) -> String {
+        self.units.iter().map(|u| u.code.as_str()).collect()
+    }
+
+    /// 期望的首選。
+    pub fn expected(&self) -> String {
+        self.units.iter().map(|u| u.text.as_str()).collect()
+    }
 }
 
 /// `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。
@@ -23,32 +47,82 @@ pub fn parse_fixed(text: &str) -> Result<Vec<Item>, String> {
                 fields.len()
             ));
         };
-        items.push(item(number, input, expected, source)?);
+        if input.is_empty() || expected.is_empty() {
+            return Err(format!("第 {number} 行的輸入碼或期望首選是空的"));
+        }
+        items.push(Item {
+            units: vec![Unit {
+                code: input.to_string(),
+                text: expected.to_string(),
+            }],
+            line: number,
+            label: source.to_string(),
+            weight: 1,
+        });
     }
     Ok(items)
 }
 
-/// `<逐字速成碼，空格分隔><TAB><句子>`，輸入碼是各字的碼接起來。
+/// `<逐字速成碼，空格分隔><TAB><句子>`。
 pub fn parse_corpus(text: &str) -> Result<Vec<Item>, String> {
     let mut items = Vec::new();
     for (number, line) in numbered_lines(text) {
         let Some((codes, sentence)) = line.split_once('\t') else {
             return Err(format!("第 {number} 行少了 tab：要有輸入碼與句子兩欄"));
         };
-        let input: String = codes.split(' ').collect();
-        items.push(item(number, &input, sentence, &format!("第 {number} 行"))?);
+        items.push(per_character(number, codes, sentence, 1)?);
     }
     Ok(items)
 }
 
-fn item(number: usize, input: &str, expected: &str, label: &str) -> Result<Item, String> {
-    if input.is_empty() || expected.is_empty() {
-        return Err(format!("第 {number} 行的輸入碼或期望首選是空的"));
+/// 個人集：`<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 Rime 學習資料轉出。
+/// 錯誤訊息只指出行號，不帶內容（plan §5.2）。
+pub fn parse_personal(text: &str) -> Result<Vec<Item>, String> {
+    let mut items = Vec::new();
+    for (number, line) in numbered_lines(text) {
+        let fields: Vec<&str> = line.split('\t').collect();
+        let [codes, word, count] = fields.as_slice() else {
+            return Err(format!(
+                "第 {number} 行要有 3 欄（輸入碼、詞、上屏次數），實際 {} 欄",
+                fields.len()
+            ));
+        };
+        let weight = count
+            .parse::<u64>()
+            .ok()
+            .filter(|&c| c >= 1)
+            .ok_or_else(|| format!("第 {number} 行的上屏次數不是正整數"))?;
+        items.push(per_character(number, codes, word, weight)?);
+    }
+    Ok(items)
+}
+
+/// 每個字配一個碼的題目；碼數與字數不同就是壞檔。訊息不帶內容，個人集也用它。
+fn per_character(number: usize, codes: &str, text: &str, weight: u64) -> Result<Item, String> {
+    let codes: Vec<&str> = codes.split(' ').collect();
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() || codes.iter().any(|c| c.is_empty()) {
+        return Err(format!("第 {number} 行的輸入碼或文字是空的"));
+    }
+    if codes.len() != chars.len() {
+        return Err(format!(
+            "第 {number} 行有 {} 個碼、{} 個字，要一個字一個碼",
+            codes.len(),
+            chars.len()
+        ));
     }
     Ok(Item {
-        input: input.to_string(),
-        expected: expected.to_string(),
-        label: label.to_string(),
+        units: codes
+            .iter()
+            .zip(chars)
+            .map(|(code, ch)| Unit {
+                code: code.to_string(),
+                text: ch.to_string(),
+            })
+            .collect(),
+        line: number,
+        label: format!("第 {number} 行"),
+        weight,
     })
 }
 

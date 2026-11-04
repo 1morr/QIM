@@ -2,6 +2,7 @@
 
 use std::process::ExitCode;
 
+use qim_databuild::personal;
 use qim_databuild::sources::{CACHE_ENV, Http, default_cache_dir};
 
 const USAGE: &str = "用法：qim-databuild [--verify]（在 repo 根目錄執行）";
@@ -34,6 +35,18 @@ fn main() -> ExitCode {
                 .strip_prefix(&root)
                 .unwrap_or(&outcome.pack_path);
             println!("資料包：{}", shown.display());
+            // 個人集只印數字（plan §5.2）。
+            match outcome.personal {
+                Some(c) => println!(
+                    "個人集：{} 轉出 {} 題（略過 c < 1 的 {} 列、轉不了碼的 {} 詞，合併重複 {} 列）",
+                    personal::ITEMS,
+                    c.words,
+                    c.unused,
+                    c.untranscodable,
+                    c.merged
+                ),
+                None => println!("個人集：沒有 {}，跳過", personal::USERDB),
+            }
             match outcome.report {
                 Some(report) => {
                     println!("{report}");
