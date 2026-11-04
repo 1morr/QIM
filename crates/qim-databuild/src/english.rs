@@ -4,7 +4,8 @@
 //! 詞表（README 的 `mk-list --accents=strip en_US 60`）。`en_US.dic` 一行一個詞幹與旗標，
 //! 照 `en_US.aff` 的字首、字尾規則展開成全部詞形。只支援這份 `.aff` 用到的寫法：單字元旗標、
 //! `PFX` / `SFX` 的 strip、add、條件（字元、`.`、`[...]`、`[^...]`），沒有接續旗標；
-//! 遇到別的寫法就讓建置失敗，不默默略過。
+//! 會改變有哪些詞的其他指令（[`UNSUPPORTED`]）讓建置失敗，不默默略過。只影響拼字檢查與
+//! 建議的指令（`TRY`、`REP`…）照略過。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -16,6 +17,18 @@ use crate::Error;
 /// release zip 裡的字典與規則檔。
 pub const DIC: &str = "en_US.dic";
 pub const AFF: &str = "en_US.aff";
+
+/// 會改變有哪些詞、這裡卻沒實作的 `.aff` 指令：出現就讓建置失敗。
+pub const UNSUPPORTED: [&str; 8] = [
+    "FLAG",
+    "COMPLEXPREFIXES",
+    "NEEDAFFIX",
+    "CIRCUMFIX",
+    "FORBIDDENWORD",
+    "AF",
+    "IGNORE",
+    "FULLSTRIP",
+];
 
 /// `.aff` 的字首、字尾規則與特殊旗標。
 #[derive(Debug, Clone, Default)]
@@ -61,6 +74,14 @@ impl Class {
 }
 
 impl Affixes {
+    fn table_mut(&mut self, prefix: bool) -> &mut BTreeMap<char, Affix> {
+        if prefix {
+            &mut self.prefixes
+        } else {
+            &mut self.suffixes
+        }
+    }
+
     /// 讀 `.aff`：只取 `PFX`、`SFX`、`NOSUGGEST`、`ONLYINCOMPOUND`、`COMPOUNDRULE` 的旗標，
     /// 其他指令（`TRY`、`REP`…）只影響拼字檢查與建議，不影響有哪些詞。
     pub fn parse(text: &str) -> Result<Self, Error> {
@@ -96,12 +117,7 @@ impl Affixes {
                         },
                         rules: Vec::new(),
                     };
-                    let table = if prefix {
-                        &mut affixes.prefixes
-                    } else {
-                        &mut affixes.suffixes
-                    };
-                    if table.insert(flag, affix).is_some() {
+                    if affixes.table_mut(prefix).insert(flag, affix).is_some() {
                         return Err(Error::invalid(at(), format!("旗標 {flag} 重複")));
                     }
                     open = Some((prefix, flag, count));
@@ -122,12 +138,8 @@ impl Affixes {
                         condition: parse_condition(condition)
                             .map_err(|r| Error::invalid(at(), r))?,
                     };
-                    let table = if prefix {
-                        &mut affixes.prefixes
-                    } else {
-                        &mut affixes.suffixes
-                    };
-                    table
+                    affixes
+                        .table_mut(prefix)
                         .get_mut(&open_flag)
                         .expect("宣告時插入過")
                         .rules
@@ -135,6 +147,9 @@ impl Affixes {
                 }
                 [kind @ ("PFX" | "SFX"), ..] => {
                     return Err(Error::invalid(at(), format!("{kind} 的欄位數不對")));
+                }
+                [directive, ..] if UNSUPPORTED.contains(&directive) => {
+                    return Err(Error::invalid(at(), format!("不支援 {directive}")));
                 }
                 _ => {}
             }

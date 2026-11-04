@@ -44,7 +44,7 @@ pub(crate) const SIMPLIFIER: [PackedSource; 1] = [PackedSource {
 pub(crate) const ENGLISH: [PackedSource; 1] = [PackedSource {
     name: "ESDB (SCOWL)",
     source_id: SCOWL,
-    used: "en_US.dic and en_US.aff in hunspell-en_US-2026.02.25.zip: the words of the size 60 \
+    used: "en_US.dic and en_US.aff in the hunspell-en_US zip: the words of the size 60 \
            American English speller dictionary",
 }];
 

@@ -117,3 +117,18 @@ fn compound_rule_flags_are_ignored() {
     let words = expanded("3\n0/nm\n1st/p\nwalk/D\n");
     assert_eq!(words, ["0", "1st", "walk", "walked"]);
 }
+
+#[test]
+fn a_directive_that_changes_the_word_set_is_an_error() {
+    for directive in english::UNSUPPORTED {
+        let aff = format!("{AFF}\n{directive} x\n");
+        assert!(Affixes::parse(&aff).is_err(), "{directive} 要讓建置失敗");
+    }
+    // 只影響建議的指令照略過。
+    assert!(
+        Affixes::parse(&format!(
+            "{AFF}\nTRY esianrtolcdugmphbyfvkwz\nREP 1\nREP a ei\n"
+        ))
+        .is_ok()
+    );
+}

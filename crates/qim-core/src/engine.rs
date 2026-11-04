@@ -104,7 +104,7 @@ impl Engine {
     /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan §2.4）：剛好是詞表裡的完整單字、又長過
     /// 方案一個字的最長碼時才有。不容錯、不補全；1–2 碼的英文字（`an`、`it`）和單字的碼撞得太常，
     /// macOS 速成也是第 3 碼起才出英文（黑箱 T7）。
-    pub(crate) fn english_word(&self, input: &str) -> Option<&str> {
+    pub(crate) fn english_candidate(&self, input: &str) -> Option<&str> {
         (input.len() > usize::from(self.scheme.max_code_length))
             .then(|| self.english.lookup(input))
             .flatten()

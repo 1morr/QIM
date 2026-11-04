@@ -51,6 +51,7 @@
 | 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 | 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 15 | ESDB 英文資料包 8.6 萬詞、排位規則 4（3 碼起排第 2、選了不學）、`Options.english_candidates` 與網頁開關；首選正確率不變；細節見票 15 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（等 17b、23 合併） |
 
 ## 偏差與決定
 
@@ -120,3 +121,6 @@
 - 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。
 - 2026-11-04 M1 16（協調者決定）：快照的候選、分段與上屏另帶繁體原文（`original`、`commit_original`），「回報」與字根提示用原文，簡體模式不停用回報（plan §2.1）。
 - 2026-11-04 M1 16：merge 票 21 後簡體的轉換單位由「一個候選」改為「一個分段」：選了多段候選後各段分開固定，候選列也要各段分開轉換，看到的才是上屏的（plan §2.1）。
+- 2026-11-04 M1 15：英文詞表取 ESDB release 的 hunspell-en_US zip 自己展開字首字尾，不跑 ESDB 的 Python + SQLite 工具；沒有逐詞 size，plan §4.4 刪掉「size 當常見度」。
+- 2026-11-04 M1 15：英文候選第 3 碼起才出（macOS 速成 T7）、只給剩下的整串、沒有中文候選不出、選了不學；同一小寫拼法只留一種大小寫（brief §4.3、plan §2.4）。
+- 2026-11-04 M1 15：英文佔第 2 位讓 hkcancor、個人集各多翻一頁（修正 +1），`--update-baseline` 接受；各集合首選正確率不變（票 15 Comments）。

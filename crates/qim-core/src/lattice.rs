@@ -29,8 +29,8 @@ pub(crate) struct CandidateSpan {
     pub len: usize,
     /// 組成它的各段，依輸入碼的順序、接起來是 `text`；上屏時學習用（plan §2.4）。
     pub segments: Vec<PathSegment>,
-    /// 英文候選（排位規則 4）：選了它和 Enter 一樣原樣上屏、不學。
-    pub english: bool,
+    /// 英文候選（排位規則 4）：選了它和 Enter 一樣不學。
+    pub english_candidate: bool,
 }
 
 impl CandidateSpan {
@@ -44,7 +44,7 @@ impl CandidateSpan {
             }],
             text,
             len,
-            english: false,
+            english_candidate: false,
         }
     }
 }
@@ -155,13 +155,13 @@ impl Lattice {
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
 /// 3. 只蓋住開頭一段的字詞，蓋得長的在前，同長依分數排。
 ///
-/// 文字重複的只留第一個。`english` 為真、整串輸入碼是英文單字（[`Engine::english_word`]）、
+/// 文字重複的只留第一個。`english_candidates` 為真、整串輸入碼是英文單字（[`Engine::english_candidate`]）、
 /// 又有其他候選時，最後加上那個英文字。接著依序套用排位規則（[`RULES`]）。
 pub(crate) fn candidates(
     engine: &Engine,
     user: &UserModel,
     lattice: &Lattice,
-    english: bool,
+    english_candidates: bool,
 ) -> Vec<CandidateSpan> {
     let input = lattice.input();
     let n = input.len();
@@ -184,7 +184,7 @@ pub(crate) fn candidates(
                     text: node.text.clone(),
                     len: n,
                     segments: lattice.path(n, k),
-                    english: false,
+                    english_candidate: false,
                 };
                 (node.score, span)
             }),
@@ -214,12 +214,14 @@ pub(crate) fn candidates(
         .filter(|c| seen.insert(c.text.clone()))
         .collect();
     // 沒有中文候選時不出英文：它不搶首選（brief §4.3）。
-    if let Some(word) = english.then(|| engine.english_word(input)).flatten()
+    if let Some(word) = english_candidates
+        .then(|| engine.english_candidate(input))
+        .flatten()
         && !list.is_empty()
         && seen.insert(word.to_string())
     {
         list.push(CandidateSpan {
-            english: true,
+            english_candidate: true,
             ..CandidateSpan::single(word.to_string(), n)
         });
     }
@@ -393,7 +395,7 @@ fn used_word_second(ranked: &mut Ranked) {
 
 /// 規則 4：英文候選排第 2 位（brief §4.3）；第 2 位已由前面的規則排定時排在它後面最前的空位。
 fn english_second(ranked: &mut Ranked) {
-    if let Some(i) = ranked.free.iter().position(|c| c.english) {
+    if let Some(i) = ranked.free.iter().position(|c| c.english_candidate) {
         ranked.pin_at_or_after(i, 1);
     }
 }

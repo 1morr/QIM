@@ -26,6 +26,7 @@ pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Met
 pub const PACK: &str = "build/packs/quick/quick.pack";
 pub const PACKS: &str = "build/packs";
 /// 英文資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著英文候選，基準照網頁掛上。
+/// WebAssembly 的延遲腳本依檔頭魔數分辨各資料包，不靠參數的位置。
 pub const ENGLISH_PACK: &str = "build/packs/scowl-en-us/scowl-en-us.pack";
 pub const FIXED: &str = "bench/fixed.tsv";
 /// 語料目錄，依序跑：每個 `<名>.tsv` 是一個集合，集合名在所有目錄間不能重複。
@@ -395,7 +396,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 讀 [`PACK`] 與方案指名的詞庫、語言模型資料包，建 `Engine`；`overrides` 蓋掉方案的打分參數。
+/// 讀 [`PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]，建 `Engine`；
+/// `overrides` 蓋掉方案的打分參數。
 /// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
 fn load_engine(
     root: &Path,

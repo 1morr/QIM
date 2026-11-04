@@ -85,7 +85,7 @@ fn engine() -> Engine {
 fn english() -> EnglishPack {
     EnglishPack {
         id: "english".into(),
-        words: EnglishWords::new(["the", "an", "May", "may", "English", "NASA", "wee"]),
+        words: EnglishWords::new(["the", "an", "May", "may", "English", "NASA", "wee", "yes"]),
     }
 }
 
@@ -289,7 +289,7 @@ fn the_word_list_keys_by_lower_case_and_prefers_the_lower_case_spelling() {
     assert_eq!(words.lookup("nasa"), Some("NASA"));
     assert_eq!(words.lookup("English"), None, "輸入碼只有小寫");
     assert_eq!(words.lookup("engl"), None, "不補全");
-    assert_eq!(words.len(), 6);
+    assert_eq!(words.len(), 7);
 }
 
 #[test]
@@ -306,4 +306,24 @@ fn the_english_pack_round_trips_through_bytes() {
         EnglishPack::from_bytes(&pack.to_bytes().unwrap()).unwrap(),
         pack
     );
+}
+
+#[test]
+fn no_english_candidate_without_any_chinese_candidate() {
+    // `y` 沒有字，`yes` 沒有任何中文候選：英文候選不搶首選，所以也不單獨出現。
+    let mut ime = Ime::new();
+    assert_eq!(ime.candidates("yes"), Vec::<String>::new());
+}
+
+#[test]
+fn changing_the_option_without_refresh_takes_effect_on_the_next_key() {
+    let mut ime = Ime::new();
+    assert_eq!(texts(&ime.type_code("the"))[1], "the");
+    ime.session.set_options(Options {
+        english_candidates: false,
+        ..Options::default()
+    });
+    // 組字中吃下不動作的鍵：先依新選項重列。
+    let shown = texts(&ime.press(Key::Other));
+    assert!(!shown.contains(&"the".to_string()), "{shown:?}");
 }

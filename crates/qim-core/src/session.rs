@@ -507,7 +507,7 @@ impl Session {
         };
         // 英文候選蓋住剩下的整串（分段的候選列沒有它）：和 Enter 一樣，選定的分段上屏字詞、
         // 其餘上屏英文字，整次不學也不造詞（plan §2.4）。
-        if choice.english {
+        if choice.english_candidate {
             let mut commit = self.selected_commit(engine);
             commit.text.push_str(&choice.text);
             commit.original.push_str(&choice.text);
