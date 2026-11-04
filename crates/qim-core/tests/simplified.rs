@@ -276,3 +276,17 @@ fn in_traditional_mode_the_original_is_the_text() {
     let committed = ime.press(Key::Punct(','));
     assert_eq!(committed.commit, committed.commit_original);
 }
+
+/// 觸控鍵盤的文字鍵（`Session::text`，M1 票 20）：組字照簡體上屏、原文是繁體；文字鍵本身照原樣。
+#[test]
+fn a_touch_text_key_commits_the_simplified_composition_and_its_text_as_is() {
+    let mut ime = Ime::simplified();
+    ime.type_code("anr");
+    let committed = ime.session.text(&ime.engine, &mut ime.user, "門");
+    assert_eq!(committed.commit.as_deref(), Some("门口門"));
+    assert_eq!(committed.commit_original.as_deref(), Some("門口門"));
+
+    let alone = ime.session.text(&ime.engine, &mut ime.user, "唔該");
+    assert_eq!(alone.commit.as_deref(), Some("唔該"));
+    assert_eq!(alone.commit_original.as_deref(), Some("唔該"));
+}

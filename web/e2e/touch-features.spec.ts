@@ -356,3 +356,14 @@ test("點候選選字之後，長按與放大預覽照常", async ({ page }) => 
 	await expect(text).toHaveValue(new RegExp(`^${second}.+q$`));
 	await expect(page.getByTestId("composition")).toHaveText("");
 });
+
+test("簡體模式下觸控打字：空白上屏簡體，組字中點符號先上屏簡體組字", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await page.getByLabel("簡體").tap();
+	await tapKeys(page, ["a", "n", "r", "space"]);
+	await expect(text).toHaveValue("门口");
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
+	await expect(text).toHaveValue("门口门口？");
+});
