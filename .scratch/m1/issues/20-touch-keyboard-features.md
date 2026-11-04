@@ -53,3 +53,15 @@ Blocked by: 19
   - 放開才做動作、兩指交疊：票沒寫，但分辨點一下與長按一定會帶出這兩點。已寫進 plan §2.6，平台殼照做。
 - 2026-11-04 合併 main（票 13，`0736054`）：沒有文字衝突，但有一處語意衝突：票 13 讓 `commit_all_then` 多收 `&mut UserModel`（標點先上屏組字時照樣學），`Session::text` 編不過。改成把 `user` 傳下去，觸控文字鍵和標點一樣學。`tests/learning.rs` 補「文字鍵與標點學到的 `UserModel` 相同且不是空的」，雙向驗過：改成學進丟掉的 `UserModel` 時會紅。合併後 `cargo xtask data` 通過（資料包 sha256 不變：quick `f9499e401df5`、quick-lexicon `fe79d8a13d48`、zh-hant-bigram `088a93199bd2`）；`bench --check` exit 0，各集合沒有翻盤，固定題 11/11；`cargo xtask check` 通過（e2e `44 passed`）。合併後觸控亂按：4 個種子 × 150 步，加切換無痕，三頁都走到，沒有錯誤。
 - 2026-11-04 合併 main（票 22，`391a30a`）：三個檔衝突。`docs/development.md` 的資料包說明取 main（多了字根提示資料包），預設佈局取本票。`web/index.html` 用 main 的 `.settings`，放觸控鍵盤、深色、字根提示三個控制項；本票的 `.toggles` 樣式改名成 `.settings`。`web/src/main.ts` 兩邊的常數都留，import 拿掉已經沒人用的 `LayoutKey`。語意衝突：票 22 把組字改成顯示字根，本票 `touch-features.spec.ts` 的四個組字斷言照票 22 的寫法改成字根（`手`、`日弓口`、`弓`）。合併後 `cargo xtask data --verify` 通過（`verify 通過`，25 項全過；資料包格式 5，sha256：quick `0fd82b8adae0`、quick-lexicon `f17de0b58ac6`、zh-hant-bigram `baf9cc30a7b6`、cangjie-hint `9e755488f431`）；`bench --check` exit 0，各集合答錯與修正數都和 baseline 相同、沒有翻盤，固定題 11/11；`cargo xtask check` 通過（e2e `51 passed`）。觸控亂按：4 個種子 × 150 步，加切換無痕，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 12，`82d476e`）：四個檔衝突。
+  - `docs/development.md`：資料包與語料說明取 main（語料權重），預設佈局取本票。
+  - `web/style.css`：兩邊的樣式都留。
+  - `web/src/main.ts`：回報與深色、轉向兩邊都留。
+  - `web/src/touch.ts`：用本票的版本。票 12 讓 `onSnapshot` 多收按的鍵，用 `key.tap === "space"` 判斷是不是選字（回報用）；本票的 `LayoutKey` 已拿掉 `tap`，綁定改在 `Snapshot` 帶實際做的 `action`，所以改成 `snapshot.action === "space"`，`onSnapshot` 仍只收 `Snapshot`。這樣長按與組字中的動作也照實際做的算。
+  - 自動合併時，票 12 的 `onSnapshot(snapshot, key)` 落進本票的 `finish`，那裡沒有 `key`，改回 `onSnapshot(snapshot)`。
+  - 補 Playwright「觸控空白鍵選字可以回報，組字中點符號上屏不算」：改成恆為 `false`、恆為 `true` 時各自紅。
+  - 合併後的檢查：
+    - `cargo xtask data --verify`：`verify 通過`，25 項全過。sha256：quick `ae3bc207ce7a`、quick-lexicon `95e8f43e91cb`、zh-hant-bigram `d5c20a5a307e`、cangjie-hint `9e755488f431`。
+    - `bench --check`：exit 0，公開語料四集的答錯與修正數都和 baseline 相同、沒有翻盤，固定題 15/15。個人集答錯 1106 → 1096，由錯變對 40 題、由對變錯 30 題，都來自票 12 的調參；個人集的 baseline 只在本機，合併時沒更新，本票沒動打分。
+    - `cargo xtask check`：通過（e2e `54 passed`）。
+  - 觸控亂按：4 個種子 × 150 步，三頁都走到，沒有錯誤。
