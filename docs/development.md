@@ -33,6 +33,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `cargo build` | 建置全部 Rust crate |
 | `cargo xtask web` | 編 WebAssembly 綁定、複製資料包到網頁，見〈網頁〉 |
 | `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
+| `npm test --prefix web` | 網頁的單元測試（`web/test/` 下的 `*.test.ts`，不必先跑 `cargo xtask web`） |
 | `npm run --prefix web e2e` | Playwright 實打網頁（自己起開發伺服器，埠 5179）；先跑 `cargo xtask web` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`，見〈資料建置〉 |
@@ -200,8 +201,9 @@ cargo xtask check
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
 | `docs` | 文件規則（plan §6）：`docs/progress.md` 的段落、表格、長度、里程碑標記、下一步指令，與 `.scratch/` 的 spec | 跑 |
 | `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
-| `tsc` | `web/` 的 `tsc --noEmit`，再對 `web/bench/` 跑一次（`npm run typecheck`） | 跑 |
+| `tsc` | `web/` 的 `tsc --noEmit`，再對 `web/bench/`、`web/test/` 各跑一次（`npm run typecheck`） | 跑 |
 | `biome` | `web/` 的 `biome check`（`npm run lint`） | 跑 |
+| `unit` | `web/test/` 的單元測試（`npm test`，Node 內建的 `node --test`，直接跑 TypeScript） | 跑 |
 | `e2e` | 複製資料包（〈網頁〉第 2 步）後跑 Playwright（`npm run e2e`）；要先跑過 `cargo xtask data` | 跳過 |
 
 `cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test` 與 `e2e`：測試會隨碼表與性質測試變慢，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。

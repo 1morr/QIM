@@ -28,7 +28,7 @@
 | 產品 | 採用 | 刻意不同 |
 | --- | --- | --- |
 | Gboard | 連打（整串解碼，選開頭一段後其餘重算）、容錯（觸控按點擊位置算，原樣讀法優先）、長按出英文、打完符號留在符號頁、預設佈局（[黑箱基線](research/blackbox-baseline.md)） | 候選依使用頻率前移（Gboard 速成選 10 次都不動）；自動造詞（Gboard 不學）；繁體模式不混簡體字（Gboard 混排，`ls` 首選「门」）；英文候選放第 2 位（Gboard 速成沒有）；單碼不列鄰鍵的字 |
-| iOS / macOS 內建速成 | 聯想（iOS：看前文、字詞都給、可一直接下去）、中文狀態下的英文候選、字根提示；粵語字序以 iOS 為準（嘢、啲、嘅、佢排第 1）；組字中按標點的行為由票 10 參考兩者決定（[黑箱基線](research/blackbox-baseline.md)） | 連打做整串解碼（兩者都不做，iOS 固定 2 碼一段）；選兩次才成首選，不學它們「選一次就到第 1、只記最近一次」；自動造詞（兩者逐字上屏都不學新詞）；繁體模式不混簡體字（iOS 混排）；英文候選放第 2 位（macOS 排第 1）；長按出英文字母（iOS 字根鍵沒有子鍵）；打完符號留在符號頁（iOS 打標點後跳回） |
+| iOS / macOS 內建速成 | 聯想（iOS：看前文、字詞都給、可一直接下去）、中文狀態下的英文候選、字根提示；粵語字序以 iOS 為準（嘢、啲、嘅、佢排第 1）；組字中按標點先上屏首選再出標點（§4.3，[黑箱基線](research/blackbox-baseline.md) T18） | 連打做整串解碼（兩者都不做，iOS 固定 2 碼一段）；選兩次才成首選，不學它們「選一次就到第 1、只記最近一次」；自動造詞（兩者逐字上屏都不學新詞）；繁體模式不混簡體字（iOS 混排）；英文候選放第 2 位（macOS 排第 1）；長按出英文字母（iOS 字根鍵沒有子鍵）；打完符號留在符號頁（iOS 打標點後跳回） |
 | Rime | 輸入方案與核心分離的做法 | 每個方案只索引自己的碼；長詞條與造句用同一把尺比分數（`docs/research/rime.md` §5） |
 | libime | 碼表格式、使用者學習的做法 | — |
 | afm-ime / 青簡 | 慢的模型只做非同步重排、不搶首選（ADR 0005）；青簡的容錯「預設相信使用者」（§4.8）、譯詞、主題格式（可繼承、按淺深色給變數） | 譯詞表與詞庫不拷青簡的加工檔（GPL，`docs/research/qingjian.md` §10.3） |
@@ -85,12 +85,17 @@ QIM（暫名）。
 | 空白 | 上屏首選（翻頁後也一樣） |
 | 1–9 | 選對應候選 |
 | `-` / `=`、PageUp / PageDown | 翻頁 |
-| Enter | 把輸入碼當英文原樣上屏 |
+| Enter | 把輸入碼當英文原樣上屏；已選定的分段上屏字詞，其餘上屏輸入碼 |
 | Esc | 清除輸入碼 |
 | ← / → | 組字中移到前一段或後一段，候選改列該段的字詞 |
 | Shift（單按） | 切換中英文 |
+| 標點 | 組字中先上屏整個組字再接標點；沒有組字時直接上屏標點 |
+| 大寫字母（Shift＋字母） | 組字中先上屏整個組字再接那個字母；沒有組字時照打 |
 
-- 標點預設全形。
+- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、還沒做的 ← / → 與 Shift）組字中吃下不動作；`z` 留給萬用鍵（§1.5）。
+- 「上屏整個組字」和一直按空白相同：已選定的分段，接著逐次取剩下的輸入碼的首選，沒有字的碼原樣上屏。
+- 參考：組字中按標點，macOS、iOS 速成與 Gboard 都先上屏首選再出標點（[黑箱基線](research/blackbox-baseline.md) T18）。Enter、大寫字母照 librime express_editor：Return 是 `CommitRawInput`（選定的段上屏字、其餘上屏原碼），方案以外的可見字元是 `DirectCommit`（先上屏組字、字元照打）。macOS、Gboard 的 Enter 上屏首選，macOS 的 Shift＋字母把整串改成英文，都不學：要首選有空白，要英文有 Enter。
+- 標點預設全形：`,` `.` `?` `!` `;` `:` `(` `)` `[` `]` `{` `}` `<` `>` `\` `^` `_` 依序轉成 ， 。 ？ ！ ； ： （ ） 「 」 『 』 《 》 、 …… ——，取 rime-prelude `punctuation.yaml` `half_shape` 每鍵第一個是全形的選項，不出標點選單。其他符號上屏半形：引號要配對（智慧標點，§4.7）；`/`（Rime 是「、」，和 `\` 重複，留給網址與分數）、`$`（Rime 是「￥」，香港用 $）不學 Rime；其餘 Rime 的第一個選項就是半形。`-` / `=` 是翻頁鍵，沒有組字時照打。
 - 英文候選：輸入碼剛好是完整英文單字時放第 2 位，不搶首選；不容錯、不補全，糾錯與預測只在英文模式（§4.7）。
 - 組字中顯示已打的字根（如「日弓口」）；候選旁不顯示碼，用快捷鍵查字根提示。
 
@@ -271,6 +276,8 @@ QIM（暫名）。
 - 三案例根因：`anr` 的「問」是倉頡全碼、與「門口」同長而比詞頻（50737 > 9435）；`mir` 的「一台」不在詞庫，且精確詞條（䂖、一店、歹口）擋掉造句；只保留速成碼後 `anr` 首選變「門口」。`docs/research/rime.md` §4，復現：`scripts/experiments/rime-cases/`。
 - 使用者資料同步把每個使用者詞典寫成純文字 `<詞典名>.userdb.txt`，放在 `sync_dir/<user_id>/`（`user_id` 即 `installation.yaml` 的 `installation_id`）。每列三欄以 Tab 分隔：輸入碼（每個音節後帶一個空白）、詞、`c=上屏次數 d=衰減值 t=tick`。`c` 為負代表已刪除。librime `e930f57`：`src/rime/dict/user_db.cc:22-25,69-95`、`src/rime/lever/user_dict_manager.cc:51-71`、`src/rime/deployer.cc:150-152`、`src/rime/lever/deployment_tasks.cc:97-107`（`sync_dir` 預設為使用者目錄下的 `sync`）、`src/rime/dict/user_dictionary.cc:443-451`，2026-11-04 查。
 - userdb 的輸入碼是詞典的音節碼，不是使用者按的鍵：使用者速成方案（rime-quick）的 4,528 個詞、9,241 個音節，99.5% 等於該字的倉頡全碼，沒有一個是速成碼。所以看不出使用者打的是速成碼還是全碼，也看不出三代或五代。本機統計（小狼毫 `quick5.userdb`，用 `rime_dict_manager -b` 轉出），2026-11-04。
+- express_editor（「按非方案的字元就上屏」的編輯器）的 Return 綁 `CommitRawInput`：丟掉沒選定的段再上屏，選定的段上屏候選、其餘上屏原碼；方案與標點都不收的可見 ASCII 字元走 `DirectCommit`：上屏組字（每段取選定的候選，沒選的取第一個）後回 `kRejected`，字元交給宿主照打。組字中按標點時標點自成一段，只有一個選項的確認、帶 `commit` 的連同組字一起上屏。librime `9777cb2`：`src/rime/gear/editor.cc:113-116,178-181,204-216`、`src/rime/composition.cc:102-120`、`src/rime/gear/punctuator.cc:122-136,202-215`，2026-11-04 查。
+- rime-prelude `punctuation.yaml` 的 `half_shape`：`,` `.` `?` `!` `;` `:` 帶 `commit`（，。？！；：），`(` `)` 是（），`[` `]` `{` `}` `<` `>` `\` 第一個選項是「」『』《》、，`^` `_` 是…… ——；引號是配對（‘’、“”），`/` 第一個是、，`$` 是￥，`` ` `` `@` `#` `&` `+` `-` `=` 是半形本身。rime-prelude `082425e`：`punctuation.yaml:39-71`，2026-11-04 查。
 - librime-octagram 外掛為 BSD-3-Clause，語法模型資料 rime-octagram-data 為 LGPL-3.0；繁體字級 / 詞級壓縮模型 10.3 MB / 41.4 MB（release 20260712）。[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)。
 
 ### 12.3 平台框架

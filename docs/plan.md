@@ -119,7 +119,7 @@ flowchart LR
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
 | `@playwright/test` | 1.64.1 | 網頁 e2e 與驗收 | 使用者指定 |
-| `@types/node` | 26.6.6 | `web/bench/` 的 Node 腳本（WebAssembly 每鍵延遲）的型別 | 跟 Node 26 同主版本；只給 `web/bench/tsconfig.json`，網頁的程式碼看不到 Node 的 API |
+| `@types/node` | 26.6.6 | `web/bench/` 的 Node 腳本（WebAssembly 每鍵延遲）與 `web/test/` 單元測試（Node 內建的 `node:test`，不另加測試框架）的型別 | 跟 Node 26 同主版本；只給 `web/bench/`、`web/test/` 的 `tsconfig.json`，網頁的程式碼看不到 Node 的 API |
 
 ## 2. 核心
 
@@ -132,7 +132,7 @@ pub struct Engine;      // 不可變：方案 + 資料包，多個 Session 共�
 pub struct UserModel;   // 可變：使用者詞、學習計數；export() / import() 給殼存檔
 pub struct Session;     // 一個輸入框的組字狀態
 
-pub enum Key { Letter(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp, PageDown, Left, Right, ToggleAscii }
+pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp, PageDown, Left, Right, ToggleAscii, Other }
 
 pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool }
 
@@ -157,6 +157,7 @@ impl Session {
 }
 ```
 
+- `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 上下文（M3）：`Session::set_context(before: &str)`，n-gram 與個人 bigram 用前文當起點。
 - 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的字詞；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
