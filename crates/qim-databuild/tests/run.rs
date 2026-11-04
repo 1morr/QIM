@@ -63,6 +63,9 @@ const CC_LICENSES: [(&str, &str); 3] = [
 /// rime-essay 的 `essay.txt`：門口、問日、日日收進詞庫；單字、低於門檻、含擴展區的字的不收。
 const ESSAY: &str = "日\t71052\n門口\t9435\n問日\t300\n日日\t100\n丟丟\t99\n日𠀀\t500\n";
 
+/// repo 裡的粵語口語詞表：口門收進詞庫（rime-essay 沒有）。
+const COLLOQUIAL: &str = "# 粵語口語詞表\n\n口門\t300\n";
+
 /// rime-essay 的 `LICENSE`（這裡只取開頭）。
 const LGPL: &str = "\
                    GNU LESSER GENERAL PUBLIC LICENSE
@@ -270,6 +273,8 @@ fn repo(root: &Path, statement: &str) {
     for (path, text) in CC_LICENSES {
         std::fs::write(root.join(path), text).unwrap();
     }
+    std::fs::create_dir_all(root.join("data/lexicon")).unwrap();
+    std::fs::write(root.join("data/lexicon/yue-colloquial.tsv"), COLLOQUIAL).unwrap();
     std::fs::create_dir_all(root.join("data/schemes")).unwrap();
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/schemes/quick.toml"),
@@ -438,6 +443,7 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     };
     assert_eq!(words("ara"), ["問日"]);
     assert_eq!(words("aa"), ["日日"]);
+    assert_eq!(words("ran"), ["口門"]);
     assert!(lexicon.lexicon.char_frequency('日') > 0);
     let c = outcome.lexicon.counts;
     assert_eq!(
@@ -446,9 +452,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
             c.single_characters,
             c.below_threshold,
             c.outside_continuous,
-            c.words
+            c.words,
+            c.colloquial,
+            c.colloquial_added,
         ),
-        (6, 1, 1, 1, 3)
+        (6, 1, 1, 1, 4, 1, 1)
     );
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(&outcome.pack_path).unwrap();
@@ -467,6 +475,20 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
+    // 口語詞表在 repo 裡：NOTICE 列出它的路徑、sha256 與 CC0，LICENSE 有它的一段。
+    let section = notice
+        .split("\n\n")
+        .find(|s| s.contains("data/lexicon/yue-colloquial.tsv"))
+        .unwrap_or_else(|| panic!("{notice}"));
+    assert!(
+        section.contains(&sha256_hex(COLLOQUIAL.as_bytes())),
+        "{section}"
+    );
+    assert!(section.contains("CC0-1.0"), "{section}");
+    assert!(
+        license.contains("Cantonese colloquial word list") && license.contains("License: CC0-1.0"),
+        "{license}"
+    );
     let quick_license =
         std::fs::read_to_string(root.path().join("build/packs/quick/LICENSE")).unwrap();
     assert!(!quick_license.contains("LGPL"), "{quick_license}");
