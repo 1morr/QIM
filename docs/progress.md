@@ -49,6 +49,7 @@
 | 2026-11-04 | M1 16 | merge main（票 22）：字根改在組字快照裡算，`refresh` 也帶字根；簡體模式的字根提示查的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | merge main（票 12）：簡體開關改呼叫 `apply(snapshot, false)`；簡體模式下「回報」記的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
+| 2026-11-04 | M1 17b | 粵語語料改用 `t2hk`、「揾」寫成「搵」，`--verify` 查 9 個粵語字的字頻；「搵工」「走晒」「試吓」進 `fixed.tsv`，口語修正 −0.9%；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
 
 ## 偏差與決定
 
@@ -116,3 +117,5 @@
 - 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。
 - 2026-11-04 M1 16（協調者決定）：快照的候選、分段與上屏另帶繁體原文（`original`、`commit_original`），「回報」與字根提示用原文，簡體模式不停用回報（plan §2.1）。
 - 2026-11-04 M1 16：merge 票 21 後簡體的轉換單位由「一個候選」改為「一個分段」：選了多段候選後各段分開固定，候選列也要各段分開轉換，看到的才是上屏的（plan §2.1）。
+- 2026-11-04 M1 17b：粵語維基、HKCanCor、Common Voice 改用 OpenCC `t2hk`，只有中文維基用 `s2hk`：`s2hk` 把繁體裡也是簡體的字再轉一次，粵語維基換錯約 6.8 萬字（plan §4.3、brief §12.1）。
+- 2026-11-04 M1 17b：前處理轉完把「揾」一律寫成使用者打的「搵」（`USER_FORMS`）；「說／説」「溫／温」等同碼香港字形要不要也換，等使用者決定（票 17b Comments）。
