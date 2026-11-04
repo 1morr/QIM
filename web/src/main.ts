@@ -46,10 +46,14 @@ function press(session: Session, key: Key): Snapshot {
 	switch (key.kind) {
 		case "letter":
 			return session.letter(key.char);
+		case "punct":
+			return session.punct(key.char);
 		case "digit":
 			return session.digit(key.digit);
 		case "space":
 			return session.space();
+		case "enter":
+			return session.enter();
 		case "backspace":
 			return session.backspace();
 		case "escape":
@@ -58,6 +62,12 @@ function press(session: Session, key: Key): Snapshot {
 			return session.pageUp();
 		case "pageDown":
 			return session.pageDown();
+		case "left":
+			return session.left();
+		case "right":
+			return session.right();
+		case "other":
+			return session.other();
 	}
 }
 

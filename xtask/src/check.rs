@@ -81,6 +81,11 @@ const ALL: &[Step] = &[
         action: Action::NpmScript("lint"),
     },
     Step {
+        name: "unit",
+        slow: false,
+        action: Action::NpmScript("test"),
+    },
+    Step {
         name: "e2e",
         slow: true,
         action: Action::E2e,
@@ -188,7 +193,7 @@ mod tests {
         assert_eq!(
             names(&steps(false)),
             [
-                "fmt", "clippy", "test", "deps", "docs", "wasm", "tsc", "biome", "e2e"
+                "fmt", "clippy", "test", "deps", "docs", "wasm", "tsc", "biome", "unit", "e2e"
             ]
         );
     }
@@ -197,7 +202,9 @@ mod tests {
     fn fast_check_skips_cargo_test_and_e2e() {
         assert_eq!(
             names(&steps(true)),
-            ["fmt", "clippy", "deps", "docs", "wasm", "tsc", "biome"]
+            [
+                "fmt", "clippy", "deps", "docs", "wasm", "tsc", "biome", "unit"
+            ]
         );
     }
 

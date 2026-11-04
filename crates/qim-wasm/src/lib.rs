@@ -30,6 +30,28 @@ impl WebSession {
         self.handle(Key::Letter(c))
     }
 
+    /// 數字、字母、空白以外的可見 ASCII 字元。
+    pub fn punct(&mut self, c: char) -> WebSnapshot {
+        self.handle(Key::Punct(c))
+    }
+
+    pub fn enter(&mut self) -> WebSnapshot {
+        self.handle(Key::Enter)
+    }
+
+    pub fn left(&mut self) -> WebSnapshot {
+        self.handle(Key::Left)
+    }
+
+    pub fn right(&mut self) -> WebSnapshot {
+        self.handle(Key::Right)
+    }
+
+    /// 網頁不轉成其他鍵的按鍵：組字中吃下，沒有組字時交還瀏覽器。
+    pub fn other(&mut self) -> WebSnapshot {
+        self.handle(Key::Other)
+    }
+
     pub fn space(&mut self) -> WebSnapshot {
         self.handle(Key::Space)
     }
