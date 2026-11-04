@@ -41,6 +41,7 @@
 | 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
 | 2026-11-04 | M1 16 | 簡體模式：OpenCC `fae2a0a` 建簡繁資料包，排序後轉換、去重，學習記繁體；網頁開關，`anr` 首選「门口」；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
+| 2026-11-04 | M1 21 | ← / →、`focus_segment`、`select`；網頁點分段、點候選；改選中間段時前面固定、後面重算；bench 不變；細節見票 21 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等票 20 合併；22 另在並行） |
 | 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 | 2026-11-04 | M1 22 | 組字顯示字根；`cangjie-hint` 資料包與 `--verify` 抽查；組字中 Tab、觸控長按候選列出字根提示；細節見票 22 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等 20、21） |
 | 2026-11-04 | M1 16 | merge main（票 22）：字根改在組字快照裡算，`refresh` 也帶字根；簡體模式的字根提示查的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
@@ -100,6 +101,7 @@
 - 2026-11-04 M1 19（使用者決定）：`touchInset` 改名 `extendedEdges`，與 Delta skin 同名同義（正數往外擴、負數往內縮），格式還沒發佈、不留舊名（plan §2.6）。
 - 2026-11-04 M1 16：簡繁不經 `ferrous-opencc`：它編得進 WebAssembly，但只能用內嵌的舊字典、不能從資料包載入；改自讀 OpenCC `fae2a0a` 建簡繁資料包，`qim-core` 照 OpenCC 規則轉換（plan §1.4、§4.4）。
 - 2026-11-04 M1 16：`@tofu-risk` 的罕用簡體字不轉、保留原字；簡繁資料包不由方案指名，由 `Engine::with_simplifier` 掛上；加 `Session::refresh` 給組字中換選項（plan §2.1、§4.4）。
+- 2026-11-04 M1 21（使用者確認）：改選中間分段時，前面沒選定的分段照顯示的字固定、不重算，選定的分段因此永遠在開頭；預設的目前分段是分段數（像 librime caret 在最後）（plan §2.1）。
 - 2026-11-04 M1 12：合併 main 後 `personal` 的 w 由 0.2 改 0.05：新參數下 0.2 讓口語集學習開反而多修正；學習模式暫改讀 dev 掃出（plan §2.3、票 12）。
 - 2026-11-04 M1 22：字根提示用組字中的 Tab 叫出、觸控長按候選，fcitx5 table 是設定開關、沒有快捷鍵（brief §4.3、§4.4、§12.4）。
 - 2026-11-04 M1 22：`Composition.radicals` 只含還沒選定的輸入碼的字根，選定的分段顯示字詞（plan §2.1）。

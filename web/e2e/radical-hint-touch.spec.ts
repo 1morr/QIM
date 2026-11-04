@@ -58,9 +58,15 @@ test("長按候選列出首選的倉頡五代碼，再長按收起", async ({ pa
 	await expect(hint).toHaveCount(0);
 });
 
-test("點一下或長按中滑動都不叫出提示", async ({ page }) => {
-	const hint = page.getByTestId("hint-1");
+test("點一下選字、不叫出提示", async ({ page }) => {
 	await press(page, 50);
+	await expect(page.getByTestId("hint-1")).toHaveCount(0);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("俾");
+});
+
+test("長按中滑動既不叫出提示也不選字", async ({ page }) => {
 	await press(page, 700, 30);
-	await expect(hint).toHaveCount(0);
+	await expect(page.getByTestId("hint-1")).toHaveCount(0);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("");
+	await expect(page.getByTestId("composition")).toHaveText("人十");
 });
