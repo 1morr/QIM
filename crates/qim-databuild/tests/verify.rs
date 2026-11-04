@@ -755,3 +755,76 @@ mod corpus {
         );
     }
 }
+
+mod kept_characters {
+    use std::collections::BTreeMap;
+
+    use qim_databuild::verify::{self, CheckId};
+
+    fn check(frequency: &[(char, u64)]) -> (bool, String) {
+        let frequency: BTreeMap<char, u64> = frequency.iter().copied().collect();
+        let check = verify::kept_characters(&frequency, &['晒', '搵']);
+        assert_eq!(check.id, CheckId::KeptCharacters);
+        (check.passed, check.detail)
+    }
+
+    #[test]
+    fn every_kept_character_counted_in_train_passes() {
+        assert_eq!(
+            check(&[('晒', 3), ('搵', 1), ('曬', 9)]),
+            (true, "晒 3、搵 1".into())
+        );
+    }
+
+    #[test]
+    fn kept_character_missing_or_zero_in_train_fails() {
+        assert_eq!(check(&[('晒', 3), ('揾', 5)]), (false, "晒 3、搵 0".into()));
+        assert_eq!(check(&[('晒', 0), ('搵', 2)]), (false, "晒 0、搵 2".into()));
+    }
+}
+
+mod common_forms {
+    use std::collections::BTreeMap;
+
+    use qim_core::{CodeEntry, CodeTable};
+    use qim_databuild::common_forms::CommonForms;
+    use qim_databuild::verify::{self, CheckId};
+
+    fn check(frequency: &[(char, u64)]) -> (bool, String) {
+        let entry = |text| CodeEntry {
+            text,
+            extension: false,
+        };
+        let table = CodeTable::from_entries([
+            ("et".to_string(), vec![entry('溫'), entry('温')]),
+            ("sq".into(), vec![entry('群'), entry('羣')]),
+        ]);
+        let forms = CommonForms::from_opencc(&table).unwrap();
+        let frequency: BTreeMap<char, u64> = frequency.iter().copied().collect();
+        let check = verify::common_forms(&frequency, &forms);
+        assert_eq!(check.id, CheckId::CommonForms);
+        (check.passed, check.detail)
+    }
+
+    #[test]
+    fn no_replaced_form_left_in_train_passes() {
+        assert_eq!(
+            check(&[('溫', 5), ('群', 2)]),
+            (
+                true,
+                "對照表 2 組（温→溫、羣→群），換掉的寫法在 train 都沒有".into()
+            )
+        );
+    }
+
+    #[test]
+    fn replaced_form_left_in_train_fails() {
+        assert_eq!(
+            check(&[('溫', 5), ('温', 3), ('羣', 1)]),
+            (
+                false,
+                "對照表 2 組（温→溫、羣→群），換掉的寫法還在 train：温 3、羣 1".into()
+            )
+        );
+    }
+}

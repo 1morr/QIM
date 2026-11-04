@@ -116,7 +116,7 @@ fn remove_balanced(s: &str, open: &str, close: &str, replacement: &str) -> Strin
     without(s, &pairs, replacement)
 }
 
-/// 繁簡規則挑哪個變體，依序找；`plain_text` 之後還會經 `s2hk`，所以簡體也比沒有好。
+/// 繁簡規則挑哪個變體，依序找；中文維基在 `plain_text` 之後還會經 `s2hk`，所以簡體也比沒有好。
 const VARIANTS: [&str; 7] = [
     "zh-hk", "zh-hant", "zh-tw", "zh-mo", "zh-hans", "zh-cn", "zh-sg",
 ];

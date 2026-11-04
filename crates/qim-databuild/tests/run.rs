@@ -16,6 +16,15 @@ const TABLE: &str = "\
 丟 丢 1 1 0 0 1 0 0 0 0 hgi mgi,xxmgi NA 22813
 門 门 1 1 0 0 1 0 0 0 0 an an NA 20000
 口 口 1 1 0 0 1 0 0 0 0 r r NA 20100
+晒 晒 1 1 0 0 1 0 0 0 0 amcw amcw NA 0
+搵 搵 1 1 0 0 1 0 0 0 0 qawt qawt NA 0
+吓 吓 1 1 0 0 1 0 0 0 0 rmy rmy NA 0
+郁 郁 1 1 0 0 1 0 0 0 0 kbnl kbnl NA 0
+喂 喂 1 1 0 0 1 0 0 0 0 rwmv rwmv NA 0
+涌 涌 1 1 0 0 1 0 0 0 0 enib enib NA 0
+咸 咸 1 1 0 0 1 0 0 0 0 ihmr ihmr NA 0
+响 响 1 1 0 0 1 0 0 0 0 rhbr rhbr NA 0
+仆 仆 1 1 0 0 1 0 0 0 0 oy oy NA 0
 𠀀 𠀀 1 0 0 0 0 0 0 0 0 a NA NA 0
 廿 廿 1 1 0 0 1 0 0 0 0 t t NA 23000
 竹 竹 1 1 0 0 1 0 0 0 0 h h NA 23001
@@ -144,7 +153,7 @@ fn sentences_of_length(len: usize) -> Vec<String> {
 }
 
 /// 連打字集只有日曰問丟，所以拿它們組 3–5 字的句子：1,344 句，約 5% 落在 test。
-/// 另有一句簡體（`s2hk` 轉成繁體才轉得了碼），與 [`DROPPED`] 句含字集外字元的句子。
+/// 另有一句簡體：粵語維基只經 `t2hk`，不轉簡體，所以和其他含字集外字元的句子一樣整句丟掉，共 [`DROPPED`] 句。
 fn wiki_articles() -> Vec<String> {
     let chars = ['日', '曰', '問', '丟'];
     let mut sentences: Vec<String> = vec![String::new()];
@@ -171,7 +180,7 @@ fn wiki_articles() -> Vec<String> {
     articles
 }
 
-const DROPPED: usize = 3;
+const DROPPED: usize = 4;
 
 /// 中文維基：長度 6 的句子寫成簡體（问），`s2hk` 轉回繁體才轉得了碼。
 fn zh_wiki_articles() -> Vec<String> {
@@ -250,12 +259,22 @@ fn hkcancor_zip() -> Vec<u8> {
 }
 
 /// Common Voice：長度 8 的前 2,000 句，一半在 yue、一半在 zh-HK，一行一句。
+/// yue 另有前處理保留的粵語用字開頭的 8 字句，每字 10 句，總會有落在 train 的。
 fn common_voice() -> (String, String) {
     let all = sentences_of_length(8);
     let lines = |range: std::ops::Range<usize>| -> String {
         all[range].iter().map(|s| format!("{s}\n")).collect()
     };
-    (lines(0..1000), lines(1000..2000))
+    let kept: String = qim_databuild::corpora::CANTONESE_KEPT
+        .iter()
+        .flat_map(|k| {
+            sentences_of_length(7)
+                .into_iter()
+                .take(10)
+                .map(move |s| format!("{k}{s}\n"))
+        })
+        .collect();
+    (lines(0..1000) + &kept, lines(1000..2000))
 }
 
 fn unihan_zip() -> Vec<u8> {
@@ -525,7 +544,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (9, 1));
+    assert_eq!((report.continuous, report.extension), (18, 1));
 }
 
 #[test]
@@ -951,22 +970,22 @@ fn wiki_dump_becomes_bench_sentences_and_training_splits() {
         );
     }
 
-    // 1,344 句加簡體轉成的那句，每句只出現一次；「日日」只在檔案說明裡，被丟掉了。
+    // 1,344 句每句只出現一次；簡體那句與「日日」（只在檔案說明裡）被丟掉了。
     let summary = outcome
         .corpora
         .iter()
         .find(|c| c.name == "yue-wiki")
         .unwrap();
     let counts = summary.counts;
-    assert_eq!(counts.train + counts.dev + counts.test, 1_345);
+    assert_eq!(counts.train + counts.dev + counts.test, 1_344);
     assert_eq!(counts.dropped, DROPPED);
     assert_eq!(bench.lines().count(), counts.test);
     assert!((30..=110).contains(&counts.test), "{counts:?}");
     assert!(
         [&bench, &train, &dev]
             .iter()
-            .any(|s| s.contains("問問問問問問")),
-        "簡體句沒有轉成繁體"
+            .all(|s| !s.contains("問問問問問問")),
+        "粵語維基不該轉簡體"
     );
 
     let attribution = read(root.path(), "bench/corpus/ATTRIBUTION.md");
@@ -1064,6 +1083,16 @@ fn corpus_files(root: &Path, dir: &str, name: &str) -> (Vec<String>, String, Str
                     '日' | '曰' => "a",
                     '問' => "ar",
                     '丟' => "mi",
+                    // Common Voice 夾具裡前處理保留的粵語用字。
+                    '晒' => "aw",
+                    '搵' => "qt",
+                    '吓' => "ry",
+                    '郁' => "kl",
+                    '喂' => "rv",
+                    '涌' => "eb",
+                    '咸' => "ir",
+                    '响' => "rr",
+                    '仆' => "oy",
                     other => panic!("{name} 有連打字集外的字：{other}"),
                 })
                 .collect();
@@ -1086,8 +1115,8 @@ fn every_corpus_gets_bench_sentences_training_splits_and_character_counts() {
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), true).unwrap();
 
-    // 各語料句子的長度不同：粵語維基 3–5（另有一句 6 字的簡體句）、中文維基 6、HKCanCor 7、Common Voice 8。
-    for ((dir, name), lengths) in CORPORA.iter().zip([3..=6, 6..=6, 7..=7, 8..=8]) {
+    // 各語料句子的長度不同：粵語維基 3–5、中文維基 6、HKCanCor 7、Common Voice 8。
+    for ((dir, name), lengths) in CORPORA.iter().zip([3..=5, 6..=6, 7..=7, 8..=8]) {
         let (bench, train, dev, chars) = corpus_files(root.path(), dir, name);
         assert!(!bench.is_empty(), "{name} 沒有基準句");
         for sentence in bench
@@ -1169,6 +1198,16 @@ fn every_corpus_gets_bench_sentences_training_splits_and_character_counts() {
             assert!(shown.contains(&expected), "缺 {expected}：\n{shown}");
         }
     }
+    // 粵語用字只在 Common Voice 的夾具裡。
+    assert!(shown.contains("[通過] 前處理保留粵語用字：晒 "), "{shown}");
+    assert!(
+        shown.contains("[通過] 字形用常見寫法：對照表 1 組（揾→搵）"),
+        "{shown}"
+    );
+    for expected in ["Conversion: OpenCC s2hk", "Conversion: OpenCC t2hk"] {
+        assert!(wiki.contains(expected), "缺 {expected}：\n{wiki}");
+    }
+    assert!(!colloquial.contains("OpenCC s2hk"), "{colloquial}");
 }
 
 #[test]

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use ferrous_opencc::OpenCC;
 use ferrous_opencc::config::BuiltinConfig;
 
+use crate::common_forms::CommonForms;
 use crate::corpus::BENCH_SENTENCES;
 use crate::sources::Source;
 use crate::{Error, hkcancor, wiki};
@@ -45,6 +46,57 @@ impl Group {
     }
 }
 
+/// 前處理的字形轉換（plan §4.3）：都轉成香港繁體，轉完再照 [`CommonForms`] 換回常見寫法。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Conversion {
+    /// 原文混有簡體（中文維基）：OpenCC `s2hk`。
+    S2hk,
+    /// 原文已是繁體（粵語維基、HKCanCor、Common Voice）：只換香港寫法的 OpenCC `t2hk`。
+    /// `s2hk` 會把繁體裡也是簡體的字再轉一次，「晒」→「曬」、「吓」→「嚇」、「布」→「佈」，
+    /// 粵語維基 3,400 萬字裡換錯約 6.8 萬字（M1 票 17b Comments）。
+    T2hk,
+}
+
+impl Conversion {
+    /// `ATTRIBUTION.md` 裡的說明。
+    fn description(self) -> &'static str {
+        match self {
+            Conversion::S2hk => {
+                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms"
+            }
+            Conversion::T2hk => {
+                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms"
+            }
+        }
+    }
+}
+
+/// `s2hk` 會換掉、粵語語料改用 `t2hk` 後保留的粵語用字（M1 票 17b 的統計）；
+/// `--verify` 檢查它們在 train 的字頻都大於 0。
+pub const CANTONESE_KEPT: [char; 9] = ['晒', '搵', '吓', '郁', '喂', '涌', '咸', '响', '仆'];
+
+/// 一種 [`Conversion`] 加上字形對照表的轉換器，建一次給整份語料用。
+pub struct Converter {
+    opencc: OpenCC,
+    forms: CommonForms,
+}
+
+impl Converter {
+    pub fn new(conversion: Conversion, forms: CommonForms) -> Result<Self, Error> {
+        let (config, name) = match conversion {
+            Conversion::S2hk => (BuiltinConfig::S2hk, "OpenCC s2hk"),
+            Conversion::T2hk => (BuiltinConfig::T2hk, "OpenCC t2hk"),
+        };
+        let opencc =
+            OpenCC::from_config(config).map_err(|e| Error::invalid(name, e.to_string()))?;
+        Ok(Self { opencc, forms })
+    }
+
+    pub fn convert(&self, raw: &str) -> String {
+        self.forms.apply(&self.opencc.convert(raw))
+    }
+}
+
 /// 來源檔的格式。
 #[derive(Debug, Clone, Copy)]
 enum Format {
@@ -66,6 +118,7 @@ pub struct Corpus {
     /// M1 票 12 在 dev 切分上掃 1–256 定為 64：口語集修正次數少約三成，維基集答錯多約 2%；
     /// 再往上口語只再好一點、維基退得更多（票 12 Comments）。
     pub weight: u64,
+    pub conversion: Conversion,
     format: Format,
     /// 署名：來源名稱、網址、作者與引用、授權網址、QIM 怎麼抽出文字。
     pub(crate) title: &'static str,
@@ -85,6 +138,7 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "yue_wiki",
         group: Group::Wiki,
         weight: 1,
+        conversion: Conversion::T2hk,
         format: Format::WikiDump,
         title: "Cantonese Wikipedia",
         site: "https://zh-yue.wikipedia.org/",
@@ -97,6 +151,7 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "zh_wiki",
         group: Group::Wiki,
         weight: 1,
+        conversion: Conversion::S2hk,
         format: Format::WikiDump,
         title: "Chinese Wikipedia",
         site: "https://zh.wikipedia.org/",
@@ -109,6 +164,7 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "hkcancor",
         group: Group::Colloquial,
         weight: 64,
+        conversion: Conversion::T2hk,
         format: Format::HkCanCor,
         title: "Hong Kong Cantonese Corpus (HKCanCor), transcriptions",
         site: "https://github.com/fcbond/hkcancor",
@@ -121,6 +177,7 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "common_voice",
         group: Group::Colloquial,
         weight: 64,
+        conversion: Conversion::T2hk,
         format: Format::Lines,
         title: "Mozilla Common Voice sentence collection, Cantonese (yue and zh-HK)",
         site: "https://github.com/common-voice/common-voice",
@@ -131,27 +188,35 @@ pub const CORPORA: [Corpus; 4] = [
 ];
 
 impl Corpus {
-    /// 逐段交出轉成香港繁體（OpenCC `s2hk`）的文字。`paths` 是來源在 `sources.toml` 列的每個檔
-    /// 在快取裡的位置，依列出的順序讀；換 dump 日期只改 `sources.toml`。
+    /// 逐段交出經 [`Self::conversion`] 轉成香港繁體、再照 `forms` 換回常見寫法的文字。`paths` 是來源在 `sources.toml` 列的
+    /// 每個檔在快取裡的位置，依列出的順序讀；換 dump 日期只改 `sources.toml`。
     pub fn texts(
+        &self,
+        paths: &[PathBuf],
+        forms: &CommonForms,
+        mut text: impl FnMut(&str) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let converter = Converter::new(self.conversion, forms.clone())?;
+        self.raw_texts(paths, |raw| text(&converter.convert(raw)))
+    }
+
+    /// 逐段交出來源抽出、還沒轉換的文字。
+    pub fn raw_texts(
         &self,
         paths: &[PathBuf],
         mut text: impl FnMut(&str) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let s2hk = OpenCC::from_config(BuiltinConfig::S2hk)
-            .map_err(|e| Error::invalid("OpenCC s2hk", e.to_string()))?;
-        let mut converted = |raw: &str| text(&s2hk.convert(raw));
         for path in paths {
             let open = || File::open(path).map_err(Error::io(path));
             match self.format {
-                Format::WikiDump => wiki::articles(BufReader::new(open()?), &mut converted)?,
+                Format::WikiDump => wiki::articles(BufReader::new(open()?), &mut text)?,
                 Format::HkCanCor => {
                     let zip = std::fs::read(path).map_err(Error::io(path))?;
-                    hkcancor::archive(&zip, &mut converted)?;
+                    hkcancor::archive(&zip, &mut text)?;
                 }
                 Format::Lines => {
                     for line in BufReader::new(open()?).lines() {
-                        converted(&line.map_err(Error::io(path))?)?;
+                        text(&line.map_err(Error::io(path))?)?;
                     }
                 }
             }
@@ -178,7 +243,8 @@ impl Corpus {
              - Version: {version}\n\
              {files}\
              - License: {license}, {license_url}\n\
-             - Extraction: {extraction}.\n",
+             - Extraction: {extraction}.\n\
+             - Conversion: {conversion}.\n",
             name = self.name,
             title = self.title,
             site = self.site,
@@ -187,6 +253,7 @@ impl Corpus {
             license = source.license,
             license_url = self.license_url,
             extraction = self.extraction,
+            conversion = self.conversion.description(),
         )
     }
 }
@@ -199,8 +266,8 @@ pub fn attribution_file(group: Group, sections: &[String]) -> String {
          {license} They are test data for the QIM\n\
          top-choice benchmark and are not shipped in any app.\n\
          \n\
-         Changes made by QIM: text was taken from each source as its section describes and\n\
-         converted with OpenCC s2hk; it was split into clauses at punctuation and whitespace,\n\
+         Changes made by QIM: text was taken from each source and converted with OpenCC as its\n\
+         section describes; it was split into clauses at punctuation and whitespace,\n\
          and clauses containing characters outside the QIM continuous character set were\n\
          dropped. Each file keeps up to {BENCH_SENTENCES} distinct clauses from the held-out test split,\n\
          one per line, preceded by machine-generated Quick codes (one per character, separated\n\

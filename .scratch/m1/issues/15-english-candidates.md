@@ -66,3 +66,9 @@ Blocked by: 13
 - 中英切換與英文候選共存：英文狀態下 `Session::handle` 一開頭就交還宿主、沒有組字，所以也沒有英文候選；組字中切英文上屏的是中文首選（英文候選不在首選）。重排固定首選，英文候選不會被換到第 1。補核心測試 2 題、e2e 1 題（單按 Shift 打 `the` 直接進輸入框、沒有候選；切回中文 `the` 仍在第 2 位）。
 - 亂按（真鍵盤 300 輪，含單按 Shift 50 次、151 輪在英文狀態、隨機切英文候選與簡體）：沒有例外，英文狀態從沒有組字或候選，英文從不在首選。
 - bench `--check` 通過，各集合數字同合併前；每鍵 p95 原生 39.17、WebAssembly 51.00 µs。
+
+### merge main（票 17b，2026-11-04）
+
+- 衝突：`crates/qim-databuild/tests/run.rs`（測試碼表兩邊各加字，連打字集 6 + 9 + 3 = 18；英文來源的 sources 段保留）與 `bench/baseline.json`。
+- baseline 照 spec 規則重跑 `cargo xtask data`、`bench --update-baseline` 取新值。和 main 的 baseline 只差 hkcancor 修正 2595 → 2596：逐題比對開關英文，只有第 644 行（17b 重建語料前是第 646 行）`al of rg or bg be rn` 剩下 `bern` → Bern 多翻一頁，同前；其他三個公開集合開關英文的修正次數完全相同。
+- 合併後 `data --verify` 29 項全過、`bench --check` 通過（固定題 25/25、沒有翻盤）、`check` 通過（Playwright 99 題）。

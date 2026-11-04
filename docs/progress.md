@@ -49,12 +49,16 @@
 | 2026-11-04 | M1 16 | merge main（票 22）：字根改在組字快照裡算，`refresh` 也帶字根；簡體模式的字根提示查的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | merge main（票 12）：簡體開關改呼叫 `apply(snapshot, false)`；簡體模式下「回報」記的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
+| 2026-11-04 | M1 17b | 粵語語料改用 `t2hk`、「揾」寫成「搵」，`--verify` 查 9 個粵語字的字頻；「搵工」「走晒」「試吓」進 `fixed.tsv`，口語修正 −0.9%；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
+| 2026-11-04 | M1 17b | 字形用常見寫法（使用者決定）：34 組對照表換回「說溫群衛」，`--verify` 查換掉的寫法不在 train；`et` 溫、`sq` 群進 `fixed.tsv`；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
 | 2026-11-04 | M1 23 | 展開面板、單按 Shift 英文直通、重排介面與假實作、翻頁不加 `generation`、簡體文字鍵、組字中組合鍵吃下；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md`（14、17 另在並行） |
 | 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 | 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 | 2026-11-04 | M1 15 | ESDB 英文資料包 8.6 萬詞、排位規則 4（3 碼起排第 2、選了不學）、`Options.english_candidates` 與網頁開關；首選正確率不變；細節見票 15 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（等 17b、23 合併） |
 | 2026-11-04 | M1 23 | merge main（票 14、17）：衝突只在文件與 `main.ts` 的 `start()`；data --verify、bench --check、check 全套與亂按都過；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 | 2026-11-04 | M1 15 | merge main（票 23）：英文狀態不出候選、切回中文英文候選照舊，補核心與 e2e 測試；check、data、bench 綠燈 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（等 17b 合併） |
+| 2026-11-04 | M1 17b | merge main（票 14、23）：`key-table` e2e 也改用 `anrkbof`；data --verify、bench --check（數字不變）、check 全套都過；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 15 | merge main（票 17b）：baseline 取合併後的值，hkcancor 修正 2595 → 2596 仍是 `bern` 那題；check、data、bench 綠燈 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md` |
 
 ## 偏差與決定
 
@@ -127,6 +131,8 @@
 - 2026-11-04 M1 15：英文詞表取 ESDB release 的 hunspell-en_US zip 自己展開字首字尾，不跑 ESDB 的 Python + SQLite 工具；沒有逐詞 size，plan §4.4 刪掉「size 當常見度」。
 - 2026-11-04 M1 15：英文候選第 3 碼起才出（macOS 速成 T7）、只給剩下的整串、沒有中文候選不出、選了不學；同一小寫拼法只留一種大小寫（brief §4.3、plan §2.4）。
 - 2026-11-04 M1 15：英文佔第 2 位讓 hkcancor、個人集各多翻一頁（修正 +1），`--update-baseline` 接受；各集合首選正確率不變（票 15 Comments）。
+- 2026-11-04 M1 17b：粵語維基、HKCanCor、Common Voice 改用 OpenCC `t2hk`，只有中文維基用 `s2hk`：`s2hk` 把繁體裡也是簡體的字再轉一次，粵語維基換錯約 6.8 萬字（plan §4.3、brief §12.1）。
+- 2026-11-04 M1 17b（使用者決定）：字形用常見寫法、不用香港寫法：語料轉換後照 OpenCC `t2hk`、`t2tw` 逐字查出的對照表換回（「説→說」「羣→群」，34 組），不同碼的不換（brief §4.1、plan §4.3）。
 - 2026-11-04 M1 23：翻頁不再加 `generation`，翻頁中收到的重排結果照樣套用：重排只動第一頁，看得到的頁不變（plan §2.1，M0 票 09 留下的）。
 - 2026-11-04 M1 23：`apply_rerank` 多一個 `engine` 參數；名次變了才加 `generation`，原樣回傳不作廢另一層的結果（plan §2.1）。
 - 2026-11-04 M1 23：組字中單按 Shift 先上屏整個組字再切英文，照 Rime `commit_text`、不學 `inline_ascii`；判定 500 ms 在殼（brief §4.3、plan §2.1）。
