@@ -203,6 +203,8 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
+網頁把學習資料（`# qim-userdict v1`，plan §2.4）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。回報清單在 `qim.reports`。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」。
+
 Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 
 ## 全部檢查

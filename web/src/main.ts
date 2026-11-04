@@ -1,7 +1,9 @@
 import { type Key, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
 import "./style.css";
+import { element } from "./dom.ts";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
+import { mountUserDict, type UserDict } from "./user-dict.ts";
 import init, {
 	Layout,
 	pageSize,
@@ -21,14 +23,6 @@ const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
 const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
-
-function element<T extends HTMLElement>(selector: string): T {
-	const found = document.querySelector<T>(selector);
-	if (!found) {
-		throw new Error(`index.html 少了 ${selector}`);
-	}
-	return found;
-}
 
 const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
@@ -51,6 +45,8 @@ const hintVersion = element<HTMLSelectElement>("#hint-version");
 const LONG_PRESS_MS = 500;
 /** 觸控鍵盤；載入完成前是 `undefined`。 */
 let touchKeyboard: Keyboard | undefined;
+/** 學習資料；載入完成前是 `undefined`。 */
+let userDict: UserDict | undefined;
 
 /** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
 async function load(url: string): Promise<Response> {
@@ -205,6 +201,8 @@ function apply(snapshot: Snapshot, chosen: boolean): void {
 	}
 	if (snapshot.commit !== undefined) {
 		insert(snapshot.commit);
+		// 上屏時核心可能學到東西；每次都存，重新整理網頁後還在。
+		userDict?.save();
 	}
 	render(snapshot);
 	touchKeyboard?.refresh();
@@ -322,6 +320,7 @@ async function start(): Promise<void> {
 			load(LAYOUT_URL).then((response) => response.text()),
 		]);
 	const session = new Session(pack, lexicon, languageModel, simplifier);
+	userDict = mountUserDict(session, () => text.focus());
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
 	// 點候選選字，長按叫出字根提示（brief §4.4）：放開時還沒到長按的門檻才選字。
