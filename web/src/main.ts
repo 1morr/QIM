@@ -38,6 +38,7 @@ const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
 const englishCandidates = element<HTMLInputElement>("#english-candidates");
+const digitSeparators = element<HTMLInputElement>("#digit-separators");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const darkToggle = element<HTMLButtonElement>("#dark-toggle");
@@ -240,7 +241,11 @@ function insert(commit: string): void {
 /** 核心吃下的鍵：有上屏就插入，再畫組字與候選。`chosen` 是這個鍵是不是選字（空白、數字鍵）。 */
 function apply(snapshot: Snapshot, chosen: boolean): void {
 	const before = report.last;
-	report = observe(report, { ...readReported(snapshot), chosen });
+	// 畫面上沒有候選時空白、數字鍵不是選字（如待定的數字分隔符接數字）；`shown` 還是按鍵前的畫面。
+	report = observe(report, {
+		...readReported(snapshot),
+		chosen: chosen && shown.candidates.length > 0,
+	});
 	if (report.last !== before) {
 		reportButton.disabled = report.last === undefined;
 	}
@@ -506,6 +511,12 @@ async function start(): Promise<void> {
 	applyEnglishCandidates();
 	englishCandidates.addEventListener("change", () => {
 		applyEnglishCandidates();
+		text.focus();
+	});
+	// 數字後的句點、逗號、冒號用半形（預設開）。
+	session.setDigitSeparators(digitSeparators.checked);
+	digitSeparators.addEventListener("change", () => {
+		session.setDigitSeparators(digitSeparators.checked);
 		text.focus();
 	});
 	const layout = new Layout(layoutJson, device(), orientation());

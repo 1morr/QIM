@@ -29,3 +29,12 @@ pub(crate) fn full_width(c: char) -> Option<&'static str> {
         .find(|(key, _)| *key == c)
         .map(|(_, p)| *p)
 }
+
+/// 數字後保持半形的標點（brief §4.7）：librime `digit_separators` 預設的 `.` `:`，加上使用者
+/// 要的 `,`（M1 票 26）。
+const DIGIT_SEPARATORS: [char; 3] = ['.', ',', ':'];
+
+/// 緊接在半形數字後時，`c` 先待定、接數字就保持半形。
+pub(crate) fn is_digit_separator(c: char) -> bool {
+    DIGIT_SEPARATORS.contains(&c)
+}

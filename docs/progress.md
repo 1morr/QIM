@@ -23,5 +23,8 @@
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
 | 2026-11-04 | M2 封存 M1 | 票 24：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過、黑箱在 QIM 重跑；M1 封存到 `docs/archive/M1.md`，M2 標進行中；細節見票 24 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
+| 2026-11-05 | M2 補 M1 26 | 數字後的 `.` `,` `:` 照 librime `digit_separators` 待定、接數字或空白半形上屏、再按一次改全形；加開關，細節見票 26 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票`（票 25、27 也做完後） |
 
 ## 偏差與決定
+
+- 2026-11-05 M2 補 M1 26（使用者決定）：數字後半形從 M4 提前到 M1，預設開、可關；`,` 也算分隔符（Rime 預設只有 `.` `:`），再按一次同一個鍵改全形（brief §4.7）。

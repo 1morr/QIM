@@ -33,6 +33,9 @@ pub struct Options {
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
+    /// 數字後的 `.` `,` `:` 用半形（brief §4.7，librime `punctuator` 的 `digit_separators`）：
+    /// 先待定，接數字或空白就半形上屏，再按一次同一個鍵改成全形。預設開（brief §7）。
+    pub digit_separators: bool,
 }
 
 impl Options {
@@ -48,6 +51,7 @@ impl Default for Options {
             simplified: false,
             incognito: false,
             english_candidates: true,
+            digit_separators: true,
         }
     }
 }
@@ -214,6 +218,11 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：開著時沒有組字，鍵都交還宿主。
     ascii: bool,
+    /// 待定的數字分隔符（[`Options::digit_separators`]）：組字裡只有它，下一個鍵決定它半形或全形。
+    separator: Option<char>,
+    /// 最近一次送出去的文字（上屏或交還宿主打的鍵）以半形數字結尾。只看核心自己經手的：
+    /// 輸入框的前文要等 M3 的 `set_context`，所以游標移到別處、宿主自己改了字都看不到。
+    after_digit: bool,
 }
 
 impl Session {
@@ -236,9 +245,13 @@ impl Session {
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
         let snapshot = if self.composing() {
             self.select_at(engine, user, index)
+        } else if self.separator.is_some() {
+            // 待定的數字分隔符沒有候選可選，留著。
+            self.snapshot(engine, true, None)
         } else {
             self.snapshot(engine, false, None)
         };
+        self.note_output(&snapshot, false);
         with_radicals(engine, snapshot)
     }
 
@@ -250,6 +263,10 @@ impl Session {
         user: &mut UserModel,
         segment: usize,
     ) -> Snapshot {
+        if self.separator.is_some() {
+            // 待定的數字分隔符只有一段，移不到別處。
+            return with_radicals(engine, self.snapshot(engine, true, None));
+        }
         if !self.composing() {
             return self.snapshot(engine, false, None);
         }
@@ -335,8 +352,74 @@ impl Session {
         if !self.listed_with.lists_like(&self.options) && self.composing() {
             self.refresh_candidates(engine, user);
         }
-        let snapshot = self.handle_key(engine, user, key);
+        let snapshot = match self.separator.take() {
+            Some(separator) => self.handle_after_separator(engine, user, separator, key),
+            None => self.handle_key(engine, user, key),
+        };
+        self.note_output(&snapshot, matches!(key, Key::Digit(_)));
         with_radicals(engine, snapshot)
+    }
+
+    /// 記下這次送出去的文字是不是以半形數字結尾（[`Session::after_digit`]）；`passed_digit` 是
+    /// 這個鍵是數字鍵，交還宿主時宿主照打。沒送出任何東西（組字中打字、翻頁）時不變，同 librime
+    /// 的 commit history；交還宿主的其他鍵都當成結束了數字，librime 只認可見字元、退格與 Enter，
+    /// 但方向鍵也會把游標移離數字。
+    fn note_output(&mut self, snapshot: &Snapshot, passed_digit: bool) {
+        if let Some(commit) = &snapshot.commit {
+            self.after_digit = commit.ends_with(|c: char| c.is_ascii_digit());
+        } else if !snapshot.handled {
+            self.after_digit = passed_digit;
+        }
+    }
+
+    /// 有待定的數字分隔符時的鍵，照 librime `punctuator` 的 `digit_separators`：數字或空白連同
+    /// 分隔符半形上屏；再按同一個鍵改成全形；退格、Esc 丟掉它。分隔符像只有一個字的組字：
+    /// 移動、翻頁這類鍵吃下不動作，其他鍵先半形上屏它，再照沒有組字時處理那個鍵。
+    fn handle_after_separator(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        separator: char,
+        key: Key,
+    ) -> Snapshot {
+        let commit = |tail: &str| Some(Commit::plain(format!("{separator}{tail}")));
+        match key {
+            Key::Digit(d) => self.snapshot(engine, true, commit(&d.to_string())),
+            Key::Space => self.snapshot(engine, true, commit(" ")),
+            Key::Enter => self.snapshot(engine, true, commit("")),
+            // 再按一次同一個鍵：取回原本的全形（librime 的 double strike）。
+            Key::Punct(c) if c == separator => {
+                let full = punctuation::full_width(c).unwrap_or_default();
+                self.snapshot(engine, true, Some(Commit::plain(full.to_string())))
+            }
+            Key::Backspace | Key::Escape => self.snapshot(engine, true, None),
+            // 方案以外的小寫字母（`z`）在組字中也是吃下不動作。
+            Key::Left | Key::Right | Key::PageUp | Key::PageDown | Key::Other => {
+                self.separator = Some(separator);
+                self.snapshot(engine, true, None)
+            }
+            Key::Letter(c) if c.is_ascii_lowercase() && !engine.scheme().alphabet.contains(c) => {
+                self.separator = Some(separator);
+                self.snapshot(engine, true, None)
+            }
+            // 沒有組字時會交還宿主的字元：連同分隔符上屏，`handled` 為假時不能有上屏。
+            Key::Letter(c) if !c.is_ascii_lowercase() => {
+                self.snapshot(engine, true, commit(&c.to_string()))
+            }
+            Key::Punct(c) if punctuation::full_width(c).is_none() => {
+                self.snapshot(engine, true, commit(&c.to_string()))
+            }
+            Key::Letter(_) | Key::Punct(_) | Key::ToggleAscii => {
+                // 分隔符上屏了，接下來的鍵不再緊接在數字後。
+                self.after_digit = false;
+                let mut snapshot = self.handle_key(engine, user, key);
+                let tail = snapshot.commit.take().unwrap_or_default();
+                let tail_original = snapshot.commit_original.take().unwrap_or_default();
+                snapshot.commit = Some(format!("{separator}{tail}"));
+                snapshot.commit_original = Some(format!("{separator}{tail_original}"));
+                snapshot
+            }
+        }
     }
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
@@ -364,6 +447,14 @@ impl Session {
         // 沒有組字時，有全形的標點上屏全形，其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
         if !self.composing() {
             return match key {
+                Key::Punct(c)
+                    if self.after_digit
+                        && self.options.digit_separators
+                        && punctuation::is_digit_separator(c) =>
+                {
+                    self.separator = Some(c);
+                    self.snapshot(engine, true, None)
+                }
                 Key::Punct(c) if let Some(full) = punctuation::full_width(c) => {
                     self.snapshot(engine, true, Some(Commit::plain(full.to_string())))
                 }
@@ -489,15 +580,21 @@ impl Session {
     /// 組字中和標點相同，先上屏整個組字再接 `text`。文字不轉全形；簡體模式轉成簡體，原文留繁體
     /// （M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
-        let text = Commit {
+        let mut text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
         };
+        // 待定的數字分隔符和組字一樣先上屏，半形。
+        if let Some(separator) = self.separator.take() {
+            text.text.insert(0, separator);
+            text.original.insert(0, separator);
+        }
         let snapshot = if self.composing() {
             self.commit_all_then(engine, user, text)
         } else {
             self.snapshot(engine, true, Some(text))
         };
+        self.note_output(&snapshot, false);
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
         with_radicals(engine, snapshot)
     }
@@ -753,6 +850,21 @@ impl Session {
 
     /// 組字：各分段的字詞經過後處理，另留原文。
     fn composition(&self, engine: &Engine) -> Composition {
+        // 待定的數字分隔符自成一個選定的分段：它唯一的字就是它自己，不列候選。
+        if let Some(separator) = self.separator {
+            let text = separator.to_string();
+            return Composition {
+                input: text.clone(),
+                segments: vec![Segment {
+                    code: text.clone(),
+                    original: text.clone(),
+                    text,
+                    selected: true,
+                    ..Segment::default()
+                }],
+                focus: 1,
+            };
+        }
         let segments: Vec<Segment> = self
             .segments()
             .into_iter()
