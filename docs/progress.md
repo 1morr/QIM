@@ -38,9 +38,9 @@
 | 2026-11-04 | M1 13 | 學習計數、規則 2、`personal`、無痕與 `set_options`、`bench --learning`（學習開修正較少）；細節見票 13 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md`（11、18 另在並行） |
 | 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
-| 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1，口語修正少三成；`bench --dev`、網頁「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 | 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
+| 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 
 ## 偏差與決定
 
@@ -94,3 +94,4 @@
 - 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
 - 2026-11-04 M1 19：`jsonschema` 讓網頁 WebAssembly 由 0.42 MB 變 4.6 MB；iOS 鍵盤擴充要不要略過 Schema 在 M2 量記憶體時定（plan §8）。
 - 2026-11-04 M1 19（使用者決定）：`touchInset` 改名 `extendedEdges`，與 Delta skin 同名同義（正數往外擴、負數往內縮），格式還沒發佈、不留舊名（plan §2.6）。
+- 2026-11-04 M1 12：合併 main 後 `personal` 的 w 由 0.2 改 0.05：新參數下 0.2 讓口語集學習開反而多修正；學習模式暫改讀 dev 掃出（plan §2.3、票 12）。
