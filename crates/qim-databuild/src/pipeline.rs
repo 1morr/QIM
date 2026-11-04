@@ -381,6 +381,11 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         corpus_checks.extend(
             verify::leaks(&benches, readers).map_err(Error::io(root.join("build/corpus")))?,
         );
+        let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
+        corpus_checks.push(verify::kept_characters(
+            &lexicon::char_frequency(&tables)?,
+            &corpora::CANTONESE_KEPT,
+        ));
     }
 
     let report = if verify {
@@ -458,9 +463,10 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
-         each corpus, added together. Each corpus is extracted, converted with OpenCC s2hk\n\
-         and split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
-         bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
+         each corpus, added together. Each corpus is extracted, converted to Hong Kong\n\
+         Traditional Chinese with OpenCC and split into clauses as described in\n\
+         bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
+         repository.\n",
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
     )
@@ -473,9 +479,10 @@ fn language_model_about(id: &str) -> String {
         "{id} is a character bigram language model trained by QIM with interpolated\n\
          Kneser-Ney smoothing. It was trained on the training split of each corpus listed\n\
          above, counting adjacent characters within each clause, and pruned to the pairs\n\
-         seen at least {min} times. Each corpus is extracted, converted with OpenCC s2hk and\n\
-         split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
-         bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
+         seen at least {min} times. Each corpus is extracted, converted to Hong Kong\n\
+         Traditional Chinese with OpenCC and split into clauses as described in\n\
+         bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
+         repository.\n",
         min = bigram::MIN_COUNT,
     )
 }

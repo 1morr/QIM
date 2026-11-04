@@ -54,6 +54,8 @@ pub enum CheckId {
     CorpusNoLeak,
     /// 同樣的來源建兩次，基準句、訓練切分與字頻的 sha256 相同。
     CorpusDeterministic,
+    /// 前處理保留的粵語用字（`corpora::CANTONESE_KEPT`）在 train 的字頻都大於 0（M1 票 17b）。
+    KeptCharacters,
 }
 
 impl fmt::Display for CheckId {
@@ -76,6 +78,7 @@ impl fmt::Display for CheckId {
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
             Self::CorpusDeterministic => "語料決定性",
+            Self::KeptCharacters => "前處理保留粵語用字",
         })
     }
 }
@@ -634,6 +637,24 @@ pub fn leaks(
             detail: format!("{name} test 句原樣出現在 train {} 句", leaked.len()),
         })
         .collect())
+}
+
+/// `kept` 的每個字在 `frequency`（各語料 train 乘上權重相加的字頻）都大於 0；
+/// 沒保留住時字頻是 0，例如 `s2hk` 把「晒」換成「曬」。
+pub fn kept_characters(frequency: &BTreeMap<char, u64>, kept: &[char]) -> Check {
+    let counts: Vec<(char, u64)> = kept
+        .iter()
+        .map(|&ch| (ch, frequency.get(&ch).copied().unwrap_or(0)))
+        .collect();
+    Check {
+        id: CheckId::KeptCharacters,
+        passed: counts.iter().all(|&(_, n)| n > 0),
+        detail: counts
+            .iter()
+            .map(|(ch, n)| format!("{ch} {n}"))
+            .collect::<Vec<_>>()
+            .join("、"),
+    }
 }
 
 fn spot(id: CheckId, passed: bool) -> Check {

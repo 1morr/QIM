@@ -686,3 +686,30 @@ mod corpus {
         );
     }
 }
+
+mod kept_characters {
+    use std::collections::BTreeMap;
+
+    use qim_databuild::verify::{self, CheckId};
+
+    fn check(frequency: &[(char, u64)]) -> (bool, String) {
+        let frequency: BTreeMap<char, u64> = frequency.iter().copied().collect();
+        let check = verify::kept_characters(&frequency, &['晒', '搵']);
+        assert_eq!(check.id, CheckId::KeptCharacters);
+        (check.passed, check.detail)
+    }
+
+    #[test]
+    fn every_kept_character_counted_in_train_passes() {
+        assert_eq!(
+            check(&[('晒', 3), ('搵', 1), ('曬', 9)]),
+            (true, "晒 3、搵 1".into())
+        );
+    }
+
+    #[test]
+    fn kept_character_missing_or_zero_in_train_fails() {
+        assert_eq!(check(&[('晒', 3), ('揾', 5)]), (false, "晒 3、搵 0".into()));
+        assert_eq!(check(&[('晒', 0), ('搵', 2)]), (false, "晒 0、搵 2".into()));
+    }
+}
