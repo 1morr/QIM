@@ -11,6 +11,7 @@ mod pack;
 mod punctuation;
 mod scheme;
 mod session;
+mod user;
 
 pub use code_table::{CodeEntry, CodeTable};
 pub use engine::Engine;
@@ -18,6 +19,5 @@ pub use language_model::{CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
 pub use pack::{FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError};
 pub use scheme::{Packs, Ranking, Scheme};
-pub use session::{
-    Candidate, Composition, Key, Options, PAGE_SIZE, Segment, Session, Snapshot, UserModel,
-};
+pub use session::{Candidate, Composition, Key, Options, PAGE_SIZE, Segment, Session, Snapshot};
+pub use user::UserModel;

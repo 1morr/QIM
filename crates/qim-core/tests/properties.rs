@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, PAGE_SIZE, Pack, Packs, Ranking,
-    Scheme, Session, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Pack, Packs,
+    Ranking, Scheme, Session, Snapshot, UserModel, Word,
 };
 
 /// 測試方案的最長碼；碼表裡有更長的碼，那些不是字的碼。
@@ -48,9 +48,18 @@ fn key() -> impl Strategy<Value = Key> {
 }
 
 fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<String>>) -> Engine {
+    engine_for("quick", table, words)
+}
+
+/// 方案 `id` 的引擎；碼表與詞庫同 [`engine`]。
+fn engine_for(
+    id: &str,
+    table: &BTreeMap<String, Vec<char>>,
+    words: &BTreeMap<String, Vec<String>>,
+) -> Engine {
     let scheme = Scheme {
-        id: "quick".into(),
-        name: "速成".into(),
+        id: id.into(),
+        name: id.into(),
         version: "1".into(),
         alphabet: "abc".into(),
         max_code_length: MAX_CODE_LENGTH,
@@ -90,6 +99,28 @@ fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<Stri
         lexicon,
     };
     Engine::new(Pack { scheme, code_table }, Some(lexicon), None).unwrap()
+}
+
+/// 同碼不同字的另一個方案：每個碼的字倒過來排、前面多一個「甲」，詞也倒過來；
+/// 同一組（碼, 字詞）兩個方案都有，排的位置不同，學習計數混在一起就看得出來。
+fn other_scheme(
+    table: &BTreeMap<String, Vec<char>>,
+    words: &BTreeMap<String, Vec<String>>,
+) -> (BTreeMap<String, Vec<char>>, BTreeMap<String, Vec<String>>) {
+    let table = table
+        .iter()
+        .map(|(code, chars)| {
+            let chars = std::iter::once('甲')
+                .chain(chars.iter().rev().copied())
+                .collect();
+            (code.clone(), chars)
+        })
+        .collect();
+    let words = words
+        .iter()
+        .map(|(code, texts)| (code.clone(), texts.iter().rev().cloned().collect()))
+        .collect();
+    (table, words)
 }
 
 /// `text` 能拆成一串字詞（`pieces` 的「文字, 碼」），碼接起來是 `input` 開頭的一段（至少一碼）。
@@ -175,7 +206,7 @@ proptest! {
         let mut session = Session::default();
         for key in keys {
             let snapshot = session.handle(&engine, &mut user, key);
-            let from_scratch = engine.candidates(snapshot.composition.unselected_input());
+            let from_scratch = engine.candidates(&user, snapshot.composition.unselected_input());
             let page: Vec<String> = from_scratch
                 .into_iter()
                 .skip(snapshot.page * PAGE_SIZE)
@@ -183,6 +214,53 @@ proptest! {
                 .collect();
             let texts: Vec<String> = snapshot.candidates.iter().map(|c| c.text.clone()).collect();
             prop_assert_eq!(texts, page, "{:?} 後", key);
+        }
+    }
+
+    /// 無痕模式下怎麼打、選、上屏都不寫學習資料（plan §5.1），之前學過的也不動。
+    #[test]
+    fn incognito_leaves_the_user_model_unchanged(
+        table in random_table(),
+        words in random_words(),
+        learning in prop::collection::vec(key(), 0..40),
+        keys in prop::collection::vec(key(), 0..40),
+    ) {
+        let engine = engine(&table, &words);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for key in learning {
+            session.handle(&engine, &mut user, key);
+        }
+        let before = user.clone();
+        session.set_options(Options { incognito: true, ..Options::default() });
+        for key in keys {
+            session.handle(&engine, &mut user, key);
+            prop_assert_eq!(&user, &before, "{:?} 後", key);
+        }
+    }
+
+    /// 同一個 `UserModel` 交替用在兩個同碼不同字的方案，各方案的候選和只用那個方案時相同
+    /// （plan §2.4）。
+    #[test]
+    fn two_schemes_sharing_a_user_model_do_not_affect_each_other(
+        table in random_table(),
+        words in random_words(),
+        keys in prop::collection::vec((any::<bool>(), key()), 0..100),
+    ) {
+        let (other_table, other_words) = other_scheme(&table, &words);
+        let engines = [
+            engine_for("quick", &table, &words),
+            engine_for("cangjie", &other_table, &other_words),
+        ];
+        let mut shared = UserModel::default();
+        let mut alone = [UserModel::default(), UserModel::default()];
+        let mut sessions = [Session::default(), Session::default()];
+        let mut alone_sessions = [Session::default(), Session::default()];
+        for (second, key) in keys {
+            let i = usize::from(second);
+            let together: Snapshot = sessions[i].handle(&engines[i], &mut shared, key);
+            let by_itself = alone_sessions[i].handle(&engines[i], &mut alone[i], key);
+            prop_assert_eq!(together, by_itself, "方案 {} 按 {:?} 後", engines[i].scheme().id, key);
         }
     }
 }

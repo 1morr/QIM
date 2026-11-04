@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use crate::Engine;
+use crate::{Engine, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -27,6 +27,23 @@ struct Node {
 pub(crate) struct CandidateSpan {
     pub text: String,
     pub len: usize,
+    /// 組成它的各段，依輸入碼的順序、接起來是 `text`；上屏時學習用（plan §2.4）。
+    pub segments: Vec<PathSegment>,
+}
+
+impl CandidateSpan {
+    /// 只有一段的候選：碼表的字或詞庫的詞，蓋住開頭 `len` 碼。
+    fn single(text: String, len: usize) -> Self {
+        Self {
+            segments: vec![PathSegment {
+                start: 0,
+                end: len,
+                text: text.clone(),
+            }],
+            text,
+            len,
+        }
+    }
 }
 
 /// 首選路徑的一段：輸入碼 `[start, end)` 與它的字詞。
@@ -52,10 +69,10 @@ impl Default for Lattice {
 
 impl Lattice {
     /// 從頭建一串輸入碼的 lattice，和逐鍵 [`Lattice::push`] 相同。
-    pub fn from_input(engine: &Engine, input: &str) -> Self {
+    pub fn from_input(engine: &Engine, user: &UserModel, input: &str) -> Self {
         let mut lattice = Self::default();
         for c in input.chars() {
-            lattice.push(engine, c);
+            lattice.push(engine, user, c);
         }
         lattice
     }
@@ -65,9 +82,9 @@ impl Lattice {
     }
 
     /// 多打一個字母：只算新的一欄，前面的欄不動。
-    pub fn push(&mut self, engine: &Engine, c: char) {
+    pub fn push(&mut self, engine: &Engine, user: &UserModel, c: char) {
         self.input.push(c);
-        let edges = engine.edges_ending(&self.input);
+        let edges = engine.edges_ending(user, &self.input);
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
         for (e, edge) in edges.iter().enumerate() {
             for (k, node) in self.columns[edge.start].iter().enumerate() {
@@ -108,8 +125,13 @@ impl Lattice {
         if self.columns[end].is_empty() || end == 0 {
             return Vec::new();
         }
+        self.path(end, 0)
+    }
+
+    /// 結束在位置 `end`、在那一欄第 `k` 名的部分路徑的各段。
+    fn path(&self, end: usize, k: usize) -> Vec<PathSegment> {
         let mut segments = Vec::new();
-        let (mut j, mut k) = (end, 0);
+        let (mut j, mut k) = (end, k);
         while let Some((i, prev)) = self.columns[j][k].prev {
             let text = &self.columns[j][k].text[self.columns[i][prev].text.len()..];
             segments.push(PathSegment {
@@ -130,39 +152,113 @@ impl Lattice {
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
 /// 3. 只蓋住開頭一段的字詞，蓋得長的在前，同長依分數排。
 ///
-/// 文字重複的只留第一個。
-pub(crate) fn candidates(engine: &Engine, lattice: &Lattice) -> Vec<CandidateSpan> {
+/// 文字重複的只留第一個。接著依序套用排位規則（[`RULES`]）。
+pub(crate) fn candidates(
+    engine: &Engine,
+    user: &UserModel,
+    lattice: &Lattice,
+) -> Vec<CandidateSpan> {
     let input = lattice.input();
     let n = input.len();
     if n == 0 {
         return Vec::new();
     }
-    let mut full = engine.span(input);
+    let mut full: Vec<(f64, CandidateSpan)> = engine
+        .span(user, input)
+        .into_iter()
+        .map(|(score, text)| (score, CandidateSpan::single(text, n)))
+        .collect();
     full.extend(
         lattice.columns[n]
             .iter()
-            .filter(|node| node.prev.is_some_and(|(i, _)| i > 0))
+            .enumerate()
+            .filter(|(_, node)| node.prev.is_some_and(|(i, _)| i > 0))
             .take(engine.sentences())
-            .map(|node| (node.score, node.text.clone())),
+            .map(|(k, node)| {
+                let span = CandidateSpan {
+                    text: node.text.clone(),
+                    len: n,
+                    segments: lattice.path(n, k),
+                };
+                (node.score, span)
+            }),
     );
     full.sort_by(|a, b| b.0.total_cmp(&a.0));
 
-    let full = full
-        .into_iter()
-        .map(|(_, text)| CandidateSpan { text, len: n });
-    let extension = engine.extension(input).map(|c| CandidateSpan {
-        text: c.to_string(),
-        len: n,
-    });
+    let full = full.into_iter().map(|(_, span)| span);
+    let extension = engine
+        .extension(input)
+        .map(|c| CandidateSpan::single(c.to_string(), n));
     let prefixes = (1..n).rev().flat_map(|len| {
         engine
-            .span(&input[..len])
+            .span(user, &input[..len])
             .into_iter()
-            .map(move |(_, text)| CandidateSpan { text, len })
+            .map(move |(_, text)| CandidateSpan::single(text, len))
     });
     let mut seen = HashSet::new();
-    full.chain(extension)
+    let mut list: Vec<CandidateSpan> = full
+        .chain(extension)
         .chain(prefixes)
         .filter(|c| seen.insert(c.text.clone()))
-        .collect()
+        .collect();
+    let mut ranked = Ranked {
+        scheme: &engine.scheme().id,
+        user,
+        input,
+        list: &mut list,
+        fixed: 0,
+    };
+    for rule in RULES {
+        rule(&mut ranked);
+    }
+    list
+}
+
+/// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
+/// 規則 1、3 在 M1 票 14，規則 4 在票 15。
+const RULES: [fn(&mut Ranked); 1] = [recent_twice_first];
+
+/// 套用排位規則中的候選列。
+struct Ranked<'a> {
+    scheme: &'a str,
+    user: &'a UserModel,
+    /// 這列候選的輸入碼；規則比對的是它（plan §2.4）。
+    input: &'a str,
+    list: &'a mut Vec<CandidateSpan>,
+    /// 開頭這麼多個已由前面的規則排定。
+    fixed: usize,
+}
+
+impl Ranked<'_> {
+    /// 把第 `from` 個移到還沒排定的最前面，並排定它。`from` 已排定時不動。
+    fn place_next(&mut self, from: usize) {
+        if from < self.fixed {
+            return;
+        }
+        let candidate = self.list.remove(from);
+        self.list.insert(self.fixed, candidate);
+        self.fixed += 1;
+    }
+}
+
+/// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。
+fn recent_twice_first(ranked: &mut Ranked) {
+    let most_recent = ranked
+        .list
+        .iter()
+        .enumerate()
+        .skip(ranked.fixed)
+        .filter(|(_, c)| c.len == ranked.input.len())
+        .filter_map(|(i, c)| {
+            Some((
+                ranked
+                    .user
+                    .last_tick_if_chosen_twice(ranked.scheme, ranked.input, &c.text)?,
+                i,
+            ))
+        })
+        .max();
+    if let Some((_, i)) = most_recent {
+        ranked.place_next(i);
+    }
 }
