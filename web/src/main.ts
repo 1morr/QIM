@@ -13,6 +13,8 @@ const PACK_URL = "/packs/quick/quick.pack";
 const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
 /** 速成方案檔 `[packs]` 指名的語言模型資料包（字級 bigram）。 */
 const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
+/** 簡繁資料包（OpenCC `hk2s`），簡體模式用。 */
+const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 
@@ -29,6 +31,7 @@ const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
+const simplified = element<HTMLInputElement>("#simplified");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 /** 觸控鍵盤；載入完成前是 `undefined`。 */
@@ -157,17 +160,33 @@ function setTouch(on: boolean): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon, languageModel, layoutJson] = await Promise.all([
-		init(),
-		loadPack(PACK_URL),
-		loadPack(LEXICON_URL),
-		loadPack(LANGUAGE_MODEL_URL),
-		load(LAYOUT_URL).then((response) => response.text()),
-	]);
-	const session = new Session(pack, lexicon, languageModel);
+	const [, pack, lexicon, languageModel, simplifier, layoutJson] =
+		await Promise.all([
+			init(),
+			loadPack(PACK_URL),
+			loadPack(LEXICON_URL),
+			loadPack(LANGUAGE_MODEL_URL),
+			loadPack(SIMPLIFIER_URL),
+			load(LAYOUT_URL).then((response) => response.text()),
+		]);
+	const session = new Session(pack, lexicon, languageModel, simplifier);
 	session.setIncognito(incognito.checked);
 	incognito.addEventListener("change", () => {
 		session.setIncognito(incognito.checked);
+		text.focus();
+	});
+	// 組字中切換也立刻重列候選。
+	const applySimplified = (): void => {
+		const snapshot = session.setSimplified(simplified.checked);
+		try {
+			render(snapshot);
+		} finally {
+			snapshot.free();
+		}
+	};
+	applySimplified();
+	simplified.addEventListener("change", () => {
+		applySimplified();
 		text.focus();
 	});
 	const layout = new Layout(layoutJson, device(), orientation());

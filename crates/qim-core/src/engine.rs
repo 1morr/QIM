@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 
@@ -5,7 +6,7 @@ use crate::lattice::{self, Lattice};
 use crate::user::personal_bonus;
 use crate::{
     CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, PackError,
-    Scheme, UserModel, Word,
+    Scheme, Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -22,6 +23,8 @@ pub struct Engine {
     longest_word_code: usize,
     /// 詞的 unigram 的分母取 ln：每個詞（不論幾個碼）的詞頻總和。
     word_log_total: f64,
+    /// 簡體模式的轉換；沒掛上簡繁資料包時是 `None`，簡體模式照原樣輸出。
+    simplifier: Option<Simplifier>,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -80,7 +83,22 @@ impl Engine {
             language_model: language_model.map(|m| m.model).unwrap_or_default(),
             longest_word_code,
             lexicon,
+            simplifier: None,
         })
+    }
+
+    /// 掛上簡繁資料包，簡體模式（[`crate::Options::simplified`]）才有作用。
+    pub fn with_simplifier(mut self, pack: SimplifierPack) -> Self {
+        self.simplifier = Some(pack.simplifier);
+        self
+    }
+
+    /// 簡體模式下輸出的文字；沒掛上簡繁資料包時照原樣。
+    pub(crate) fn simplify<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        match &self.simplifier {
+            Some(simplifier) => Cow::Owned(simplifier.convert(text)),
+            None => Cow::Borrowed(text),
+        }
     }
 
     /// 由資料包的位元組建立；讀檔是呼叫端的事（plan §1.3）。

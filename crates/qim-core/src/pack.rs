@@ -3,7 +3,7 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{CodeTable, LanguageModel, Lexicon, Scheme};
+use crate::{CodeTable, LanguageModel, Lexicon, Scheme, Simplifier};
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
 pub const FORMAT_VERSION: u32 = 4;
@@ -14,6 +14,8 @@ const SCHEME_MAGIC: &[u8; 4] = b"QIMP";
 const LEXICON_MAGIC: &[u8; 4] = b"QIML";
 /// 語言模型資料包檔頭的魔數。
 const LANGUAGE_MODEL_MAGIC: &[u8; 4] = b"QIMB";
+/// 簡繁資料包檔頭的魔數。
+const SIMPLIFIER_MAGIC: &[u8; 4] = b"QIMS";
 
 /// 一個輸入方案的資料包：方案與它的碼表。
 ///
@@ -40,6 +42,16 @@ pub struct LexiconPack {
 pub struct LanguageModelPack {
     pub id: String,
     pub model: LanguageModel,
+}
+
+/// 簡繁資料包：OpenCC 的轉換表（plan §4.4），由 [`crate::Engine::with_simplifier`] 掛上，
+/// 不由方案指名：各方案都輸出繁體，簡體模式共用同一份。
+///
+/// 位元組格式：魔數 `QIMS`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SimplifierPack {
+    pub id: String,
+    pub simplifier: Simplifier,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,5 +160,15 @@ impl LanguageModelPack {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
         decode(LANGUAGE_MODEL_MAGIC, bytes)
+    }
+}
+
+impl SimplifierPack {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
+        encode(SIMPLIFIER_MAGIC, self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
+        decode(SIMPLIFIER_MAGIC, bytes)
     }
 }

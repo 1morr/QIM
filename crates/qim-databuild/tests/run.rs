@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
-use qim_core::{Engine, LanguageModelPack, LexiconPack, Pack};
+use qim_core::{Engine, LanguageModelPack, LexiconPack, Pack, SimplifierPack};
 use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
 
@@ -67,6 +67,27 @@ const ESSAY: &str = "日\t71052\n門口\t9435\n問日\t300\n日日\t100\n丟丟\
 const LGPL: &str = "\
                    GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
+";
+
+/// OpenCC 的字典（檔名, 內容）：只有「門」「問」有簡體，香港異體「綫」先轉回「線」。
+const OPENCC_DICTIONARIES: [(&str, &str); 5] = [
+    (
+        "data/dictionary/CJK_Compatibility_Ideographs.txt",
+        "# File\n",
+    ),
+    ("data/dictionary/TSPhrases.txt", "乾隆\t乾隆\n"),
+    (
+        "data/dictionary/TSCharacters.txt",
+        "門\t门\n問\t问\n線\t线\n",
+    ),
+    ("data/dictionary/HKVariants.txt", "線\t綫\n"),
+    ("data/dictionary/HKVariantsRevPhrases.txt", ""),
+];
+
+/// OpenCC 的 `LICENSE`（這裡只取開頭）。
+const APACHE: &str = "\
+                                 Apache License
+                           Version 2.0, January 2004
 ";
 
 const DUMP_FILE: &str = "zh_yuewiki-20261101-pages-articles.xml.bz2";
@@ -237,30 +258,44 @@ impl Fetch for Offline {
 }
 
 fn upstream(readme: &str) -> Files {
-    Files(BTreeMap::from([
-        ("https://example.invalid/table.txt".into(), TABLE.into()),
-        (
-            "https://example.invalid/README.table.md".into(),
-            readme.into(),
-        ),
-        ("https://example.invalid/Unihan.zip".into(), unihan_zip()),
-        (format!("https://example.invalid/{DUMP_FILE}"), dump()),
-        (format!("https://example.invalid/{ZH_DUMP_FILE}"), zh_dump()),
-        (
-            "https://example.invalid/hkcancor.zip".into(),
-            hkcancor_zip(),
-        ),
-        (
-            "https://example.invalid/cv-yue.txt".into(),
-            common_voice().0.into(),
-        ),
-        (
-            "https://example.invalid/cv-zh-HK.txt".into(),
-            common_voice().1.into(),
-        ),
-        ("https://example.invalid/essay.txt".into(), ESSAY.into()),
-        ("https://example.invalid/essay-LICENSE".into(), LGPL.into()),
-    ]))
+    Files(
+        BTreeMap::from([
+            ("https://example.invalid/table.txt".into(), TABLE.into()),
+            (
+                "https://example.invalid/README.table.md".into(),
+                readme.into(),
+            ),
+            ("https://example.invalid/Unihan.zip".into(), unihan_zip()),
+            (format!("https://example.invalid/{DUMP_FILE}"), dump()),
+            (format!("https://example.invalid/{ZH_DUMP_FILE}"), zh_dump()),
+            (
+                "https://example.invalid/hkcancor.zip".into(),
+                hkcancor_zip(),
+            ),
+            (
+                "https://example.invalid/cv-yue.txt".into(),
+                common_voice().0.into(),
+            ),
+            (
+                "https://example.invalid/cv-zh-HK.txt".into(),
+                common_voice().1.into(),
+            ),
+            ("https://example.invalid/essay.txt".into(), ESSAY.into()),
+            ("https://example.invalid/essay-LICENSE".into(), LGPL.into()),
+            (
+                "https://example.invalid/opencc-LICENSE".into(),
+                APACHE.into(),
+            ),
+        ])
+        .into_iter()
+        .chain(OPENCC_DICTIONARIES.iter().map(|(path, text)| {
+            (
+                format!("https://example.invalid/opencc/{path}"),
+                text.as_bytes().to_vec(),
+            )
+        }))
+        .collect(),
+    )
 }
 
 /// 在 `root` 放 sources.toml、repo 裡的速成方案檔與 Unicode 授權全文。
@@ -372,7 +407,18 @@ sha256 = "{essay}"
 path = "LICENSE"
 url = "https://example.invalid/essay-LICENSE"
 sha256 = "{lgpl}"
-"#,
+
+[source.opencc]
+repository = "https://example.invalid/OpenCC"
+version = "fae2a0a911c30764e669a7d8b0591cd8e852934a"
+license = "Apache-2.0"
+license_text = {{ upstream_file = "LICENSE" }}
+
+[[source.opencc.files]]
+path = "LICENSE"
+url = "https://example.invalid/opencc-LICENSE"
+sha256 = "{apache}"
+{opencc}"#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
         unihan = sha256_hex(&unihan_zip()),
@@ -383,6 +429,17 @@ sha256 = "{lgpl}"
         cv_zh_hk = sha256_hex(common_voice().1.as_bytes()),
         essay = sha256_hex(ESSAY.as_bytes()),
         lgpl = sha256_hex(LGPL.as_bytes()),
+        apache = sha256_hex(APACHE.as_bytes()),
+        opencc = OPENCC_DICTIONARIES
+            .iter()
+            .map(|(path, text)| {
+                format!(
+                    "\n[[source.opencc.files]]\npath = \"{path}\"\n\
+                     url = \"https://example.invalid/opencc/{path}\"\nsha256 = \"{}\"\n",
+                    sha256_hex(text.as_bytes())
+                )
+            })
+            .collect::<String>(),
     );
     std::fs::write(root.join("data/sources.toml"), sources).unwrap();
 }
@@ -498,6 +555,37 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
     assert!(notice.contains("Kneser-Ney"), "{notice}");
+}
+
+#[test]
+fn builds_the_simplifier_pack_with_its_own_license_and_notice() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/opencc-hk2s");
+    assert_eq!(outcome.simplifier_path, dir.join("opencc-hk2s.pack"));
+    let bytes = std::fs::read(&outcome.simplifier_path).unwrap();
+    assert_eq!(outcome.simplifier_sha256, sha256_hex(&bytes));
+    let pack = SimplifierPack::from_bytes(&bytes).unwrap();
+    assert_eq!(pack.id, "opencc-hk2s");
+    assert_eq!(pack.simplifier.convert("門口綫乾隆"), "门口线乾隆");
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains("Apache-2.0"), "{license}");
+    assert!(license.contains(APACHE.trim_end()), "{license}");
+    assert!(!license.contains("LGPL"), "{license}");
+    assert!(!license.contains(STATEMENT), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(
+        notice.contains("fae2a0a911c30764e669a7d8b0591cd8e852934a"),
+        "{notice}"
+    );
+    for (_, text) in OPENCC_DICTIONARIES {
+        assert!(notice.contains(&sha256_hex(text.as_bytes())), "{notice}");
+    }
+    assert!(notice.contains("hk2s"), "{notice}");
+    assert!(notice.contains("@tofu-risk"), "{notice}");
 }
 
 #[test]

@@ -115,7 +115,7 @@ flowchart LR
 | `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證；`jsonschema` 關掉預設 features（不要網路與檔案的 `$ref` 解析） | 佈局要給 TS、Swift、Kotlin 直接讀 |
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2） | 一份介面產生兩種語言 |
-| `ferrous-opencc` | 0.4.0 | 簡繁轉換；`qim-databuild` 前處理語料的 `s2hk`（用它內建的字典） | 純 Rust、Apache-2.0；能否編 WebAssembly 在 M1 票 16 開工時驗證 |
+| `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
 | `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
@@ -153,12 +153,14 @@ impl Session {
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot;
     pub fn focus_segment(&mut self, engine: &Engine, user: &mut UserModel, segment: usize) -> Snapshot;
     pub fn set_options(&mut self, options: Options);
+    pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot; // 換選項後依新選項重列候選
     pub fn rerank_request(&self) -> Option<RerankRequest>;            // 上下文 + 前 k 個候選
     pub fn apply_rerank(&mut self, generation: u64, order: &[usize]) -> Option<Snapshot>;
 }
 ```
 
 - `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
+- 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉，轉換的單位是一個候選或一個分段，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 上下文（M3）：`Session::set_context(before: &str)`，n-gram 與個人 bigram 用前文當起點。
 - 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的字詞；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
@@ -401,17 +403,17 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 ### 4.4 英文與簡繁
 
 - 英文：SCOWL / ESDB（`en-wl/wordlist`）size ≤ 60 的詞，size 級別當常見度。
-- 簡繁：OpenCC（`fae2a0a`）的字典，經 `ferrous-opencc` 轉換。
+- 簡繁：OpenCC（`fae2a0a`）的字典建成簡繁資料包 `opencc-hk2s`，`qim-core` 照 OpenCC 的規則轉換（`simplifier.rs`）：照 `hk2s.json` 先正規化 CJK 相容表意文字、用 TSPhrases 分段，再經 HKVariantsRevPhrases + HKVariantsRev、TSPhrases + TSCharacters 兩組，每組第一張有匹配的表勝出、表內取最長的鍵。`@tofu-risk` 的罕用簡體字不用、保留原字（多數字型顯示不出）。不用 `ferrous-opencc`：它的公開 API 只能用編進 crate 的字典（版本不是 `fae2a0a`），不能從資料包載入（M1 票 16 Comments）。
 
 ### 4.5 驗證（`cargo xtask data --verify`，M0 起每次改資料管線或來源都跑）
 
 - 不掉字：連打字集的字數等於來源中旗標符合、且有倉頡碼的字數。
 - 速成碼表的每個鍵長度都是 1 或 2；不存在長度 3 以上的鍵（ADR 0003 的守門測試）。
-- 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」；`anr` 的候選有「門口」。後兩項經 `Engine` 查，含字頻排序。
+- 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」；`anr` 的候選有「門口」；簡體模式 `anr` 的第一頁有「门口」、沒有「門口」。「日」「門口」經 `Engine` 查，含字頻排序；「门口」經 `Session` 打。
 - 詞庫：每個詞的碼都由詞裡每個字的一個速成碼接成；報告列詞數、被門檻與字集濾掉的數量。
 - Unihan `kCangjie` 交叉比對，差異清單輸出成報表，不擋建置。
 - bigram 資料包 ≤ 8 MB（§4.3）。
-- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫與 bigram 三份）。
+- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫、bigram 與簡繁四份）。
 
 ## 5. 測試策略
 
@@ -627,7 +629,6 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | 空間模型讓正確輸入被錯字蓋過 | M4 範圍 | M4 基準 | 改成只在無候選時啟動，或只用於觸控 |
 | 小型神經模型放不進鍵盤擴充或太慢 | M3 範圍、M7 | M2、§7.8 | 只在桌面與 Android 用，或不做，寫回 brief §1.5 |
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
-| `ferrous-opencc` 不能編 WebAssembly | M1 票 16 | 票開工時 | 改自讀 OpenCC 字典，記偏差 |
 | iOS 鍵盤擴充放不下核心與資料包 | M3 的模型大小、M7 | M2 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
 | `jsonschema` 讓程式碼變大（M1 票 19：網頁 WebAssembly 由 0.42 MB 變 4.6 MB，gzip 1.2 MB，多半是它帶的 regex 與大數） | iOS 鍵盤擴充的記憶體（brief §9） | M2 | 鍵盤擴充只讀存檔時驗過的佈局，Schema 驗證留在主 App 與編輯器（`qim-layout` 加 feature 關掉），改 §1.3、§1.4 |
 | 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |

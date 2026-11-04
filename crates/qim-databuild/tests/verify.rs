@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CharModel, CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack,
-    Word,
+    CharModel, CodeEntry, CodeTable, ConversionTable, LanguageModel, LanguageModelPack, Lexicon,
+    LexiconPack, Pack, Simplifier, SimplifierPack, Word,
 };
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
@@ -26,7 +26,7 @@ const SCHEME: &str = r#"
 id = "t"
 name = "測試"
 version = "1"
-alphabet = "ab"
+alphabet = "abnr"
 max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
@@ -34,6 +34,8 @@ language_model = "t-bigram"
 [radicals]
 a = "日"
 b = "月"
+n = "弓"
+r = "口"
 [ranking]
 word_bonus = 0.0
 segment_penalty = 0.0
@@ -90,6 +92,18 @@ fn language_model_from(corpus: &str) -> LanguageModelPack {
     }
 }
 
+/// 只轉「門」的簡繁資料包。
+fn simplifier() -> SimplifierPack {
+    SimplifierPack {
+        id: "opencc-hk2s".into(),
+        simplifier: Simplifier::new(
+            vec![],
+            ConversionTable::new([]),
+            vec![vec![ConversionTable::new([("門".into(), "门".into())])]],
+        ),
+    }
+}
+
 fn run_with(pack: &Pack, lexicon: &LexiconPack) -> Report {
     run_with_language_model(pack, lexicon, &language_model())
 }
@@ -102,10 +116,12 @@ fn run_with_language_model(
     let quick = pack.to_bytes().unwrap();
     let lexicon = lexicon.to_bytes().unwrap();
     let language_model = language_model.to_bytes().unwrap();
+    let simplifier = simplifier().to_bytes().unwrap();
     let bytes = PackBytes {
         quick: &quick,
         lexicon: &lexicon,
         language_model: &language_model,
+        simplifier: &simplifier,
     };
     verify::run(&rows(), bytes, bytes)
 }
@@ -186,6 +202,7 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::RiIsTopForA,
             CheckId::WordCodesFromCharacters,
             CheckId::MenKouForAnr,
+            CheckId::SimplifiedMenKou,
             CheckId::LanguageModelSize,
             CheckId::Deterministic,
         ]
@@ -203,10 +220,12 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
         .unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
     let language_model = language_model().to_bytes().unwrap();
+    let simplifier = simplifier().to_bytes().unwrap();
     let both = PackBytes {
         quick: &bytes,
         lexicon: &lexicon,
         language_model: &language_model,
+        simplifier: &simplifier,
     };
     let report = verify::run(&rows, both, both);
     assert_eq!(failed(&report), []);
@@ -309,6 +328,27 @@ fn word_code_not_made_of_its_characters_quick_codes_fails() {
     }
 }
 
+/// 簡繁資料包沒轉「門」：簡體模式的候選還是繁體。
+#[test]
+fn a_simplifier_pack_that_does_not_convert_fails_the_spot_check() {
+    let quick = pack().to_bytes().unwrap();
+    let lexicon = lexicon().to_bytes().unwrap();
+    let model = language_model().to_bytes().unwrap();
+    let mut identity = simplifier();
+    identity.simplifier = Simplifier::new(vec![], ConversionTable::new([]), vec![]);
+    let identity = identity.to_bytes().unwrap();
+    let bytes = PackBytes {
+        quick: &quick,
+        lexicon: &lexicon,
+        language_model: &model,
+        simplifier: &identity,
+    };
+    assert_eq!(
+        failed(&verify::run(&rows(), bytes, bytes)),
+        [CheckId::SimplifiedMenKou]
+    );
+}
+
 #[test]
 fn missing_men_kou_for_anr_fails() {
     let lexicon = edited_lexicon(|w| {
@@ -326,28 +366,20 @@ fn different_bytes_from_the_second_build_fail_determinism() {
         pack().to_bytes().unwrap(),
         lexicon().to_bytes().unwrap(),
         language_model().to_bytes().unwrap(),
+        simplifier().to_bytes().unwrap(),
     ];
-    let bytes = |b: &[Vec<u8>; 3]| -> (Vec<u8>, Vec<u8>, Vec<u8>) {
-        (b[0].clone(), b[1].clone(), b[2].clone())
-    };
-    for changed in 0..3 {
+    fn bytes(b: &[Vec<u8>; 4]) -> PackBytes<'_> {
+        PackBytes {
+            quick: &b[0],
+            lexicon: &b[1],
+            language_model: &b[2],
+            simplifier: &b[3],
+        }
+    }
+    for changed in 0..4 {
         let mut second = first.clone();
         *second[changed].last_mut().unwrap() ^= 1;
-        let (a, b, c) = bytes(&first);
-        let (x, y, z) = bytes(&second);
-        let report = verify::run(
-            &rows(),
-            PackBytes {
-                quick: &a,
-                lexicon: &b,
-                language_model: &c,
-            },
-            PackBytes {
-                quick: &x,
-                lexicon: &y,
-                language_model: &z,
-            },
-        );
+        let report = verify::run(&rows(), bytes(&first), bytes(&second));
         assert_eq!(
             failed(&report),
             [CheckId::Deterministic],
@@ -364,18 +396,21 @@ fn undecodable_pack_fails_without_panicking() {
     let model = language_model().to_bytes().unwrap();
     other_model.id = "other".into();
     let other_model = other_model.to_bytes().unwrap();
-    for (quick, lexicon, language_model) in [
-        (&b"garbage"[..], &lexicon[..], &model[..]),
-        (&quick[..], &b"garbage"[..], &model[..]),
-        (&quick[..], &lexicon[..], &b"garbage"[..]),
+    let simplifier = simplifier().to_bytes().unwrap();
+    for (quick, lexicon, language_model, simplifier) in [
+        (&b"garbage"[..], &lexicon[..], &model[..], &simplifier[..]),
+        (&quick[..], &b"garbage"[..], &model[..], &simplifier[..]),
+        (&quick[..], &lexicon[..], &b"garbage"[..], &simplifier[..]),
+        (&quick[..], &lexicon[..], &model[..], &b"garbage"[..]),
         // 都解得開，但詞庫或語言模型不是方案指名的那份。
-        (&quick[..], &quick[..], &model[..]),
-        (&quick[..], &lexicon[..], &other_model[..]),
+        (&quick[..], &quick[..], &model[..], &simplifier[..]),
+        (&quick[..], &lexicon[..], &other_model[..], &simplifier[..]),
     ] {
         let bytes = PackBytes {
             quick,
             lexicon,
             language_model,
+            simplifier,
         };
         let report = verify::run(&rows(), bytes, bytes);
         assert_eq!(failed(&report), [CheckId::Decodes]);
