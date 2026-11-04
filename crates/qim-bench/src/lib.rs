@@ -11,6 +11,7 @@ use std::fs;
 use std::path::Path;
 
 use qim_core::Engine;
+use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, SetBaseline, parse as parse_baseline};
 pub use items::{Item, parse_corpus, parse_fixed};
@@ -35,6 +36,8 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct Outcome {
+    /// 資料包 sha256 的十六進位；同一份資料包前後對照時一樣，沒重建就看得出來。
+    pub pack_sha256: String,
     pub fixed: SetResult,
     /// 各語料集合，依名稱排序。
     pub sets: Vec<SetResult>,
@@ -58,7 +61,7 @@ impl Outcome {
 
 /// 在 repo 根目錄 `root` 跑基準。
 pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
-    let engine = load_engine(&root.join(PACK))?;
+    let (engine, pack_sha256) = load_engine(&root.join(PACK))?;
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let fixed = score::score(&engine, "fixed", &fixed);
     let mut sets = Vec::new();
@@ -83,6 +86,7 @@ pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
         }
     };
     Ok(Outcome {
+        pack_sha256,
         fixed,
         sets,
         baseline,
@@ -99,14 +103,20 @@ fn load_baseline(path: &Path) -> Result<Option<Baseline>, String> {
         .map_err(|e| format!("{}：{e}", path.display()))
 }
 
-fn load_engine(path: &Path) -> Result<Engine, String> {
+/// 資料包與它的 sha256。
+fn load_engine(path: &Path) -> Result<(Engine, String), String> {
     let bytes = fs::read(path).map_err(|e| {
         format!(
             "讀不到資料包 {}：{e}；先跑 `cargo xtask data`",
             path.display()
         )
     })?;
-    Engine::from_pack_bytes(&bytes).map_err(|e| format!("{}：{e}", path.display()))
+    let engine = Engine::from_pack_bytes(&bytes).map_err(|e| format!("{}：{e}", path.display()))?;
+    let sha256 = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    Ok((engine, sha256))
 }
 
 fn read(path: &Path) -> Result<String, String> {

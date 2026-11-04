@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use qim_bench::{Mode, PACK, run};
+use qim_bench::{Mode, run};
 
 const USAGE: &str = "用法：qim-bench [--check | --update-baseline]";
 
@@ -31,7 +31,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("首選字基準（資料包 {PACK}）\n");
+    println!("首選字基準\n");
     print!("{}", outcome.report());
     if mode == Mode::UpdateBaseline {
         println!("\n已改寫 {}", qim_bench::BASELINE);

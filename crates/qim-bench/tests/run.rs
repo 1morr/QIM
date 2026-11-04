@@ -230,3 +230,26 @@ fn check_ignores_the_order_of_sets_in_baseline() {
     );
     assert_eq!(check(&repo), Vec::<String>::new());
 }
+
+/// 報告裡指出資料包的那一行。
+fn pack_line(repo: &TempDir) -> String {
+    let report = run(repo.path(), Mode::Report).unwrap().report();
+    report
+        .lines()
+        .find(|line| line.contains("資料包"))
+        .unwrap_or_else(|| panic!("報告沒有指出資料包：{report}"))
+        .to_string()
+}
+
+#[test]
+fn report_names_the_pack_by_its_sha256_so_a_stale_pack_shows() {
+    let repo = repo();
+    let before = pack_line(&repo);
+    assert_eq!(before, pack_line(&repo), "同一個資料包要印出一樣的指紋");
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &pack_bytes(&[("a", "日曰"), ("b", "月")]),
+    );
+    assert_ne!(before, pack_line(&repo), "換了資料包，指紋要跟著變");
+}

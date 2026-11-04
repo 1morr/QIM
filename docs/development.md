@@ -93,7 +93,11 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 ## 首選字基準
 
-改核心或資料包時必跑（plan §5.2），不在 `cargo xtask check` 裡。先跑過 `cargo xtask data`：基準讀 `build/packs/quick/quick.pack`，沒有就失敗。
+改核心或資料包時必跑（plan §5.2），不在 `cargo xtask check` 裡。基準讀 `build/packs/quick/quick.pack`，沒有就失敗，但不會自己重建：
+
+- 改了 `data/`、`crates/qim-databuild/` 或資料包格式（`crates/qim-core/src/pack.rs`）之後，跑 bench 前先跑 `cargo xtask data`，否則量到的是舊資料包，前後數字一樣、`--check` 也照過。
+- 只改核心程式碼不必重建：`cargo xtask bench` 每次都重編核心。
+- 結果表格上方印出資料包 sha256 的前 12 碼；做前後對照時兩次不同才表示資料包真的換了，也可以和 `cargo xtask data` 印出的完整 sha256 對開頭。
 
 ```sh
 cargo xtask bench                     # 印結果

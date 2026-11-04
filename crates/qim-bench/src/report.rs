@@ -5,7 +5,13 @@ use crate::Outcome;
 use crate::score::SetResult;
 
 pub fn render(outcome: &Outcome) -> String {
-    let mut out = String::from(
+    // 前 12 碼足以分辨；`cargo xtask data` 印的是完整 sha256，開頭對得上就是同一份。
+    let mut out = format!(
+        "資料包 {}（sha256 {}）\n\n",
+        crate::PACK,
+        &outcome.pack_sha256[..12]
+    );
+    out.push_str(
         "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 |\n\
          | --- | ---: | ---: | ---: | ---: | ---: |\n",
     );

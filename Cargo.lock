@@ -681,6 +681,7 @@ dependencies = [
  "qim-core",
  "serde",
  "serde_json",
+ "sha2",
  "strsim",
  "tempfile",
 ]
