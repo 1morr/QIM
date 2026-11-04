@@ -26,6 +26,7 @@
 | 2026-11-04 | M1 plan | 收到使用者小狼毫的 `quick5.userdb`，轉成 `bench/personal/rime-userdb.txt`（本機）；查出 Rime 記的是倉頡全碼而非按鍵，plan §5.2 改由自己轉碼 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
 | 2026-11-04 | M1 拆票 | 寫 `.scratch/m1/spec.md`，依使用者同意拆成 24 張票（票序在 spec）；plan §7.2 縮成連結，plan、brief 裡的「M1〈名稱〉」改成票號 | 新 session 下 `/implement .scratch/m1/issues/01-corpus-yue-wiki.md` |
 | 2026-11-04 | M1 01 | 粵語維基 → `bench/corpus/yue-wiki.tsv`（2,000 句）與 train / dev；`--verify` 加轉碼、洩漏、決定性三項，全過；細節見票 01 | 新 session 下 `/implement .scratch/m1/issues/02-bench-v0.md` |
+| 2026-11-04 | M1 02 | `qim-bench`、`cargo xtask bench`；M0 baseline：fixed 1/1、yue-wiki 答錯 2000/2000；細節見票 02 | 新 session 下 `/implement .scratch/m1/issues/03-corpus-zh-wiki-and-colloquial.md` |
 
 ## 偏差與決定
 
@@ -42,3 +43,4 @@
 - 2026-11-04 M1 拆票：票 06 先讓詞庫用整串輸入碼查，網頁 `anr` 就查得到「門口」；`anr 門口` 在哪張票通過就由哪張加進 `fixed.tsv`。
 - 2026-11-04 M1 01：維基語料改用 pages-articles 自己抽內文：CirrusSearch dump 搬到 `cirrus_search_index/` 且只留約 5 週，釘了很快下載不到（plan §4.3、brief §12.1）。
 - 2026-11-04 M1 01：「只留連打字集內的字」定為含字集外字元的句子整句丟掉，不拿掉個別字，免得拼出原文沒有的相鄰字（plan §4.3）。
+- 2026-11-04 M1 02：`bench --check` 對沒有 baseline 的集合、baseline 有但沒跑到的集合也紅（plan §5.2），新增語料的票要同 commit 跑 `--update-baseline`。

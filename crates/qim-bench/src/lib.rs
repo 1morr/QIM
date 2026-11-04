@@ -49,6 +49,11 @@ impl Outcome {
     pub fn report(&self) -> String {
         report::render(self)
     }
+
+    /// 集合 `name` 跑之前的 baseline 答錯數。
+    pub fn baseline_wrong(&self, name: &str) -> Option<usize> {
+        self.baseline.as_ref()?.get(name).map(|b| b.wrong)
+    }
 }
 
 /// 在 repo 根目錄 `root` 跑基準。

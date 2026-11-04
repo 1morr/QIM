@@ -35,12 +35,7 @@ pub fn check(fixed: &SetResult, sets: &[SetResult], baseline: &Baseline) -> Vec<
     let mut violations: Vec<String> = fixed
         .failures
         .iter()
-        .map(|f| {
-            format!(
-                "固定題沒過：{}（{}）期望「{}」，首選「{}」",
-                f.item.input, f.item.label, f.item.expected, f.actual
-            )
-        })
+        .map(|failure| format!("固定題沒過：{failure}"))
         .collect();
     for set in sets {
         match baseline.get(&set.name) {

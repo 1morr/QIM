@@ -1,5 +1,7 @@
 //! 用核心實際打每一題、算分數：只經 `Session::handle`，不重寫排序（plan §1.3）。
 
+use std::fmt;
+
 use qim_core::{Engine, Key, Session, UserModel};
 
 use crate::items::Item;
@@ -23,7 +25,22 @@ pub struct SetResult {
 pub struct Failure {
     pub item: Item,
     /// 打完輸入碼後的首選；沒有候選時是空字串。
-    pub actual: String,
+    pub top: String,
+}
+
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Item {
+            input,
+            expected,
+            label,
+        } = &self.item;
+        write!(
+            f,
+            "{input}（{label}）期望「{expected}」，首選「{}」",
+            self.top
+        )
+    }
 }
 
 impl SetResult {
@@ -61,16 +78,16 @@ pub fn score(engine: &Engine, name: &str, items: &[Item]) -> SetResult {
         failures: Vec::new(),
     };
     for item in items {
-        let actual = first_candidate(engine, &item.input);
+        let top = top(engine, &item.input);
         let chars = item.expected.chars().count();
         result.chars += chars;
-        result.char_errors += strsim::levenshtein(&actual, &item.expected).min(chars);
-        if actual == item.expected {
+        result.char_errors += strsim::levenshtein(&top, &item.expected).min(chars);
+        if top == item.expected {
             result.correct += 1;
         } else {
             result.failures.push(Failure {
                 item: item.clone(),
-                actual,
+                top,
             });
         }
     }
@@ -78,7 +95,7 @@ pub fn score(engine: &Engine, name: &str, items: &[Item]) -> SetResult {
 }
 
 /// 逐鍵打完 `input` 後的首選。
-fn first_candidate(engine: &Engine, input: &str) -> String {
+fn top(engine: &Engine, input: &str) -> String {
     let mut session = Session::default();
     let mut user = UserModel::default();
     let mut snapshot = None;

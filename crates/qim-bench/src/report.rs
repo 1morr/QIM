@@ -12,10 +12,8 @@ pub fn render(outcome: &Outcome) -> String {
     out.push_str(&row(&outcome.fixed, "—".into()));
     for set in &outcome.sets {
         let limit = outcome
-            .baseline
-            .as_ref()
-            .and_then(|b| b.get(&set.name))
-            .map_or("—".into(), |b| b.wrong.to_string());
+            .baseline_wrong(&set.name)
+            .map_or("—".into(), |wrong| wrong.to_string());
         out.push_str(&row(set, limit));
     }
     let fixed = &outcome.fixed;
@@ -23,11 +21,8 @@ pub fn render(outcome: &Outcome) -> String {
         "\n固定題 {}/{} 通過\n",
         fixed.correct, fixed.total
     ));
-    for f in &fixed.failures {
-        out.push_str(&format!(
-            "- 沒過：{}（{}）期望「{}」，首選「{}」\n",
-            f.item.input, f.item.label, f.item.expected, f.actual
-        ));
+    for failure in &fixed.failures {
+        out.push_str(&format!("- 沒過：{failure}\n"));
     }
     out
 }

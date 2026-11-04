@@ -208,3 +208,25 @@ fn report_runs_without_a_baseline_file() {
     let report = run(repo.path(), Mode::Report).unwrap().report();
     assert!(report.contains("| toy |"), "{report}");
 }
+
+#[test]
+fn check_ignores_the_order_of_sets_in_baseline() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/corpus/another.tsv",
+        "b\t月\n".as_bytes(),
+    );
+    write(
+        repo.path(),
+        "bench/baseline.json",
+        br#"{"toy": {"wrong": 2}, "another": {"wrong": 0}}"#,
+    );
+    assert_eq!(check(&repo), Vec::<String>::new());
+    write(
+        repo.path(),
+        "bench/baseline.json",
+        br#"{"another": {"wrong": 0}, "toy": {"wrong": 2}}"#,
+    );
+    assert_eq!(check(&repo), Vec::<String>::new());
+}
