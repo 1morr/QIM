@@ -34,4 +34,4 @@ Blocked by: 07
   - `verify::run` 的 sha256 用位置 tuple（`.0`–`.3`）：只在這個函式裡用，四份還看得懂，再加資料包時改成具名結構。
   - `RadicalHints::iter` 只有建置端與測試用：和 `CodeTable::iter`、`Lexicon::iter` 同樣是給建置與驗證讀資料包的，保留。
   - 組字中與否、組字結束收起提示、Tab 不轉給核心、提示的排版在網頁的 `main.ts`：這些是殼的按鍵對照與顯示（plan §1.3 只禁止殼重寫排序、查碼、點擊判定），各平台殼照 brief §4.3、§4.4 做；平台殼開工時若重複太多再考慮放進 `Snapshot`。
-
+- 2026-11-04 合併 main（票 13，`0736054`）：`session.rs`（`set_options` 取 main，`handle` 補字根取本票，`handle_key` 改用 `user`）、`verify.rs` 與 `qim-wasm` 的 `use`、`web/src/main.ts`（無痕開關與字根提示兩段都留）有衝突；票 13 新的 `tests/learning.rs` 補 `..Packs::default()`。合併後 `cargo xtask data --verify` 通過，四份資料包 sha256 不變（quick `0fd82b8adae0`、字根提示 `9e755488f431`）；`cargo xtask bench --check` exit 0，各集合答錯、修正與 baseline 相同、沒有翻盤、固定題 11/11，每鍵 p95 原生 48.25 µs、WebAssembly 60.38 µs（含票 13 的 `personal` 加分）；`cargo xtask check` 通過（e2e `37 passed`）。
