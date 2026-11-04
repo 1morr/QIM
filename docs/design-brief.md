@@ -87,14 +87,14 @@ QIM（暫名）。
 | `-` / `=`、PageUp / PageDown | 翻頁 |
 | Enter | 把輸入碼當英文原樣上屏；已選定的分段上屏字詞，其餘上屏輸入碼 |
 | Esc | 清除輸入碼 |
-| ← / → | 組字中移到前一段或後一段，候選改列該段的字詞 |
+| ← / → | 組字中移到前一段或後一段，候選改列該段的字詞；← 從最後一段開始，→ 走過最後一段回到整串 |
 | Tab | 組字中在候選旁列出或收起字根提示；沒有組字時交還宿主 |
 | Shift（單按） | 切換中英文 |
 | 標點 | 組字中先上屏整個組字再接標點；沒有組字時直接上屏標點 |
 | 大寫字母（Shift＋字母） | 組字中先上屏整個組字再接那個字母；沒有組字時照打 |
 
-- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、還沒做的 ← / → 與 Shift）組字中吃下不動作；`z` 留給萬用鍵（§1.5）。
-- 「上屏整個組字」和一直按空白相同：已選定的分段，接著逐次取剩下的輸入碼的首選，沒有字的碼原樣上屏。
+- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、還沒做的 Shift）組字中吃下不動作；`z` 留給萬用鍵（§1.5）。
+- 「上屏整個組字」和一直按空白相同：已選定的分段，接著逐次取剩下的輸入碼的首選，沒有字的碼原樣上屏。移到某一段時按空白也是上屏整個組字。
 - 參考：組字中按標點，macOS、iOS 速成與 Gboard 都先上屏首選再出標點（[黑箱基線](research/blackbox-baseline.md) T18）。Enter、大寫字母照 librime express_editor：Return 是 `CommitRawInput`（選定的段上屏字、其餘上屏原碼），方案以外的可見字元是 `DirectCommit`（先上屏組字、字元照打）。macOS、Gboard 的 Enter 上屏首選，macOS 的 Shift＋字母把整串改成英文，都不學：要首選有空白，要英文有 Enter。
 - 標點預設全形：`,` `.` `?` `!` `;` `:` `(` `)` `[` `]` `{` `}` `<` `>` `\` `^` `_` 依序轉成 ， 。 ？ ！ ； ： （ ） 「 」 『 』 《 》 、 …… ——，取 rime-prelude `punctuation.yaml` `half_shape` 每鍵第一個是全形的選項，不出標點選單。其他符號上屏半形：引號要配對（智慧標點，§4.7）；`/`（Rime 是「、」，和 `\` 重複，留給網址與分數）、`$`（Rime 是「￥」，香港用 $）不學 Rime；其餘 Rime 的第一個選項就是半形。`-` / `=` 是翻頁鍵，沒有組字時照打。
 - 英文候選：輸入碼剛好是完整英文單字時放第 2 位，不搶首選；不容錯、不補全，糾錯與預測只在英文模式（§4.7）。
@@ -112,7 +112,7 @@ QIM（暫名）。
 - 候選列單列、可左右滑，右側展開鍵一次看全部候選（候選展開面板因此列入 MVP）。
 - 空白上屏首選；英文候選規則同 §4.3。
 - 按鍵時顯示放大預覽；點組字裡的某一段可改該段。
-- 長按候選列出或收起字根提示，同桌面的 Tab（§4.3）。
+- 點候選選字；長按候選列出或收起字根提示，同桌面的 Tab（§4.3），不選字；按住後滑動兩者都不做。
 - 候選列不因背景模型的結果改動首選（ADR 0005）。
 
 ### 4.5 學習與排位【決定】
@@ -257,6 +257,8 @@ QIM（暫名）。
 - 繁體詞頻只找到 LGPL 來源：rime-essay（442,688 筆）、libchewing-data（160,462 筆）。教育部國語辭典為 CC BY-ND 3.0 台灣、無頻次。`docs/research/data-sources.md` §5。
 - rime-cantonese 為 CC BY 4.0（`maps` 為 ODbL），但詞條參考了非商業授權的粵典及商業輸入法詞庫，授權鏈未查明；粵典 `wordslist`（字 → 讀音）為 Public Domain。[rime-cantonese](https://github.com/rime/rime-cantonese)、[粵典授權](https://words.hk/base/hoifong/)。
 - OpenCC（含字典）為 Apache-2.0；純 Rust 實作 ferrous-opencc 亦為 Apache-2.0。[OpenCC](https://github.com/BYVoid/OpenCC)。
+- OpenCC `fae2a0a`（2026-10-29）的 `hk2s.json`：先用 CJK_Compatibility_Ideographs 正規化，用 TSPhrases 分段（mmseg），再依序經兩組字典（HKVariantsRevPhrases、HKVariantsRev；TSPhrases、TSCharactersExt、TSCharacters），群組預設 `short_circuit`（第一個有匹配的字典勝出），每個位置取最長的鍵、用第一個值。HKVariantsRev 由 HKVariants 反轉產生，`# @reverse-prefer:` 指定反轉後的首選；TSCharactersExt 由 TSCharacters 裡 `# @tofu-risk:` 標記的 896 列抽出，是多數字型顯示不出的罕用簡體字，`ConfigLoadOptions` 預設載入。[hk2s.json](https://github.com/BYVoid/OpenCC/blob/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/config/hk2s.json)、[DictGroup.cpp](https://github.com/BYVoid/OpenCC/blob/fae2a0a911c30764e669a7d8b0591cd8e852934a/src/DictGroup.cpp)、[common.py](https://github.com/BYVoid/OpenCC/blob/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/scripts/common.py)、[extract_tofu_risk.py](https://github.com/BYVoid/OpenCC/blob/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/scripts/extract_tofu_risk.py)，2026-11-04 查。
+- ferrous-opencc 0.4.0 只開 `t2s-conversion` 能編成 `wasm32-unknown-unknown`（含它內嵌的字典約 0.52 MB）；字典由 build.rs 從 crate 內的 `assets/` 編進程式，與 OpenCC `fae2a0a` 的同名字典 sha256 不同；載入字典的公開 API 只有內建設定與讀檔的 `OpenCC::new(路徑)`，`Dictionary` trait 不公開，不能從記憶體的位元組載入。本機實驗與原始碼（`src/lib.rs`、`src/dictionary/mod.rs`），2026-11-04；M1 票 16 Comments。
 - CLDR annotations（yue、zh_Hant、zh_Hant_HK）為 Unicode-3.0。[CLDR](https://github.com/unicode-org/cldr/tree/main/common/annotations)。
 - HKSCS 資料集（含倉頡碼、粵拼）商用免費，須署名，有賠償條款。[data.gov.hk 條款](https://data.gov.hk/en/terms-and-conditions)。
 - 隨機速成字母串（a–y）對 macOS `/usr/share/dict/words` 的 210,773 個小寫詞：4 個字母剛好是英文詞 0.9%、差一處（插入、刪除、替換、對調）38.5%；5 個字母 0.1%、8.7%；6 個字母 0%、1.1%。隨機字母不代表真實速成碼的分佈，詞表含冷僻詞，只看量級。本機實驗 `scripts/experiments/english-edit1/`，2026-11-03。

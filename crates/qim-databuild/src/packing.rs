@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::Error;
 use crate::corpora::CORPORA;
 use crate::lexicon;
-use crate::pipeline::{LIBCANGJIE, RIME_ESSAY, UNIHAN};
+use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
 
 /// 進資料包的一個來源。
@@ -31,6 +31,14 @@ pub(crate) const QUICK: [PackedSource; 2] = [
         used: "field kGradeLevel of Unihan_DictionaryLikeData.txt",
     },
 ];
+
+/// 簡繁資料包：OpenCC 的字典（plan §4.4）。
+pub(crate) const SIMPLIFIER: [PackedSource; 1] = [PackedSource {
+    name: "OpenCC",
+    source_id: OPENCC,
+    used: "data/dictionary/CJK_Compatibility_Ideographs.txt, TSPhrases.txt, TSCharacters.txt, \
+           HKVariants.txt and HKVariantsRevPhrases.txt: the dictionaries of the hk2s configuration",
+}];
 
 /// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。
 pub(crate) const RADICAL_HINT: [PackedSource; 1] = [PackedSource {

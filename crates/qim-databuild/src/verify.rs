@@ -7,8 +7,8 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::{
-    CangjieVersion, CodeTable, Engine, LanguageModelPack, Lexicon, LexiconPack, Pack,
-    RadicalHintPack, RadicalHints, UserModel,
+    CangjieVersion, CodeTable, Engine, Key, LanguageModelPack, Lexicon, LexiconPack, Options, Pack,
+    RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
 use crate::corpus::Counts;
@@ -19,7 +19,8 @@ use crate::{bigram, lexicon};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
-    /// `qim-core` 解得開建出的速成、詞庫、語言模型與字根提示資料包，後三者是方案指名的那份。
+    /// `qim-core` 解得開建出的速成、詞庫、語言模型、字根提示與簡繁資料包，詞庫、語言模型與
+    /// 字根提示是方案指名的那份。
     Decodes,
     /// 連打字集與擴展區的字數都等於來源中有倉頡碼的漢字數。
     NoMissingCharacters,
@@ -41,9 +42,11 @@ pub enum CheckId {
     RadicalHintCoversCharacters,
     /// 抽查字根提示：「丟」三代 `hgi`、五代先列 `mgi`；「問」兩代都是 `anr`。
     RadicalHintByVersion,
+    /// 簡體模式打 `anr` 的候選有「门口」、沒有「門口」：簡繁資料包接得上核心（首選由核心測試擋）。
+    SimplifiedMenKou,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
-    /// 同樣的來源建兩次，四份資料包的 sha256 都相同。
+    /// 同樣的來源建兩次，五份資料包的 sha256 都相同。
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
@@ -67,6 +70,7 @@ impl fmt::Display for CheckId {
             Self::MenKouForAnr => "抽查：詞庫的 anr 有「門口」",
             Self::RadicalHintCoversCharacters => "字根提示涵蓋碼表的字",
             Self::RadicalHintByVersion => "抽查：字根提示的三代與五代碼",
+            Self::SimplifiedMenKou => "抽查：簡體模式 anr 有「门口」",
             Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
             Self::CorpusTranscodes => "語料轉碼",
@@ -96,6 +100,7 @@ pub struct Report {
     pub lexicon_sha256: String,
     pub language_model_sha256: String,
     pub radical_hint_sha256: String,
+    pub simplifier_sha256: String,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
     /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
@@ -197,6 +202,7 @@ impl fmt::Display for Report {
         writeln!(f, "詞庫 sha256：{}", self.lexicon_sha256)?;
         writeln!(f, "bigram sha256：{}", self.language_model_sha256)?;
         writeln!(f, "字根提示 sha256：{}", self.radical_hint_sha256)?;
+        writeln!(f, "簡繁 sha256：{}", self.simplifier_sha256)?;
         if let Some(lexicon) = &self.lexicon {
             writeln!(f, "{lexicon}")?;
         }
@@ -224,13 +230,14 @@ impl fmt::Display for Report {
     }
 }
 
-/// 一次建置寫出的四份資料包的位元組。
+/// 一次建置寫出的五份資料包的位元組。
 #[derive(Debug, Clone, Copy)]
 pub struct PackBytes<'a> {
     pub quick: &'a [u8],
     pub lexicon: &'a [u8],
     pub language_model: &'a [u8],
     pub radical_hint: &'a [u8],
+    pub simplifier: &'a [u8],
 }
 
 /// `first` 是寫出的資料包，`second` 是由同樣的來源再建一次的結果。
@@ -241,6 +248,7 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
             sha256_hex(p.lexicon),
             sha256_hex(p.language_model),
             sha256_hex(p.radical_hint),
+            sha256_hex(p.simplifier),
         )
     };
     let (first_sha256, second_sha256) = (sha256(first), sha256(second));
@@ -252,6 +260,7 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         lexicon_sha256: first_sha256.1.clone(),
         language_model_sha256: first_sha256.2.clone(),
         radical_hint_sha256: first_sha256.3.clone(),
+        simplifier_sha256: first_sha256.4.clone(),
         lexicon: None,
         language_model: None,
         checks: Vec::new(),
@@ -284,14 +293,14 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         id: CheckId::Deterministic,
         passed: first_sha256 == second_sha256,
         detail: format!(
-            "第二次速成 {}、詞庫 {}、bigram {}、字根提示 {}",
-            second_sha256.0, second_sha256.1, second_sha256.2, second_sha256.3
+            "第二次速成 {}、詞庫 {}、bigram {}、字根提示 {}、簡繁 {}",
+            second_sha256.0, second_sha256.1, second_sha256.2, second_sha256.3, second_sha256.4
         ),
     });
     report
 }
 
-/// 解開的四份資料包；字根提示經殼用的 [`RadicalHints::for_scheme`] 取出。
+/// 解開的資料包；字根提示經殼用的 [`RadicalHints::for_scheme`] 取出，簡繁資料包掛在 `engine` 上。
 struct Decoded {
     pack: Pack,
     lexicon: Lexicon,
@@ -307,7 +316,9 @@ fn decode(bytes: PackBytes) -> Result<Decoded, qim_core::PackError> {
         RadicalHintPack::from_bytes(bytes.radical_hint)?,
         &pack.scheme,
     )?;
-    let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))?;
+    let simplifier = SimplifierPack::from_bytes(bytes.simplifier)?;
+    let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))?
+        .with_simplifier(simplifier);
     Ok(Decoded {
         pack,
         lexicon: lexicon.lexicon,
@@ -368,7 +379,7 @@ fn pack_checks(
             id: CheckId::Decodes,
             passed: true,
             detail: format!(
-                "格式版本 {}，速成、詞庫、bigram 與字根提示",
+                "格式版本 {}，速成、詞庫、bigram、字根提示與簡繁",
                 qim_core::FORMAT_VERSION
             ),
         },
@@ -403,7 +414,29 @@ fn pack_checks(
         ),
         hint_coverage(&continuous, &extension, hints),
         hint_by_version(hints),
+        simplified_men_kou(engine),
     ]);
+}
+
+/// 簡體模式經 `Session` 打 `anr`，看第一頁的候選。
+fn simplified_men_kou(engine: &Engine) -> Check {
+    let mut session = Session::default();
+    session.set_options(Options {
+        simplified: true,
+        incognito: true,
+        ..Options::default()
+    });
+    let mut user = UserModel::default();
+    let mut candidates = Vec::new();
+    for c in "anr".chars() {
+        candidates = session.handle(engine, &mut user, Key::Letter(c)).candidates;
+    }
+    let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
+    Check {
+        id: CheckId::SimplifiedMenKou,
+        passed: texts.contains(&"门口") && !texts.contains(&"門口"),
+        detail: format!("第一頁：{}", texts.join(" ")),
+    }
 }
 
 /// 碼表的每個字都查得到至少一個倉頡碼，提示才不會在某個候選上落空。

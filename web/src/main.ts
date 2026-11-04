@@ -4,7 +4,7 @@ import "./style.css";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
-	type LayoutKey,
+	pageSize,
 	RadicalHints,
 	Session,
 	type Snapshot,
@@ -17,6 +17,8 @@ const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
 const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
 /** 速成方案檔 `[packs]` 指名的字根提示資料包（倉頡三代 / 五代碼）。 */
 const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
+/** 簡繁資料包（OpenCC `hk2s`），簡體模式用。 */
+const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 
@@ -33,8 +35,10 @@ const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
+const simplified = element<HTMLInputElement>("#simplified");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+const darkToggle = element<HTMLButtonElement>("#dark-toggle");
 const reportButton = element<HTMLButtonElement>("#report");
 const reports = element<HTMLTextAreaElement>("#reports");
 const copyReports = element<HTMLButtonElement>("#copy-reports");
@@ -90,10 +94,15 @@ function press(session: Session, key: Key): Snapshot {
 	}
 }
 
+/** 候選列目前頁，點候選時換算成全部候選的位置。 */
+let page = 0;
+
 /** 畫面上的組字與候選；切換字根提示時不必再問核心就能重畫。 */
 const shown = {
 	composing: false,
 	candidates: [] as string[],
+	/** 候選的繁體原文，字根提示用：簡體模式下要提示的是打得出的繁體字。 */
+	originals: [] as string[],
 	/** 候選旁顯示字根提示；組字結束就關掉（brief §4.3）。 */
 	hints: false,
 };
@@ -120,11 +129,31 @@ function hintText(candidate: string): string {
 		: parts.map((part) => part || "—").join(" ");
 }
 
+/**
+ * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示字根（brief §4.3）；目前分段標
+ * `aria-current`。點一段就移到那段（brief §4.4），由 `start` 掛的事件處理。
+ */
 function render(snapshot: Snapshot): void {
-	// 組字顯示選定的字詞，接著其餘輸入碼的字根（brief §4.3）。
-	composition.textContent = snapshot.selected + snapshot.radicals;
-	shown.composing = snapshot.selected !== "" || snapshot.unselected !== "";
+	const segments = snapshot.segments;
+	composition.replaceChildren(
+		...segments.map((segment, i) => {
+			const span = document.createElement("span");
+			span.className = "segment";
+			span.dataset.index = String(i);
+			span.textContent = segment.selected ? segment.text : segment.radicals;
+			if (i === snapshot.focus) {
+				span.setAttribute("aria-current", "true");
+			}
+			return span;
+		}),
+	);
+	shown.composing = segments.length > 0;
+	for (const segment of segments) {
+		segment.free();
+	}
+	page = snapshot.page;
 	shown.candidates = snapshot.candidates;
+	shown.originals = snapshot.candidatesOriginal;
 	if (!shown.composing) {
 		shown.hints = false;
 	}
@@ -135,11 +164,12 @@ function renderCandidates(): void {
 	candidates.replaceChildren(
 		...shown.candidates.map((candidate, i) => {
 			const item = document.createElement("li");
+			item.dataset.index = String(i);
 			const index = document.createElement("span");
 			index.className = "index";
 			index.textContent = String(i + 1);
 			item.append(index, candidate);
-			const text = shown.hints ? hintText(candidate) : "";
+			const text = shown.hints ? hintText(shown.originals[i] ?? candidate) : "";
 			if (text !== "") {
 				const hint = document.createElement("span");
 				hint.className = "radical-hint";
@@ -180,13 +210,27 @@ function apply(snapshot: Snapshot, chosen: boolean): void {
 	touchKeyboard?.refresh();
 }
 
-/** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
+/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
+function applyHandled(snapshot: Snapshot, chosen: boolean): void {
+	try {
+		if (snapshot.handled) {
+			apply(snapshot, chosen);
+		}
+	} finally {
+		snapshot.free();
+	}
+}
+
+/**
+ * `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。
+ * 候選與上屏取繁體原文：`fixed.tsv` 的期望首選是繁體，簡體模式下也一樣。
+ */
 function readReported(snapshot: Snapshot) {
 	return {
 		input: snapshot.input,
 		selected: snapshot.selected,
-		candidates: snapshot.candidates,
-		commit: snapshot.commit,
+		candidates: snapshot.candidatesOriginal,
+		commit: snapshot.commitOriginal,
 	};
 }
 
@@ -203,14 +247,11 @@ function addReport(): void {
 	text.focus();
 }
 
-/** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
-function hostDefault(key: LayoutKey): void {
-	switch (key.tap) {
+/** 觸控鍵盤上核心沒吃下的動作：照輸入框收到實體按鍵時的預設動作。 */
+function hostDefault(snapshot: Snapshot): void {
+	switch (snapshot.action) {
 		case "letter":
-			insert(key.letter ?? "");
-			return;
-		case "text":
-			insert(key.text ?? "");
+			insert(snapshot.letter ?? "");
 			return;
 		case "space":
 			insert(" ");
@@ -247,6 +288,21 @@ function orientation(): "portrait" | "landscape" {
 		: "portrait";
 }
 
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+/** 網頁的深色開關按過就照它，否則跟系統（`prefers-color-scheme`）。 */
+let chosenDark: boolean | undefined;
+
+/** 套用深色或淺色：按鍵顏色由 CSS `light-dark()` 依 `color-scheme` 選（touch.ts）。 */
+function applyTheme(): void {
+	const dark = chosenDark ?? systemDark.matches;
+	if (chosenDark === undefined) {
+		delete document.documentElement.dataset.theme;
+	} else {
+		document.documentElement.dataset.theme = dark ? "dark" : "light";
+	}
+	darkToggle.setAttribute("aria-pressed", String(dark));
+}
+
 /** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
 function setTouch(on: boolean): void {
 	keyboard.hidden = !on;
@@ -255,41 +311,69 @@ function setTouch(on: boolean): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon, languageModel, radicalHint, layoutJson] =
+	const [, pack, lexicon, languageModel, radicalHint, simplifier, layoutJson] =
 		await Promise.all([
 			init(),
 			loadPack(PACK_URL),
 			loadPack(LEXICON_URL),
 			loadPack(LANGUAGE_MODEL_URL),
 			loadPack(RADICAL_HINT_URL),
+			loadPack(SIMPLIFIER_URL),
 			load(LAYOUT_URL).then((response) => response.text()),
 		]);
-	const session = new Session(pack, lexicon, languageModel);
+	const session = new Session(pack, lexicon, languageModel, simplifier);
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
-	// 觸控：長按候選叫出字根提示（brief §4.4）。
+	// 點候選選字，長按叫出字根提示（brief §4.4）：放開時還沒到長按的門檻才選字。
 	let pressTimer: number | undefined;
+	/** 按下的候選在目前頁的位置；長按觸發或取消後是 `undefined`。 */
+	let pressed: number | undefined;
 	const cancelPress = () => {
 		window.clearTimeout(pressTimer);
 		pressTimer = undefined;
+		pressed = undefined;
 	};
 	candidates.addEventListener("pointerdown", (event) => {
 		// 不讓輸入框失去焦點，長按完還能接著打字。
 		event.preventDefault();
 		cancelPress();
+		const item = (event.target as Element).closest<HTMLElement>("li");
+		pressed = item ? Number(item.dataset.index) : undefined;
 		pressTimer = window.setTimeout(() => {
-			pressTimer = undefined;
+			cancelPress();
 			toggleHints();
 		}, LONG_PRESS_MS);
 	});
-	// 手指左右滑候選列時瀏覽器接手捲動、送 pointercancel，長按就取消。
-	for (const type of ["pointerup", "pointerleave", "pointercancel"]) {
+	candidates.addEventListener("pointerup", () => {
+		const index = pressed;
+		cancelPress();
+		if (index !== undefined) {
+			applyHandled(session.select(page * pageSize() + index), true);
+		}
+	});
+	// 手指左右滑候選列時瀏覽器接手捲動、送 pointercancel，長按與選字都取消。
+	for (const type of ["pointerleave", "pointercancel"]) {
 		candidates.addEventListener(type, cancelPress);
 	}
 	candidates.addEventListener("contextmenu", (event) => event.preventDefault());
 	session.setIncognito(incognito.checked);
 	incognito.addEventListener("change", () => {
 		session.setIncognito(incognito.checked);
+		text.focus();
+	});
+	// 組字中切換也立刻重列候選。
+	const applySimplified = (): void => {
+		const snapshot = session.setSimplified(simplified.checked);
+		try {
+			// 切換不是選字。
+			apply(snapshot, false);
+		} finally {
+			snapshot.free();
+		}
+	};
+	applySimplified();
+	simplified.addEventListener("change", () => {
+		applySimplified();
 		text.focus();
 	});
 	const layout = new Layout(layoutJson, device(), orientation());
@@ -300,13 +384,38 @@ async function start(): Promise<void> {
 		keyboard,
 		layout,
 		session,
-		(snapshot, key) => apply(snapshot, key.tap === "space"),
+		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
+		(snapshot) => apply(snapshot, snapshot.action === "space"),
 		hostDefault,
 	);
+	const mounted = touchKeyboard;
+	// 轉向時重選佈局版本（plan §2.6），留在同一頁。
+	window
+		.matchMedia("(orientation: landscape)")
+		.addEventListener("change", () => {
+			const warning = layout.select(device(), orientation());
+			if (warning !== undefined) {
+				console.warn(`佈局：${warning}`);
+			}
+			mounted.relayout();
+		});
+	// 頁面底部留出鍵盤實際的高度，鍵盤才不會蓋住輸入框；高度隨佈局版本的畫布比例與寬度變。
+	new ResizeObserver(([entry]) => {
+		document.body.style.setProperty(
+			"--keyboard-height",
+			`${entry.borderBoxSize[0].blockSize}px`,
+		);
+	}).observe(keyboard);
 	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
 	setTouch(window.matchMedia("(pointer: coarse)").matches);
 	touchToggle.addEventListener("click", () => {
 		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
+	});
+	applyTheme();
+	systemDark.addEventListener("change", applyTheme);
+	darkToggle.addEventListener("click", () => {
+		chosenDark = darkToggle.getAttribute("aria-pressed") !== "true";
+		applyTheme();
 	});
 	reports.value = localStorage.getItem(REPORTS_KEY) ?? "";
 	reports.addEventListener("input", () => {
@@ -317,6 +426,16 @@ async function start(): Promise<void> {
 		navigator.clipboard.writeText(reports.value).catch((error: unknown) => {
 			status.textContent = `複製失敗：${String(error)}`;
 		});
+	});
+
+	// 點組字的一段就移到那段；取消預設動作，輸入框不失去焦點（同觸控鍵盤）。
+	composition.addEventListener("pointerdown", (event) => {
+		const segment = (event.target as Element).closest<HTMLElement>(".segment");
+		if (!segment) {
+			return;
+		}
+		event.preventDefault();
+		applyHandled(session.focusSegment(Number(segment.dataset.index)), false);
 	});
 
 	text.addEventListener("keydown", (event) => {

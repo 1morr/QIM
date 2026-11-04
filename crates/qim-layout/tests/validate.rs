@@ -496,3 +496,22 @@ fn key_covered_except_for_a_thin_strip_is_not_covered() {
         report.warnings
     );
 }
+
+#[test]
+fn switching_variants_keeps_the_page_with_the_same_id_or_falls_back_to_the_initial_page() {
+    // 轉向時重選佈局版本（plan §2.6）：新版本有同 id 的頁就留在那頁。
+    let value = json!({ "format": "qim-layout/1", "variants": [{
+        "when": { "device": "phone", "orientation": "portrait" },
+        "canvas": { "width": 400, "height": 10 },
+        "initialPage": "letters",
+        "pages": [
+            { "id": "symbols", "keys": [key("abc", 0.0, json!({ "switchPage": "letters" }))] },
+            letters(vec![key("sym", 260.0, json!({ "switchPage": "symbols" }))]),
+        ],
+    }] });
+    let layout = Layout::from_json(&value.to_string()).unwrap();
+    let variant = &layout.variants[0];
+    assert_eq!(variant.page_index_or_initial(Some("symbols")), Some(0));
+    assert_eq!(variant.page_index_or_initial(Some("phrases")), Some(1));
+    assert_eq!(variant.page_index_or_initial(None), Some(1));
+}
