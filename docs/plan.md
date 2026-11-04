@@ -109,10 +109,11 @@ flowchart LR
 | `toml` | 1.1.8 | 方案檔、`data/sources.toml` | Rust 生態標準格式，可寫註解 |
 | `ureq` / `sha2` | 3.5.1 / 0.11.1 | `qim-databuild` 下載來源並核對 sha256 | 同步 API、不必帶 async runtime |
 | `zip` | 9.3.0 | `qim-databuild` 讀 Unihan.zip | Unicode 只發 zip；只開 deflate 解壓 |
+| `bzip2` / `quick-xml` | 0.6.1 / 0.42.0 | `qim-databuild` 讀維基 dump（`pages-articles.xml.bz2`） | `bzip2` 預設用純 Rust 的 libbz2-rs-sys；串流讀 XML，不必整份載入 |
 | `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證 | 佈局要給 TS、Swift、Kotlin 直接讀 |
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2） | 一份介面產生兩種語言 |
-| `ferrous-opencc` | 0.4.0 | 簡繁轉換 | 純 Rust、Apache-2.0；能否編 WebAssembly 在 M1 票 16 開工時驗證 |
+| `ferrous-opencc` | 0.4.0 | 簡繁轉換；`qim-databuild` 前處理語料的 `s2hk`（用它內建的字典） | 純 Rust、Apache-2.0；能否編 WebAssembly 在 M1 票 16 開工時驗證 |
 | `proptest` | 1.12.0 | 核心的性質測試（dev） | — |
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
@@ -365,9 +366,10 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 ### 4.3 字級 bigram
 
-- 語料：中文維基與粵語維基。優先用 Wikimedia 的 CirrusSearch 內容 dump（已是純文字），dump 日期釘在 `sources.toml`；格式與可用性在 M1 票開工時查證。
+- 語料：中文維基與粵語維基。用 Wikimedia 的 `pages-articles` dump 自己抽內文（`qim-databuild` 的 `wikitext` 模組：模板、表格、註腳、檔案連結、標題與列表整個丟掉），dump 日期與 sha256 釘在 `sources.toml`。CirrusSearch 內容 dump 雖是純文字，但只留最近約 5 週，釘了很快就下載不到（brief §12.1）。
 - 口語語料：維基偏書面語，另加 HKCanCor 與 Tatoeba 的粵語句子（brief §5.2）。量遠小於維基，訓練時乘上權重，權重由口語集的開發切分調出。Common Voice 粵語句子要先讀完條款，可用才加。LIHKG、OpenSubtitles 權利來源不清，不用。
-- 前處理：OpenCC `s2hk` 轉繁體 → 切句 → 只留連打字集內的字。
+- 前處理：OpenCC `s2hk` 轉繁體 → 在標點、空白、符號處切句 → 含連打字集以外字元（英文字母、數字、擴展區的字）的句子整句丟掉，不拿掉個別字，免得拼出原文沒有的相鄰字。
+- 切分：依句子的 sha256 分 train 90%、dev 5%、test 5%，同一句永遠在同一個切分；test 取雜湊最小的 2,000 個不重複句進基準。
 - 每份語料都切 train / dev / test：test 給首選字基準，不參與訓練。
 - 訓練：字級 interpolated Kneser-Ney bigram；剪枝到資料包 ≤ 8 MB（Gboard 文獻的 5–10 MB 預算，brief §12.4）。
 - 授權：語料是 CC BY-SA 4.0，這份模型隨 App 發佈是否要以相同授權散布，與 LGPL 資料並列 brief §11 的待決項，由使用者判斷。
@@ -397,7 +399,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 | 檔案 | 內容 | 授權 / 位置 |
 | --- | --- | --- |
 | `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`，`anr 門口`、`mir 一台` 由 M1 票 07（連打）、11（bigram 訓練）通過時加入 | 進 git |
-| `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼） | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
+| `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼）；每個語料一個 `<名>.tsv`，一行「逐字速成碼（空格分隔）<TAB>句子」，由 `cargo xtask data` 產生 | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
 | `bench/colloquial/` | 口語語料 test 切分的句子，轉碼方式同上；口語集的開發切分只用來調參 | 依來源（CC BY 等），附 `ATTRIBUTION.md`，進 git |
 | `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料（brief §12.2 的 `.userdb.txt`；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
 | `bench/personal/sentences.txt` | 選填：使用者提供的真實句子，一行一句，由 `qim-databuild` 轉碼；英文段落切開不算 | 同上 |
@@ -600,7 +602,6 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | `ferrous-opencc` 不能編 WebAssembly | M1 票 16 | 票開工時 | 改自讀 OpenCC 字典，記偏差 |
 | iOS 鍵盤擴充放不下核心與資料包 | M3 的模型大小、M7 | M2 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
 | 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
-| CirrusSearch dump 不可用或格式改變 | M1 票 01 | 票開工時 | 改用 pages-articles 加文字抽取，記偏差 |
 | 延遲超過預算 | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢 | M3 範圍 | §7.8 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |
 | iOS 鍵盤擴充不能用 Foundation Models | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |

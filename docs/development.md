@@ -52,8 +52,21 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `license_text`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 的 `kGradeLevel` 進速成資料包，用 `data/licenses/Unicode-3.0.txt`）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<方案 id>/` 下的 `<方案 id>.pack`、`LICENSE`、`NOTICE`。資料包格式定義在 `crates/qim-core/src/pack.rs`，改格式時加 `FORMAT_VERSION`。
+- 語料（plan §4.3）：粵語維基 dump 經抽內文、`s2hk`、切句、切分，寫出 `bench/corpus/<名>.tsv`、`bench/corpus/ATTRIBUTION.md`（進 git）與 `build/corpus/<名>/train.txt`、`dev.txt`（一行一句，不進 git）。第一次要下載約 130 MB 的 dump；之後 `cargo xtask data` 約 30 秒，`--verify` 把語料再建一次比 sha256，約 1 分鐘（Apple M6，release）。
 
-`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、資料包 sha256、Unihan 交叉比對的摘要，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`。
+`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、資料包 sha256、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`。
+
+### 語料
+
+`bench/corpus/<名>.tsv` 是首選字基準的題目，由建置產生、不要手改。UTF-8，沒有欄名，一行一句：
+
+```text
+<逐字速成碼，空格分隔><TAB><句子>
+```
+
+例如 `an r⇥門口`（`⇥` 是 tab）。輸入碼是把各字的碼接起來；分開寫是讓基準知道每個字用了幾個鍵。轉碼由 `qim_databuild::transcode::Transcoder` 做：每個字取第一個五代碼的速成碼，沒有五代碼才取三代碼，連打字集以外的字轉碼失敗。
+
+`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在 train、建兩次 sha256 相同。切句與取樣規則見 plan §4.3，抽 wikitext 內文的規則在 `crates/qim-databuild/src/wikitext.rs`。
 
 ### Unihan 交叉比對
 

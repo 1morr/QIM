@@ -249,6 +249,7 @@ QIM（暫名）。
 - CLDR annotations（yue、zh_Hant、zh_Hant_HK）為 Unicode-3.0。[CLDR](https://github.com/unicode-org/cldr/tree/main/common/annotations)。
 - HKSCS 資料集（含倉頡碼、粵拼）商用免費，須署名，有賠償條款。[data.gov.hk 條款](https://data.gov.hk/en/terms-and-conditions)。
 - 隨機速成字母串（a–y）對 macOS `/usr/share/dict/words` 的 210,773 個小寫詞：4 個字母剛好是英文詞 0.9%、差一處（插入、刪除、替換、對調）38.5%；5 個字母 0.1%、8.7%；6 個字母 0%、1.1%。隨機字母不代表真實速成碼的分佈，詞表含冷僻詞，只看量級。本機實驗 `scripts/experiments/english-edit1/`，2026-11-03。
+- Wikimedia 的 CirrusSearch dump 已停在 `other/cirrussearch/`（最後 20251229），改到 `other/cirrus_search_index/`、依索引分片成 `.json.bz2`，2026-11-04 只列最近 5 週（20261004–20261101）；`pages-articles` dump 的舊版仍可下載（粵語維基 20240101 回 200）。[DEPRECATED.txt](https://dumps.wikimedia.org/other/cirrussearch/DEPRECATED.txt)、[cirrus_search_index](https://dumps.wikimedia.org/other/cirrus_search_index/)、[zh_yuewiki](https://dumps.wikimedia.org/zh_yuewiki/)，2026-11-04 查。
 - HKCanCor：1997–1998 年的自發對話與電台節目轉寫，約 23 萬詞，CC BY（目錄標 4.0，未找到主要來源的授權聲明）。[Hugging Face](https://huggingface.co/datasets/hkcancor)、[PyCantonese](https://pypi.org/project/pycantonese)，2026-10-31 查。
 - Common Voice Scripted Speech 25.0 粵語：標 CC0-1.0，文字語料 28,727 句；24.0 的資料說明另寫不得轉發資料集，兩者的關係未查清。[25.0](https://datacollective.mozillafoundation.org/datasets/cmn29rqn9016to107eniyak65)、[24.0](https://datacollective.mozillafoundation.org/datasets/cmj8u3q2b00v9nxxborfkm824)，2026-10-31 查。
 - Tatoeba 句子預設 CC BY 2.0 FR，須署名，部分句子另有 CC0；粵語句子的數量未查。[Tatoeba 下載頁](https://tatoeba.org/ca/downloads)、[CC0 說明](https://en.wiki.tatoeba.org/articles/show/cc0-contributions)，2026-10-31 查。
