@@ -7,7 +7,7 @@
 		"dev": "vite",
 		"build": "tsc --noEmit && vite build",
 		"preview": "vite preview",
-		"typecheck": "tsc --noEmit && tsc --noEmit -p bench && tsc --noEmit -p test",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p bench",
 		"lint": "biome check",
 		"test": "node --test \"test/**/*.test.ts\"",
 		"e2e": "playwright test"

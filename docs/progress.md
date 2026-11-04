@@ -71,3 +71,4 @@
 - 2026-11-04 M1 10：Enter 有選定分段時上屏「選定的字詞＋其餘輸入碼」，照 librime `CommitRawInput`；標點、大寫先上屏組字，不學 macOS 的英文串（brief §4.3）。
 - 2026-11-04 M1 10：`Key` 加 `Punct`、`Other`；亂按找到組字中 Tab、Delete、方向鍵改到輸入框，網頁沒對應的鍵都轉成 `Other`，組字中吃下（plan §2.1）。
 - 2026-11-04 M1 10：網頁加 `node:test` 單元測試與 `check` 的 `unit` 步驟，不加測試框架依賴（`docs/development.md`、plan §1.4）。
+- 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。

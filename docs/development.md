@@ -34,7 +34,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `cargo xtask web` | 編 WebAssembly 綁定、複製資料包到網頁，見〈網頁〉 |
 | `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
 | `npm test --prefix web` | 網頁的單元測試（`web/test/` 下的 `*.test.ts`，不必先跑 `cargo xtask web`） |
-| `npm run --prefix web e2e` | Playwright 實打網頁（自己起開發伺服器，埠 5179）；先跑 `cargo xtask web` |
+| `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`，見〈資料建置〉 |
 | `cargo xtask bench [--check \| --update-baseline]` | 首選字基準，見〈首選字基準〉 |
@@ -181,7 +181,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 兩個目錄都不進 git。改了 `qim-core` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
-Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
+Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 
 ## 全部檢查
 
@@ -201,7 +201,7 @@ cargo xtask check
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
 | `docs` | 文件規則（plan §6）：`docs/progress.md` 的段落、表格、長度、里程碑標記、下一步指令，與 `.scratch/` 的 spec | 跑 |
 | `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
-| `tsc` | `web/` 的 `tsc --noEmit`，再對 `web/bench/`、`web/test/` 各跑一次（`npm run typecheck`） | 跑 |
+| `tsc` | `web/` 的 `tsc --noEmit`（`src/`），再對 `tsconfig.node.json`（Playwright 設定、`e2e/`、`test/`）與 `web/bench/` 各跑一次（`npm run typecheck`） | 跑 |
 | `biome` | `web/` 的 `biome check`（`npm run lint`） | 跑 |
 | `unit` | `web/test/` 的單元測試（`npm test`，Node 內建的 `node --test`，直接跑 TypeScript） | 跑 |
 | `e2e` | 複製資料包（〈網頁〉第 2 步）後跑 Playwright（`npm run e2e`）；要先跑過 `cargo xtask data` | 跳過 |

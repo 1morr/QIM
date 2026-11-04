@@ -119,7 +119,7 @@ flowchart LR
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
 | `@playwright/test` | 1.64.1 | 網頁 e2e 與驗收 | 使用者指定 |
-| `@types/node` | 26.6.6 | `web/bench/` 的 Node 腳本（WebAssembly 每鍵延遲）與 `web/test/` 單元測試（Node 內建的 `node:test`，不另加測試框架）的型別 | 跟 Node 26 同主版本；只給 `web/bench/`、`web/test/` 的 `tsconfig.json`，網頁的程式碼看不到 Node 的 API |
+| `@types/node` | 26.6.6 | `web/bench/` 的 Node 腳本（WebAssembly 每鍵延遲）、`web/test/` 單元測試（Node 內建的 `node:test`，不另加測試框架）與 Playwright 設定、e2e 的型別 | 跟 Node 26 同主版本；只給 `web/bench/tsconfig.json` 與 `web/tsconfig.node.json`，網頁的程式碼（`src/`）看不到 Node 的 API |
 
 ## 2. 核心
 
