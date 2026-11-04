@@ -2,22 +2,25 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use crate::lattice::{self, Lattice};
-use crate::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, PackError, Scheme};
+use crate::{
+    CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, PackError,
+    Scheme, Word,
+};
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
 #[derive(Debug, Clone)]
 pub struct Engine {
     scheme: Scheme,
-    /// 每個碼的字已依字頻重排（[`by_frequency`]），也就是依字的分數由高到低。
+    /// 每個碼的字已依字頻重排（[`by_frequency`]）。
     code_table: CodeTable,
     /// 方案沒指名詞庫時是空的。
     lexicon: Lexicon,
-    /// 字的 unigram 的分母取 ln：字頻總和加連打字集的字數（加一平滑）。
-    char_log_total: f64,
-    /// 詞的 unigram 的分母取 ln：每個詞（不論幾個碼）的詞頻總和。
-    word_log_total: f64,
+    /// 方案沒指名語言模型時是 [`LanguageModel::default`]：每個字的分數都是 0。
+    language_model: LanguageModel,
     /// 詞庫裡最長的碼的長度，lattice 往回找詞的上限。
     longest_word_code: usize,
+    /// 詞的 unigram 的分母取 ln：每個詞（不論幾個碼）的詞頻總和。
+    word_log_total: f64,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -25,13 +28,19 @@ pub struct Engine {
 pub(crate) struct Edge {
     pub start: usize,
     pub text: String,
-    /// 這一段的分數，已含 β 與 γ（plan §2.3）。
-    pub score: f64,
+    /// 第一個字；它的分數看前一段的最後一個字，見 [`Engine::edge_score`]。
+    first: char,
+    /// 不看前一段的部分（plan §2.3）：字是 −γ；詞是 β − γ 加上詞頻換算的詞內機率。
+    inner: f64,
 }
 
 impl Engine {
-    /// `lexicon` 要剛好是方案 [`crate::Packs::lexicon`] 指名的那份；方案沒指名時要是 `None`。
-    pub fn new(pack: Pack, lexicon: Option<LexiconPack>) -> Result<Self, PackError> {
+    /// `lexicon`、`language_model` 要剛好是方案 [`crate::Packs`] 指名的那份；方案沒指名時要是 `None`。
+    pub fn new(
+        pack: Pack,
+        lexicon: Option<LexiconPack>,
+        language_model: Option<LanguageModelPack>,
+    ) -> Result<Self, PackError> {
         let found = lexicon.as_ref().map(|l| l.id.clone());
         if pack.scheme.packs.lexicon != found {
             return Err(PackError::LexiconMismatch {
@@ -39,13 +48,19 @@ impl Engine {
                 found,
             });
         }
+        let found = language_model.as_ref().map(|m| m.id.clone());
+        if pack.scheme.packs.language_model != found {
+            return Err(PackError::LanguageModelMismatch {
+                expected: pack.scheme.packs.language_model,
+                found,
+            });
+        }
         let lexicon = lexicon.map(|l| l.lexicon).unwrap_or_default();
-        let continuous: HashSet<char> = pack
-            .code_table
+        let longest_word_code = lexicon
             .iter()
-            .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
-            .collect();
-        let char_total: u64 = continuous.iter().map(|&c| lexicon.char_frequency(c)).sum();
+            .map(|(code, _)| code.len())
+            .max()
+            .unwrap_or(0);
         let mut seen = HashSet::new();
         let word_total: u64 = lexicon
             .iter()
@@ -53,25 +68,27 @@ impl Engine {
             .filter(|w| seen.insert(w.text.as_str()))
             .map(|w| w.frequency)
             .sum();
-        let longest_word_code = lexicon
-            .iter()
-            .map(|(code, _)| code.len())
-            .max()
-            .unwrap_or(0);
         Ok(Self {
+            word_log_total: (word_total.max(1) as f64).ln(),
             code_table: by_frequency(&pack.code_table, &lexicon),
             scheme: pack.scheme,
-            char_log_total: ((char_total + continuous.len() as u64) as f64).ln(),
-            word_log_total: (word_total.max(1) as f64).ln(),
+            language_model: language_model.map(|m| m.model).unwrap_or_default(),
             longest_word_code,
             lexicon,
         })
     }
 
     /// 由資料包的位元組建立；讀檔是呼叫端的事（plan §1.3）。
-    pub fn from_pack_bytes(pack: &[u8], lexicon: Option<&[u8]>) -> Result<Self, PackError> {
+    pub fn from_pack_bytes(
+        pack: &[u8],
+        lexicon: Option<&[u8]>,
+        language_model: Option<&[u8]>,
+    ) -> Result<Self, PackError> {
         let lexicon = lexicon.map(LexiconPack::from_bytes).transpose()?;
-        Self::new(Pack::from_bytes(pack)?, lexicon)
+        let language_model = language_model
+            .map(LanguageModelPack::from_bytes)
+            .transpose()?;
+        Self::new(Pack::from_bytes(pack)?, lexicon, language_model)
     }
 
     pub fn scheme(&self) -> &Scheme {
@@ -91,17 +108,35 @@ impl Engine {
         usize::from(self.scheme.ranking.beam)
     }
 
-    /// 字的分數：ln 字頻的 unigram（加一平滑）− γ。
-    fn char_score(&self, c: char) -> f64 {
-        ((self.lexicon.char_frequency(c) + 1) as f64).ln()
-            - self.char_log_total
-            - self.scheme.ranking.segment_penalty
+    /// 一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
+    fn char_edge(&self, start: usize, c: char) -> Edge {
+        Edge {
+            start,
+            text: c.to_string(),
+            first: c,
+            inner: -self.scheme.ranking.segment_penalty,
+        }
     }
 
-    /// 詞的分數：ln 詞頻的 unigram + β − γ。
-    fn word_score(&self, frequency: u64) -> f64 {
-        (frequency.max(1) as f64).ln() - self.word_log_total + self.scheme.ranking.word_bonus
-            - self.scheme.ranking.segment_penalty
+    /// 一個詞的邊（plan §2.3）：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，
+    /// 第一個字之後由詞頻換算，所以詞頻仍分得出同碼的詞；再加 β − γ。
+    fn word_edge(&self, start: usize, word: &Word) -> Edge {
+        let ranking = &self.scheme.ranking;
+        let first = word.text.chars().next().expect("詞不是空的");
+        let rest = (word.frequency.max(1) as f64).ln()
+            - self.word_log_total
+            - self.language_model.log_prob(None, first);
+        Edge {
+            start,
+            text: word.text.clone(),
+            first,
+            inner: rest + ranking.word_bonus - ranking.segment_penalty,
+        }
+    }
+
+    /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
+    pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge) -> f64 {
+        self.language_model.log_prob(prev, edge.first) + edge.inner
     }
 
     pub(crate) fn sentences(&self) -> usize {
@@ -117,29 +152,24 @@ impl Engine {
         }
     }
 
-    /// 剛好是碼 `code` 的連打字集的字與詞。字依分數由高到低、最多 `limit` 個（字序在
-    /// [`Engine::new`] 依字頻排過）；詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
+    /// 剛好是碼 `code` 的連打字集的字與詞。字依字頻由高到低、最多 `limit` 個（字序在
+    /// [`Engine::new`] 排過）；詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
     fn exact(&self, code: &str, start: usize, limit: usize) -> impl Iterator<Item = Edge> {
         let chars = self
             .char_entries(code)
             .iter()
             .filter(|e| !e.extension)
             .take(limit)
-            .map(move |e| Edge {
-                start,
-                text: e.text.to_string(),
-                score: self.char_score(e.text),
-            });
-        let words = self.lexicon.lookup(code).iter().map(move |w| Edge {
-            start,
-            text: w.text.clone(),
-            score: self.word_score(w.frequency),
-        });
+            .map(move |e| self.char_edge(start, e.text));
+        let words = self
+            .lexicon
+            .lookup(code)
+            .iter()
+            .map(move |w| self.word_edge(start, w));
         chars.chain(words)
     }
 
-    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取分數最高的 beam 個（再多也進不了
-    /// beam），加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
+    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個，加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
     pub(crate) fn edges_ending(&self, input: &str) -> Vec<Edge> {
         let end = input.len();
         let longest = self
@@ -150,10 +180,14 @@ impl Engine {
             .collect()
     }
 
-    /// 碼 `code` 的全部連打字集的字與詞，依分數由高到低（同分照碼表、詞庫的順序）。
-    pub(crate) fn span(&self, code: &str) -> Vec<Edge> {
-        let mut edges: Vec<Edge> = self.exact(code, 0, usize::MAX).collect();
-        edges.sort_by(|a, b| b.score.total_cmp(&a.score));
+    /// 碼 `code` 的全部連打字集的字與詞與它們在組字開頭的分數，依分數由高到低（同分照碼表、
+    /// 詞庫的順序）。
+    pub(crate) fn span(&self, code: &str) -> Vec<(f64, String)> {
+        let mut edges: Vec<(f64, String)> = self
+            .exact(code, 0, usize::MAX)
+            .map(|e| (self.edge_score(None, &e), e.text))
+            .collect();
+        edges.sort_by(|a, b| b.0.total_cmp(&a.0));
         edges
     }
 

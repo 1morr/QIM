@@ -31,6 +31,7 @@ fn scheme(lexicon: Option<&str>) -> Scheme {
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: lexicon.map(Into::into),
+            language_model: None,
         },
         ranking: Ranking::default(),
     }
@@ -77,6 +78,7 @@ fn engine(char_frequency: &[(char, u64)]) -> Engine {
                 .to_bytes()
                 .unwrap(),
         ),
+        None,
     )
     .unwrap()
 }
@@ -168,14 +170,14 @@ fn lexicon_must_be_the_one_the_scheme_names() {
     let scheme_pack = pack(Some("quick-lexicon")).to_bytes().unwrap();
     let other = lexicon_pack("cangjie-lexicon", &[]).to_bytes().unwrap();
     assert_eq!(
-        Engine::from_pack_bytes(&scheme_pack, Some(&other)).err(),
+        Engine::from_pack_bytes(&scheme_pack, Some(&other), None).err(),
         Some(PackError::LexiconMismatch {
             expected: Some("quick-lexicon".into()),
             found: Some("cangjie-lexicon".into()),
         })
     );
     assert_eq!(
-        Engine::from_pack_bytes(&scheme_pack, None).err(),
+        Engine::from_pack_bytes(&scheme_pack, None, None).err(),
         Some(PackError::LexiconMismatch {
             expected: Some("quick-lexicon".into()),
             found: None,
@@ -183,7 +185,7 @@ fn lexicon_must_be_the_one_the_scheme_names() {
     );
     let lexicon = lexicon_pack("quick-lexicon", &[]).to_bytes().unwrap();
     assert_eq!(
-        Engine::from_pack_bytes(&pack(None).to_bytes().unwrap(), Some(&lexicon)).err(),
+        Engine::from_pack_bytes(&pack(None).to_bytes().unwrap(), Some(&lexicon), None).err(),
         Some(PackError::LexiconMismatch {
             expected: None,
             found: Some("quick-lexicon".into()),

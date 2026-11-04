@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
-use qim_core::{Engine, LexiconPack, Pack};
+use qim_core::{Engine, LanguageModelPack, LexiconPack, Pack};
 use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
 
@@ -450,9 +450,10 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
         ),
         (6, 1, 1, 1, 3)
     );
-    // 速成資料包指名它，兩份合起來建得出 Engine。
+    // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(&outcome.pack_path).unwrap();
-    assert!(Engine::from_pack_bytes(&quick, Some(&bytes)).is_ok());
+    let language_model = std::fs::read(&outcome.language_model_path).unwrap();
+    assert!(Engine::from_pack_bytes(&quick, Some(&bytes), Some(&language_model)).is_ok());
 
     let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
     assert!(license.contains("LGPL-3.0"), "{license}");
@@ -469,6 +470,34 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     let quick_license =
         std::fs::read_to_string(root.path().join("build/packs/quick/LICENSE")).unwrap();
     assert!(!quick_license.contains("LGPL"), "{quick_license}");
+}
+
+#[test]
+fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notice() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/zh-hant-bigram");
+    assert_eq!(outcome.language_model_path, dir.join("zh-hant-bigram.pack"));
+    let bytes = std::fs::read(&outcome.language_model_path).unwrap();
+    let pack = LanguageModelPack::from_bytes(&bytes).unwrap();
+    assert_eq!(pack.id, "zh-hant-bigram");
+    // 由各語料的 train 切分數出來：有字、有相鄰字。
+    assert!(outcome.language_model.characters > 0);
+    assert!(outcome.language_model.bigrams > 0);
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    for (_, text) in CC_LICENSES {
+        assert!(license.contains(text), "{license}");
+    }
+    // 詞庫與速成資料包的授權不混進來。
+    assert!(!license.contains("LGPL"), "{license}");
+    assert!(!license.contains(STATEMENT), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
+    assert!(notice.contains("Common Voice"), "{notice}");
+    assert!(notice.contains("Kneser-Ney"), "{notice}");
 }
 
 #[test]
@@ -543,9 +572,14 @@ fn second_build_uses_the_cache_and_gives_the_same_bytes() {
     let first = run(root.path(), &upstream(README), false).unwrap();
     let first_bytes = std::fs::read(&first.pack_path).unwrap();
     let first_lexicon = std::fs::read(&first.lexicon_path).unwrap();
+    let first_language_model = std::fs::read(&first.language_model_path).unwrap();
     let second = run(root.path(), &Offline, false).unwrap();
     assert_eq!(std::fs::read(&second.pack_path).unwrap(), first_bytes);
     assert_eq!(std::fs::read(&second.lexicon_path).unwrap(), first_lexicon);
+    assert_eq!(
+        std::fs::read(&second.language_model_path).unwrap(),
+        first_language_model
+    );
     assert_eq!(first.sha256, second.sha256);
     assert!(second.report.is_none());
 }

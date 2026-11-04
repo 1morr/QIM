@@ -1,48 +1,78 @@
-//! Viterbi + beam 的獨立對照（plan §2.3）：小輸入上窮舉每一種切法，照 plan 寫的 unigram 式子算分，
-//! 核心的首選要是最高分的路徑之一；beam 再窄也一樣，因為首選只靠每一欄的第一名接出來。
+//! Viterbi + beam 的獨立對照（plan §2.3）：小輸入上窮舉每一種切法，照 plan 的式子算分，
+//! 核心的首選要是最高分的路徑之一。bigram 讓下一段的分數看前一段的最後一個字，beam 窄時
+//! 可能剪掉之後會勝出的部分路徑，所以這裡給夠寬的 beam（大於可能的部分路徑數）。
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Session,
-    UserModel, Word,
+    CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack, Lexicon,
+    LexiconPack, Pack, Packs, Ranking, Scheme, Session, UserModel, Word,
 };
 
-/// 隨機資料：碼表（碼 → 字，可能有超過最長碼的碼）、詞庫（碼 → 詞與詞頻）、字頻、打分參數。
+/// 夠寬的 beam：5 碼的輸入、每碼最多 3 字加 2 詞，部分路徑數遠小於它。
+const WIDE_BEAM: u16 = 10_000;
+
+/// 隨機資料：碼表（碼 → 字，可能有超過最長碼的碼）、詞庫（碼 → 詞）、語言模型、打分參數。
 #[derive(Debug, Clone)]
 struct Data {
     table: BTreeMap<String, Vec<char>>,
     words: BTreeMap<String, Vec<(String, u64)>>,
-    chars: BTreeMap<char, u64>,
+    chars: BTreeMap<char, (f64, f64, f64)>,
+    bigrams: BTreeMap<(char, char), f64>,
     ranking: Ranking,
+}
+
+/// 只用十個字，bigram 才常常碰得到。
+const CHARS: &str = "一二三四五六七八九十";
+
+fn digit() -> impl Strategy<Value = char> {
+    prop::sample::select(CHARS.chars().collect::<Vec<_>>())
 }
 
 fn data() -> impl Strategy<Value = Data> {
     let table = prop::collection::btree_map(
         "[abc]{1,3}",
-        prop::collection::btree_set(prop::char::range('一', '十'), 1..4)
+        prop::collection::btree_set(digit(), 1..4)
             .prop_map(|set| set.into_iter().collect::<Vec<_>>()),
         1..8,
     );
     let words = prop::collection::btree_map(
         "[abc]{2,4}",
-        prop::collection::vec(("[一-十]{2,3}", 1u64..1000), 1..3),
+        prop::collection::vec(("[一二三四五六七八九十]{2,3}", 1u64..1000), 1..3),
         0..5,
     );
-    let chars = prop::collection::btree_map(prop::char::range('一', '十'), 0u64..1000, 0..10);
-    let ranking = (-3.0..3.0f64, 0.0..3.0f64, 1u16..4).prop_map(|(b, g, beam)| Ranking {
+    let log_p = || -8.0..0.0f64;
+    let chars = prop::collection::btree_map(digit(), (log_p(), log_p(), log_p()), 0..10);
+    let bigrams = prop::collection::btree_map((digit(), digit()), log_p(), 0..20);
+    let ranking = (-3.0..3.0f64, 0.0..3.0f64).prop_map(|(b, g)| Ranking {
         word_bonus: b,
         segment_penalty: g,
-        beam,
+        beam: WIDE_BEAM,
         sentences: 3,
     });
-    (table, words, chars, ranking).prop_map(|(table, words, chars, ranking)| Data {
-        table,
-        words,
-        chars,
-        ranking,
+    (table, words, chars, bigrams, ranking).prop_map(|(table, words, chars, bigrams, ranking)| {
+        Data {
+            table,
+            words,
+            chars,
+            bigrams,
+            ranking,
+        }
     })
+}
+
+fn language_model(data: &Data) -> LanguageModel {
+    let model = |&(start, continuation, backoff): &(f64, f64, f64)| CharModel {
+        start,
+        continuation,
+        backoff,
+    };
+    LanguageModel::new(
+        data.chars.iter().map(|(&c, m)| (c, model(m))),
+        model(&UNKNOWN),
+        data.bigrams.iter().map(|(&(a, b), &p)| (a, b, p)),
+    )
 }
 
 fn engine(data: &Data) -> Engine {
@@ -55,6 +85,7 @@ fn engine(data: &Data) -> Engine {
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
+            language_model: Some("bigram".into()),
         },
         ranking: data.ranking,
     };
@@ -80,53 +111,95 @@ fn engine(data: &Data) -> Engine {
     });
     let lexicon = LexiconPack {
         id: "lexicon".into(),
-        lexicon: Lexicon::new(words, data.chars.clone()),
+        lexicon: Lexicon::new(words, []),
     };
-    Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
+    let language_model = LanguageModelPack {
+        id: "bigram".into(),
+        model: language_model(data),
+    };
+    Engine::new(
+        Pack { scheme, code_table },
+        Some(lexicon),
+        Some(language_model),
+    )
+    .unwrap()
 }
 
-/// 每一段可用的字詞與分數，照 plan §2.3（bigram 之前的 unigram）：
-/// - 字：ln((字頻 + 1) ÷ (連打字集的字頻總和 + 字數)) − γ；
-/// - 詞：ln(詞頻 ÷ 每個詞算一次的詞頻總和) + β − γ。
+/// 一段可用的字詞：碼、文字、不看前文的分數（plan §2.3）。字 −γ；詞 β − γ 加上
+/// `ln(詞頻 ÷ 詞頻總和) − ln P_unigram(第一字)`，詞頻總和每個詞算一次。
 fn pieces(data: &Data) -> Vec<(String, String, f64)> {
     let r = data.ranking;
-    let continuous: BTreeSet<char> = data.table.values().flatten().copied().collect();
-    let frequency = |c: &char| data.chars.get(c).copied().unwrap_or(0) as f64;
-    let char_total = continuous.iter().map(frequency).sum::<f64>() + continuous.len() as f64;
-    let mut seen = HashSet::new();
-    let word_total: f64 = data
+    let mut pieces = Vec::new();
+    for (code, chars) in data.table.iter().filter(|(code, _)| code.len() <= 2) {
+        for c in chars {
+            pieces.push((code.clone(), c.to_string(), -r.segment_penalty));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    let total: f64 = data
         .words
         .values()
         .flatten()
         .filter(|(text, _)| seen.insert(text.clone()))
         .map(|(_, f)| *f as f64)
         .sum();
-    let mut pieces = Vec::new();
-    for (code, chars) in data.table.iter().filter(|(code, _)| code.len() <= 2) {
-        for c in chars {
-            let score = ((frequency(c) + 1.0) / char_total).ln() - r.segment_penalty;
-            pieces.push((code.clone(), c.to_string(), score));
-        }
-    }
     for (code, list) in &data.words {
         for (text, f) in list {
-            let score = (*f as f64 / word_total).ln() + r.word_bonus - r.segment_penalty;
-            pieces.push((code.clone(), text.clone(), score));
+            let first = text.chars().next().unwrap();
+            let rest = (*f as f64 / total).ln() - stats(data, first).0;
+            pieces.push((
+                code.clone(),
+                text.clone(),
+                rest + r.word_bonus - r.segment_penalty,
+            ));
         }
     }
     pieces
 }
 
-/// 窮舉 `input` 的每一種切法：蓋滿整串的（文字, 分數）。
-fn every_path(input: &str, pieces: &[(String, String, f64)]) -> Vec<(String, f64)> {
+const UNKNOWN: (f64, f64, f64) = (-9.0, -9.0, 0.0);
+
+/// 字的（unigram, 接續, 退回）；沒有統計的字用 [`UNKNOWN`]。
+fn stats(data: &Data, c: char) -> (f64, f64, f64) {
+    *data.chars.get(&c).unwrap_or(&UNKNOWN)
+}
+
+/// 照退回式查 `ln P(c | prev)`：留下的 bigram 用它的值（量化過的值只有核心知道，向它要），
+/// 沒留下的用 α(前一字) + P_cont(字)，開頭用 unigram。
+fn transition(data: &Data, model: &LanguageModel, prev: Option<char>, c: char) -> f64 {
+    match prev {
+        None => stats(data, c).0,
+        Some(p)
+            if data.chars.contains_key(&p)
+                && data.chars.contains_key(&c)
+                && data.bigrams.contains_key(&(p, c)) =>
+        {
+            model.log_prob(Some(p), c)
+        }
+        Some(p) => stats(data, p).2 + stats(data, c).1,
+    }
+}
+
+/// 窮舉 `input` 的每一種切法：蓋滿整串的（文字, 分數）。每段的分數是前一段最後一個字接到
+/// 這段第一個字的 bigram，加上這段不看前文的分數。
+fn every_path(
+    data: &Data,
+    model: &LanguageModel,
+    input: &str,
+    prev: Option<char>,
+    pieces: &[(String, String, f64)],
+) -> Vec<(String, f64)> {
     if input.is_empty() {
         return vec![(String::new(), 0.0)];
     }
     let mut paths = Vec::new();
     for (code, text, score) in pieces {
         if let Some(rest) = input.strip_prefix(code.as_str()) {
-            for (tail, tail_score) in every_path(rest, pieces) {
-                paths.push((format!("{text}{tail}"), score + tail_score));
+            let first = text.chars().next().unwrap();
+            let here = transition(data, model, prev, first) + score;
+            let last = text.chars().next_back();
+            for (tail, tail_score) in every_path(data, model, rest, last, pieces) {
+                paths.push((format!("{text}{tail}"), here + tail_score));
             }
         }
     }
@@ -139,7 +212,8 @@ proptest! {
         data in data(),
         input in "[abc]{1,5}",
     ) {
-        let paths = every_path(&input, &pieces(&data));
+        let model = language_model(&data);
+        let paths = every_path(&data, &model, &input, None, &pieces(&data));
         let engine = engine(&data);
         let mut user = UserModel::default();
         let mut session = Session::default();
@@ -154,7 +228,7 @@ proptest! {
         };
         let winners: BTreeSet<&str> = paths
             .iter()
-            .filter(|(_, s)| (best - s).abs() < 1e-9)
+            .filter(|(_, s)| (best - s).abs() < 1e-6)
             .map(|(t, _)| t.as_str())
             .collect();
         let top = top.unwrap_or_default();

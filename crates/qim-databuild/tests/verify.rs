@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
 
-use qim_core::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Word};
+use qim_core::{
+    CharModel, CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack,
+    Word,
+};
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::verify::{self, CheckId, PackBytes, Report};
-use qim_databuild::{build_pack, lexicon, scheme};
+use qim_databuild::{bigram, build_pack, lexicon, scheme};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字。
 const TABLE: &str = "\
@@ -27,6 +30,7 @@ alphabet = "ab"
 max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
+language_model = "t-bigram"
 [radicals]
 a = "日"
 b = "月"
@@ -71,12 +75,37 @@ fn lexicon() -> LexiconPack {
     lexicon_with(BTreeMap::from([('日', 10), ('曰', 3)]))
 }
 
+/// 日比曰常見，`a` 的首選才是日。
+fn language_model() -> LanguageModelPack {
+    language_model_from("日曰日\n門口\n")
+}
+
+/// 由一行一句的語料訓練；單字的分數來自這裡的字次數，和詞庫的字頻同源。
+fn language_model_from(corpus: &str) -> LanguageModelPack {
+    let mut counter = bigram::Counter::default();
+    counter.add(corpus.as_bytes(), 1).unwrap();
+    LanguageModelPack {
+        id: "t-bigram".into(),
+        model: bigram::train(&counter, 8, 1).0,
+    }
+}
+
 fn run_with(pack: &Pack, lexicon: &LexiconPack) -> Report {
+    run_with_language_model(pack, lexicon, &language_model())
+}
+
+fn run_with_language_model(
+    pack: &Pack,
+    lexicon: &LexiconPack,
+    language_model: &LanguageModelPack,
+) -> Report {
     let quick = pack.to_bytes().unwrap();
     let lexicon = lexicon.to_bytes().unwrap();
+    let language_model = language_model.to_bytes().unwrap();
     let bytes = PackBytes {
         quick: &quick,
         lexicon: &lexicon,
+        language_model: &language_model,
     };
     verify::run(&rows(), bytes, bytes)
 }
@@ -157,6 +186,7 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::RiIsTopForA,
             CheckId::WordCodesFromCharacters,
             CheckId::MenKouForAnr,
+            CheckId::LanguageModelSize,
             CheckId::Deterministic,
         ]
     );
@@ -172,9 +202,11 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
         .to_bytes()
         .unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
+    let language_model = language_model().to_bytes().unwrap();
     let both = PackBytes {
         quick: &bytes,
         lexicon: &lexicon,
+        language_model: &language_model,
     };
     let report = verify::run(&rows, both, both);
     assert_eq!(failed(&report), []);
@@ -231,14 +263,25 @@ fn another_character_before_ri_on_a_fails_the_top_candidate_check() {
         t.get_mut("a").unwrap().swap(0, 1);
     });
     let same = lexicon_with(BTreeMap::from([('日', 3), ('曰', 3)]));
-    assert_eq!(failed(&run_with(&pack, &same)), [CheckId::RiIsTopForA]);
+    assert_eq!(
+        failed(&run_with_language_model(
+            &pack,
+            &same,
+            &language_model_from("日日日\n曰曰曰\n")
+        )),
+        [CheckId::RiIsTopForA]
+    );
 }
 
 #[test]
 fn a_higher_frequency_for_another_character_fails_the_top_candidate_check() {
     let yue_first = lexicon_with(BTreeMap::from([('日', 3), ('曰', 10)]));
     assert_eq!(
-        failed(&run_with(&pack(), &yue_first)),
+        failed(&run_with_language_model(
+            &pack(),
+            &yue_first,
+            &language_model_from("日日日\n曰曰曰曰曰曰曰曰曰曰\n")
+        )),
         [CheckId::RiIsTopForA]
     );
 }
@@ -279,28 +322,37 @@ fn missing_men_kou_for_anr_fails() {
 
 #[test]
 fn different_bytes_from_the_second_build_fail_determinism() {
-    let quick = pack().to_bytes().unwrap();
-    let lexicon = lexicon().to_bytes().unwrap();
-    for changed in [0, 1] {
-        let (mut other_quick, mut other_lexicon) = (quick.clone(), lexicon.clone());
-        let other = if changed == 0 {
-            &mut other_quick
-        } else {
-            &mut other_lexicon
-        };
-        *other.last_mut().unwrap() ^= 1;
+    let first = [
+        pack().to_bytes().unwrap(),
+        lexicon().to_bytes().unwrap(),
+        language_model().to_bytes().unwrap(),
+    ];
+    let bytes = |b: &[Vec<u8>; 3]| -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        (b[0].clone(), b[1].clone(), b[2].clone())
+    };
+    for changed in 0..3 {
+        let mut second = first.clone();
+        *second[changed].last_mut().unwrap() ^= 1;
+        let (a, b, c) = bytes(&first);
+        let (x, y, z) = bytes(&second);
         let report = verify::run(
             &rows(),
             PackBytes {
-                quick: &quick,
-                lexicon: &lexicon,
+                quick: &a,
+                lexicon: &b,
+                language_model: &c,
             },
             PackBytes {
-                quick: &other_quick,
-                lexicon: &other_lexicon,
+                quick: &x,
+                lexicon: &y,
+                language_model: &z,
             },
         );
-        assert_eq!(failed(&report), [CheckId::Deterministic]);
+        assert_eq!(
+            failed(&report),
+            [CheckId::Deterministic],
+            "改第 {changed} 份"
+        );
     }
 }
 
@@ -308,16 +360,47 @@ fn different_bytes_from_the_second_build_fail_determinism() {
 fn undecodable_pack_fails_without_panicking() {
     let quick = pack().to_bytes().unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
-    for (quick, lexicon) in [
-        (&b"garbage"[..], &lexicon[..]),
-        (&quick[..], &b"garbage"[..]),
-        // 兩份都解得開，但詞庫不是方案指名的那份。
-        (&quick[..], &quick[..]),
+    let mut other_model = language_model();
+    let model = language_model().to_bytes().unwrap();
+    other_model.id = "other".into();
+    let other_model = other_model.to_bytes().unwrap();
+    for (quick, lexicon, language_model) in [
+        (&b"garbage"[..], &lexicon[..], &model[..]),
+        (&quick[..], &b"garbage"[..], &model[..]),
+        (&quick[..], &lexicon[..], &b"garbage"[..]),
+        // 都解得開，但詞庫或語言模型不是方案指名的那份。
+        (&quick[..], &quick[..], &model[..]),
+        (&quick[..], &lexicon[..], &other_model[..]),
     ] {
-        let bytes = PackBytes { quick, lexicon };
+        let bytes = PackBytes {
+            quick,
+            lexicon,
+            language_model,
+        };
         let report = verify::run(&rows(), bytes, bytes);
         assert_eq!(failed(&report), [CheckId::Decodes]);
     }
+}
+
+#[test]
+fn language_model_over_the_size_limit_fails_the_size_check() {
+    let model = |p: f64| CharModel {
+        start: p.ln(),
+        continuation: p.ln(),
+        backoff: 0.0,
+    };
+    let mut big = language_model();
+    // 每個字的 unigram 存 12 位元組，70 萬字就超過 8 MB。
+    let chars = (0..=0x10FFFF)
+        .filter_map(char::from_u32)
+        .take(700_000)
+        .map(|c| (c, model(1e-6)));
+    big.model = LanguageModel::new(chars.chain([('日', model(0.5))]), model(1e-7), []);
+    let report = run_with_language_model(&pack(), &lexicon(), &big);
+    assert!(big.to_bytes().unwrap().len() > bigram::MAX_BYTES);
+    assert_eq!(failed(&report), [CheckId::LanguageModelSize]);
+    // 剛建好的小模型不超過。
+    assert_eq!(failed(&run(&pack())), []);
 }
 
 mod corpus {

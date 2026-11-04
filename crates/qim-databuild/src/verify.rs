@@ -6,17 +6,17 @@ use std::fmt;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use qim_core::{CodeTable, Engine, Lexicon, LexiconPack, Pack};
+use qim_core::{CodeTable, Engine, LanguageModelPack, Lexicon, LexiconPack, Pack};
 
 use crate::corpus::Counts;
-use crate::lexicon;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
 use crate::transcode::Transcoder;
+use crate::{bigram, lexicon};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
-    /// `qim-core` 解得開建出的速成與詞庫資料包，詞庫是方案指名的那份。
+    /// `qim-core` 解得開建出的速成、詞庫與語言模型資料包，後兩者是方案指名的那份。
     Decodes,
     /// 連打字集與擴展區的字數都等於來源中有倉頡碼的漢字數。
     NoMissingCharacters,
@@ -34,7 +34,9 @@ pub enum CheckId {
     WordCodesFromCharacters,
     /// 詞庫的 `anr` 有「門口」；連打用「門」+「口」也拼得出，所以直接查詞庫，首選由 `bench/fixed.tsv` 擋。
     MenKouForAnr,
-    /// 同樣的來源建兩次，兩份資料包的 sha256 都相同。
+    /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
+    LanguageModelSize,
+    /// 同樣的來源建兩次，三份資料包的 sha256 都相同。
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
@@ -56,6 +58,7 @@ impl fmt::Display for CheckId {
             Self::RiIsTopForA => "抽查：a 的首選是「日」",
             Self::WordCodesFromCharacters => "詞的碼由字的速成碼組成",
             Self::MenKouForAnr => "抽查：詞庫的 anr 有「門口」",
+            Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
@@ -82,8 +85,11 @@ pub struct Report {
     /// 速成資料包的 sha256。
     pub sha256: String,
     pub lexicon_sha256: String,
+    pub language_model_sha256: String,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
+    /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
+    pub language_model: Option<bigram::Summary>,
     pub checks: Vec<Check>,
     /// Unihan 交叉比對的摘要；[`run`] 不算，由呼叫端填。
     pub unihan: Option<UnihanSummary>,
@@ -177,8 +183,12 @@ impl fmt::Display for Report {
         writeln!(f, "速成碼：{} 個", self.codes)?;
         writeln!(f, "sha256：{}", self.sha256)?;
         writeln!(f, "詞庫 sha256：{}", self.lexicon_sha256)?;
+        writeln!(f, "bigram sha256：{}", self.language_model_sha256)?;
         if let Some(lexicon) = &self.lexicon {
             writeln!(f, "{lexicon}")?;
+        }
+        if let Some(language_model) = &self.language_model {
+            writeln!(f, "{language_model}")?;
         }
         if let Some(u) = &self.unihan {
             writeln!(
@@ -201,16 +211,23 @@ impl fmt::Display for Report {
     }
 }
 
-/// 一次建置寫出的兩份資料包的位元組。
+/// 一次建置寫出的三份資料包的位元組。
 #[derive(Debug, Clone, Copy)]
 pub struct PackBytes<'a> {
     pub quick: &'a [u8],
     pub lexicon: &'a [u8],
+    pub language_model: &'a [u8],
 }
 
 /// `first` 是寫出的資料包，`second` 是由同樣的來源再建一次的結果。
 pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
-    let sha256 = |p: PackBytes| (sha256_hex(p.quick), sha256_hex(p.lexicon));
+    let sha256 = |p: PackBytes| {
+        (
+            sha256_hex(p.quick),
+            sha256_hex(p.lexicon),
+            sha256_hex(p.language_model),
+        )
+    };
     let (first_sha256, second_sha256) = (sha256(first), sha256(second));
     let mut report = Report {
         continuous: 0,
@@ -218,7 +235,9 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         codes: 0,
         sha256: first_sha256.0.clone(),
         lexicon_sha256: first_sha256.1.clone(),
+        language_model_sha256: first_sha256.2.clone(),
         lexicon: None,
+        language_model: None,
         checks: Vec::new(),
         unihan: None,
         corpora: Vec::new(),
@@ -232,9 +251,21 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         }),
     }
     report.checks.push(Check {
+        id: CheckId::LanguageModelSize,
+        passed: first.language_model.len() <= bigram::MAX_BYTES,
+        detail: format!(
+            "{} 位元組，上限 {}",
+            first.language_model.len(),
+            bigram::MAX_BYTES
+        ),
+    });
+    report.checks.push(Check {
         id: CheckId::Deterministic,
         passed: first_sha256 == second_sha256,
-        detail: format!("第二次速成 {}、詞庫 {}", second_sha256.0, second_sha256.1),
+        detail: format!(
+            "第二次速成 {}、詞庫 {}、bigram {}",
+            second_sha256.0, second_sha256.1, second_sha256.2
+        ),
     });
     report
 }
@@ -242,7 +273,8 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
 fn decode(bytes: PackBytes) -> Result<(Pack, Lexicon, Engine), qim_core::PackError> {
     let pack = Pack::from_bytes(bytes.quick)?;
     let lexicon = LexiconPack::from_bytes(bytes.lexicon)?;
-    let engine = Engine::new(pack.clone(), Some(lexicon.clone()))?;
+    let language_model = LanguageModelPack::from_bytes(bytes.language_model)?;
+    let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))?;
     Ok((pack, lexicon.lexicon, engine))
 }
 
@@ -289,7 +321,7 @@ fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon
         Check {
             id: CheckId::Decodes,
             passed: true,
-            detail: format!("格式版本 {}，速成與詞庫", qim_core::FORMAT_VERSION),
+            detail: format!("格式版本 {}，速成、詞庫與 bigram", qim_core::FORMAT_VERSION),
         },
         Check {
             id: CheckId::NoMissingCharacters,

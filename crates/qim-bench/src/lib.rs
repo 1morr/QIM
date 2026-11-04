@@ -11,7 +11,7 @@ mod score;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use qim_core::{Engine, LexiconPack, Pack};
+use qim_core::{Engine, LanguageModelPack, LexiconPack, Pack};
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
@@ -241,7 +241,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 讀 [`PACK`] 與方案指名的詞庫資料包，建 `Engine`。
+/// 讀 [`PACK`] 與方案指名的詞庫、語言模型資料包，建 `Engine`。
 fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
     let load = |rel: String| -> Result<(Vec<u8>, LoadedPack), String> {
         let path = root.join(&rel);
@@ -257,17 +257,23 @@ fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
     let (bytes, loaded) = load(PACK.into())?;
     let pack = Pack::from_bytes(&bytes).map_err(|e| format!("{PACK}：{e}"))?;
     let mut packs = vec![loaded];
-    let lexicon = match &pack.scheme.packs.lexicon {
-        Some(id) => {
-            let (bytes, loaded) = load(format!("{PACKS}/{id}/{id}.pack"))?;
-            let lexicon =
-                LexiconPack::from_bytes(&bytes).map_err(|e| format!("{}：{e}", loaded.path))?;
-            packs.push(loaded);
-            Some(lexicon)
-        }
-        None => None,
+    // 方案指名的另一份資料包：`build/packs/<id>/<id>.pack`，解不開時報它的路徑。
+    let mut named = |id: &Option<String>| -> Result<Option<(Vec<u8>, String)>, String> {
+        let Some(id) = id else { return Ok(None) };
+        let (bytes, loaded) = load(format!("{PACKS}/{id}/{id}.pack"))?;
+        let path = loaded.path.clone();
+        packs.push(loaded);
+        Ok(Some((bytes, path)))
     };
-    let engine = Engine::new(pack, lexicon).map_err(|e| format!("{PACK}：{e}"))?;
+    let lexicon = named(&pack.scheme.packs.lexicon)?
+        .map(|(bytes, path)| LexiconPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}")))
+        .transpose()?;
+    let language_model = named(&pack.scheme.packs.language_model)?
+        .map(|(bytes, path)| {
+            LanguageModelPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}"))
+        })
+        .transpose()?;
+    let engine = Engine::new(pack, lexicon, language_model).map_err(|e| format!("{PACK}：{e}"))?;
     Ok((engine, packs))
 }
 

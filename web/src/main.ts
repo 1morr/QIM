@@ -11,6 +11,8 @@ import init, {
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
 const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
+/** 速成方案檔 `[packs]` 指名的語言模型資料包（字級 bigram）。 */
+const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 
@@ -135,13 +137,14 @@ function setTouch(on: boolean): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon, layoutJson] = await Promise.all([
+	const [, pack, lexicon, languageModel, layoutJson] = await Promise.all([
 		init(),
 		loadPack(PACK_URL),
 		loadPack(LEXICON_URL),
+		loadPack(LANGUAGE_MODEL_URL),
 		load(LAYOUT_URL).then((response) => response.text()),
 	]);
-	const session = new Session(pack, lexicon);
+	const session = new Session(pack, lexicon, languageModel);
 	const layout = new Layout(layoutJson);
 	mountKeyboard(keyboard, layout, session, apply, hostDefault);
 	// 行動裝置（主要指標是手指）預設開觸控鍵盤。

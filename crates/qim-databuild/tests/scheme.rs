@@ -75,6 +75,20 @@ fn packs_table_names_the_lexicon_pack() {
 }
 
 #[test]
+fn packs_table_names_the_language_model_pack() {
+    assert_eq!(scheme::parse(MINIMAL).unwrap().packs.language_model, None);
+    let with = format!("{MINIMAL}\n[packs]\nlanguage_model = \"t-bigram\"\n");
+    assert_eq!(
+        scheme::parse(&with)
+            .unwrap()
+            .packs
+            .language_model
+            .as_deref(),
+        Some("t-bigram")
+    );
+}
+
+#[test]
 fn ranking_table_sets_word_bonus_segment_penalty_and_beam() {
     let r = scheme::parse(MINIMAL).unwrap().ranking;
     assert_eq!(
