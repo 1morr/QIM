@@ -46,3 +46,4 @@ Blocked by: 18
 - 2026-11-04 code-review 沒處理：
   - `variant`、`page`、`key` 三個欄位在多個 `Warning` 重複（Data Clumps）：等 M5 編輯器要用位置標警告時再收成一個型別。
   - 網頁照 `style`、`rotate`、`radius`、`a11yLabel` 畫鍵算票外：不照畫的話，旋轉或圓角的鍵畫的位置和點擊判定對不上，保留。
+- 2026-11-04（使用者決定，經協調者）：`touchInset` 改名 `extendedEdges`，語意不變（正數往外擴、負數往內縮），與 Delta skin 同名同義；格式還沒發佈，舊名不留相容，寫舊名的檔案不符合 Schema（`tests/validate.rs` 有一例）。上面 Comments 提到的 `touchInset` 都指這個欄位。

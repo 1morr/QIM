@@ -11,7 +11,7 @@ fn key(id: usize, frame: Frame, rotate: f64, z: i32, radius: f64, inset: Insets)
         rotate,
         z,
         shape: Shape::Rect { radius },
-        touch_inset: inset,
+        extended_edges: inset,
         label: None,
         hint: None,
         a11y_label: None,
@@ -71,14 +71,14 @@ fn world(key: &Key, lx: f64, ly: f64) -> (f64, f64) {
     (cx + lx * cos - ly * sin, cy + lx * sin + ly * cos)
 }
 
-/// 整頁等比例縮放 `s` 倍：位置、大小、圓角、`touchInset` 都乘上 `s`，角度不變。
+/// 整頁等比例縮放 `s` 倍：位置、大小、圓角、`extendedEdges` 都乘上 `s`，角度不變。
 fn scaled(page: &Page, s: f64) -> Page {
     let keys = page
         .keys
         .iter()
         .map(|k| {
             let f = k.frame;
-            let i = k.touch_inset;
+            let i = k.extended_edges;
             let Shape::Rect { radius } = k.shape else {
                 unreachable!("性質測試只產生矩形")
             };
@@ -182,7 +182,7 @@ proptest! {
 }
 
 #[test]
-fn touch_inset_extends_or_shrinks_the_touch_area() {
+fn extended_edges_extend_or_shrink_the_touch_area() {
     let frame = Frame {
         x: 10.0,
         y: 10.0,

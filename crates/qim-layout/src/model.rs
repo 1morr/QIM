@@ -182,9 +182,9 @@ pub struct Key {
     pub z: i32,
     #[serde(default, skip_serializing_if = "Shape::is_default")]
     pub shape: Shape,
-    /// 觸控範圍比 `frame` 每邊往外擴的距離，負數往內縮（同 Delta skin 的 `extendedEdges`）。
+    /// 觸控範圍比 `frame` 每邊往外擴的距離，負數往內縮（同 Delta skin 的 `extendedEdges`，同名同義）。
     #[serde(default, skip_serializing_if = "Insets::is_zero")]
-    pub touch_inset: Insets,
+    pub extended_edges: Insets,
     /// 主標籤；省略時見 [`Key::display_label`]。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,

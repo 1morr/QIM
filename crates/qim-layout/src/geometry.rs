@@ -34,7 +34,7 @@ struct TouchArea {
 
 fn touch_area(key: &Key) -> TouchArea {
     let (hw, hh) = (key.frame.w / 2.0, key.frame.h / 2.0);
-    let inset = &key.touch_inset;
+    let inset = &key.extended_edges;
     let left = -hw - inset.left;
     let right = (hw + inset.right).max(left);
     let top = -hh - inset.top;
@@ -53,7 +53,7 @@ fn touch_area(key: &Key) -> TouchArea {
 }
 
 impl Key {
-    /// 點 `(x, y)` 在不在這個鍵的觸控範圍（形狀加 `touchInset`）內。
+    /// 點 `(x, y)` 在不在這個鍵的觸控範圍（形狀加 `extendedEdges`）內。
     /// 左、上邊算在內，右、下邊不算（旋轉前），相鄰兩鍵的共用邊只屬於一個鍵；圓角外的角落不算。
     pub fn contains(&self, x: f64, y: f64) -> bool {
         let (lx, ly) = to_local(self, x, y);
@@ -97,7 +97,7 @@ impl Key {
         ((qx * qx + qy * qy).sqrt() - r).max(0.0)
     }
 
-    /// 畫出來的矩形（旋轉後、不含 `touchInset` 與圓角）的四個角，順時針。
+    /// 畫出來的矩形（旋轉後、不含 `extendedEdges` 與圓角）的四個角，順時針。
     pub(crate) fn corners(&self) -> [(f64, f64); 4] {
         let (hw, hh) = (self.frame.w / 2.0, self.frame.h / 2.0);
         [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)].map(|(lx, ly)| to_world(self, lx, ly))

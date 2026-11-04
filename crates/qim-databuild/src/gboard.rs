@@ -136,7 +136,7 @@ pub fn layout() -> Layout {
                 rotate: 0.0,
                 z: 0,
                 shape: Shape::Rect { radius: RADIUS },
-                touch_inset: Insets::default(),
+                extended_edges: Insets::default(),
                 label: cell.label.map(str::to_owned),
                 hint,
                 a11y_label: None,

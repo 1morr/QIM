@@ -16,7 +16,7 @@
               "rotate": 0,
               "z": 0,
               "shape": { "type": "rect", "radius": 6 },
-              "touchInset": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+              "extendedEdges": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
               "hint": "a",
               "a11yLabel": "日，英文 a",
               "style": {

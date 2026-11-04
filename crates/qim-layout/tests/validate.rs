@@ -154,6 +154,13 @@ fn file_that_breaks_the_schema_is_broken() {
                     json!({ "fill": { "light": "#ffffff", "dark": "black" } })
             }),
         ),
+        // 改名前的 extendedEdges 不留相容。
+        (
+            "/variants/0/pages/0/keys/0",
+            Box::new(|v| {
+                v["variants"][0]["pages"][0]["keys"][0]["touchInset"] = json!({ "top": 2 })
+            }),
+        ),
         (
             "/variants/0/pages/0/keys/0/z",
             Box::new(|v| v["variants"][0]["pages"][0]["keys"][0]["z"] = json!(1u64 << 40)),
@@ -459,9 +466,10 @@ fn variant_selection_prefers_device_and_orientation_then_orientation_then_the_fi
 
 #[test]
 fn key_with_no_touch_area_is_not_reported_as_covered() {
-    // 負的 touchInset 把 a 的觸控範圍縮成 0：點不到，但不是被誰蓋住。
+    // 負的 extendedEdges 把 a 的觸控範圍縮成 0：點不到，但不是被誰蓋住。
     let mut value = layout(vec![letters(vec![])]);
-    value["variants"][0]["pages"][0]["keys"][0]["touchInset"] = json!({ "left": -6, "right": -6 });
+    value["variants"][0]["pages"][0]["keys"][0]["extendedEdges"] =
+        json!({ "left": -6, "right": -6 });
     let report = check(&value);
     assert!(
         !report

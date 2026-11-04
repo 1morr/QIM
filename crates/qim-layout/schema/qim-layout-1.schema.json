@@ -102,8 +102,8 @@
           "default": 0
         },
         "shape": { "$ref": "#/$defs/shape" },
-        "touchInset": {
-          "description": "觸控範圍比 frame 每邊往外擴的距離，負數往內縮（同 Delta skin 的 extendedEdges）。",
+        "extendedEdges": {
+          "description": "觸控範圍比 frame 每邊往外擴的距離，負數往內縮（同 Delta skin 的 extendedEdges，同名同義）。",
           "type": "object",
           "additionalProperties": false,
           "properties": {
