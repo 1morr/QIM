@@ -41,6 +41,7 @@
 | 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
 | 2026-11-04 | M1 20 | 長按、符號頁、自訂頁、放大預覽、深色、橫向；核心加 `Session::text`；Gboard 佈局直橫兩版過嚴格檢查；細節見票 20 | 新 session 下 `/implement .scratch/m1/issues/21-edit-segments-in-composition.md` |
+| 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 | 2026-11-04 | M1 22 | 組字顯示字根；`cangjie-hint` 資料包與 `--verify` 抽查；組字中 Tab、觸控長按候選列出字根提示；細節見票 22 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等 20、21） |
 
 ## 偏差與決定
@@ -86,6 +87,10 @@
 - 2026-11-04 M1 13 後（使用者決定）：規則 2 的「上屏 ≥ 2 次」與「最近」只算整串輸入碼就是那個碼的上屏，句中各段只進 `personal`，免得句中用過的字搶到單打首選（plan §2.4、brief §4.5）。
 - 2026-11-04 M1 11：詞的段改成第一字用 bigram、詞內用詞頻（plan §2.3）：詞內也用字級 bigram 時同碼的詞分不出常用度，個人集答錯 1146 → 1452；票 12 用 dev 複核。
 - 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。
+- 2026-11-04 M1 12：口語語料權重放 `corpora.rs` 不放方案檔（票寫 `quick.toml`）：它屬於各方案共用的語言模型（plan §2.5、§4.3）。
+- 2026-11-04 M1 12：調參只看 dev，但個人集當守門：dev 偏好的低 β、詞內內插都讓個人集答錯變多，取過守門的 dev 最佳點（plan §2.3、§5.2，票 12）。
+- 2026-11-04 M1 12：`--update-baseline` 接受 zh-wiki 答錯 +20、修正 +4.3%，換口語兩集修正 −32%、−36%（brief §9：維基只防退步）。
+- 2026-11-04 M1 12：詞庫字頻也乘語料權重；bigram 剪枝看乘權重後的次數，口語字對全留（plan §4.2、§4.3）。
 - 2026-11-04 M1 19：佈局格式加四向 `swipe`（M5 才有作用）；鍵盤底色不進格式，由殼依淺深色決定；`touchInset` 正數往外擴（plan §2.6）。
 - 2026-11-04 M1 19：「切得回字母頁」只算點一下的 `switchPage`，長按、滑動、組字中的動作不算，免得頁面只靠它們回去而困住使用者（plan §2.6）。
 - 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
@@ -94,6 +99,7 @@
 - 2026-11-04 M1 20：組字中按觸控文字鍵先上屏組字再接文字（同票 10 的標點），核心加 `Session::text`，不用 `Key::Text` 以保住 `Key: Copy`（plan §2.1、§2.6）。
 - 2026-11-04 M1 20：觸控鍵改在放開時做動作，按住 400 ms 出長按清單；快打時前一指先當點一下做掉；轉向時留在同 id 的頁（plan §2.6）。
 - 2026-11-04 M1 20：預設佈局的字母鍵長按用 `text`，英文字母直接上屏不進組字，第一排字母在前、數字在後；切頁時組字留著（plan §2.6）。
+- 2026-11-04 M1 12：合併 main 後 `personal` 的 w 由 0.2 改 0.05：新參數下 0.2 讓口語集學習開反而多修正；學習模式暫改讀 dev 掃出（plan §2.3、票 12）。
 - 2026-11-04 M1 22：字根提示用組字中的 Tab 叫出、觸控長按候選，fcitx5 table 是設定開關、沒有快捷鍵（brief §4.3、§4.4、§12.4）。
 - 2026-11-04 M1 22：`Composition.radicals` 只含還沒選定的輸入碼的字根，選定的分段顯示字詞（plan §2.1）。
 - 2026-11-04 M1 22：字根提示資料包不經 `Engine`，殼用 `RadicalHints::for_scheme` 另外載入；方案多了欄位，`FORMAT_VERSION` 4 → 5（plan §2.5、§4.1）。

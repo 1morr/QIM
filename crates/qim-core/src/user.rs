@@ -5,8 +5,10 @@ use std::collections::BTreeMap;
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
 const DECAY_STEP: f64 = 200.0;
 
-/// 個人機率在 `personal` 裡的權重 w（plan §2.3 的初值，libime `UserLanguageModel`）。
-const PERSONAL_WEIGHT: f64 = 0.2;
+/// 個人機率在 `personal` 裡的權重 w（plan §2.3，libime `UserLanguageModel` 的式子）。libime 用
+/// 0.2；M1 票 12 換上口語權重與新的 β、γ 後，0.2 讓口語集學習開反而多修正，dev 切分上 0.05
+/// 對口語與維基都最好。
+const PERSONAL_WEIGHT: f64 = 0.05;
 
 /// 排位規則 2 的期限：距最後上屏不超過這麼多次上屏（plan §2.4 的初值）。
 pub(crate) const RECENT_COMMITS: u64 = 10_000;

@@ -15,7 +15,7 @@ pub struct Item {
 }
 
 /// 基準模擬打字的單位：一段輸入碼與它該打出的文字。是題目檔的切法，和核心組字的〈分段〉（`Segment`）無關。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Unit {
     pub code: String,
     pub text: String,
@@ -95,6 +95,27 @@ pub fn parse_personal(text: &str) -> Result<Vec<Item>, String> {
         items.push(per_character(number, codes, word, weight)?);
     }
     Ok(items)
+}
+
+/// 題目裡每段連續 `len` 個字各當一題（逐字的碼 → 那幾個字），不重複，權重是出現的次數；
+/// 依第一次出現的順序，行號是這個順序。dev 模式量短輸入（單字、詞）的首選用。
+pub fn substrings(items: &[Item], len: usize) -> Vec<Item> {
+    let mut found: Vec<Item> = Vec::new();
+    let mut index = std::collections::HashMap::new();
+    for window in items.iter().flat_map(|item| item.units.windows(len)) {
+        let i = *index.entry(window.to_vec()).or_insert_with(|| {
+            let line = found.len() + 1;
+            found.push(Item {
+                units: window.to_vec(),
+                line,
+                label: format!("第 {line} 題"),
+                weight: 0,
+            });
+            line - 1
+        });
+        found[i].weight += 1;
+    }
+    found
 }
 
 /// 每個字配一個碼的題目；碼數與字數不同就是壞檔。訊息不帶內容，個人集也用它。

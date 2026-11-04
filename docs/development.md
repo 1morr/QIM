@@ -37,7 +37,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`、預設佈局到 `build/layouts/`，見〈資料建置〉 |
-| `cargo xtask bench [--check \| --update-baseline \| --learning]` | 首選字基準，見〈首選字基準〉 |
+| `cargo xtask bench [--check \| --update-baseline \| --learning \| --dev [--set <鍵>=<值>]…]` | 首選字基準，見〈首選字基準〉；`--dev` 調參用，見〈dev 切分調參〉 |
 
 ## 資料建置
 
@@ -55,9 +55,9 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `upstream_file`：上游釘住 sha256 的授權檔（`files` 之一）整份寫進 `LICENSE`（rime-essay 的 `LICENSE`）。
   - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包、bigram 進語言模型資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
-- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分相加的字頻（plan §4.2），在語料之後建；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建；字根提示資料包的 `<id>` 是 `[packs]` 的 `radical_hint`（`cangjie-hint`），是 libcangjie 每個漢字的倉頡三代 / 五代碼（plan §4.1 步驟 5，`crates/qim-databuild/src/radical_hint.rs`），授權只有 libcangjie，`Engine` 不載入它，由殼另外載入顯示（ADR 0003）。四種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
+- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分乘上語料權重相加的字頻（plan §4.2），在語料之後建；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建；字根提示資料包的 `<id>` 是 `[packs]` 的 `radical_hint`（`cangjie-hint`），是 libcangjie 每個漢字的倉頡三代 / 五代碼（plan §4.1 步驟 5，`crates/qim-databuild/src/radical_hint.rs`），授權只有 libcangjie，`Engine` 不載入它，由殼另外載入顯示（ADR 0003）。四種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
 - 預設佈局：`build/layouts/gboard-quick.json`，Gboard 速成的手機直向與橫向，各有字母、符號、常用（自訂頁面的示範）三頁，由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式 `qim-layout/1` 的型別與 JSON Schema 在 `crates/qim-layout`（`schema/qim-layout-1.schema.json`）。不讀來源、沒有授權檔。內建佈局的嚴格檢查（plan §5.3）是 `crates/qim-databuild/tests/gboard.rs` 的測試，跟著 `cargo xtask check` 的 `test` 跑；網頁載入佈局時把驗證的警告印在瀏覽器 console。
-- 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`chars.tsv`（字頻，見〈語料〉），後三者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 45 秒，`--verify` 把語料再建一次、bigram 再訓練一次比 sha256，約 80 秒（Apple M6，release）。
+- 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`dev.tsv`（dev 切分的調參題，取法與格式同基準檔，見〈首選字基準〉的〈dev 切分調參〉）、`chars.tsv`（字頻，見〈語料〉），後四者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 45 秒，`--verify` 把語料再建一次、bigram 再訓練一次比 sha256，約 80 秒（Apple M6，release）。
 
 `--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、四份資料包的 sha256、詞庫的詞數與被門檻和字集濾掉的數量、有字頻的字數、bigram 的字數與剪枝前後的相鄰字對數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）與 `anr` 的「門口」經 `qim-core` 的 `Engine` 查，與網頁同一條路。
 
@@ -71,7 +71,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 例如 `an r⇥門口`（`⇥` 是 tab）。輸入碼是把各字的碼接起來；分開寫是讓基準知道每個字用了幾個鍵。轉碼由 `qim_databuild::transcode::Transcoder` 做：每個字取第一個五代碼的速成碼，沒有五代碼才取三代碼，連打字集以外的字轉碼失敗。
 
-`build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻；各語料的次數直接相加後放進詞庫資料包，`Engine` 載入時用它排字序（plan §4.1、§4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
+`build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻；各語料的次數乘上語料權重（和 bigram 同一個，`corpora.rs` 的 `weight`）相加後放進詞庫資料包，`Engine` 載入時用它排字序（plan §4.1、§4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
 
 `--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練）、建兩次基準檔、切分與字頻的 sha256 相同。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。
 
@@ -159,6 +159,22 @@ ln -s <主 checkout>/bench/personal bench/personal
 ```
 
 `.gitignore` 的 `/bench/personal` 不帶結尾斜線，目錄與軟連結都排除；帶斜線只比對目錄，軟連結會變成未追蹤檔。接上後各 worktree 共用同一份 `rime-userdb.tsv` 與 `baseline.json`：在任一個 worktree 跑 `cargo xtask data` 或 `--update-baseline` 都會改到主 checkout 那份。
+
+### dev 切分調參
+
+β、γ 這類打分參數只用 dev 切分調（plan §2.3、§5.2），不看 test 與個人集：
+
+```sh
+cargo xtask bench --dev                                              # 用方案檔的值打各集合的 dev 切分
+cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫時蓋掉方案檔 [ranking] 的值
+```
+
+- 題目是 `build/corpus/<名>/dev.tsv`，`<名>` 是 `bench/corpus/`、`bench/colloquial/` 下的每個集合；由 `cargo xtask data` 寫出，取 dev 切分雜湊最小的 2,000 個不重複句，格式同基準檔。沒有就失敗，先跑 `cargo xtask data`。
+- `--set` 可重複，鍵是方案檔 `[ranking]` 的欄位名（`word_bonus`、`segment_penalty`、`beam`、`sentences`）；資料包不變。語料權重要改 `crates/qim-databuild/src/corpora.rs` 再 `cargo xtask data`。
+- 每個集合後面接兩組由它的 dev 句子取出的短輸入（依出現次數加權的列才是照語料打的正確率）：`<名>·單字` 是句子裡每個字單獨打，`<名>·詞` 是句子裡出現、詞庫也有的 2–4 字詞單獨打。dev 都是長句，沒有它們就看不出參數讓兩碼的單字或單打一個詞時選錯。
+- 只印結果：固定題、各集合與短輸入的指標表、依長度分組；不比 baseline、不跑個人集、不量每鍵延遲，所以不重編 WebAssembly 綁定，一次約 15 秒（Apple M6）。
+- dev 的句子和 bigram 的訓練語料同源，字級 bigram 在 dev 上特別準：票 12 照 dev 調低 β 時個人集（使用者自己的詞）答錯變多，`·詞` 也看不出來。所以 dev 挑出的參數仍要過 `cargo xtask bench --check` 的個人集 baseline。
+- 格點搜尋：`scripts/experiments/bigram-tuning/grid.sh "<β 值…>" "<γ 值…>" [<鍵>=<值>…]` 平行跑每一格，一格一列 TSV；票 12 的調參過程與結果在 `.scratch/m1/issues/12-bigram-tuning-and-report.md`。
 
 ### 每鍵延遲
 

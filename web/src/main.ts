@@ -1,4 +1,5 @@
 import { type Key, toKey } from "./keys.ts";
+import { fixedLine, initialReport, observe } from "./report.ts";
 import "./style.css";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
@@ -34,6 +35,13 @@ const incognito = element<HTMLInputElement>("#incognito");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const darkToggle = element<HTMLButtonElement>("#dark-toggle");
+const reportButton = element<HTMLButtonElement>("#report");
+const reports = element<HTMLTextAreaElement>("#reports");
+const copyReports = element<HTMLButtonElement>("#copy-reports");
+
+/** 回報清單存在 `localStorage`，重新整理不會不見。 */
+const REPORTS_KEY = "qim.reports";
+let report = initialReport;
 const hintVersion = element<HTMLSelectElement>("#hint-version");
 /** 長按候選多久叫出字根提示（毫秒）；和 Android 的長按門檻同級。 */
 const LONG_PRESS_MS = 500;
@@ -158,13 +166,41 @@ function insert(commit: string): void {
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。 */
-function apply(snapshot: Snapshot): void {
+/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。`chosen` 是這個鍵是不是選字（空白、數字鍵）。 */
+function apply(snapshot: Snapshot, chosen: boolean): void {
+	const before = report.last;
+	report = observe(report, { ...readReported(snapshot), chosen });
+	if (report.last !== before) {
+		reportButton.disabled = report.last === undefined;
+	}
 	if (snapshot.commit !== undefined) {
 		insert(snapshot.commit);
 	}
 	render(snapshot);
 	touchKeyboard?.refresh();
+}
+
+/** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
+function readReported(snapshot: Snapshot) {
+	return {
+		input: snapshot.input,
+		selected: snapshot.selected,
+		candidates: snapshot.candidates,
+		commit: snapshot.commit,
+	};
+}
+
+/** 把剛才那次組字加到回報清單最後一行；同一次只加一次。 */
+function addReport(): void {
+	if (!report.last) {
+		return;
+	}
+	const lines = reports.value === "" ? [] : reports.value.split("\n");
+	lines.push(fixedLine(report.last));
+	reports.value = lines.join("\n");
+	localStorage.setItem(REPORTS_KEY, reports.value);
+	reportButton.disabled = true;
+	text.focus();
 }
 
 /** 觸控鍵盤上核心沒吃下的動作：照輸入框收到實體按鍵時的預設動作。 */
@@ -272,7 +308,14 @@ async function start(): Promise<void> {
 	for (const warning of layout.warnings) {
 		console.warn(`佈局：${warning}`);
 	}
-	touchKeyboard = mountKeyboard(keyboard, layout, session, apply, hostDefault);
+	touchKeyboard = mountKeyboard(
+		keyboard,
+		layout,
+		session,
+		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
+		(snapshot) => apply(snapshot, snapshot.action === "space"),
+		hostDefault,
+	);
 	const mounted = touchKeyboard;
 	// 轉向時重選佈局版本（plan §2.6），留在同一頁。
 	window
@@ -302,6 +345,16 @@ async function start(): Promise<void> {
 		chosenDark = darkToggle.getAttribute("aria-pressed") !== "true";
 		applyTheme();
 	});
+	reports.value = localStorage.getItem(REPORTS_KEY) ?? "";
+	reports.addEventListener("input", () => {
+		localStorage.setItem(REPORTS_KEY, reports.value);
+	});
+	reportButton.addEventListener("click", addReport);
+	copyReports.addEventListener("click", () => {
+		navigator.clipboard.writeText(reports.value).catch((error: unknown) => {
+			status.textContent = `複製失敗：${String(error)}`;
+		});
+	});
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);
@@ -320,7 +373,7 @@ async function start(): Promise<void> {
 				return;
 			}
 			event.preventDefault();
-			apply(snapshot);
+			apply(snapshot, key.kind === "space" || key.kind === "digit");
 		} finally {
 			snapshot.free();
 		}
