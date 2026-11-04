@@ -345,8 +345,8 @@ fn enter_after_selecting_a_beginning_commits_its_text_and_the_rest_as_typed() {
 }
 
 #[test]
-fn z_toggle_ascii_and_other_keys_are_swallowed_and_change_nothing() {
-    for key in [Key::Letter('z'), Key::ToggleAscii, Key::Other] {
+fn z_and_other_keys_are_swallowed_and_change_nothing() {
+    for key in [Key::Letter('z'), Key::Other] {
         let mut ime = Ime::new(&men_kou());
         let typed = ime.type_code("anr");
         let pressed = ime.press(key);
@@ -442,7 +442,6 @@ fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_
         Key::Enter,
         Key::Left,
         Key::Right,
-        Key::ToggleAscii,
         Key::Other,
     ] {
         let pressed = ime.press(key);

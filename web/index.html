@@ -11,11 +11,23 @@
 			<label><input type="checkbox" id="simplified" /> 簡體</label>
 			<textarea id="text" aria-label="輸入框" rows="4" readonly></textarea>
 			<div id="composition" data-testid="composition"></div>
-			<ol id="candidates" aria-label="候選"></ol>
+			<div class="candidate-bar">
+				<span id="mode" data-testid="mode" title="單按 Shift 切換中英">中</span>
+				<ol id="candidates" aria-label="候選"></ol>
+				<button id="expand" type="button" aria-label="展開候選" aria-expanded="false" aria-controls="panel" hidden>⌄</button>
+			</div>
+			<ol id="panel" aria-label="全部候選" hidden></ol>
 			<p id="status" role="status">載入中…</p>
 			<div class="settings">
 				<button id="touch-toggle" type="button" aria-pressed="false">觸控鍵盤</button>
 				<button id="dark-toggle" type="button" aria-pressed="false">深色</button>
+				<label>重排
+					<select id="rerank">
+						<option value="off">關</option>
+						<option value="identity" selected>原樣（假實作）</option>
+						<option value="raise-fifth">第 5 個提前（測試）</option>
+					</select>
+				</label>
 				<label>字根提示
 					<select id="hint-version">
 						<option value="cangjie5" selected>倉頡五代</option>
@@ -24,6 +36,25 @@
 				</label>
 			</div>
 			<div id="keyboard" data-testid="keyboard" hidden></div>
+			<section id="user-dict" aria-label="使用者詞">
+				<form id="add-word">
+					<label>詞 <input id="word" type="text" required /></label>
+					<label>觸發詞 <input id="trigger" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" /></label>
+					<button type="submit">加詞</button>
+				</form>
+				<div>
+					<button id="export-user-dict" type="button">匯出學習資料</button>
+					<label>匯入學習資料（取代目前的） <input id="import-user-dict" type="file" accept=".tsv,.txt,text/tab-separated-values,text/plain" aria-describedby="import-note" /></label>
+					<button id="clear-user-dict" type="button">清空學習資料</button>
+				</div>
+				<p id="import-note" class="note">匯入會用檔案的內容覆蓋目前全部的學習資料，不是合併；要保留目前的，先匯出。</p>
+				<fieldset id="confirm-import" aria-label="確認匯入" hidden>
+					<p id="confirm-import-text"></p>
+					<button id="confirm-import-ok" type="button">確定匯入</button>
+					<button id="confirm-import-cancel" type="button">取消</button>
+				</fieldset>
+				<p id="user-dict-status" role="status" aria-label="學習資料狀態"></p>
+			</section>
 			<section id="report-panel" aria-label="回報">
 				<button id="report" type="button" disabled>回報</button>
 				<label for="reports">回報的固定題（<code>bench/fixed.tsv</code> 的行；期望的字不對可以直接改）</label>

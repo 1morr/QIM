@@ -51,6 +51,10 @@
 | 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 17b | 粵語語料改用 `t2hk`、「揾」寫成「搵」，`--verify` 查 9 個粵語字的字頻；「搵工」「走晒」「試吓」進 `fixed.tsv`，口語修正 −0.9%；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
 | 2026-11-04 | M1 17b | 字形用常見寫法（使用者決定）：34 組對照表換回「說溫群衛」，`--verify` 查換掉的寫法不在 train；`et` 溫、`sq` 群進 `fixed.tsv`；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
+| 2026-11-04 | M1 23 | 展開面板、單按 Shift 英文直通、重排介面與假實作、翻頁不加 `generation`、簡體文字鍵、組字中組合鍵吃下；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md`（14、17 另在並行） |
+| 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 23 | merge main（票 14、17）：衝突只在文件與 `main.ts` 的 `start()`；data --verify、bench --check、check 全套與亂按都過；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 
 ## 偏差與決定
 
@@ -114,9 +118,18 @@
 - 2026-11-04 M1 22：字根提示用組字中的 Tab 叫出、觸控長按候選，fcitx5 table 是設定開關、沒有快捷鍵（brief §4.3、§4.4、§12.4）。
 - 2026-11-04 M1 22：`Composition.radicals` 只含還沒選定的輸入碼的字根，選定的分段顯示字詞（plan §2.1）。
 - 2026-11-04 M1 22：字根提示資料包不經 `Engine`，殼用 `RadicalHints::for_scheme` 另外載入；方案多了欄位，`FORMAT_VERSION` 4 → 5（plan §2.5、§4.1）。
+- 2026-11-04 M1 14：規則 2 補上「整串上屏剛好 1 次的候選不靠學到的分數成首選」：個人分壓過多字候選的靜態機率，選一次就成首選，違反 brief §4.5（plan §2.4、票 14）。
+- 2026-11-04 M1 14（使用者確認）：匯出格式由票上 7 欄改 9 欄，多記衰減值與整串上屏的 tick；匯入取代整份、壞一列整份不收，網頁匯入前在頁面上確認（plan §2.4、§3.1）。
 - 2026-11-04 M1 17：粵語口語詞表在 repo 裡、不經 `sources.toml`（不是下載的來源），詞庫資料包 `NOTICE` 記它的路徑與 sha256，授權用 `data/licenses/CC0-1.0.txt`（plan §4.2）。
 - 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。
 - 2026-11-04 M1 16（協調者決定）：快照的候選、分段與上屏另帶繁體原文（`original`、`commit_original`），「回報」與字根提示用原文，簡體模式不停用回報（plan §2.1）。
 - 2026-11-04 M1 16：merge 票 21 後簡體的轉換單位由「一個候選」改為「一個分段」：選了多段候選後各段分開固定，候選列也要各段分開轉換，看到的才是上屏的（plan §2.1）。
 - 2026-11-04 M1 17b：粵語維基、HKCanCor、Common Voice 改用 OpenCC `t2hk`，只有中文維基用 `s2hk`：`s2hk` 把繁體裡也是簡體的字再轉一次，粵語維基換錯約 6.8 萬字（plan §4.3、brief §12.1）。
 - 2026-11-04 M1 17b（使用者決定）：字形用常見寫法、不用香港寫法：語料轉換後照 OpenCC `t2hk`、`t2tw` 逐字查出的對照表換回（「説→說」「羣→群」，34 組），不同碼的不換（brief §4.1、plan §4.3）。
+- 2026-11-04 M1 23：翻頁不再加 `generation`，翻頁中收到的重排結果照樣套用：重排只動第一頁，看得到的頁不變（plan §2.1，M0 票 09 留下的）。
+- 2026-11-04 M1 23：`apply_rerank` 多一個 `engine` 參數；名次變了才加 `generation`，原樣回傳不作廢另一層的結果（plan §2.1）。
+- 2026-11-04 M1 23：組字中單按 Shift 先上屏整個組字再切英文，照 Rime `commit_text`、不學 `inline_ascii`；判定 500 ms 在殼（brief §4.3、plan §2.1）。
+- 2026-11-04 M1 23：桌面展開面板用 ↓ / ↑，由殼攔下：Microsoft 速成的 Tab、→ 展開已給字根提示與分段（brief §4.3、§12.4，plan §3.1）。
+- 2026-11-04 M1 23：組字中 Ctrl / Cmd / Alt 組合鍵吃下不動作，Cmd+V 不再貼進輸入框；Cmd+C、Option＋字母組字中也沒作用（brief §4.3）。
+- 2026-11-04 M1 23（使用者決定）：簡體模式下觸控文字鍵也轉簡體，原文留繁體給回報與學習（plan §2.1）。
+- 2026-11-04 M1 23 後（使用者確認）：組字中單按 Shift 維持先上屏整個組字再切英文，左右 Shift 相同，要原碼用 Enter（brief §4.3）。

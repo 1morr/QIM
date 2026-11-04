@@ -367,3 +367,15 @@ test("簡體模式下觸控打字：空白上屏簡體，組字中點符號先�
 	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
 	await expect(text).toHaveValue("门口门口？");
 });
+
+// 使用者 2026-11-04 決定（M1 票 23）：「常用」頁的文字鍵在簡體模式也轉簡體。
+test("「常用」頁的「多謝」：簡體模式上屏「多谢」，繁體模式「多謝」", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await tapKeys(page, ["to-symbols", "to-phrases", "多謝"]);
+	await expect(text).toHaveValue("多謝");
+	await page.getByLabel("簡體").tap();
+	await tapKeys(page, ["多謝"]);
+	await expect(text).toHaveValue("多謝多谢");
+});

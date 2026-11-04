@@ -19,6 +19,7 @@ body {
 
 .settings {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 0.5rem;
 }
 
@@ -50,7 +51,29 @@ textarea {
 	color: #fff;
 }
 
+/* 候選列：左邊中英狀態，右邊展開鍵（brief §4.4）。 */
+.candidate-bar {
+	/* grid 的子項預設不縮；不設的話候選撐寬頁面，手機上整頁被縮小。 */
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+#mode {
+	color: gray;
+	font-size: 0.875rem;
+}
+
+#expand {
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
 #candidates {
+	/* 可以縮到比內容窄，放不下的在列內左右滑，不撐寬頁面。 */
+	flex: 1;
+	min-width: 0;
 	display: flex;
 	gap: 1rem;
 	min-height: 2rem;
@@ -77,6 +100,28 @@ textarea {
 #candidates .index {
 	color: gray;
 	font-size: 1rem;
+}
+
+/* 候選展開面板：一次列全部候選（brief §4.4），太多時面板內上下捲。 */
+#panel {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1rem;
+	max-height: 12rem;
+	overflow-y: auto;
+	margin: 0;
+	padding: 0.5rem;
+	list-style: none;
+	font-size: 1.5rem;
+	border: 1px solid light-dark(#dadce0, #5f6368);
+}
+
+#panel[hidden] {
+	display: none;
+}
+
+#panel li {
+	cursor: pointer;
 }
 
 /* 固定在畫面底部，跟真的鍵盤一樣：上方的組字與候選變高時鍵盤不跟著移動。 */
@@ -169,4 +214,27 @@ body:has(#keyboard:not([hidden])) {
 	width: 100%;
 	font-size: 1rem;
 	font-family: ui-monospace, monospace;
+}
+
+#user-dict .note {
+	margin: 0;
+	color: gray;
+	font-size: 0.875rem;
+}
+
+/* 匯入前的確認（plan §2.4：匯入取代整份），用頁面上的區塊，不用瀏覽器原生對話框。 */
+#confirm-import {
+	margin: 0;
+	padding: 0.5rem;
+	border: 1px solid #d93025;
+	border-radius: 0.25rem;
+	background: #fce8e6;
+}
+
+#confirm-import[hidden] {
+	display: none;
+}
+
+#confirm-import p {
+	margin: 0 0 0.5rem;
 }

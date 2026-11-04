@@ -277,10 +277,72 @@ fn space_after_paging_still_commits_the_top_candidate_of_the_first_page() {
 }
 
 #[test]
-fn paging_counts_as_a_candidate_change_only_when_the_page_moves() {
+fn only_a_change_of_candidates_changes_the_generation() {
     let mut ime = Ime::new();
     let typed = ime.press(Key::Letter('a')).generation;
-    let turned = ime.press(Key::PageDown).generation;
-    assert_ne!(turned, typed);
-    assert_eq!(ime.press(Key::PageDown).generation, turned);
+    // 翻頁不是候選變動（M1 票 23，重排的規則見 `tests/rerank.rs`）。
+    assert_eq!(ime.press(Key::PageDown).generation, typed);
+    assert_ne!(ime.press(Key::Backspace).generation, typed);
+}
+
+/// 單按 Shift（`ToggleAscii`）切英文直通（brief §4.3）：英文狀態下鍵都交還宿主，再按一次回中文。
+#[test]
+fn toggle_ascii_passes_keys_to_the_host_until_toggled_back() {
+    let mut ime = Ime::new();
+    let toggled = ime.press(Key::ToggleAscii);
+    assert!(toggled.handled);
+    assert!(toggled.ascii);
+    for key in [
+        Key::Letter('a'),
+        Key::Punct(','),
+        Key::Space,
+        Key::Digit(1),
+        Key::Enter,
+        Key::Other,
+    ] {
+        let pressed = ime.press(key);
+        assert!(!pressed.handled, "{key:?}");
+        assert!(pressed.ascii, "{key:?}");
+        assert_eq!(pressed.composition.input, "", "{key:?}");
+    }
+    let back = ime.press(Key::ToggleAscii);
+    assert!(!back.ascii);
+    assert_eq!(ime.press(Key::Letter('a')).composition.input, "a");
+}
+
+/// 組字中切英文：先上屏整個組字，同按空白（Rime `ascii_composer` 的 `commit_text`；
+/// 要上屏輸入碼有 Enter）。
+#[test]
+fn toggle_ascii_while_composing_commits_the_composition_first() {
+    let mut ime = Ime::new();
+    ime.press(Key::Letter('a'));
+    let toggled = ime.press(Key::ToggleAscii);
+    assert!(toggled.handled);
+    assert!(toggled.ascii);
+    assert_eq!(toggled.commit.as_deref(), Some("日"));
+    assert_eq!(toggled.composition.input, "");
+    assert!(toggled.candidates.is_empty());
+}
+
+/// 候選展開面板（brief §4.4）一次列全部候選，不分頁；選字用全部候選的位置。
+#[test]
+fn all_candidates_lists_every_page_and_select_takes_its_position() {
+    let mut ime = Ime::new();
+    assert!(ime.session.all_candidates().is_empty());
+    ime.press(Key::Letter('a'));
+    let all: Vec<String> = ime
+        .session
+        .all_candidates()
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert_eq!(
+        all,
+        "日曰昌晶昍旦早旭旨旬"
+            .chars()
+            .map(String::from)
+            .collect::<Vec<_>>()
+    );
+    let chosen = ime.session.select(&ime.engine, &mut ime.user, 9);
+    assert_eq!(chosen.commit.as_deref(), Some("旬"));
 }
