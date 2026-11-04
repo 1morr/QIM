@@ -320,3 +320,21 @@ fn using_a_twice_chosen_candidate_in_a_sentence_does_not_make_it_more_recent() {
     assert_eq!(committed.commit.as_deref(), Some("乙丁"));
     assert_eq!(ime.top_of(&mut user, "ab"), "丙");
 }
+
+/// 觸控鍵盤的文字鍵（`Session::text`，M1 票 20）組字中和標點相同：先上屏組字，照樣學。
+#[test]
+fn a_touch_text_key_learns_the_composition_like_punctuation() {
+    let mut by_punct = UserModel::default();
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code(&mut by_punct, "anr");
+    let punct = ime.press(&mut by_punct, Key::Punct(','));
+
+    let mut by_text = UserModel::default();
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code(&mut by_text, "anr");
+    let text = ime.session.text(&ime.engine, &mut by_text, "，");
+
+    assert_eq!(text.commit, punct.commit);
+    assert_ne!(by_text, UserModel::default());
+    assert_eq!(by_text, by_punct);
+}

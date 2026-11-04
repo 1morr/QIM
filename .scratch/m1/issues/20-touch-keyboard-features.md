@@ -51,3 +51,4 @@ Blocked by: 19
   - 綁定裡 `Action` 轉 `Key`：`qim-layout` 不能依賴 `qim-core`（plan §1.3），只能放在綁定。M2 的 `qim-ffi` 要用時，再決定要不要抽成共用。
   - 淺深兩組顏色攤平成四個欄位：wasm-bindgen 的 getter 不好回傳巢狀物件，網頁也只把它們接成 `light-dark()`。
   - 放開才做動作、兩指交疊：票沒寫，但分辨點一下與長按一定會帶出這兩點。已寫進 plan §2.6，平台殼照做。
+- 2026-11-04 合併 main（票 13，`0736054`）：沒有文字衝突，但有一處語意衝突：票 13 讓 `commit_all_then` 多收 `&mut UserModel`（標點先上屏組字時照樣學），`Session::text` 編不過。改成把 `user` 傳下去，觸控文字鍵和標點一樣學。`tests/learning.rs` 補「文字鍵與標點學到的 `UserModel` 相同且不是空的」，雙向驗過：改成學進丟掉的 `UserModel` 時會紅。合併後 `cargo xtask data` 通過（資料包 sha256 不變：quick `f9499e401df5`、quick-lexicon `fe79d8a13d48`、zh-hant-bigram `088a93199bd2`）；`bench --check` exit 0，各集合沒有翻盤，固定題 11/11；`cargo xtask check` 通過（e2e `44 passed`）。合併後觸控亂按：4 個種子 × 150 步，加切換無痕，三頁都走到，沒有錯誤。
