@@ -89,11 +89,13 @@ QIM（暫名）。
 | Esc | 清除輸入碼 |
 | ← / → | 組字中移到前一段或後一段，候選改列該段的字詞；← 從最後一段開始，→ 走過最後一段回到整串 |
 | Tab | 組字中在候選旁列出或收起字根提示；沒有組字時交還宿主 |
-| Shift（單按） | 切換中英文 |
+| Shift（單按） | 切換中英文；組字中先上屏整個組字（同一直按空白）再切換，左右 Shift 相同；要上屏原碼用 Enter。英文狀態下按鍵直接交給宿主 |
+| ↓ / ↑ | 組字中打開或收起候選展開面板 |
 | 標點 | 組字中先上屏整個組字再接標點；沒有組字時直接上屏標點 |
 | 大寫字母（Shift＋字母） | 組字中先上屏整個組字再接那個字母；沒有組字時照打 |
 
-- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、還沒做的 Shift）組字中吃下不動作；`z` 留給萬用鍵（§1.5）。
+- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、Delete、Home、End）與 Ctrl / Cmd / Alt 組合鍵（Cmd+C、Option＋字母也是）組字中吃下不動作，不然 Cmd+V 貼進輸入框而組字還在；`z` 留給萬用鍵（§1.5）。
+- 單按 Shift：按下到放開 500 ms 內、中間沒有別的鍵才算，Shift＋字母是大寫、Ctrl＋Shift 不算（librime `ascii_composer` 同值）。組字中按下照 Rime `commit_text` 上屏組字，不學 `inline_ascii` 留著組字接英文：要原碼有 Enter。
 - 「上屏整個組字」和一直按空白相同：已選定的分段，接著逐次取剩下的輸入碼的首選，沒有字的碼原樣上屏。移到某一段時按空白也是上屏整個組字。
 - 參考：組字中按標點，macOS、iOS 速成與 Gboard 都先上屏首選再出標點（[黑箱基線](research/blackbox-baseline.md) T18）。Enter、大寫字母照 librime express_editor：Return 是 `CommitRawInput`（選定的段上屏字、其餘上屏原碼），方案以外的可見字元是 `DirectCommit`（先上屏組字、字元照打）。macOS、Gboard 的 Enter 上屏首選，macOS 的 Shift＋字母把整串改成英文，都不學：要首選有空白，要英文有 Enter。
 - 標點預設全形：`,` `.` `?` `!` `;` `:` `(` `)` `[` `]` `{` `}` `<` `>` `\` `^` `_` 依序轉成 ， 。 ？ ！ ； ： （ ） 「 」 『 』 《 》 、 …… ——，取 rime-prelude `punctuation.yaml` `half_shape` 每鍵第一個是全形的選項，不出標點選單。其他符號上屏半形：引號要配對（智慧標點，§4.7）；`/`（Rime 是「、」，和 `\` 重複，留給網址與分數）、`$`（Rime 是「￥」，香港用 $）不學 Rime；其餘 Rime 的第一個選項就是半形。`-` / `=` 是翻頁鍵，沒有組字時照打。
@@ -284,6 +286,7 @@ QIM（暫名）。
 - userdb 的輸入碼是詞典的音節碼，不是使用者按的鍵：使用者速成方案（rime-quick）的 4,528 個詞、9,241 個音節，99.5% 等於該字的倉頡全碼，沒有一個是速成碼。所以看不出使用者打的是速成碼還是全碼，也看不出三代或五代。本機統計（小狼毫 `quick5.userdb`，用 `rime_dict_manager -b` 轉出），2026-11-04。
 - express_editor（「按非方案的字元就上屏」的編輯器）的 Return 綁 `CommitRawInput`：丟掉沒選定的段再上屏，選定的段上屏候選、其餘上屏原碼；方案與標點都不收的可見 ASCII 字元走 `DirectCommit`：上屏組字（每段取選定的候選，沒選的取第一個）後回 `kRejected`，字元交給宿主照打。組字中按標點時標點自成一段，只有一個選項的確認、帶 `commit` 的連同組字一起上屏。librime `9777cb2`：`src/rime/gear/editor.cc:113-116,178-181,204-216`、`src/rime/composition.cc:102-120`、`src/rime/gear/punctuator.cc:122-136,202-215`，2026-11-04 查。
 - rime-prelude `punctuation.yaml` 的 `half_shape`：`,` `.` `?` `!` `;` `:` 帶 `commit`（，。？！；：），`(` `)` 是（），`[` `]` `{` `}` `<` `>` `\` 第一個選項是「」『』《》、，`^` `_` 是…… ——；引號是配對（‘’、“”），`/` 第一個是、，`$` 是￥，`` ` `` `@` `#` `&` `+` `-` `=` 是半形本身。rime-prelude `082425e`：`punctuation.yaml:39-71`，2026-11-04 查。
+- ascii_composer（中英切換）：單按修飾鍵是按下後 500 ms 內放開、中間沒有別的鍵按下（任何一般鍵按下就解除）。組字中切換的處理由 `switch_key` 選：`inline_ascii`（留著組字接英文）、`commit_text`（確認目前的候選）、`commit_code`（上屏原碼）、`clear`、`noop`；rime-prelude `default.yaml` 的預設是 `Shift_L: inline_ascii`、`Shift_R: commit_text`。[`ascii_composer.cc`](https://github.com/rime/librime/blob/master/src/rime/gear/ascii_composer.cc)、[`default.yaml`](https://github.com/rime/rime-prelude/blob/master/default.yaml)，2026-11-04 查 master。
 - librime-octagram 外掛為 BSD-3-Clause，語法模型資料 rime-octagram-data 為 LGPL-3.0；繁體字級 / 詞級壓縮模型 10.3 MB / 41.4 MB（release 20260712）。[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)。
 
 ### 12.3 平台框架
@@ -316,6 +319,7 @@ QIM（暫名）。
 - llama.cpp 在 iPhone 15 Pro 的 Q4_0 實測：TinyLlama 1.1B prompt 646 token/s、生成 57 token/s。[llama.cpp #4508](https://github.com/ggml-org/llama.cpp/discussions/4508)。
 - libime：KenLM trie，beam 20；每按一鍵增量更新 lattice 的只有拼音引擎（重用舊的位置、只算改過的），碼表引擎每鍵整個重算；拼音選定開頭一段後清掉 lattice、其餘從頭建。`53df6a2`，[`docs/research/libime-lattice.md`](research/libime-lattice.md)，2026-11-04 查。使用者歷史 bigram 以三個 LRU 池（128 / 8192 / 65536 句）固定權重混入。`fcitx/libime` `src/libime/core/decoder.h`、`historybigram.cpp`。
 - libime 的使用者分數：`max(靜態, log10((1−w)·10^靜態 + w·10^歷史))`，`w = 0.2`，歷史只加分不扣分；歷史機率 = 0.2 × unigram + 0.8 × bigram，unigram 除以滿載歷史的總質量（三池權重合計 1.0），不是已學的句數；計數綁輸入碼的變體（`WordWithCode`）給碼表引擎用。授權 LGPL-2.1-or-later。`53df6a2` `src/libime/core/userlanguagemodel.cpp:122-140`、`historybigram.cpp:578-590,660-688`，[`docs/research/libime-user-model.md`](research/libime-user-model.md)，2026-11-04 查。
+- Microsoft 繁體中文輸入法（注音、倉頡、速成）的候選窗：↓ 進入候選窗、在窗內往下移，Tab 或 → 展開成表格，Space 翻頁，數字鍵選字。[Microsoft Traditional Chinese IME](https://support.microsoft.com/en-us/windows/microsoft-traditional-chinese-ime-ef596ca5-aff7-4272-b34b-0ac7c2631a38)，2026-11-04 查。Apple 的候選窗說明沒寫展開的按鍵，只有方向鍵移動、`=` `-` 與 `[` `]` 換列。[Apple](https://support.apple.com/guide/chinese-input-method/use-the-candidate-window-cim12992/mac)。
 - libime table 引擎的使用者詞庫文字檔沒有檔頭與版本號：手動詞一列 `code value`，自動造詞在 `[Auto]` 段多一欄次數 `code value hit`，被刪的系統詞在 `[Delete]` 段；以空白分隔，含空白的值加雙引號。`53df6a2`：`src/libime/table/tablebaseddictionary.cpp:946-998,1027-1051`，[`docs/research/userdict-text-formats.md`](research/userdict-text-formats.md) §2。
 - afm-ime 用 Apple Foundation Models 做異步重排，結果只放第 2 位。`Bemly/afm-ime` `Sources/IMECore/FMReranker.swift`（`a8543a1`）。
 - 可重用的滑動輸入實作：FlorisBoard v0.5.2 `StatisticalGlideTypingClassifier.kt`、AnySoftKeyboard `GestureTypingDetector.java`，皆 Apache-2.0；HeliBoard / OpenBoard 的滑動依賴閉源函式庫。`docs/research/open-source-imes.md` §1。

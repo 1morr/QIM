@@ -60,8 +60,10 @@ test("組字中按 z、←、→ 吃下不動作", async ({ page }, testInfo) =>
 });
 
 // 亂按時找到的：這些鍵網頁原本不轉給核心，組字中 Tab 移走焦點、Delete 刪掉輸入框的字、
-// 方向鍵與 Home / End 移動游標，上屏的字就落到別處。
-test("組字中按 Tab、Delete、↑、↓、Home、End 吃下不動作", async ({ page }) => {
+// 方向鍵與 Home / End 移動游標，上屏的字就落到別處。↑ ↓ 後來改成開關展開面板（票 23）。
+test("組字中按 Tab、Delete、↑、↓、Home、End，輸入框與組字不變", async ({
+	page,
+}) => {
 	const { text, composition } = ui(page);
 	await page.keyboard.type("日月");
 	await page.keyboard.press("ArrowLeft");

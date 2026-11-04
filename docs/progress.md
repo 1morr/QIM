@@ -49,8 +49,10 @@
 | 2026-11-04 | M1 16 | merge main（票 22）：字根改在組字快照裡算，`refresh` 也帶字根；簡體模式的字根提示查的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | merge main（票 12）：簡體開關改呼叫 `apply(snapshot, false)`；簡體模式下「回報」記的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
+| 2026-11-04 | M1 23 | 展開面板、單按 Shift 英文直通、重排介面與假實作、翻頁不加 `generation`、簡體文字鍵、組字中組合鍵吃下；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md`（14、17 另在並行） |
 | 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 | 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 23 | merge main（票 14、17）：衝突只在文件與 `main.ts` 的 `start()`；data --verify、bench --check、check 全套與亂按都過；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 
 ## 偏差與決定
 
@@ -120,3 +122,10 @@
 - 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。
 - 2026-11-04 M1 16（協調者決定）：快照的候選、分段與上屏另帶繁體原文（`original`、`commit_original`），「回報」與字根提示用原文，簡體模式不停用回報（plan §2.1）。
 - 2026-11-04 M1 16：merge 票 21 後簡體的轉換單位由「一個候選」改為「一個分段」：選了多段候選後各段分開固定，候選列也要各段分開轉換，看到的才是上屏的（plan §2.1）。
+- 2026-11-04 M1 23：翻頁不再加 `generation`，翻頁中收到的重排結果照樣套用：重排只動第一頁，看得到的頁不變（plan §2.1，M0 票 09 留下的）。
+- 2026-11-04 M1 23：`apply_rerank` 多一個 `engine` 參數；名次變了才加 `generation`，原樣回傳不作廢另一層的結果（plan §2.1）。
+- 2026-11-04 M1 23：組字中單按 Shift 先上屏整個組字再切英文，照 Rime `commit_text`、不學 `inline_ascii`；判定 500 ms 在殼（brief §4.3、plan §2.1）。
+- 2026-11-04 M1 23：桌面展開面板用 ↓ / ↑，由殼攔下：Microsoft 速成的 Tab、→ 展開已給字根提示與分段（brief §4.3、§12.4，plan §3.1）。
+- 2026-11-04 M1 23：組字中 Ctrl / Cmd / Alt 組合鍵吃下不動作，Cmd+V 不再貼進輸入框；Cmd+C、Option＋字母組字中也沒作用（brief §4.3）。
+- 2026-11-04 M1 23（使用者決定）：簡體模式下觸控文字鍵也轉簡體，原文留繁體給回報與學習（plan §2.1）。
+- 2026-11-04 M1 23 後（使用者確認）：組字中單按 Shift 維持先上屏整個組字再切英文，左右 Shift 相同，要原碼用 Enter（brief §4.3）。

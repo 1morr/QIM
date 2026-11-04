@@ -1,5 +1,6 @@
-import { type Key, toKey } from "./keys.ts";
+import { type Key, LoneShift, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
+import { fakeOrder, RERANK_DELAY_MS, rerankMode } from "./rerank.ts";
 import "./style.css";
 import { element } from "./dom.ts";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
@@ -27,6 +28,10 @@ const LAYOUT_URL = "/layouts/gboard-quick.json";
 const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
+const mode = element<HTMLElement>("#mode");
+const expand = element<HTMLButtonElement>("#expand");
+const panel = element<HTMLOListElement>("#panel");
+const rerankSelect = element<HTMLSelectElement>("#rerank");
 const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
@@ -85,6 +90,8 @@ function press(session: Session, key: Key): Snapshot {
 			return session.left();
 		case "right":
 			return session.right();
+		case "toggleAscii":
+			return session.toggleAscii();
 		case "other":
 			return session.other();
 	}
@@ -101,7 +108,11 @@ const shown = {
 	originals: [] as string[],
 	/** 候選旁顯示字根提示；組字結束就關掉（brief §4.3）。 */
 	hints: false,
+	/** 候選展開面板開著；組字結束就關掉。 */
+	panel: false,
 };
+/** 核心；載入完成前是 `undefined`。展開面板與重排要直接問它。 */
+let core: Session | undefined;
 /** 字根提示；載入完成前是 `undefined`。 */
 let radicalHints: RadicalHints | undefined;
 
@@ -152,8 +163,39 @@ function render(snapshot: Snapshot): void {
 	shown.originals = snapshot.candidatesOriginal;
 	if (!shown.composing) {
 		shown.hints = false;
+		shown.panel = false;
 	}
+	mode.textContent = snapshot.ascii ? "英" : "中";
+	mode.setAttribute("aria-label", snapshot.ascii ? "英文" : "中文");
+	expand.hidden = !shown.composing;
 	renderCandidates();
+	renderPanel();
+}
+
+/** 候選展開面板：一次列全部候選（brief §4.4），每項記著它在全部候選的位置，點了照它選字。 */
+function renderPanel(): void {
+	panel.hidden = !shown.panel;
+	expand.setAttribute("aria-expanded", String(shown.panel));
+	expand.textContent = shown.panel ? "⌃" : "⌄";
+	expand.setAttribute("aria-label", shown.panel ? "收起候選" : "展開候選");
+	if (!shown.panel || !core) {
+		panel.replaceChildren();
+		return;
+	}
+	panel.replaceChildren(
+		...core.allCandidates().map((candidate, i) => {
+			const item = document.createElement("li");
+			item.dataset.index = String(i);
+			item.textContent = candidate;
+			return item;
+		}),
+	);
+}
+
+/** 打開或收起展開面板；沒有組字時不開。 */
+function setPanel(open: boolean): void {
+	shown.panel = open && shown.composing;
+	renderPanel();
 }
 
 function renderCandidates(): void {
@@ -206,6 +248,52 @@ function apply(snapshot: Snapshot, chosen: boolean): void {
 	}
 	render(snapshot);
 	touchKeyboard?.refresh();
+	requestRerank(snapshot.generation);
+}
+
+/** 上次要求重排時的 `generation`；候選沒變就不再要求。 */
+let rerankedAt: bigint | undefined;
+
+/**
+ * 候選變了就把重排要求交給假的模型，`RERANK_DELAY_MS` 後套用（plan §3.1）。這段時間內又按了鍵，
+ * 結果帶的 `generation` 過期，核心丟掉。名次變了才重畫，也不再要求重排；回報只看首選，
+ * 重排不動首選，所以不經過回報。
+ */
+function requestRerank(generation: bigint): void {
+	const chosen = rerankMode(rerankSelect.value);
+	if (chosen === "off" || !core || generation === rerankedAt) {
+		return;
+	}
+	rerankedAt = generation;
+	const request = core.rerankRequest();
+	if (!request) {
+		return;
+	}
+	const asked = request.generation;
+	const order = fakeOrder(chosen, request.candidates.length);
+	request.free();
+	const session = core;
+	window.setTimeout(() => {
+		// 等待中關掉了重排，就不套用。
+		if (rerankMode(rerankSelect.value) === "off") {
+			return;
+		}
+		const result = session.applyRerank(asked, Uint32Array.from(order));
+		if (!result) {
+			return;
+		}
+		try {
+			// `generation` 沒變是名次沒變，不必重畫。
+			if (result.generation === asked) {
+				return;
+			}
+			rerankedAt = result.generation;
+			render(result);
+			touchKeyboard?.refresh();
+		} finally {
+			result.free();
+		}
+	}, RERANK_DELAY_MS);
 }
 
 /** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
@@ -320,6 +408,7 @@ async function start(): Promise<void> {
 			load(LAYOUT_URL).then((response) => response.text()),
 		]);
 	const session = new Session(pack, lexicon, languageModel, simplifier);
+	core = session;
 	userDict = mountUserDict(session, () => text.focus());
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
@@ -355,6 +444,18 @@ async function start(): Promise<void> {
 		candidates.addEventListener(type, cancelPress);
 	}
 	candidates.addEventListener("contextmenu", (event) => event.preventDefault());
+	// 展開鍵與面板：按下時不讓輸入框失去焦點，點完還能接著打字。
+	expand.addEventListener("pointerdown", (event) => event.preventDefault());
+	expand.addEventListener("click", () => setPanel(!shown.panel));
+	panel.addEventListener("pointerdown", (event) => event.preventDefault());
+	panel.addEventListener("click", (event) => {
+		const item = (event.target as Element).closest<HTMLElement>("li");
+		if (item) {
+			// 選了字就收起，同 Gboard 的展開面板。
+			shown.panel = false;
+			applyHandled(session.select(Number(item.dataset.index)), true);
+		}
+	});
 	session.setIncognito(incognito.checked);
 	incognito.addEventListener("change", () => {
 		session.setIncognito(incognito.checked);
@@ -437,8 +538,35 @@ async function start(): Promise<void> {
 		applyHandled(session.focusSegment(Number(segment.dataset.index)), false);
 	});
 
+	// 單按 Shift 切中英（brief §4.3）：Shift 自己不交給核心，放開時才判定。
+	const loneShift = new LoneShift();
+	text.addEventListener("keyup", (event) => {
+		if (loneShift.up(event.key, event.timeStamp) && !event.isComposing) {
+			const snapshot = session.toggleAscii();
+			try {
+				apply(snapshot, false);
+			} finally {
+				snapshot.free();
+			}
+		}
+	});
 	text.addEventListener("keydown", (event) => {
-		const key = toKey(event);
+		const plain = !(event.ctrlKey || event.metaKey || event.altKey);
+		loneShift.down(event.key, event.repeat, event.timeStamp, !plain);
+		if (event.key === "Shift") {
+			return;
+		}
+		// 組字中 ↓ 打開展開面板、↑ 收起（plan §3.1）；核心本來就吃下不動作，不必轉給它。
+		if (
+			plain &&
+			shown.composing &&
+			(event.key === "ArrowDown" || event.key === "ArrowUp")
+		) {
+			event.preventDefault();
+			setPanel(event.key === "ArrowDown");
+			return;
+		}
+		const key = toKey(event, shown.composing);
 		if (!key) {
 			return;
 		}
