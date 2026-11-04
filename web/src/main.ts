@@ -1,4 +1,5 @@
 import { type Key, toKey } from "./keys.ts";
+import { fixedLine, initialReport, observe } from "./report.ts";
 import "./style.css";
 import { mountKeyboard } from "./touch.ts";
 import init, {
@@ -30,6 +31,13 @@ const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+const reportButton = element<HTMLButtonElement>("#report");
+const reports = element<HTMLTextAreaElement>("#reports");
+const copyReports = element<HTMLButtonElement>("#copy-reports");
+
+/** 回報清單存在 `localStorage`，重新整理不會不見。 */
+const REPORTS_KEY = "qim.reports";
+let report = initialReport;
 
 /** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
 async function load(url: string): Promise<Response> {
@@ -93,12 +101,40 @@ function insert(commit: string): void {
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。 */
-function apply(snapshot: Snapshot): void {
+/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。`chosen` 是這個鍵是不是選字（空白、數字鍵）。 */
+function apply(snapshot: Snapshot, chosen: boolean): void {
+	const before = report.last;
+	report = observe(report, { ...readReported(snapshot), chosen });
+	if (report.last !== before) {
+		reportButton.disabled = report.last === undefined;
+	}
 	if (snapshot.commit !== undefined) {
 		insert(snapshot.commit);
 	}
 	render(snapshot);
+}
+
+/** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
+function readReported(snapshot: Snapshot) {
+	return {
+		input: snapshot.input,
+		selected: snapshot.selected,
+		candidates: snapshot.candidates,
+		commit: snapshot.commit,
+	};
+}
+
+/** 把剛才那次組字加到回報清單最後一行；同一次只加一次。 */
+function addReport(): void {
+	if (!report.last) {
+		return;
+	}
+	const lines = reports.value === "" ? [] : reports.value.split("\n");
+	lines.push(fixedLine(report.last));
+	reports.value = lines.join("\n");
+	localStorage.setItem(REPORTS_KEY, reports.value);
+	reportButton.disabled = true;
+	text.focus();
 }
 
 /** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
@@ -146,11 +182,27 @@ async function start(): Promise<void> {
 	]);
 	const session = new Session(pack, lexicon, languageModel);
 	const layout = new Layout(layoutJson);
-	mountKeyboard(keyboard, layout, session, apply, hostDefault);
+	mountKeyboard(
+		keyboard,
+		layout,
+		session,
+		(snapshot, key) => apply(snapshot, key.tap === "space"),
+		hostDefault,
+	);
 	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
 	setTouch(window.matchMedia("(pointer: coarse)").matches);
 	touchToggle.addEventListener("click", () => {
 		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
+	});
+	reports.value = localStorage.getItem(REPORTS_KEY) ?? "";
+	reports.addEventListener("input", () => {
+		localStorage.setItem(REPORTS_KEY, reports.value);
+	});
+	reportButton.addEventListener("click", addReport);
+	copyReports.addEventListener("click", () => {
+		navigator.clipboard.writeText(reports.value).catch((error: unknown) => {
+			status.textContent = `複製失敗：${String(error)}`;
+		});
 	});
 
 	text.addEventListener("keydown", (event) => {
@@ -164,7 +216,7 @@ async function start(): Promise<void> {
 				return;
 			}
 			event.preventDefault();
-			apply(snapshot);
+			apply(snapshot, key.kind === "space" || key.kind === "digit");
 		} finally {
 			snapshot.free();
 		}

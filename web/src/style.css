@@ -81,3 +81,16 @@ body:has(#keyboard:not([hidden])) {
 	color: gray;
 	font-size: 0.7rem;
 }
+
+#report-panel {
+	display: grid;
+	gap: 0.25rem;
+	justify-items: start;
+}
+
+/* 回報清單是 TSV，等寬字才看得出欄位。 */
+#reports {
+	width: 100%;
+	font-size: 1rem;
+	font-family: ui-monospace, monospace;
+}
