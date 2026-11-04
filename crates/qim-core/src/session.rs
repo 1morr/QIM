@@ -493,10 +493,13 @@ impl Session {
             text: self.output(engine, text),
             original: text.to_string(),
         };
-        if self.lattice.input().is_empty() {
-            return self.snapshot(engine, true, Some(text));
-        }
-        self.commit_all_then(engine, user, text)
+        let snapshot = if self.composing() {
+            self.commit_all_then(engine, user, text)
+        } else {
+            self.snapshot(engine, true, Some(text))
+        };
+        // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
+        with_radicals(engine, snapshot)
     }
 
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；

@@ -50,7 +50,7 @@ const REPORTS_KEY = "qim.reports";
 let report = initialReport;
 const hintVersion = element<HTMLSelectElement>("#hint-version");
 /** 長按候選多久叫出字根提示（毫秒）；和 Android 的長按門檻同級。 */
-const LONG_PRESS_MS = 500;
+const CANDIDATE_HINT_PRESS_MS = 500;
 /** 觸控鍵盤；載入完成前是 `undefined`。 */
 let touchKeyboard: Keyboard | undefined;
 /** 學習資料；載入完成前是 `undefined`。 */
@@ -448,7 +448,7 @@ async function start(): Promise<void> {
 		pressTimer = window.setTimeout(() => {
 			cancelPress();
 			toggleHints();
-		}, LONG_PRESS_MS);
+		}, CANDIDATE_HINT_PRESS_MS);
 	});
 	candidates.addEventListener("pointerup", () => {
 		const index = pressed;

@@ -78,6 +78,8 @@ struct Cell {
     units: f64,
     /// 固定標籤；字母鍵不寫，用方案的字根。
     label: Option<String>,
+    /// 標籤是符號（⌫、↵）時給讀屏的文字；其他鍵由標籤與角標組出。
+    a11y_label: Option<String>,
     hint: Option<String>,
     long_press: Vec<Action>,
 }
@@ -89,9 +91,16 @@ impl Cell {
             tap,
             units,
             label: label.map(str::to_owned),
+            a11y_label: None,
             hint: None,
             long_press: Vec::new(),
         }
+    }
+
+    /// 符號標籤的鍵給讀屏唸動作的說法（「刪除」「換行」）。
+    fn spoken(mut self) -> Self {
+        self.a11y_label = Some(self.tap.spoken());
+        self
     }
 
     fn units(mut self, units: f64) -> Self {
@@ -130,7 +139,7 @@ fn switch(page: &str, label: &str) -> Cell {
 }
 
 fn backspace() -> Cell {
-    Cell::new("backspace", Action::Backspace, 1.5, Some("⌫"))
+    Cell::new("backspace", Action::Backspace, 1.5, Some("⌫")).spoken()
 }
 
 /// 一排：從左邊空幾個鍵寬開始，接著依序排。
@@ -148,7 +157,7 @@ fn bottom_row(switch_to: Cell) -> Row {
             text("，"),
             Cell::new("space", Action::Space, 5.0, None),
             text("。"),
-            Cell::new("enter", Action::Enter, 1.5, Some("↵")),
+            Cell::new("enter", Action::Enter, 1.5, Some("↵")).spoken(),
         ],
     }
 }
@@ -251,7 +260,7 @@ fn page(id: &str, rows: Vec<Row>, geometry: &Geometry) -> Page {
                 extended_edges: Insets::default(),
                 label: cell.label,
                 hint: cell.hint,
-                a11y_label: None,
+                a11y_label: cell.a11y_label,
                 style: Some(style(&cell.tap)),
                 tap: cell.tap,
                 long_press: cell.long_press,

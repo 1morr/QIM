@@ -599,6 +599,8 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
+    // 字頻乘上語料權重：NOTICE 寫出各語料的權重（M1 票 24）。
+    assert!(notice.contains("hkcancor 64"), "{notice}");
     // 口語詞表在 repo 裡：NOTICE 列出它的路徑、sha256 與 CC0，LICENSE 有它的一段。
     let section = notice
         .split("\n\n")
@@ -644,6 +646,7 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
     assert!(notice.contains("Kneser-Ney"), "{notice}");
+    assert!(notice.contains("zh-wiki 1, hkcancor 64"), "{notice}");
 }
 
 #[test]

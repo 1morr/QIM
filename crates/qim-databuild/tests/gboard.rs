@@ -215,3 +215,24 @@ fn tapping_the_gap_between_two_keys_hits_one_of_them() {
         .map(|i| page.keys[i].id.as_str());
     assert_eq!(hit, Some("a"));
 }
+
+/// 標籤是符號的刪除、Enter 給文字的無障礙標籤，讀屏不會唸「⌫」「↵」（plan §2.6，M1 票 24）。
+#[test]
+fn glyph_labelled_edit_keys_have_spoken_accessibility_labels_on_every_page() {
+    for variant in &layout().variants {
+        for page in &variant.pages {
+            for key in &page.keys {
+                let expected = match key.tap {
+                    Action::Backspace => Some("刪除"),
+                    Action::Enter => Some("換行"),
+                    _ => None,
+                };
+                if let Some(expected) = expected {
+                    assert_eq!(key.a11y_label.as_deref(), Some(expected), "{}", key.id);
+                }
+            }
+        }
+    }
+    let letters = &layout().variants[0].pages[0];
+    assert_eq!(key(letters, "a").a11y_label, None);
+}

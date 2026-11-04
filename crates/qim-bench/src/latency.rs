@@ -29,7 +29,7 @@ pub struct Timing {
     pub per_key_ms: Vec<Vec<f64>>,
 }
 
-/// 在 WebAssembly 上量時間的方式：給資料包路徑（速成，有詞庫時接著詞庫）與輸入碼，逐鍵打每個輸入。
+/// 在 WebAssembly 上量時間的方式：給基準載入的每份資料包路徑（順序不拘，腳本依檔頭魔數分辨）與輸入碼，逐鍵打每個輸入。
 /// 實際用 [`node_wasm_timer`]；測試可以換成假的。
 pub type WasmTimer<'a> = &'a dyn Fn(&[PathBuf], &[String]) -> Result<Timing, String>;
 
