@@ -74,7 +74,7 @@ pub(crate) struct RepoData {
 /// 詞庫資料包的粵語口語詞表（plan §4.2、brief §5.2）。
 pub(crate) const COLLOQUIAL: RepoData = RepoData {
     name: "QIM Cantonese colloquial word list",
-    path: lexicon::COLLOQUIAL,
+    path: lexicon::COLLOQUIAL_PATH,
     license: "CC0-1.0",
     license_path: "data/licenses/CC0-1.0.txt",
     used: "Cantonese colloquial words and their frequencies, compiled by QIM",

@@ -271,7 +271,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             let characters = frequency.len();
             let (lexicon, counts) = lexicon::build(
                 &load_text(RIME_ESSAY, ESSAY)?,
-                &read(lexicon::COLLOQUIAL)?,
+                &read(lexicon::COLLOQUIAL_PATH)?,
                 &quick.pack.code_table,
                 &Transcoder::new(&quick.rows),
                 frequency,
@@ -409,8 +409,8 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          data as follows: single characters, words with a frequency below {min}, and words\n\
          containing characters outside the continuous set of the scheme were dropped; a word\n\
          listed more than once keeps its highest frequency. The words of the QIM Cantonese\n\
-         colloquial word list were added with their listed frequencies; a word in both keeps\n\
-         the higher one. Each word is indexed by the Quick codes of its characters joined,\n\
+         colloquial word list, which only lists words the steps above left out, were added\n\
+         with their listed frequencies. Each word is indexed by the Quick codes of its characters joined,\n\
          at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\

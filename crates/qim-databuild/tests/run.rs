@@ -454,9 +454,8 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
             c.outside_continuous,
             c.words,
             c.colloquial,
-            c.colloquial_added,
         ),
-        (6, 1, 1, 1, 4, 1, 1)
+        (6, 1, 1, 1, 4, 1)
     );
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(&outcome.pack_path).unwrap();

@@ -42,6 +42,7 @@
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
 | 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 | 2026-11-04 | M1 22 | 組字顯示字根；`cangjie-hint` 資料包與 `--verify` 抽查；組字中 Tab、觸控長按候選列出字根提示；細節見票 22 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等 20、21） |
+| 2026-11-04 | M1 17 | 粵語口語詞表 197 詞（使用者審過）進詞庫，4 句口語進 `fixed.tsv`，口語修正 −3%、−9.5%；細節見票 17 | 協調者開 17b 後新 session 下 `/implement .scratch/m1/issues/17b-<slug>.md`（不讓 `s2hk` 換掉「晒」「搵」） |
 
 ## 偏差與決定
 
@@ -99,3 +100,5 @@
 - 2026-11-04 M1 22：字根提示用組字中的 Tab 叫出、觸控長按候選，fcitx5 table 是設定開關、沒有快捷鍵（brief §4.3、§4.4、§12.4）。
 - 2026-11-04 M1 22：`Composition.radicals` 只含還沒選定的輸入碼的字根，選定的分段顯示字詞（plan §2.1）。
 - 2026-11-04 M1 22：字根提示資料包不經 `Engine`，殼用 `RadicalHints::for_scheme` 另外載入；方案多了欄位，`FORMAT_VERSION` 4 → 5（plan §2.5、§4.1）。
+- 2026-11-04 M1 17：粵語口語詞表在 repo 裡、不經 `sources.toml`（不是下載的來源），詞庫資料包 `NOTICE` 記它的路徑與 sha256，授權用 `data/licenses/CC0-1.0.txt`（plan §4.2）。
+- 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。

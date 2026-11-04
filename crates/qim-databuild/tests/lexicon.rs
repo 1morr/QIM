@@ -98,7 +98,6 @@ fn single_characters_rare_words_and_words_outside_the_continuous_set_are_left_ou
             codes: 2,
             indexed: 2,
             colloquial: 0,
-            colloquial_added: 0,
         }
     );
 }
@@ -170,24 +169,18 @@ fn malformed_lines_are_errors() {
 
 #[test]
 fn colloquial_words_join_the_lexicon_with_their_listed_frequency() {
-    // 日弓不在 essay、丟丟在 essay 但低於門檻：都由詞表補上；門口 essay 較高，取大的。
+    // 日弓不在 essay、丟丟在 essay 但低於門檻：都由詞表補上，用詞表的詞頻。
     let (lexicon, counts) = build_colloquial(
         "門口\t9435\n丟丟\t20\n",
-        "# 註解\n\n日弓\t300\n丟丟\t1000\n門口\t300\n",
+        "# 註解\n\n日弓\t300\n丟丟\t1000\n",
     );
     assert_eq!(texts(&lexicon, "an"), ["日弓"]);
     assert_eq!(lexicon.lookup("an")[0].frequency, 300);
     assert_eq!(lexicon.lookup("mimi")[0].frequency, 1000);
     assert_eq!(lexicon.lookup("anr")[0].frequency, 9435);
-    // 詞表 3 詞，日弓、丟丟兩詞是 essay 沒收進詞庫的。
     assert_eq!(
-        (
-            counts.colloquial,
-            counts.colloquial_added,
-            counts.below_threshold,
-            counts.words
-        ),
-        (3, 2, 0, 3)
+        (counts.colloquial, counts.below_threshold, counts.words),
+        (2, 0, 3)
     );
 }
 
@@ -202,9 +195,11 @@ fn colloquial_list_errors_name_the_file_and_line() {
         ("日弓\t99\n", "100"),
         ("日𠀀\t300\n", "連打字集"),
         ("日弓\t300\n日弓\t1000\n", "重複"),
+        // essay 已收的詞列進詞表沒有作用，只會讓人以為詞表的詞頻算數。
+        ("門口\t300\n", "rime-essay 已收"),
     ] {
         let line = colloquial.lines().count();
-        let err = try_build("", colloquial, BTreeMap::new())
+        let err = try_build("門口\t9435\n", colloquial, BTreeMap::new())
             .unwrap_err()
             .to_string();
         assert!(
