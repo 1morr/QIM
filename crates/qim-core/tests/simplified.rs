@@ -86,6 +86,7 @@ fn simplifier() -> SimplifierPack {
                 ("們", "们"),
                 ("乾", "干"),
                 ("幹", "干"),
+                ("謝", "谢"),
             ])]],
         ),
     }
@@ -277,16 +278,24 @@ fn in_traditional_mode_the_original_is_the_text() {
     assert_eq!(committed.commit, committed.commit_original);
 }
 
-/// 觸控鍵盤的文字鍵（`Session::text`，M1 票 20）：組字照簡體上屏、原文是繁體；文字鍵本身照原樣。
+/// 觸控鍵盤的文字鍵（`Session::text`）：組字和文字鍵本身都照簡體上屏、原文是繁體
+/// （使用者 2026-11-04 決定，M1 票 23；票 20 原本讓文字鍵照原樣）。
 #[test]
-fn a_touch_text_key_commits_the_simplified_composition_and_its_text_as_is() {
+fn a_touch_text_key_commits_the_composition_and_its_text_simplified() {
     let mut ime = Ime::simplified();
     ime.type_code("anr");
     let committed = ime.session.text(&ime.engine, &mut ime.user, "門");
-    assert_eq!(committed.commit.as_deref(), Some("门口門"));
+    assert_eq!(committed.commit.as_deref(), Some("门口门"));
     assert_eq!(committed.commit_original.as_deref(), Some("門口門"));
 
-    let alone = ime.session.text(&ime.engine, &mut ime.user, "唔該");
-    assert_eq!(alone.commit.as_deref(), Some("唔該"));
-    assert_eq!(alone.commit_original.as_deref(), Some("唔該"));
+    let alone = ime.session.text(&ime.engine, &mut ime.user, "多謝");
+    assert_eq!(alone.commit.as_deref(), Some("多谢"));
+    assert_eq!(alone.commit_original.as_deref(), Some("多謝"));
+}
+
+#[test]
+fn in_traditional_mode_a_touch_text_key_is_committed_as_is() {
+    let mut ime = Ime::new(engine().with_simplifier(simplifier()), false);
+    let alone = ime.session.text(&ime.engine, &mut ime.user, "多謝");
+    assert_eq!(alone.commit.as_deref(), Some("多謝"));
 }

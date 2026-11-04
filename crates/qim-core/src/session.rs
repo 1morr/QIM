@@ -8,6 +8,20 @@ use crate::{Engine, UserModel, punctuation};
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
 
+/// 重排要求最多帶幾個候選：第一頁。重排只動第一頁，翻到後面的頁時看得到的不會變。
+pub const RERANK_LIMIT: usize = PAGE_SIZE;
+
+/// 給背景模型的重排要求（[`Session::rerank_request`]）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RerankRequest {
+    /// 結果交回 [`Session::apply_rerank`] 時帶著它；不是目前的就丟掉。
+    pub generation: u64,
+    /// 候選前面的字詞（繁體原文）：選定的分段，或目前分段前面的分段；輸入框的前文在 M3 加。
+    pub context: String,
+    /// 前 [`RERANK_LIMIT`] 個候選，依目前的順序。
+    pub candidates: Vec<Candidate>,
+}
+
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Options {
@@ -138,6 +152,13 @@ impl ShownCandidate {
     fn text(&self) -> &str {
         self.converted.as_deref().unwrap_or(&self.span.text)
     }
+
+    fn to_candidate(&self) -> Candidate {
+        Candidate {
+            text: self.text().to_string(),
+            original: self.span.text.clone(),
+        }
+    }
 }
 
 /// 一次上屏：顯示的文字與後處理前的原文。
@@ -173,6 +194,8 @@ pub struct Session {
     page: usize,
     generation: u64,
     options: Options,
+    /// 英文直通（[`Key::ToggleAscii`]）：開著時沒有組字，鍵都交還宿主。
+    ascii: bool,
 }
 
 impl Session {
@@ -218,6 +241,75 @@ impl Session {
         with_radicals(engine, self.snapshot(engine, true, None))
     }
 
+    /// 全部候選，不分頁、經過後處理，依目前的順序；候選展開面板用（brief §4.4，librime 的
+    /// `RimeCandidateListBegin`、fcitx5 的 `BulkCandidateList`）。選字照位置呼叫 [`Session::select`]。
+    pub fn all_candidates(&self) -> Vec<Candidate> {
+        self.candidates
+            .iter()
+            .map(ShownCandidate::to_candidate)
+            .collect()
+    }
+
+    /// 給背景模型的重排要求（plan §2.7）：目前的 `generation`、上下文與前 [`RERANK_LIMIT`]
+    /// 個候選。沒有組字或沒有候選時是 `None`。
+    pub fn rerank_request(&self) -> Option<RerankRequest> {
+        if self.candidates.is_empty() {
+            return None;
+        }
+        // 上下文是候選所在的碼前面的分段：有目前分段時是它前面的，否則是選定的分段。
+        let before = match self.focus {
+            Some(i) => self.segments()[..i].to_vec(),
+            None => self.selected.clone(),
+        };
+        Some(RerankRequest {
+            generation: self.generation,
+            context: before.iter().map(|s| s.text.as_str()).collect(),
+            candidates: self.candidates[..self.rerank_limit()]
+                .iter()
+                .map(ShownCandidate::to_candidate)
+                .collect(),
+        })
+    }
+
+    /// 套用背景模型的重排結果（plan §2.7、ADR 0005）：`order` 是 [`RerankRequest::candidates`]
+    /// 的位置，好的在前。首選不動，`order` 裡其餘的照它的順序排在第 2 位起，沒提到的照原順序
+    /// 接在後面；超出範圍、重複的位置不算。
+    ///
+    /// `generation` 不是目前的就丟掉、回 `None`。名次真的變了才算候選變動、`generation` 加一，
+    /// 同一份要求的另一個結果（另一層模型）因此也作廢：它的位置是照重排前的順序。殼不要因為套用了
+    /// 重排的結果再要求重排。翻頁不改 `generation`，翻到第 2 頁後收到的結果照樣套用：重排只動
+    /// 第一頁，看得到的那頁不變（M1 票 23）。
+    pub fn apply_rerank(
+        &mut self,
+        engine: &Engine,
+        generation: u64,
+        order: &[usize],
+    ) -> Option<Snapshot> {
+        if generation != self.generation {
+            return None;
+        }
+        let limit = self.rerank_limit();
+        let mut ranked: Vec<usize> = Vec::with_capacity(limit);
+        ranked.extend((limit > 0).then_some(0));
+        for i in order.iter().copied().chain(0..limit) {
+            if i < limit && !ranked.contains(&i) {
+                ranked.push(i);
+            }
+        }
+        if ranked.iter().enumerate().any(|(at, &i)| at != i) {
+            let top: Vec<ShownCandidate> =
+                ranked.iter().map(|&i| self.candidates[i].clone()).collect();
+            self.candidates.splice(..limit, top);
+            self.generation += 1;
+        }
+        Some(with_radicals(engine, self.snapshot(engine, true, None)))
+    }
+
+    /// 重排看得到的候選數：最多 [`RERANK_LIMIT`] 個。
+    fn rerank_limit(&self) -> usize {
+        self.candidates.len().min(RERANK_LIMIT)
+    }
+
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         if self.candidates_simplified != self.options.simplified && self.composing() {
             self.refresh_candidates(engine, user);
@@ -227,6 +319,19 @@ impl Session {
     }
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        // 切中英（單按 Shift，brief §4.3）：組字中先上屏整個組字，同 Rime `ascii_composer` 的
+        // `commit_text`；要上屏輸入碼有 Enter。英文狀態下沒有組字，其他鍵都交還宿主。
+        if key == Key::ToggleAscii {
+            self.ascii = !self.ascii;
+            return if self.composing() {
+                self.commit_all_then(engine, user, Commit::plain(String::new()))
+            } else {
+                self.snapshot(engine, true, None)
+            };
+        }
+        if self.ascii {
+            return self.snapshot(engine, false, None);
+        }
         if let Key::Letter(c) = key
             && engine.scheme().alphabet.contains(c)
         {
@@ -264,7 +369,9 @@ impl Session {
             }
             // 空白一律選全部候選的第一個，與目前在第幾頁無關（brief §4.3）；
             // 有目前分段時上屏整個組字（照顯示的分段，剩下的逐次取首選）。
-            Key::Space if self.focus.is_some() => self.commit_all_then(engine, user, ""),
+            Key::Space if self.focus.is_some() => {
+                self.commit_all_then(engine, user, Commit::plain(String::new()))
+            }
             Key::Space => self.select_at(engine, user, 0),
             Key::Digit(digit) => match usize::from(digit).checked_sub(1) {
                 Some(index) if index < self.page_candidates().len() => {
@@ -283,10 +390,10 @@ impl Session {
             }
             Key::Punct(c) => {
                 let punct = punctuation::full_width(c).map_or_else(|| c.to_string(), String::from);
-                self.commit_all_then(engine, user, &punct)
+                self.commit_all_then(engine, user, Commit::plain(punct))
             }
             Key::Letter(c) if !c.is_ascii_lowercase() => {
-                self.commit_all_then(engine, user, &c.to_string())
+                self.commit_all_then(engine, user, Commit::plain(c.to_string()))
             }
             // 最前面的 ← 與最後面的 → 不動作。
             Key::Left => {
@@ -302,8 +409,8 @@ impl Session {
                 }
                 self.snapshot(engine, true, None)
             }
-            // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、切換中英（票 23）、其他鍵：
-            // 先吃下不動作。
+            // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、其他鍵：吃下不動作。
+            // 切中英在上面處理過了。
             Key::Letter(_) | Key::ToggleAscii | Key::Other => self.snapshot(engine, true, None),
         }
     }
@@ -358,17 +465,22 @@ impl Session {
     }
 
     /// 直接輸入一段文字，不經組字（觸控鍵盤的 `text` 動作，plan §2.6）：沒有組字時上屏 `text`；
-    /// 組字中和標點相同，先上屏整個組字再接 `text`。文字照原樣，不轉全形。
+    /// 組字中和標點相同，先上屏整個組字再接 `text`。文字不轉全形；簡體模式轉成簡體，原文留繁體
+    /// （M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
+        let text = Commit {
+            text: self.output(engine, text),
+            original: text.to_string(),
+        };
         if self.lattice.input().is_empty() {
-            return self.snapshot(engine, true, Some(Commit::plain(text.to_string())));
+            return self.snapshot(engine, true, Some(text));
         }
         self.commit_all_then(engine, user, text)
     }
 
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
     /// 剩下沒有字的碼原樣上屏。整個組字都有字時才學習，`tail` 不學。
-    fn commit_all_then(&mut self, engine: &Engine, user: &mut UserModel, tail: &str) -> Snapshot {
+    fn commit_all_then(&mut self, engine: &Engine, user: &mut UserModel, tail: Commit) -> Snapshot {
         // 剩下的輸入碼的首選要用它自己的候選，不是目前分段的。
         self.clear_focus(engine, user);
         let mut segments = self.selected_segments();
@@ -392,10 +504,10 @@ impl Session {
         if raw.is_empty() {
             self.learn(engine, user, &segments);
         }
-        for text in [&mut commit.text, &mut commit.original] {
-            text.push_str(&raw);
-            text.push_str(tail);
-        }
+        commit.text.push_str(&raw);
+        commit.text.push_str(&tail.text);
+        commit.original.push_str(&raw);
+        commit.original.push_str(&tail.original);
         self.commit(engine, commit)
     }
 
@@ -520,8 +632,8 @@ impl Session {
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
+        // 翻頁不是候選變動，`generation` 不加（M1 票 23）。
         self.page = page;
-        self.generation += 1;
         self.snapshot(engine, true, None)
     }
 
@@ -598,16 +710,13 @@ impl Session {
             candidates: self
                 .page_candidates()
                 .iter()
-                .map(|c| Candidate {
-                    text: c.text().to_string(),
-                    original: c.span.text.clone(),
-                })
+                .map(ShownCandidate::to_candidate)
                 .collect(),
             page: self.page,
             has_more: self.has_more(),
             commit,
             commit_original,
-            ascii: false,
+            ascii: self.ascii,
             generation: self.generation,
         }
     }
