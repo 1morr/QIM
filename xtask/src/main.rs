@@ -9,7 +9,7 @@ mod web;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask bench [--check | --update-baseline]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -17,8 +17,10 @@ fn main() -> ExitCode {
     match args.as_slice() {
         ["check"] => check(false),
         ["check", "--fast"] => check(true),
-        ["data"] => data(&[]),
-        ["data", "--verify"] => data(&["--verify"]),
+        ["data"] => release_run("qim-databuild", &[]),
+        ["data", "--verify"] => release_run("qim-databuild", &["--verify"]),
+        ["bench"] => release_run("qim-bench", &[]),
+        ["bench", flag @ ("--check" | "--update-baseline")] => release_run("qim-bench", &[flag]),
         ["web"] => {
             let root = repo_root();
             if web::wasm_bindings(&root) && web::packs(&root) {
@@ -55,10 +57,11 @@ fn check(fast: bool) -> ExitCode {
     }
 }
 
-/// 建資料包（plan §4）；邏輯在 `qim-databuild`，這裡只轉交。
-fn data(args: &[&str]) -> ExitCode {
+/// 在 repo 根目錄用 release 跑 workspace 的 `package`：資料建置（plan §4）在 `qim-databuild`、
+/// 首選字基準（plan §5.2）在 `qim-bench`，這裡只轉交。
+fn release_run(package: &str, args: &[&str]) -> ExitCode {
     let status = std::process::Command::new(cargo())
-        .args(["run", "--quiet", "--release", "-p", "qim-databuild", "--"])
+        .args(["run", "--quiet", "--release", "-p", package, "--"])
         .args(args)
         .current_dir(repo_root())
         .status();
@@ -66,7 +69,7 @@ fn data(args: &[&str]) -> ExitCode {
         Ok(s) if s.success() => ExitCode::SUCCESS,
         Ok(_) => ExitCode::FAILURE,
         Err(e) => {
-            eprintln!("跑不起 qim-databuild：{e}");
+            eprintln!("跑不起 {package}：{e}");
             ExitCode::FAILURE
         }
     }
