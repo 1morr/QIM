@@ -22,6 +22,10 @@ test("打 3.5、1,000、12:30 讀回半形", async ({ page }, testInfo) => {
 	// 分隔符待定時顯示在組字裡，還沒上屏。
 	await expect(composition).toHaveText(".");
 	await expect(text).toHaveValue("3");
+	// 沒有候選：不出展開鈕，↓ 不打開空的面板。
+	await expect(page.getByRole("button", { name: "展開候選" })).toBeHidden();
+	await page.keyboard.press("ArrowDown");
+	await expect(page.getByRole("list", { name: "全部候選" })).toBeHidden();
 	await page.screenshot({
 		path: testInfo.outputPath("digit-separator-pending.png"),
 	});

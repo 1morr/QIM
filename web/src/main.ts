@@ -167,11 +167,14 @@ function render(snapshot: Snapshot): void {
 	shown.originals = snapshot.candidatesOriginal;
 	if (!shown.composing) {
 		shown.hints = false;
+	}
+	// 沒有候選（沒有組字，或只有待定的數字分隔符）就沒有東西可展開。
+	if (shown.candidates.length === 0) {
 		shown.panel = false;
 	}
 	mode.textContent = snapshot.ascii ? "英" : "中";
 	mode.setAttribute("aria-label", snapshot.ascii ? "英文" : "中文");
-	expand.hidden = !shown.composing;
+	expand.hidden = shown.candidates.length === 0;
 	renderCandidates();
 	renderPanel();
 }
@@ -196,9 +199,9 @@ function renderPanel(): void {
 	);
 }
 
-/** 打開或收起展開面板；沒有組字時不開。 */
+/** 打開或收起展開面板；沒有候選時不開。 */
 function setPanel(open: boolean): void {
-	shown.panel = open && shown.composing;
+	shown.panel = open && shown.candidates.length > 0;
 	renderPanel();
 }
 

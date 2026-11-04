@@ -258,3 +258,13 @@ fn tapping_the_waiting_separator_or_a_candidate_keeps_it_waiting() {
     assert_eq!(snapshot.commit, None);
     assert_eq!(snapshot.composition.input, ".");
 }
+
+#[test]
+fn tapping_a_candidate_with_nothing_composed_does_not_end_the_number() {
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    let snapshot = ime.session.select(&ime.engine, &mut ime.user, 0);
+    assert!(!snapshot.handled);
+    ime.type_keys(".5");
+    assert_eq!(ime.text, "3.5");
+}
