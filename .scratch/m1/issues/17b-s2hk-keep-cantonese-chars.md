@@ -209,3 +209,7 @@ e2e `web/e2e/edit-segments.spec.ts` 的輸入由 `anrkboa` 換成 `anrkbof`：�
 - `--verify` 的字形檢查等於確認接線：表由轉換器查出，要獨立驗覆蓋得另有一份「香港寫法」清單，沒有可信的來源，不做；已寫進 `docs/development.md`。
 - 三份測試各有一個小 `CodeTable` 夾具：各測的字不同，共用反而要讀別的檔才知道表裡有什麼，不改。
 - `Corpus::texts` 每份語料 `clone` 一次對照表（34 組）：成本可忽略，`Converter` 擁有它比借用簡單，不改。
+
+### merge main（票 14、23）
+
+沒有衝突。合併後 `cargo xtask data --verify` 通過（資料包 sha256 不變）；`cargo xtask bench --check` 通過，各集合數字與 baseline 完全相同、固定題 25/25；`cargo xtask check` 全套通過（e2e 95 項）。票 23 新加的 `web/e2e/key-table.spec.ts` 也用 `anrkboa`，同樣換成 `anrkbof`（Enter 那題的期望改成 `anr門口kbof`，← / → 那題的整串首選改成「門口有無」）。
