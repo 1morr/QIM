@@ -43,3 +43,4 @@ Blocked by: 07
   - `qim-layout` 三個測試檔各自組 JSON 外殼、綁定用 `session.engine.scheme().radicals` 取字根：小，等票 19 加欄位時再看要不要抽。
   - 錯誤訊息與 log 用中文：跟著 repo 既有慣例。
   - 超出票寫的部分保留：宿主預設動作（沒有它觸控鍵盤的刪除、空白在沒組字時沒反應）、候選單列與鍵盤固定底部（亂按找到的問題）、`from_json` 擋 `format` 錯與沒有版本或頁面（綁定靠它保證有第一頁）。
+- 2026-11-04 合併 main（票 10，`09f6116`）：沒有衝突，只把 progress 裡 union 合併排在前面的本票那列與偏差移到票 10 之後。合併後 `cargo xtask data` 的兩份 sha256 不變，`cargo xtask check` 通過（含 `unit`，e2e `23 passed`），`cargo xtask bench --check` exit 0、沒有翻盤、固定題 11/11。觸控路徑再亂按三組各 400 步（觸控點擊夾實體 Enter、`, . ? ! ;`、方向鍵、Tab、Delete、Home、End、大寫）：沒有 console 錯誤、鍵盤不移動，組字中點觸控 Enter 共 25 次都清空組字；`.scratch/m1/evidence/18-touch-monkey.png` 換成合併後的截圖。
