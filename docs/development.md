@@ -37,7 +37,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`、預設佈局到 `build/layouts/`，見〈資料建置〉 |
-| `cargo xtask bench [--check \| --update-baseline]` | 首選字基準，見〈首選字基準〉 |
+| `cargo xtask bench [--check \| --update-baseline \| --learning]` | 首選字基準，見〈首選字基準〉 |
 
 ## 資料建置
 
@@ -115,9 +115,10 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 cargo xtask bench                     # 印結果
 cargo xtask bench --check             # 固定題全過、各集合答錯數與修正次數 ≤ baseline、每題打得出，否則 exit 非零
 cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.json（有個人集時連 bench/personal/baseline.json）
+cargo xtask bench --learning          # 學習模式：比學習開關的修正次數，見〈學習模式〉
 ```
 
-`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`：
+`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、開無痕（題內也不學）、只經 `Session::handle`：
 
 1. 逐鍵打完輸入碼、不選字，取當下的第一個候選當首選；沒有候選時首選是空字串。途中的首選拿來算跳動。
 2. 模擬使用者選字打出整題，算修正次數與按鍵數：
@@ -161,7 +162,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 ### 每鍵延遲
 
-每次 `cargo xtask bench`（不論哪個模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。
@@ -170,6 +171,10 @@ ln -s <主 checkout>/bench/personal bench/personal
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
 
 改核心的票貼前後對照時，在同一台機器、不跑其他重負載時跑；差距小於幾成多半是雜訊，重跑兩三次看是否穩定。
+
+### 學習模式
+
+`cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開（plan §5.2）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關同一般模式，每題用空白的 `UserModel`、開無痕（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
 
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 

@@ -1,6 +1,6 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
-use qim_core::{Engine, Key, Session, Snapshot, UserModel};
+use qim_core::{Engine, Key, Options, Session, Snapshot, UserModel};
 use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
 
@@ -10,6 +10,7 @@ pub struct WebSession {
     engine: Engine,
     user: UserModel,
     session: Session,
+    options: Options,
     /// 上一個鍵之後還在組字：觸控鍵盤依它選 `composing` 的標籤與動作。
     composing: bool,
 }
@@ -29,8 +30,16 @@ impl WebSession {
             engine,
             user: UserModel::default(),
             session: Session::default(),
+            options: Options::default(),
             composing: false,
         })
+    }
+
+    /// 無痕模式：開著時不學習（plan §2.4）。
+    #[wasm_bindgen(js_name = setIncognito)]
+    pub fn set_incognito(&mut self, on: bool) {
+        self.options.incognito = on;
+        self.session.set_options(self.options);
     }
 
     pub fn letter(&mut self, c: char) -> WebSnapshot {

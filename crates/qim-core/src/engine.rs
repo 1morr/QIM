@@ -2,9 +2,10 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use crate::lattice::{self, Lattice};
+use crate::user::personal_bonus;
 use crate::{
     CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, PackError,
-    Scheme, Word,
+    Scheme, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -32,6 +33,10 @@ pub(crate) struct Edge {
     first: char,
     /// 不看前一段的部分（plan §2.3）：字是 −γ；詞是 β − γ 加上詞頻換算的詞內機率。
     inner: f64,
+    /// 第一個字之後的 ln 機率：詞是詞頻換算的詞內機率，字是 0；`personal` 要的靜態機率用。
+    rest: f64,
+    /// 個人機率（plan §2.3 的 `personal`）；沒學過是 0。
+    personal: f64,
 }
 
 impl Engine {
@@ -95,10 +100,10 @@ impl Engine {
         &self.scheme
     }
 
-    /// 整串輸入碼的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
+    /// 整串輸入碼在 `user` 之下的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
-    pub fn candidates(&self, input: &str) -> Vec<String> {
-        lattice::candidates(self, &Lattice::from_input(self, input))
+    pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
+        lattice::candidates(self, user, &Lattice::from_input(self, user, input))
             .into_iter()
             .map(|c| c.text)
             .collect()
@@ -108,19 +113,22 @@ impl Engine {
         usize::from(self.scheme.ranking.beam)
     }
 
-    /// 一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
-    fn char_edge(&self, start: usize, c: char) -> Edge {
+    /// 碼 `code` 的一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
+    fn char_edge(&self, user: &UserModel, code: &str, start: usize, c: char) -> Edge {
+        let text = c.to_string();
         Edge {
             start,
-            text: c.to_string(),
+            personal: user.personal_probability(&self.scheme.id, code, &text),
+            text,
             first: c,
             inner: -self.scheme.ranking.segment_penalty,
+            rest: 0.0,
         }
     }
 
     /// 一個詞的邊（plan §2.3）：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，
     /// 第一個字之後由詞頻換算，所以詞頻仍分得出同碼的詞；再加 β − γ。
-    fn word_edge(&self, start: usize, word: &Word) -> Edge {
+    fn word_edge(&self, user: &UserModel, code: &str, start: usize, word: &Word) -> Edge {
         let ranking = &self.scheme.ranking;
         let first = word.text.chars().next().expect("詞不是空的");
         let rest = (word.frequency.max(1) as f64).ln()
@@ -128,15 +136,19 @@ impl Engine {
             - self.language_model.log_prob(None, first);
         Edge {
             start,
+            personal: user.personal_probability(&self.scheme.id, code, &word.text),
             text: word.text.clone(),
             first,
             inner: rest + ranking.word_bonus - ranking.segment_penalty,
+            rest,
         }
     }
 
     /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
+    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）。
     pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge) -> f64 {
-        self.language_model.log_prob(prev, edge.first) + edge.inner
+        let first = self.language_model.log_prob(prev, edge.first);
+        first + edge.inner + personal_bonus(first + edge.rest, edge.personal)
     }
 
     pub(crate) fn sentences(&self) -> usize {
@@ -152,39 +164,51 @@ impl Engine {
         }
     }
 
-    /// 剛好是碼 `code` 的連打字集的字與詞。字依字頻由高到低、最多 `limit` 個（字序在
-    /// [`Engine::new`] 排過）；詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
-    fn exact(&self, code: &str, start: usize, limit: usize) -> impl Iterator<Item = Edge> {
+    /// 剛好是碼 `code` 的連打字集的字與詞。字取字頻最高的 `limit` 個（字序在 [`Engine::new`]
+    /// 排過），另加 `user` 學過的：它們有 `personal`，字頻排名在後也可能勝出。
+    /// 詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
+    fn exact<'a>(
+        &'a self,
+        user: &'a UserModel,
+        code: &'a str,
+        start: usize,
+        limit: usize,
+    ) -> impl Iterator<Item = Edge> + 'a {
         let chars = self
             .char_entries(code)
             .iter()
             .filter(|e| !e.extension)
-            .take(limit)
-            .map(move |e| self.char_edge(start, e.text));
+            .enumerate()
+            .filter(move |&(i, e)| {
+                i < limit
+                    || user.has_learned(&self.scheme.id, code, e.text.encode_utf8(&mut [0; 4]))
+            })
+            .map(move |(_, e)| self.char_edge(user, code, start, e.text));
         let words = self
             .lexicon
             .lookup(code)
             .iter()
-            .map(move |w| self.word_edge(start, w));
+            .map(move |w| self.word_edge(user, code, start, w));
         chars.chain(words)
     }
 
-    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個，加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
-    pub(crate) fn edges_ending(&self, input: &str) -> Vec<Edge> {
+    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個與學過的，
+    /// 加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
+    pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let end = input.len();
         let longest = self
             .longest_word_code
             .max(usize::from(self.scheme.max_code_length));
         (end.saturating_sub(longest)..end)
-            .flat_map(|start| self.exact(&input[start..], start, self.beam()))
+            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
             .collect()
     }
 
     /// 碼 `code` 的全部連打字集的字與詞與它們在組字開頭的分數，依分數由高到低（同分照碼表、
     /// 詞庫的順序）。
-    pub(crate) fn span(&self, code: &str) -> Vec<(f64, String)> {
+    pub(crate) fn span(&self, user: &UserModel, code: &str) -> Vec<(f64, String)> {
         let mut edges: Vec<(f64, String)> = self
-            .exact(code, 0, usize::MAX)
+            .exact(user, code, 0, usize::MAX)
             .map(|e| (self.edge_score(None, &e), e.text))
             .collect();
         edges.sort_by(|a, b| b.0.total_cmp(&a.0));
