@@ -215,3 +215,26 @@ body:has(#keyboard:not([hidden])) {
 	font-size: 1rem;
 	font-family: ui-monospace, monospace;
 }
+
+#user-dict .note {
+	margin: 0;
+	color: gray;
+	font-size: 0.875rem;
+}
+
+/* 匯入前的確認（plan §2.4：匯入取代整份），用頁面上的區塊，不用瀏覽器原生對話框。 */
+#confirm-import {
+	margin: 0;
+	padding: 0.5rem;
+	border: 1px solid #d93025;
+	border-radius: 0.25rem;
+	background: #fce8e6;
+}
+
+#confirm-import[hidden] {
+	display: none;
+}
+
+#confirm-import p {
+	margin: 0 0 0.5rem;
+}

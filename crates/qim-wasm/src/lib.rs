@@ -52,6 +52,43 @@ impl WebSession {
         self.session.set_options(self.options);
     }
 
+    /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
+    #[wasm_bindgen(js_name = addWord)]
+    pub fn add_word(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {
+        let trigger = (!trigger.is_empty()).then_some(trigger);
+        self.user
+            .add_word(&self.engine, text, trigger)
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    /// 使用者詞與學習計數匯出成 `# qim-userdict v1` 的 TSV（plan §2.4），網頁存 `localStorage`、
+    /// 下載成檔。
+    #[wasm_bindgen(js_name = exportUserDict)]
+    pub fn export_user_dict(&self) -> String {
+        self.user.export()
+    }
+
+    /// 檢查 `text` 是不是匯入得了的檔，不動目前的資料；網頁請使用者確認覆蓋之前先檢查。
+    #[wasm_bindgen(js_name = checkUserDict)]
+    pub fn check_user_dict(&self, text: &str) -> Result<(), JsError> {
+        UserModel::import(text)
+            .map(|_| ())
+            .map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    /// 讀匯出的檔，取代目前的使用者詞與學習計數；不合格式時整份不收、原本的不動。
+    #[wasm_bindgen(js_name = importUserDict)]
+    pub fn import_user_dict(&mut self, text: &str) -> Result<(), JsError> {
+        self.user = UserModel::import(text).map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(())
+    }
+
+    /// 清掉全部使用者詞與學習計數。
+    #[wasm_bindgen(js_name = clearUserDict)]
+    pub fn clear_user_dict(&mut self) {
+        self.user = UserModel::default();
+    }
+
     /// 簡體模式（M1 票 16）：候選、組字與上屏轉成簡體，學習仍記繁體。組字中切換也立刻
     /// 重列候選，回傳新的狀態給網頁畫。
     #[wasm_bindgen(js_name = setSimplified)]

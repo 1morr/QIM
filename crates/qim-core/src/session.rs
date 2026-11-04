@@ -534,6 +534,24 @@ impl Session {
         user.learn(&engine.scheme().id, &segments);
     }
 
+    /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
+    /// 詞，`docs/research/libime-user-model.md` §5）。無痕模式不記。
+    fn add_auto_phrase(
+        &self,
+        engine: &Engine,
+        user: &mut UserModel,
+        segments: &[(String, String)],
+    ) {
+        if self.options.incognito {
+            return;
+        }
+        let code: String = segments.iter().map(|(code, _)| code.as_str()).collect();
+        let text: String = segments.iter().map(|(_, text)| text.as_str()).collect();
+        if !engine.has_entry(&code, &text) {
+            user.add_auto_phrase(&engine.scheme().id, &code, &text);
+        }
+    }
+
     /// 已選定的分段接起來：顯示的字詞與原文。
     fn selected_commit(&self, engine: &Engine) -> Commit {
         Commit {
@@ -594,6 +612,9 @@ impl Session {
                 String::new(),
             ),
         };
+        // 這次之前已選定分段，或改選的是第 2 段以後：整個組字是分兩次以上選定的，整串上屏時
+        // 自動造詞（plan §2.4）。
+        let auto_phrase = at > 0 || !self.selected.is_empty();
         let mut fixed: Vec<Segment> = segments[..at]
             .iter()
             .map(|s| Segment {
@@ -620,7 +641,11 @@ impl Session {
         self.selected = fixed;
         self.focus = None;
         if rest.is_empty() {
-            self.learn(engine, user, &self.selected_segments());
+            let segments = self.selected_segments();
+            self.learn(engine, user, &segments);
+            if auto_phrase {
+                self.add_auto_phrase(engine, user, &segments);
+            }
             let commit = self.selected_commit(engine);
             return self.commit(engine, commit);
         }

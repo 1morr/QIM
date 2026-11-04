@@ -322,6 +322,157 @@ fn using_a_twice_chosen_candidate_in_a_sentence_does_not_make_it_more_recent() {
     assert_eq!(ime.top_of(&mut user, "ab"), "丙");
 }
 
+/// `mir`（一戈口）：詞庫的「一店」詞頻高，是首選；「歹口」（`mi` + `r`）其次；
+/// 「一台」（`m` + `ir`）的「台」字頻低，排第 3。
+fn yi_toi() -> Data<'static> {
+    Data {
+        scheme: "quick",
+        table: vec![("m", "一"), ("mi", "歹"), ("ir", "台"), ("r", "口")],
+        words: vec![("mir", "一店", 1_000_000)],
+        chars: vec![
+            ('一', 1000),
+            ('歹', 200),
+            ('台', 2),
+            ('口', 1000),
+            ('店', 300),
+        ],
+    }
+}
+
+/// 自動造詞（plan §2.4、brief §4.5）：分段選字上屏後學成使用者詞，下次排第 2，再選一次成首選。
+#[test]
+fn choosing_segment_by_segment_learns_a_word_that_is_second_then_top_after_one_more_choice() {
+    let mut ime = Ime::new(&yi_toi());
+    let mut user = UserModel::default();
+    let shown = ime.type_code(&mut user, "mir");
+    ime.press(&mut user, Key::Escape);
+    let before = texts(&shown).iter().position(|t| t == "一台");
+    assert!(
+        before.is_none_or(|at| at > 1),
+        "學之前「一台」就在前 2 位：{:?}",
+        texts(&shown)
+    );
+
+    let selected = ime.choose(&mut user, "mir", "一");
+    assert_eq!(selected.commit, None, "只選了開頭一段");
+    let at = texts(&selected).iter().position(|t| t == "台");
+    let at = at.unwrap_or_else(|| panic!("選了「一」之後沒有「台」：{:?}", texts(&selected)));
+    let committed = ime.press(&mut user, Key::Digit(u8::try_from(at + 1).unwrap()));
+    assert_eq!(committed.commit.as_deref(), Some("一台"));
+
+    let shown = ime.type_code(&mut user, "mir");
+    ime.press(&mut user, Key::Escape);
+    assert_eq!(texts(&shown)[..2], ["一店", "一台"]);
+
+    ime.choose(&mut user, "mir", "一台");
+    assert_eq!(ime.top_of(&mut user, "mir"), "一台");
+}
+
+/// 手動加的使用者詞打觸發詞時是首選（排位規則 1，brief §4.5），即使觸發詞本來有更好的候選。
+#[test]
+fn a_manual_user_word_is_the_top_when_its_trigger_is_typed() {
+    let mut ime = Ime::new(&yi_toi());
+    let mut user = UserModel::default();
+    assert_eq!(ime.top_of(&mut user, "mir"), "一店");
+
+    user.add_word(&ime.engine, "台口", Some("mir")).unwrap();
+    assert_eq!(ime.top_of(&mut user, "mir"), "台口");
+    let committed = ime.choose(&mut user, "mir", "台口");
+    assert_eq!(committed.commit.as_deref(), Some("台口"));
+}
+
+/// 使用者詞補上詞庫沒有的詞（brief §1.5）：用各字的碼接起來也打得出。`a` 有五個字、「丙」
+/// 字頻最低，`aa` 連打的前 3 條路徑都輪不到「丙丙」。
+#[test]
+fn a_manual_user_word_can_be_typed_with_the_codes_of_its_characters() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰甲乙丙")],
+        words: vec![],
+        chars: vec![
+            ('日', 1000),
+            ('曰', 500),
+            ('甲', 300),
+            ('乙', 200),
+            ('丙', 1),
+        ],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    let shown = ime.type_code(&mut user, "aa");
+    ime.press(&mut user, Key::Escape);
+    assert!(
+        !texts(&shown).contains(&"丙丙".to_string()),
+        "{:?}",
+        texts(&shown)
+    );
+
+    user.add_word(&ime.engine, "丙丙", None).unwrap();
+    let shown = ime.type_code(&mut user, "aa");
+    assert!(
+        texts(&shown).contains(&"丙丙".to_string()),
+        "{:?}",
+        texts(&shown)
+    );
+}
+
+/// 字沒有碼的詞（英文、數字）只能靠觸發詞打；沒給觸發詞、觸發詞有方案以外的字、詞是空的或含
+/// Tab、換行時加不進去。
+#[test]
+fn a_user_word_needs_a_trigger_made_of_scheme_keys_or_characters_that_have_codes() {
+    let ime = Ime::new(&yi_toi());
+    let mut user = UserModel::default();
+    assert!(user.add_word(&ime.engine, "QIM 3", None).is_err());
+    assert!(
+        user.add_word(&ime.engine, "QIM 3", Some("qz")).is_err(),
+        "z 不在速成的鍵裡"
+    );
+    assert!(user.add_word(&ime.engine, "QIM 3", Some("")).is_err());
+    assert!(user.add_word(&ime.engine, "", Some("q")).is_err());
+    assert!(user.add_word(&ime.engine, "一\t台", Some("q")).is_err());
+    assert!(user.add_word(&ime.engine, "一\n台", Some("q")).is_err());
+    assert_eq!(user, UserModel::default());
+
+    user.add_word(&ime.engine, "QIM 3", Some("qim")).unwrap();
+    let mut ime = ime;
+    assert_eq!(ime.top_of(&mut user, "qim"), "QIM 3");
+}
+
+/// 「選兩次才成首選」（brief §4.5）：整串上屏一次的候選，就算學到的分數讓它勝過原本的首選，
+/// 也只排第 2。`ab` 的「乙丙」「丙丙」是詞庫的詞，靜態機率都很低，學一次的個人分就夠勝出。
+#[test]
+fn a_candidate_committed_once_is_not_the_top_even_when_its_learned_score_is_highest() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "乙"), ("b", "丙"), ("y", "某")],
+        words: vec![
+            ("ab", "乙丙", 100),
+            ("ab", "丙丙", 10),
+            ("yy", "某某", 100_000_000),
+        ],
+        chars: vec![('乙', 10), ('丙', 5), ('某', 100_000_000)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    assert_eq!(ime.top_of(&mut user, "ab"), "乙丙");
+
+    ime.choose(&mut user, "ab", "丙丙");
+    let shown = ime.type_code(&mut user, "ab");
+    ime.press(&mut user, Key::Escape);
+    assert_eq!(texts(&shown)[..2], ["乙丙", "丙丙"]);
+    ime.choose(&mut user, "ab", "丙丙");
+    assert_eq!(ime.top_of(&mut user, "ab"), "丙丙");
+}
+
+/// 本來就是首選的候選上屏一次後仍是首選：「剛好 1 次的不靠分數成首選」只擋靠學習升上來的。
+#[test]
+fn the_top_committed_once_stays_the_top() {
+    let mut ime = Ime::new(&ab());
+    let mut user = UserModel::default();
+    ime.choose(&mut user, "ab", "甲");
+    assert_eq!(ime.top_of(&mut user, "ab"), "甲");
+}
+
 /// 觸控鍵盤的文字鍵（`Session::text`，M1 票 20）組字中和標點相同：先上屏組字，照樣學。
 #[test]
 fn a_touch_text_key_learns_the_composition_like_punctuation() {
@@ -338,4 +489,32 @@ fn a_touch_text_key_learns_the_composition_like_punctuation() {
     assert_eq!(text.commit, punct.commit);
     assert_ne!(by_text, UserModel::default());
     assert_eq!(by_text, by_punct);
+}
+
+/// 連打後移到第 2 段改選再上屏（M1 票 21 的組字中修改）也是分兩次以上選定：前面的分段照
+/// 顯示的字固定，整串學成自動造詞。
+#[test]
+fn changing_a_later_segment_before_committing_also_learns_an_auto_phrase() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰"), ("b", "月肉")],
+        words: vec![],
+        chars: vec![('日', 1000), ('曰', 500), ('月', 100), ('肉', 0)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    ime.type_code(&mut user, "ab");
+    let focused = ime.session.focus_segment(&ime.engine, &mut user, 1);
+    let at = texts(&focused).iter().position(|t| t == "肉").unwrap();
+    let committed = ime.press(&mut user, Key::Digit(u8::try_from(at + 1).unwrap()));
+    assert_eq!(committed.commit.as_deref(), Some("日肉"));
+
+    assert!(
+        user.export()
+            .contains("quick\t日肉\tab\t1\t1\t1\t1\tauto\t\n"),
+        "{}",
+        user.export()
+    );
+    let shown = ime.type_code(&mut user, "ab");
+    assert_eq!(texts(&shown)[1], "日肉");
 }

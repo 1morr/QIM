@@ -161,6 +161,52 @@ impl Engine {
         }
     }
 
+    /// 一個使用者詞的邊（plan §2.4）：沒有詞頻，詞內由字級 bigram 一字接一字估，不加 β；
+    /// 只算一段，所以比拆成單字的路徑少扣 γ。
+    fn user_word_edge(&self, user: &UserModel, code: &str, start: usize, text: &str) -> Edge {
+        let mut chars = text.chars();
+        let first = chars.next().expect("使用者詞不是空的");
+        let (rest, _) = chars.fold((0.0, first), |(sum, prev), c| {
+            (sum + self.language_model.log_prob(Some(prev), c), c)
+        });
+        Edge {
+            start,
+            personal: user.personal_probability(&self.scheme.id, code, text),
+            text: text.to_string(),
+            first,
+            inner: rest - self.scheme.ranking.segment_penalty,
+            rest,
+        }
+    }
+
+    /// `text` 各字的碼接起來；有字不在碼表裡時是 `None`。一個字有幾個碼時取它排得最前的
+    /// 那個碼，同名次取短的、再取字典序前的。
+    pub(crate) fn code_of(&self, text: &str) -> Option<String> {
+        text.chars()
+            .map(|c| {
+                self.code_table
+                    .iter()
+                    .filter(|(code, _)| code.len() <= usize::from(self.scheme.max_code_length))
+                    .filter_map(|(code, entries)| {
+                        let rank = entries.iter().position(|e| e.text == c)?;
+                        Some((rank, code.len(), code))
+                    })
+                    .min()
+                    .map(|(_, _, code)| code)
+            })
+            .collect()
+    }
+
+    /// 碼表或詞庫裡有沒有碼 `code` 的 `text`；使用者詞不算。
+    pub(crate) fn has_entry(&self, code: &str, text: &str) -> bool {
+        let mut chars = text.chars();
+        let is_char = match (chars.next(), chars.next()) {
+            (Some(c), None) => self.char_entries(code).iter().any(|e| e.text == c),
+            _ => false,
+        };
+        is_char || self.lexicon.lookup(code).iter().any(|w| w.text == text)
+    }
+
     /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
     /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）。
     pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge) -> f64 {
@@ -181,8 +227,8 @@ impl Engine {
         }
     }
 
-    /// 剛好是碼 `code` 的連打字集的字與詞。字取字頻最高的 `limit` 個（字序在 [`Engine::new`]
-    /// 排過），另加 `user` 學過的：它們有 `personal`，字頻排名在後也可能勝出。
+    /// 剛好是碼 `code` 的連打字集的字與詞，接著使用者詞。字取字頻最高的 `limit` 個（字序在
+    /// [`Engine::new`] 排過），另加 `user` 學過的：它們有 `personal`，字頻排名在後也可能勝出。
     /// 詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
     fn exact<'a>(
         &'a self,
@@ -206,16 +252,20 @@ impl Engine {
             .lookup(code)
             .iter()
             .map(move |w| self.word_edge(user, code, start, w));
-        chars.chain(words)
+        let user_words = user
+            .words(&self.scheme.id, code)
+            .map(move |text| self.user_word_edge(user, code, start, text));
+        chars.chain(words).chain(user_words)
     }
 
     /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個與學過的，
-    /// 加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
+    /// 加上詞庫的詞與使用者詞。擴展區的字不進 lattice（plan §2.3）。
     pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let end = input.len();
         let longest = self
             .longest_word_code
-            .max(usize::from(self.scheme.max_code_length));
+            .max(usize::from(self.scheme.max_code_length))
+            .max(user.longest_word_code(&self.scheme.id));
         (end.saturating_sub(longest)..end)
             .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
             .collect()

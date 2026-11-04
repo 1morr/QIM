@@ -24,9 +24,28 @@ fn build(essay: &str) -> (Lexicon, Counts) {
 }
 
 fn build_with(essay: &str, char_frequency: BTreeMap<char, u64>) -> (Lexicon, Counts) {
+    try_build(essay, "", char_frequency).unwrap()
+}
+
+/// 加上粵語口語詞表（`data/lexicon/yue-colloquial.tsv` 的格式）。
+fn build_colloquial(essay: &str, colloquial: &str) -> (Lexicon, Counts) {
+    try_build(essay, colloquial, BTreeMap::new()).unwrap()
+}
+
+fn try_build(
+    essay: &str,
+    colloquial: &str,
+    char_frequency: BTreeMap<char, u64>,
+) -> Result<(Lexicon, Counts), qim_databuild::Error> {
     let rows = libcangjie::parse(TABLE).unwrap();
     let code_table = quick::code_table(&rows, &BTreeMap::new());
-    lexicon::build(essay, &code_table, &Transcoder::new(&rows), char_frequency).unwrap()
+    lexicon::build(
+        essay,
+        colloquial,
+        &code_table,
+        &Transcoder::new(&rows),
+        char_frequency,
+    )
 }
 
 fn texts(lexicon: &Lexicon, code: &str) -> Vec<String> {
@@ -78,6 +97,7 @@ fn single_characters_rare_words_and_words_outside_the_continuous_set_are_left_ou
             capped: 0,
             codes: 2,
             indexed: 2,
+            colloquial: 0,
         }
     );
 }
@@ -141,8 +161,51 @@ fn malformed_lines_are_errors() {
     let code_table = quick::code_table(&rows, &BTreeMap::new());
     let transcoder = Transcoder::new(&rows);
     for essay in ["門口\n", "門口\t9435\t1\n", "門口\tmany\n", "\t9\n"] {
-        let err = lexicon::build(essay, &code_table, &transcoder, BTreeMap::new()).unwrap_err();
+        let err = lexicon::build(essay, "", &code_table, &transcoder, BTreeMap::new()).unwrap_err();
         assert!(err.to_string().contains("第 1 行"), "{essay:?}：{err}");
     }
     assert!(lexicon::char_frequency(&[("日 3\n", 1)]).is_err());
+}
+
+#[test]
+fn colloquial_words_join_the_lexicon_with_their_listed_frequency() {
+    // 日弓不在 essay、丟丟在 essay 但低於門檻：都由詞表補上，用詞表的詞頻。
+    let (lexicon, counts) = build_colloquial(
+        "門口\t9435\n丟丟\t20\n",
+        "# 註解\n\n日弓\t300\n丟丟\t1000\n",
+    );
+    assert_eq!(texts(&lexicon, "an"), ["日弓"]);
+    assert_eq!(lexicon.lookup("an")[0].frequency, 300);
+    assert_eq!(lexicon.lookup("mimi")[0].frequency, 1000);
+    assert_eq!(lexicon.lookup("anr")[0].frequency, 9435);
+    assert_eq!(
+        (counts.colloquial, counts.below_threshold, counts.words),
+        (2, 0, 3)
+    );
+}
+
+#[test]
+fn colloquial_list_errors_name_the_file_and_line() {
+    // 詞表是人工整理的：會被濾掉的列一律當錯，不默默丟掉。
+    for (colloquial, reason) in [
+        ("日弓\n", "詞<TAB>詞頻"),
+        ("日弓\t300\t1\n", "詞<TAB>詞頻"),
+        ("日弓\tmany\n", "整數"),
+        ("日\t300\n", "兩字以上"),
+        ("日弓\t99\n", "100"),
+        ("日𠀀\t300\n", "連打字集"),
+        ("日弓\t300\n日弓\t1000\n", "重複"),
+        // essay 已收的詞列進詞表沒有作用，只會讓人以為詞表的詞頻算數。
+        ("門口\t300\n", "rime-essay 已收"),
+    ] {
+        let line = colloquial.lines().count();
+        let err = try_build("門口\t9435\n", colloquial, BTreeMap::new())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("yue-colloquial.tsv") && err.contains(&format!("第 {line} 行")),
+            "{colloquial:?}：{err}"
+        );
+        assert!(err.contains(reason), "{colloquial:?}：{err}");
+    }
 }

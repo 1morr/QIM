@@ -1,7 +1,7 @@
 //! 連打的 lattice（plan §2.2、§2.3）：位置是輸入碼的字母邊界，邊是碼表的字與詞庫的詞，
 //! Viterbi + beam 逐鍵往右補一個位置。做法參考 libime（`docs/research/libime-lattice.md`）。
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::{Engine, UserModel};
 
@@ -189,6 +189,11 @@ pub(crate) fn candidates(
     let extension = engine
         .extension(input)
         .map(|c| CandidateSpan::single(c.to_string(), n));
+    // 觸發詞是整串的使用者詞，由排位規則 1 移到首選；它的碼多半不是整串，lattice 裡沒有。
+    let triggered = user
+        .triggered(&engine.scheme().id, input)
+        .into_iter()
+        .map(|text| CandidateSpan::single(text.to_string(), n));
     let prefixes = (1..n).rev().flat_map(|len| {
         engine
             .span(user, &input[..len])
@@ -196,69 +201,157 @@ pub(crate) fn candidates(
             .map(move |(_, text)| CandidateSpan::single(text, len))
     });
     let mut seen = HashSet::new();
-    let mut list: Vec<CandidateSpan> = full
+    let list: Vec<CandidateSpan> = full
+        .chain(triggered)
         .chain(extension)
         .chain(prefixes)
         .filter(|c| seen.insert(c.text.clone()))
         .collect();
     let mut ranked = Ranked {
-        scheme: &engine.scheme().id,
+        engine,
         user,
         input,
-        list: &mut list,
-        fixed: 0,
+        free: list,
+        pinned: BTreeMap::new(),
     };
     for rule in RULES {
         rule(&mut ranked);
     }
-    list
+    ranked.into_list()
 }
 
 /// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
-/// 規則 1、3 在 M1 票 14，規則 4 在票 15。
-const RULES: [fn(&mut Ranked); 1] = [recent_twice_first];
+/// 規則 4 在 M1 票 15。
+const RULES: [fn(&mut Ranked); 3] = [triggered_first, chosen_twice_first, used_word_second];
 
-/// 套用排位規則中的候選列。
+/// 套用排位規則中的候選列：排定的候選釘在它的位置，其餘的依原本的順序填進空著的位置。
 struct Ranked<'a> {
-    scheme: &'a str,
+    engine: &'a Engine,
     user: &'a UserModel,
     /// 這列候選的輸入碼；規則比對的是它（plan §2.4）。
     input: &'a str,
-    list: &'a mut Vec<CandidateSpan>,
-    /// 開頭這麼多個已由前面的規則排定。
-    fixed: usize,
+    /// 還沒排定的候選，依原本的順序。
+    free: Vec<CandidateSpan>,
+    /// 已由前面的規則排定的：位置 → 候選。
+    pinned: BTreeMap<usize, CandidateSpan>,
 }
 
 impl Ranked<'_> {
-    /// 把第 `from` 個移到還沒排定的最前面，並排定它。`from` 已排定時不動。
-    fn place_next(&mut self, from: usize) {
-        if from < self.fixed {
-            return;
-        }
-        let candidate = self.list.remove(from);
-        self.list.insert(self.fixed, candidate);
-        self.fixed += 1;
+    fn scheme(&self) -> &str {
+        &self.engine.scheme().id
+    }
+
+    /// 還沒排定、蓋滿整串的候選與它在 `free` 的位置。
+    fn free_full(&self) -> impl Iterator<Item = (usize, &CandidateSpan)> {
+        let n = self.input.len();
+        self.free
+            .iter()
+            .enumerate()
+            .filter(move |(_, c)| c.len == n)
+    }
+
+    /// 還沒排定、蓋滿整串的候選裡，`tick` 有值且最大（最近）的一個在 `free` 的位置。
+    fn most_recent(
+        &self,
+        tick: impl Fn(&UserModel, &str, &str, &str) -> Option<u64>,
+    ) -> Option<usize> {
+        self.free_full()
+            .filter_map(|(i, c)| Some((tick(self.user, self.scheme(), self.input, &c.text)?, i)))
+            .max()
+            .map(|(_, i)| i)
+    }
+    /// 把 `free` 的第 `from` 個排定在第 `position` 位或更前面：本來就在那裡就釘在原位，
+    /// 否則移到不超過 `position` 的空位裡最後面的一個；那些位置都排定了，就移到最前面的空位。
+    fn pin_at_most(&mut self, from: usize, position: usize) {
+        let current = self.position_of_free(from);
+        let total = self.free.len() + self.pinned.len();
+        let open = |p: &usize| !self.pinned.contains_key(p);
+        let target = if current <= position {
+            current
+        } else {
+            (0..=position)
+                .rev()
+                .find(open)
+                .or_else(|| (position + 1..total).find(open))
+                .expect("free 不是空的，總有空位")
+        };
+        let candidate = self.free.remove(from);
+        self.pinned.insert(target, candidate);
+    }
+
+    /// `free` 的第 `index` 個現在排在第幾位。
+    fn position_of_free(&self, index: usize) -> usize {
+        (0..)
+            .filter(|p| !self.pinned.contains_key(p))
+            .nth(index)
+            .expect("位置數不限")
+    }
+
+    /// 排好的候選列。
+    fn into_list(self) -> Vec<CandidateSpan> {
+        let total = self.free.len() + self.pinned.len();
+        let mut pinned = self.pinned;
+        let mut free = self.free.into_iter();
+        (0..total)
+            .map(|p| {
+                pinned
+                    .remove(&p)
+                    .or_else(|| free.next())
+                    .expect("位置數等於候選數")
+            })
+            .collect()
     }
 }
 
-/// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。
-fn recent_twice_first(ranked: &mut Ranked) {
-    let most_recent = ranked
-        .list
-        .iter()
-        .enumerate()
-        .skip(ranked.fixed)
-        .filter(|(_, c)| c.len == ranked.input.len())
-        .filter_map(|(i, c)| {
-            Some((
-                ranked
-                    .user
-                    .last_tick_if_chosen_twice(ranked.scheme, ranked.input, &c.text)?,
-                i,
-            ))
-        })
-        .max();
-    if let Some((_, i)) = most_recent {
-        ranked.place_next(i);
+/// 規則 1：觸發詞剛好是整串的使用者詞成首選；多個時取 [`UserModel::triggered`] 的第一個。
+fn triggered_first(ranked: &mut Ranked) {
+    let first = ranked
+        .user
+        .triggered(ranked.scheme(), ranked.input)
+        .into_iter()
+        .next();
+    let at = first.and_then(|text| ranked.free_full().find(|(_, c)| c.text == text));
+    if let Some((i, _)) = at {
+        ranked.pin_at_most(i, 0);
+    }
+}
+
+/// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。沒有這樣的
+/// 候選時，整串上屏剛好 1 次的不靠學到的分數成首選（[`once_chosen_keeps_the_unlearned_top`]）。
+fn chosen_twice_first(ranked: &mut Ranked) {
+    if let Some(i) = ranked.most_recent(UserModel::last_tick_if_chosen_twice) {
+        ranked.pin_at_most(i, 0);
+    } else {
+        once_chosen_keeps_the_unlearned_top(ranked);
+    }
+}
+
+/// 「選兩次才成首選」（brief §4.5）：學過一次的個人分常勝過靜態機率很低的詞與句子；排第一的
+/// 是整串上屏剛好 1 次的候選、而不學習時的首選不是它，就改回不學習時的首選。不學習時的首選
+/// 不是蓋滿整串的候選時不動。
+fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
+    let (user, scheme, input) = (ranked.user, ranked.scheme(), ranked.input);
+    let top_once = ranked
+        .free
+        .first()
+        .is_some_and(|c| c.len == input.len() && user.whole_commits(scheme, input, &c.text) == 1);
+    if !top_once {
+        return;
+    }
+    // 空白的個人模型沒有計數，這次呼叫的排位規則什麼都不做，不會再走到這裡。
+    let unlearned = ranked.engine.candidates(&UserModel::default(), input);
+    let Some(unlearned_top) = unlearned.first() else {
+        return;
+    };
+    let at = ranked.free_full().find(|(_, c)| &c.text == unlearned_top);
+    if let Some((i, _)) = at {
+        ranked.pin_at_most(i, 0);
+    }
+}
+
+/// 規則 3：碼是整串、上屏過的使用者詞（含自動造詞）至少排第 2 位；多個取最近上屏的。
+fn used_word_second(ranked: &mut Ranked) {
+    if let Some(i) = ranked.most_recent(UserModel::last_tick_if_used_word) {
+        ranked.pin_at_most(i, 1);
     }
 }

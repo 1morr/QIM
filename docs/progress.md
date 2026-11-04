@@ -45,10 +45,13 @@
 | 2026-11-04 | M1 21 | ← / →、`focus_segment`、`select`；網頁點分段、點候選；改選中間段時前面固定、後面重算；bench 不變；細節見票 21 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等票 20 合併；22 另在並行） |
 | 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
 | 2026-11-04 | M1 22 | 組字顯示字根；`cangjie-hint` 資料包與 `--verify` 抽查；組字中 Tab、觸控長按候選列出字根提示；細節見票 22 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等 20、21） |
+| 2026-11-04 | M1 17 | 粵語口語詞表 197 詞（使用者審過）進詞庫，4 句口語進 `fixed.tsv`，口語修正 −3%、−9.5%；細節見票 17 | 新 session 下 `/implement .scratch/m1/issues/17b-s2hk-keep-cantonese-chars.md` |
 | 2026-11-04 | M1 16 | merge main（票 22）：字根改在組字快照裡算，`refresh` 也帶字根；簡體模式的字根提示查的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | merge main（票 12）：簡體開關改呼叫 `apply(snapshot, false)`；簡體模式下「回報」記的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 23 | 展開面板、單按 Shift 英文直通、重排介面與假實作、翻頁不加 `generation`、簡體文字鍵、組字中組合鍵吃下；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md`（14、17 另在並行） |
+| 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
+| 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
 
 ## 偏差與決定
 
@@ -112,6 +115,10 @@
 - 2026-11-04 M1 22：字根提示用組字中的 Tab 叫出、觸控長按候選，fcitx5 table 是設定開關、沒有快捷鍵（brief §4.3、§4.4、§12.4）。
 - 2026-11-04 M1 22：`Composition.radicals` 只含還沒選定的輸入碼的字根，選定的分段顯示字詞（plan §2.1）。
 - 2026-11-04 M1 22：字根提示資料包不經 `Engine`，殼用 `RadicalHints::for_scheme` 另外載入；方案多了欄位，`FORMAT_VERSION` 4 → 5（plan §2.5、§4.1）。
+- 2026-11-04 M1 14：規則 2 補上「整串上屏剛好 1 次的候選不靠學到的分數成首選」：個人分壓過多字候選的靜態機率，選一次就成首選，違反 brief §4.5（plan §2.4、票 14）。
+- 2026-11-04 M1 14（使用者確認）：匯出格式由票上 7 欄改 9 欄，多記衰減值與整串上屏的 tick；匯入取代整份、壞一列整份不收，網頁匯入前在頁面上確認（plan §2.4、§3.1）。
+- 2026-11-04 M1 17：粵語口語詞表在 repo 裡、不經 `sources.toml`（不是下載的來源），詞庫資料包 `NOTICE` 記它的路徑與 sha256，授權用 `data/licenses/CC0-1.0.txt`（plan §4.2）。
+- 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。
 - 2026-11-04 M1 16（協調者決定）：快照的候選、分段與上屏另帶繁體原文（`original`、`commit_original`），「回報」與字根提示用原文，簡體模式不停用回報（plan §2.1）。
 - 2026-11-04 M1 16：merge 票 21 後簡體的轉換單位由「一個候選」改為「一個分段」：選了多段候選後各段分開固定，候選列也要各段分開轉換，看到的才是上屏的（plan §2.1）。
 - 2026-11-04 M1 23：翻頁不再加 `generation`，翻頁中收到的重排結果照樣套用：重排只動第一頁，看得到的頁不變（plan §2.1，M0 票 09 留下的）。

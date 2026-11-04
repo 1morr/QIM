@@ -30,4 +30,4 @@ pub use session::{
     Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
-pub use user::UserModel;
+pub use user::{ImportError, UserModel, UserWordError};
