@@ -327,3 +327,32 @@ test("觸控的空白鍵選字上屏可以回報，組字中點符號上屏不�
 	);
 	await expect(report).toBeDisabled();
 });
+
+test("點候選選字之後，長按與放大預覽照常", async ({ page }) => {
+	// 票 21 的點候選選字在候選列，長按與預覽在鍵盤上，兩邊交錯用都不互相干擾。
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
+	await tapKeys(page, ["a", "n", "r"]);
+	const second = (await items.nth(1).textContent())?.replace(/^2/, "") ?? "";
+	expect(second).not.toBe("");
+	await items.nth(1).tap();
+	await expect(text).toHaveValue(second);
+	await expect(page.getByTestId("composition")).toHaveText("");
+
+	const hand = await finger(page);
+	await tapKeys(page, ["a"]);
+	await hand.down(...(await centre(page, "key-n")));
+	await expect(page.getByTestId("key-preview")).toHaveText("弓");
+	await hand.up();
+	await expect(page.getByTestId("composition")).toHaveText("日弓");
+	await items.first().tap();
+	await hand.down(...(await centre(page, "key-q")));
+	await expect(page.getByTestId("long-press").getByRole("option")).toHaveText([
+		"q",
+		"1",
+	]);
+	await hand.up();
+	await expect(page.getByTestId("long-press")).toBeHidden();
+	await expect(text).toHaveValue(new RegExp(`^${second}.+q$`));
+	await expect(page.getByTestId("composition")).toHaveText("");
+});
