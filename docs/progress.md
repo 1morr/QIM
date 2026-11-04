@@ -34,6 +34,7 @@
 | 2026-11-04 | M1 07 | lattice、Viterbi + beam、unigram（β 2、γ 0）、選開頭一段後其餘重算；`anr`、`mir` 首選都對，維基答錯少 1/4 以上，口語修正次數變多；細節見票 07 | 新 session 下 `/implement .scratch/m1/issues/08-blackbox-apple.md` |
 | 2026-11-04 | M1 08 | macOS、iOS 內建速成 T1–T18 寫進 `docs/research/blackbox-baseline.md`；brief §1.3 更新，5 題進 `fixed.tsv`；細節見票 08 | 新 session 下 `/implement .scratch/m1/issues/09-blackbox-gboard.md` |
 | 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
+| 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
 
 ## 偏差與決定
 
@@ -67,3 +68,4 @@
 - 2026-11-04 M1 07：口語兩集修正次數高於 baseline（連打錯一處就要選開頭一段），`--update-baseline` 只更新 `bench/baseline.json`，原因在票 07 Comments。
 - 2026-11-04 M1 09：iPhone 版 Gboard 沒測：使用者決定不在 iPhone 安裝，比照 plan §8 的備案只測 Android，有沒有速成記為未確認（票 09 Comments）。
 - 2026-11-04 M1 09 後（使用者決定）：會改寫打出的字或候選位置的行為都給開關，英文自動修正、英文句首自動大寫預設關，英文候選、容錯、聯想、雲端預設開（brief §4.7、§4.8、§7；plan §7.4、§7.5）。
+- 2026-11-04 M1 11：詞的段改成第一字用 bigram、詞內用詞頻（plan §2.3）：詞內也用字級 bigram 時同碼的詞分不出常用度，個人集答錯 1146 → 1452；票 12 用 dev 複核。

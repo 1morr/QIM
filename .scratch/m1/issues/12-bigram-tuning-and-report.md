@@ -24,3 +24,5 @@ Blocked by: 04, 05, 08, 09, 11
 - [ ] `cargo xtask bench --check` 綠燈。
 
 ## Comments
+
+- 票 11 留下的（2026-11-04）：詞的段改成「第一字用 bigram、詞內用詞頻」的混合式（plan §2.3、票 11 Comments）；它是看 test 切分與個人集選的，本票用 dev 切分複核，並試詞內在詞頻與字級 bigram 之間內插。β = 2、γ = 0 仍是 unigram 時代的值。每碼先依字頻取前 beam 個字的近似、剪枝門檻 `bigram::MIN_COUNT = 2`（不剪約 4.7 MB，仍 ≤ 8 MB）也一起量。
