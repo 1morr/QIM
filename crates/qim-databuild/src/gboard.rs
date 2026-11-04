@@ -152,6 +152,11 @@ impl Cell {
         self
     }
 
+    fn plain(mut self) -> Self {
+        self.tone = Tone::Plain;
+        self
+    }
+
     fn small(self) -> Self {
         self.size(SMALL_LABEL_SIZE)
     }
@@ -253,8 +258,7 @@ fn back() -> Cell {
 
 /// 「12/34」切到數字鍵盤（白鍵）。
 fn to_numbers() -> Cell {
-    let mut cell = switch(NUMBERS, "12\n34");
-    cell.tone = Tone::Plain;
+    let mut cell = switch(NUMBERS, "12\n34").plain();
     cell.a11y_label = Some("數字鍵盤".into());
     cell
 }
@@ -330,51 +334,49 @@ fn number_row() -> Row {
     }
 }
 
-/// 符號頁（?123）：照 Gboard；打完留在符號頁（brief §4.4），「返回」回字母頁。
-/// 打出的字元照 Gboard 實測：括號與 `：；！？` 全形，底排逗號句號與其他符號半形。
-fn symbols_page() -> Vec<Row> {
-    let mut third = vec![switch(MORE_SYMBOLS, "=\\<").units(1.5)];
-    third.extend(symbols("、 “ ” ： ； ！ ？"));
-    third.push(backspace());
+/// 兩個符號頁共用的排法：兩排符號；第三排左邊切到另一個符號頁、七個符號、刪除；
+/// 底排「返回」、兩個功能鍵符號夾著「12/34」與空白、Enter。
+fn symbol_page(rows: [&str; 2], other: Cell, third: &str, [left, right]: [&str; 2]) -> Vec<Row> {
+    let mut third_row = vec![other.units(1.5)];
+    third_row.extend(symbols(third));
+    third_row.push(backspace());
     vec![
-        row(0.0, symbols("1 2 3 4 5 6 7 8 9 0")),
-        row(0.0, symbols("@ # $ _ & - + （ ） /")),
-        row(0.0, third),
+        row(0.0, symbols(rows[0])),
+        row(0.0, symbols(rows[1])),
+        row(0.0, third_row),
         row(
             0.0,
             vec![
                 back(),
-                text(",").function(),
+                text(left).function(),
                 to_numbers(),
                 space(4.0),
-                text(".").function(),
+                text(right).function(),
                 enter(),
             ],
         ),
     ]
 }
 
-/// 更多符號頁（=\<）：照 Gboard；左邊「?123」回符號頁。
+/// 符號頁（?123）：照 Gboard；打完留在符號頁（brief §4.4），「返回」回字母頁，「=\<」切到更多符號。
+/// 打出的字元照 Gboard 實測：括號與 `：；！？` 全形，底排逗號句號與其他符號半形。
+fn symbols_page() -> Vec<Row> {
+    symbol_page(
+        ["1 2 3 4 5 6 7 8 9 0", "@ # $ _ & - + （ ） /"],
+        switch(MORE_SYMBOLS, "=\\<"),
+        "、 “ ” ： ； ！ ？",
+        [",", "."],
+    )
+}
+
+/// 更多符號頁（=\<）：照 Gboard；左邊「?123」回符號頁，方括號全形（實測）。
 fn more_symbols_page() -> Vec<Row> {
-    let mut third = vec![switch(SYMBOLS, "?123").units(1.5)];
-    third.extend(symbols("% ‘ ’ ™ ✓ ［ ］"));
-    third.push(backspace());
-    vec![
-        row(0.0, symbols("~ ` | • √ π ÷ × * §")),
-        row(0.0, symbols("£ ¢ € ¥ ^ ° = 「 」 \\")),
-        row(0.0, third),
-        row(
-            0.0,
-            vec![
-                back(),
-                text("<").function(),
-                to_numbers(),
-                space(4.0),
-                text(">").function(),
-                enter(),
-            ],
-        ),
-    ]
+    symbol_page(
+        ["~ ` | • √ π ÷ × * §", "£ ¢ € ¥ ^ ° = 「 」 \\"],
+        switch(SYMBOLS, "?123"),
+        "% ‘ ’ ™ ✓ ［ ］",
+        ["<", ">"],
+    )
 }
 
 /// 數字鍵盤（12/34）：照 Gboard，左欄運算符、中間 3 × 3、右欄 % 空白 刪除；
@@ -416,17 +418,14 @@ fn numbers_page() -> Vec<Placed> {
     let bottom = [
         (back(), 1.5),
         (text(",").function(), 1.0),
-        (switch(SYMBOLS, "!?#"), digit - 1.0),
+        (switch(SYMBOLS, "!?#").plain(), digit - 1.0),
         (text("0").size(NUMPAD_LABEL_SIZE), digit),
         (text("=").size(SYMBOL_LABEL_SIZE), digit - 1.0),
         (text(".").function(), 1.0),
         (enter(), 1.5),
     ];
     let mut left = 0.0;
-    for (mut cell, units) in bottom {
-        if cell.id == format!("to-{SYMBOLS}") {
-            cell.tone = Tone::Plain;
-        }
+    for (cell, units) in bottom {
         placed.push(Placed::new(cell, left, 3.0, units, 1.0));
         left += units;
     }

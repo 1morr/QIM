@@ -16,7 +16,7 @@ const KEY_LONG_PRESS_MS = 400;
 const QUICK_REPEAT_MS = 300;
 /** 長按清單一排最多幾個選項，多的換到下一排（Gboard 句號鍵的清單是兩排）。 */
 const LONG_PRESS_COLUMNS = 8;
-/** Shift 鍵依狀態畫的圖示：關、開一次、鎖定（同 Gboard 的空心、實心、實心加底線）。 */
+/** Shift 鍵開著時畫的圖示：開一次、鎖定（同 Gboard 的實心、實心加底線）；關著時用佈局的標籤（空心 ⇧）。 */
 const SHIFT_GLYPHS: Record<string, string> = {
 	once: "⬆",
 	locked: "⇪",
@@ -142,7 +142,7 @@ export function mountKeyboard(
 		const label = element.querySelector<HTMLElement>(".label");
 		const hint = element.querySelector<HTMLElement>(".hint");
 		if (label) {
-			label.textContent = key.shift
+			label.textContent = key.isShift
 				? (SHIFT_GLYPHS[layout.shift] ?? key.label)
 				: key.label;
 		}
@@ -151,7 +151,7 @@ export function mountKeyboard(
 			hint.hidden = key.hint === undefined;
 		}
 		element.setAttribute("aria-label", key.a11yLabel);
-		if (key.shift) {
+		if (key.isShift) {
 			element.dataset.shift = layout.shift;
 			element.setAttribute("aria-pressed", String(layout.shift !== "off"));
 		}

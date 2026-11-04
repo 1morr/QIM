@@ -583,7 +583,7 @@ impl WebLayout {
                     a11y_label: key.accessibility_label(&label),
                     label,
                     hint: key.display_hint(state).map(str::to_owned),
-                    shift: key.tap == Action::Shift,
+                    is_shift: key.tap == Action::Shift,
                     fill_light: style.fill.as_ref().map(|c| c.light.clone()),
                     fill_dark: style.fill.map(|c| c.dark),
                     label_color_light: style.label_color.as_ref().map(|c| c.light.clone()),
@@ -658,8 +658,8 @@ pub struct WebLayoutKey {
     #[wasm_bindgen(readonly)]
     pub hint: Option<String>,
     /// 是不是 Shift 鍵；網頁依 [`WebLayout::shift`] 畫它的狀態。
-    #[wasm_bindgen(readonly)]
-    pub shift: bool,
+    #[wasm_bindgen(readonly, js_name = isShift)]
+    pub is_shift: bool,
     #[wasm_bindgen(readonly, js_name = a11yLabel)]
     pub a11y_label: String,
     #[wasm_bindgen(readonly, js_name = fillLight)]

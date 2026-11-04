@@ -23,6 +23,8 @@
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
 | 2026-11-04 | M2 封存 M1 | 票 24：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過、黑箱在 QIM 重跑；M1 封存到 `docs/archive/M1.md`，M2 標進行中；細節見票 24 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
-| 2026-11-05 | M2（補 M1 27） | 票 27 進行中：觸控佈局對齊 Gboard 速成、Shift、數字列已 commit；未做 code-review 與全套檢查，見票 27 Comments | 新 session 下 `/implement .scratch/m1/issues/27-touch-layout-match-gboard.md`（接續收尾） |
+| 2026-11-05 | M2（補 M1 27） | 票 27：觸控佈局照 Gboard 速成實測（Shift、符號三頁、配色、數字列開關、長按只出字母）；組字中分隔鍵待使用者決定，見票 27 | 等使用者：組字中 ⇧ 要不要做成分隔鍵（票 27 Comments）；三張補票都做完後新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 
 ## 偏差與決定
+
+- 2026-11-05 M2（補 M1 27）：長按字母鍵不再出數字，改由設定的數字列（使用者決定，推翻 brief §4.4「第一排另含數字」）；佈局格式加 `"shift"` 動作，只加不改、不升版本（plan §2.6）。

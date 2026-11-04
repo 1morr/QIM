@@ -103,6 +103,7 @@ test("數字列預設關；打開後字母頁上方多一排數字，點「1」�
 	await expect(numberRow).not.toBeChecked();
 	await expect(page.getByTestId("key-1")).toHaveCount(0);
 	const keyboard = page.getByTestId("keyboard");
+	await expect(keyboard).toBeVisible();
 	const before = await keyboard.boundingBox();
 	await numberRow.check();
 	await tapKeys(page, ["1", "a", "space"]);
