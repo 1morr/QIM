@@ -24,3 +24,5 @@ Blocked by: 02
 - [ ] 沒有個人集檔案時 `bench` 照常跑完。
 
 ## Comments
+
+- 票 01 留下的（2026-11-04）：轉碼用 `qim_databuild::transcode::Transcoder`。`corpus::clauses` 把英文字母當句子的一部分（含英文的句子整句丟掉），不符合 plan §5.2 對 `sentences.txt`「英文段落切開不算」的要求，個人句子要另外切。

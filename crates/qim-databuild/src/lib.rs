@@ -2,14 +2,19 @@
 //!
 //! 入口是 `cargo xtask data [--verify]`，用法見 `docs/development.md`。
 
+pub mod corpus;
 mod error;
 pub mod libcangjie;
+pub mod mediawiki;
 mod pipeline;
 pub mod quick;
 pub mod scheme;
 pub mod sources;
+pub mod transcode;
 pub mod unihan;
 pub mod verify;
+pub mod wiki;
+pub mod wikitext;
 
 pub use error::Error;
 pub use pipeline::{Outcome, run};

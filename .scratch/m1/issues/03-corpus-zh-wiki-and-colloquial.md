@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02
-讀: plan §4.2（字頻）、§4.3、§5.2（`bench/colloquial/`）、§8（口語語料、CirrusSearch 兩列）；brief §5.2、§11、§12.1；spec〈共同規則〉
+讀: plan §4.2（字頻）、§4.3、§5.2（`bench/colloquial/`）、§8（口語語料那列）；`docs/development.md`〈語料〉；brief §5.2、§11、§12.1；spec〈共同規則〉
 
 ## What to build
 
@@ -25,3 +25,5 @@ Blocked by: 01, 02
 - [ ] `cargo xtask bench` 列出維基（粵、中）與口語集；`baseline.json` 依新集合更新並寫理由。
 
 ## Comments
+
+- 票 01 留下的（2026-11-04）：管線用 pages-articles 自己抽內文（CirrusSearch dump 只留約 5 週，見 progress 偏差）。`pipeline.rs` 的 `WIKIS` 要求每個來源剛好一個 dump 檔，`sources::load` 把整份讀進記憶體、`--verify` 再讀一次；粵語維基 130 MB 沒問題，中文維基數 GB，要改成串流下載與解壓、只取需要的篇數。`split_of` 是全域的句子雜湊，各語料沿用它，同一句跨語料也不會一邊 train 一邊 test。

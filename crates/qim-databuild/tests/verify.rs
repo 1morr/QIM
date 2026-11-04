@@ -170,3 +170,86 @@ fn undecodable_pack_fails_without_panicking() {
     assert!(failed(&report).contains(&CheckId::Decodes));
     assert!(!report.passed());
 }
+
+mod corpus {
+    use qim_databuild::libcangjie;
+    use qim_databuild::transcode::Transcoder;
+    use qim_databuild::verify::{self, CheckId, CorpusDigests};
+
+    use super::TABLE;
+
+    const BENCH: &str = "ar a\t問日\nmi mi\t丟丟\n";
+    const TRAIN: &str = "日丟\n問問日\n";
+    const DEV: &str = "丟\n";
+
+    fn failed(bench: &str, train: &str, dev: &str, second: [&str; 3]) -> Vec<CheckId> {
+        let transcoder = Transcoder::new(&libcangjie::parse(TABLE).unwrap());
+        let digests = |[bench, train, dev]: [&str; 3]| CorpusDigests {
+            bench: bench.into(),
+            train: train.into(),
+            dev: dev.into(),
+        };
+        let first = digests(SAME);
+        let second = digests(second);
+        verify::corpus(
+            "test",
+            &transcoder,
+            bench,
+            train.as_bytes(),
+            dev.as_bytes(),
+            &first,
+            &second,
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|c| !c.passed)
+        .map(|c| c.id)
+        .collect()
+    }
+
+    const SAME: [&str; 3] = ["b", "t", "d"];
+
+    #[test]
+    fn clean_corpus_passes_even_with_lines_in_another_order() {
+        assert_eq!(failed(BENCH, TRAIN, DEV, SAME), []);
+        assert_eq!(
+            failed("mi mi\t丟丟\nar a\t問日\n", "問問日\n日丟\n", DEV, SAME),
+            []
+        );
+    }
+
+    #[test]
+    fn bench_sentence_in_train_is_a_leak() {
+        let leaked = format!("{TRAIN}丟丟\n");
+        assert_eq!(failed(BENCH, &leaked, DEV, SAME), [CheckId::CorpusNoLeak]);
+    }
+
+    #[test]
+    fn wrong_code_or_untranscodable_sentence_fails() {
+        let wrong_code = BENCH.replace("ar a", "an a");
+        assert_eq!(
+            failed(&wrong_code, TRAIN, DEV, SAME),
+            [CheckId::CorpusTranscodes]
+        );
+        assert_eq!(
+            failed(BENCH, "日𠀀\n", DEV, SAME),
+            [CheckId::CorpusTranscodes]
+        );
+        assert_eq!(
+            failed(BENCH, TRAIN, "嘅a\n", SAME),
+            [CheckId::CorpusTranscodes]
+        );
+        assert_eq!(
+            failed("問日\n", TRAIN, DEV, SAME),
+            [CheckId::CorpusTranscodes]
+        );
+    }
+
+    #[test]
+    fn different_second_build_fails() {
+        assert_eq!(
+            failed(BENCH, TRAIN, DEV, ["b", "t", "x"]),
+            [CheckId::CorpusDeterministic]
+        );
+    }
+}

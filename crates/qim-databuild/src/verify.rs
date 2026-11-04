@@ -1,14 +1,17 @@
 //! `cargo xtask data --verify` 的檢查（plan §4.5）。Unihan 交叉比對不是檢查、不影響通過與否，
 //! 由 `pipeline` 算好放進 [`Report::unihan`]，比對本身在 `unihan` 模組。
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt;
+use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::Pack;
 
+use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
+use crate::transcode::Transcoder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
@@ -28,6 +31,12 @@ pub enum CheckId {
     RiIsTopForA,
     /// 同樣的來源建兩次，sha256 相同。
     Deterministic,
+    /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
+    CorpusTranscodes,
+    /// 基準句沒有一句原樣出現在 train（plan §5.2 的防洩漏）。
+    CorpusNoLeak,
+    /// 同樣的來源建兩次，基準句與訓練切分的 sha256 相同。
+    CorpusDeterministic,
 }
 
 impl fmt::Display for CheckId {
@@ -41,6 +50,9 @@ impl fmt::Display for CheckId {
             Self::DiuHasHiAndMi => "抽查：「丟」同時有 hi 與 mi",
             Self::RiIsTopForA => "抽查：a 的首選是「日」",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
+            Self::CorpusTranscodes => "語料轉碼",
+            Self::CorpusNoLeak => "語料不洩漏",
+            Self::CorpusDeterministic => "語料決定性",
         })
     }
 }
@@ -64,6 +76,37 @@ pub struct Report {
     pub checks: Vec<Check>,
     /// Unihan 交叉比對的摘要；[`run`] 不算，由呼叫端填。
     pub unihan: Option<UnihanSummary>,
+    /// 各語料的句數；[`run`] 不算，由呼叫端填，檢查用 [`corpus`] 算好加進 `checks`。
+    pub corpora: Vec<CorpusSummary>,
+}
+
+/// 一個語料建出的句數與基準檔。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorpusSummary {
+    /// 基準檔與訓練切分的名字，例如 `yue-wiki`。
+    pub name: String,
+    pub counts: Counts,
+    /// 進基準檔的句數。
+    pub bench_sentences: usize,
+    /// 基準檔，相對 repo 根目錄。
+    pub bench: PathBuf,
+}
+
+impl fmt::Display for CorpusSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let c = &self.counts;
+        write!(
+            f,
+            "語料 {}：train {} 句、dev {} 句、test {} 句（不重複），其中 {} 句進 {}；含字集外字元丟掉 {} 句",
+            self.name,
+            c.train,
+            c.dev,
+            c.test,
+            self.bench_sentences,
+            self.bench.display(),
+            c.dropped
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +143,9 @@ impl fmt::Display for Report {
                 u.report.display()
             )?;
         }
+        for corpus in &self.corpora {
+            writeln!(f, "{corpus}")?;
+        }
         for c in &self.checks {
             let mark = if c.passed { "通過" } else { "失敗" };
             writeln!(f, "[{mark}] {}：{}", c.id, c.detail)?;
@@ -134,6 +180,7 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
                     deterministic,
                 ],
                 unihan: None,
+                corpora: Vec::new(),
             };
         }
     };
@@ -213,7 +260,80 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
         sha256,
         checks,
         unihan: None,
+        corpora: Vec::new(),
     }
+}
+
+/// 一次語料建置寫出的三個檔的 sha256。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorpusDigests {
+    pub bench: String,
+    pub train: String,
+    pub dev: String,
+}
+
+/// 一個語料的檢查。`bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
+/// `first`、`second` 是兩次建置的 sha256。
+pub fn corpus(
+    name: &str,
+    transcoder: &Transcoder,
+    bench: &str,
+    train: impl BufRead,
+    dev: impl BufRead,
+    first: &CorpusDigests,
+    second: &CorpusDigests,
+) -> io::Result<Vec<Check>> {
+    let mut failures = 0;
+    let mut sentences = HashSet::new();
+    for line in bench.lines() {
+        let transcoded = line.split_once('\t').filter(|(codes, sentence)| {
+            transcoder
+                .transcode(sentence)
+                .is_ok_and(|expected| expected.join(" ") == *codes)
+        });
+        match transcoded {
+            Some((_, sentence)) => {
+                sentences.insert(sentence);
+            }
+            None => failures += 1,
+        }
+    }
+    let mut leaked = HashSet::new();
+    for line in train.lines() {
+        let line = line?;
+        if transcoder.transcode(&line).is_err() {
+            failures += 1;
+        }
+        if let Some(&sentence) = sentences.get(line.as_str()) {
+            leaked.insert(sentence);
+        }
+    }
+    for line in dev.lines() {
+        if transcoder.transcode(&line?).is_err() {
+            failures += 1;
+        }
+    }
+    Ok(vec![
+        Check {
+            id: CheckId::CorpusTranscodes,
+            passed: failures == 0,
+            detail: format!("{name} 失敗 {failures} 句"),
+        },
+        Check {
+            id: CheckId::CorpusNoLeak,
+            passed: leaked.is_empty(),
+            detail: format!("{name} test 句原樣出現在 train {} 句", leaked.len()),
+        },
+        Check {
+            id: CheckId::CorpusDeterministic,
+            passed: first == second,
+            detail: if first == second {
+                format!("{name} 建兩次 sha256 相同")
+            } else {
+                format!("{name} 第一次 {first:?}，第二次 {second:?}")
+            },
+        },
+    ])
 }
 
 fn spot(id: CheckId, passed: bool) -> Check {

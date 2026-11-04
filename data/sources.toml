@@ -34,3 +34,18 @@ license_text = "data/licenses/Unicode-3.0.txt"
 path = "Unihan.zip"
 url = "https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip"
 sha256 = "4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e"
+
+# 粵語維基（plan §4.3）：首選字基準的 bench/corpus/yue-wiki.tsv 與 bigram 的訓練語料，不進資料包。
+# 用 pages-articles 自己抽內文：CirrusSearch 內容 dump 已搬到 other/cirrus_search_index/、
+# 只留最近約 5 週，釘了會很快下載不到；pages-articles 的舊版仍可下載（20240101 回 200，2026-11-04 查）。
+# 取用：主名字空間（ns 0）、非重定向頁面最新版的 wikitext，抽內文的規則在 crates/qim-databuild/src/wikitext.rs。
+# sha256 自己算；Wikimedia 公告的 sha1 是 8bbf1efcda7c2ae2800d9406fb1892a8feb84d9c（dumpstatus.json），兩者都核對過。
+[source.yue_wiki]
+repository = "https://dumps.wikimedia.org/zh_yuewiki/"
+version = "20261101"
+license = "CC-BY-SA-4.0"
+
+[[source.yue_wiki.files]]
+path = "zh_yuewiki-20261101-pages-articles.xml.bz2"
+url = "https://dumps.wikimedia.org/zh_yuewiki/20261101/zh_yuewiki-20261101-pages-articles.xml.bz2"
+sha256 = "e493dce7899884e250de0dcb208e560f6dff1e8b7970e7abdd015dc61da83126"

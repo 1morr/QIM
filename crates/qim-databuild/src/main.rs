@@ -41,6 +41,9 @@ fn main() -> ExitCode {
                 }
                 None => {
                     println!("sha256：{}", outcome.sha256);
+                    for corpus in &outcome.corpora {
+                        println!("{corpus}");
+                    }
                     ExitCode::SUCCESS
                 }
             }
