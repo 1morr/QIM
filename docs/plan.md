@@ -152,6 +152,7 @@ pub struct Snapshot {
 impl Session {
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot;
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot;
+    pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot; // 觸控鍵盤的 `text` 動作
     pub fn focus_segment(&mut self, engine: &Engine, user: &mut UserModel, segment: usize) -> Snapshot;
     pub fn set_options(&mut self, options: Options);
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot; // 換選項後依新選項重列候選
@@ -161,6 +162,7 @@ impl Session {
 ```
 
 - `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
+- `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它；組字中和標點相同，先上屏整個組字再接它，文字照原樣不轉全形（M1 票 20）。
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
@@ -331,7 +333,8 @@ sentences = 3         # 候選列最多放幾條多段路徑
 ```
 
 - 佈局版本的選法（`Layout::select`，傳入要的 `when`）：裝置與方向都符合的版本；其次方向符合的；再其次第一個版本等比例縮放（給警告）。網頁以螢幕短邊 600 px 為手機與平板的界線（Android `sw600dp` 的慣例）。
-- 動作（`tap`、`composing.tap`、`longPress` 的項目、`swipe` 的四向）：不帶資料的寫名字 `"backspace"`、`"space"`、`"enter"`、`"nextKeyboard"`、`"toggleAscii"`；帶資料的寫單一鍵的物件 `{ "letter": "a" }`（`a`–`z`）、`{ "text": "，" }`（直接輸入，不經組字）、`{ "switchPage": "symbols" }`（同一個版本的頁 id）。
+- 動作（`tap`、`composing.tap`、`longPress` 的項目、`swipe` 的四向）：不帶資料的寫名字 `"backspace"`、`"space"`、`"enter"`、`"nextKeyboard"`、`"toggleAscii"`；帶資料的寫單一鍵的物件 `{ "letter": "a" }`（`a`–`z`）、`{ "text": "，" }`（直接輸入，不經組字；組字中先上屏組字，經 `Session::text`）、`{ "switchPage": "symbols" }`（同一個版本的頁 id；組字留著）。預設佈局的字母鍵長按是 `text`（英文字母直接上屏，第一排另含數字），符號頁的鍵也是 `text`，打完留在符號頁。
+- 殼的觸控行為（網頁在 M1 票 20 先做，平台殼照做）：放開時才做動作，按住 400 ms 出長按清單、橫向滑動換選項、放開做選到的（第一個是預設）；會輸入字的鍵按住時顯示放大預覽；前一指還沒放開就按下一鍵時，前一鍵先當點一下做掉（長按清單開著時不理新的手指）。轉向時重選佈局版本，新版本有同 id 的頁就留在那頁。顏色依淺色或深色取佈局的那一半。
 - 點擊判定在 `qim-layout`（`Page::hit`）：依 `z` 由上往下，落在形狀內（含 `extendedEdges`）的第一個按鍵；都沒有時取距離最近的按鍵，一樣近時取上層的。旋轉前的左、上邊算在內，右、下邊不算；圓角外的角落不算。橢圓與多邊形的判定在 M5，現在當矩形。各平台共用同一份。
 - 容錯與滑動輸入用按鍵的實際位置算鄰近關係，不假設有「排」。佈局亂排時準確度下降但不會壞。
 - 驗證分兩級（brief §4.6，`qim_layout::validate`）：先過 JSON Schema，再查 Schema 表達不了的。

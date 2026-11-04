@@ -60,6 +60,12 @@ impl LayoutVariant {
         }
     }
 
+    /// 換到這個版本時要顯示的頁：有 `id` 這頁就是它，否則是一開始的頁（轉向時留在同一頁，plan §2.6）。
+    pub fn page_index_or_initial(&self, id: Option<&str>) -> Option<usize> {
+        id.and_then(|id| self.page_index(id))
+            .or_else(|| self.initial_page_index())
+    }
+
     /// `id` 這一頁在 `pages` 的位置。
     pub fn page_index(&self, id: &str) -> Option<usize> {
         self.pages.iter().position(|page| page.id == id)
@@ -237,6 +243,14 @@ impl Key {
         self.composing_override(composing)
             .and_then(|c| c.tap.as_ref())
             .unwrap_or(&self.tap)
+    }
+
+    /// 按住時要不要顯示放大預覽（brief §4.4）：點一下會輸入字的鍵（字母、文字）才要，功能鍵不要。
+    pub fn shows_preview(&self, composing: bool) -> bool {
+        matches!(
+            self.tap_action(composing),
+            Action::Letter(_) | Action::Text(_)
+        )
     }
 
     /// 組字中時的 `composing`；沒在組字或沒寫時是 `None`。
@@ -428,8 +442,8 @@ impl Action {
         }
     }
 
-    /// 沒有標籤時給螢幕閱讀器念的說法。
-    fn spoken(&self) -> String {
+    /// 沒有標籤時給螢幕閱讀器念的說法；長按清單也用它當選項的標籤（文字、字母就是本身）。
+    pub fn spoken(&self) -> String {
         match self {
             Action::Letter(c) => c.to_string(),
             Action::Text(text) => text.clone(),

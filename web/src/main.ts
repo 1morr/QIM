@@ -4,7 +4,6 @@ import "./style.css";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
-	type LayoutKey,
 	pageSize,
 	RadicalHints,
 	Session,
@@ -39,6 +38,7 @@ const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+const darkToggle = element<HTMLButtonElement>("#dark-toggle");
 const reportButton = element<HTMLButtonElement>("#report");
 const reports = element<HTMLTextAreaElement>("#reports");
 const copyReports = element<HTMLButtonElement>("#copy-reports");
@@ -247,14 +247,11 @@ function addReport(): void {
 	text.focus();
 }
 
-/** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
-function hostDefault(key: LayoutKey): void {
-	switch (key.tap) {
+/** 觸控鍵盤上核心沒吃下的動作：照輸入框收到實體按鍵時的預設動作。 */
+function hostDefault(snapshot: Snapshot): void {
+	switch (snapshot.action) {
 		case "letter":
-			insert(key.letter ?? "");
-			return;
-		case "text":
-			insert(key.text ?? "");
+			insert(snapshot.letter ?? "");
 			return;
 		case "space":
 			insert(" ");
@@ -289,6 +286,21 @@ function orientation(): "portrait" | "landscape" {
 	return window.matchMedia("(orientation: landscape)").matches
 		? "landscape"
 		: "portrait";
+}
+
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+/** 網頁的深色開關按過就照它，否則跟系統（`prefers-color-scheme`）。 */
+let chosenDark: boolean | undefined;
+
+/** 套用深色或淺色：按鍵顏色由 CSS `light-dark()` 依 `color-scheme` 選（touch.ts）。 */
+function applyTheme(): void {
+	const dark = chosenDark ?? systemDark.matches;
+	if (chosenDark === undefined) {
+		delete document.documentElement.dataset.theme;
+	} else {
+		document.documentElement.dataset.theme = dark ? "dark" : "light";
+	}
+	darkToggle.setAttribute("aria-pressed", String(dark));
 }
 
 /** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
@@ -372,13 +384,38 @@ async function start(): Promise<void> {
 		keyboard,
 		layout,
 		session,
-		(snapshot, key) => apply(snapshot, key.tap === "space"),
+		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
+		(snapshot) => apply(snapshot, snapshot.action === "space"),
 		hostDefault,
 	);
+	const mounted = touchKeyboard;
+	// 轉向時重選佈局版本（plan §2.6），留在同一頁。
+	window
+		.matchMedia("(orientation: landscape)")
+		.addEventListener("change", () => {
+			const warning = layout.select(device(), orientation());
+			if (warning !== undefined) {
+				console.warn(`佈局：${warning}`);
+			}
+			mounted.relayout();
+		});
+	// 頁面底部留出鍵盤實際的高度，鍵盤才不會蓋住輸入框；高度隨佈局版本的畫布比例與寬度變。
+	new ResizeObserver(([entry]) => {
+		document.body.style.setProperty(
+			"--keyboard-height",
+			`${entry.borderBoxSize[0].blockSize}px`,
+		);
+	}).observe(keyboard);
 	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
 	setTouch(window.matchMedia("(pointer: coarse)").matches);
 	touchToggle.addEventListener("click", () => {
 		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
+	});
+	applyTheme();
+	systemDark.addEventListener("change", applyTheme);
+	darkToggle.addEventListener("click", () => {
+		chosenDark = darkToggle.getAttribute("aria-pressed") !== "true";
+		applyTheme();
 	});
 	reports.value = localStorage.getItem(REPORTS_KEY) ?? "";
 	reports.addEventListener("input", () => {

@@ -1,6 +1,25 @@
+/* 深色跟隨系統；網頁的深色開關（main.ts）在根元素寫 data-theme 蓋過。
+   按鍵顏色用 light-dark()，由 color-scheme 選佈局的淺色或深色版本（touch.ts）。 */
+:root {
+	color-scheme: light dark;
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+}
+
 body {
 	font-family: system-ui, sans-serif;
 	margin: 2rem;
+}
+
+.settings {
+	display: flex;
+	gap: 0.5rem;
 }
 
 main {
@@ -66,9 +85,10 @@ textarea {
 	bottom: 0;
 	left: 50%;
 	transform: translateX(-50%);
-	width: 100%;
-	max-width: 40rem;
-	background: #e8eaed;
+	/* 寬度以畫面寬為上限，高度不超過畫面高的 45%（--aspect 是佈局版本畫布的寬高比，touch.ts 設）。 */
+	width: min(100%, calc(45vh * var(--aspect, 1.8)));
+	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（plan §2.6）。 */
+	background: light-dark(#e8eaed, #202124);
 	touch-action: none;
 	user-select: none;
 	/* 按鍵的圓角與字級以 cqw 依鍵盤寬度縮放（touch.ts）。 */
@@ -79,9 +99,9 @@ textarea {
 	display: none;
 }
 
-/* 鍵盤的高度約是寬度的 0.55（畫布 390 × 216），留位置免得蓋住輸入框。 */
+/* 留出鍵盤實際的高度（main.ts 量出寫進 --keyboard-height），免得蓋住輸入框。 */
 body:has(#keyboard:not([hidden])) {
-	padding-bottom: min(60vw, 25rem);
+	padding-bottom: var(--keyboard-height, 0);
 }
 
 #keyboard .key {
@@ -90,8 +110,8 @@ body:has(#keyboard:not([hidden])) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: #fff;
-	box-shadow: 0 1px 0 #9aa0a6;
+	background: light-dark(#fff, #3c4043);
+	box-shadow: 0 1px 0 light-dark(#9aa0a6, #000);
 	font-size: 1.25rem;
 }
 
@@ -101,6 +121,41 @@ body:has(#keyboard:not([hidden])) {
 	right: 4px;
 	color: gray;
 	font-size: 0.7rem;
+}
+
+/* 按鍵放大預覽與長按清單：浮在按下的鍵上方（位置與大小由 touch.ts 依按鍵算）。 */
+#keyboard .key-preview,
+#keyboard .long-press {
+	position: absolute;
+	z-index: 1000;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: light-dark(#fff, #3c4043);
+	color: light-dark(#1f1f1f, #e3e3e3);
+	box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
+	pointer-events: none;
+}
+
+#keyboard .key-preview[hidden],
+#keyboard .long-press[hidden] {
+	display: none;
+}
+
+#keyboard .long-press .option {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	align-self: stretch;
+	min-width: 2em;
+	padding: 0 0.2em;
+	border-radius: inherit;
+}
+
+#keyboard .long-press .option[aria-selected="true"] {
+	background: light-dark(#0b57d0, #a8c7fa);
+	color: light-dark(#fff, #062e6f);
 }
 
 #report-panel {
