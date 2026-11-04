@@ -26,3 +26,5 @@ Blocked by: 20, 21
 - [ ] plan §2.1 寫明翻頁時 `generation` 與重排的規則；〈M0 留下的〉已處理。
 
 ## Comments
+
+- 票 10 留下：組字中 Tab、Delete、↑ ↓、Home、End 經 `Key::Other` 只吃下不動作，要不要給真的行為（Rime：↑ ↓ 選候選、Home / End 移 caret）在本票定；帶 Ctrl / Cmd 的鍵組字中仍交給瀏覽器（Cmd+V 會貼進輸入框而組字還在）。細節見票 10 Comments。
