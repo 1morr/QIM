@@ -1,6 +1,6 @@
 # 25b: 留碼接英文時，空白接進英文（舊版 Rime 行為）
 
-Status: ready-for-agent
+Status: done
 Blocked by: None (can start immediately)
 讀: brief §4.3（Shift 那列與下方說明）、§12.2；plan §2.1；票 25 的 Comments；spec〈共同規則〉
 
@@ -15,13 +15,17 @@ Blocked by: None (can start immediately)
 
 ## 驗收
 
-- [ ] 核心測試：打 `anr`、左 Shift、打 `hello`、空白、打 `world`、Enter，上屏 `anrhello world`（或照舊版查到的實際行為，在 Comments 說明）。
-- [ ] Playwright：同上讀回輸入框。
-- [ ] brief §4.3、§12.2 已更新；`cargo xtask check`、`bench --check` 綠燈。
+- [x] 核心測試：打 `anr`、左 Shift、打 `hello`、空白、打 `world`、Enter，上屏 `anrhello world`（或照舊版查到的實際行為，在 Comments 說明）。
+- [x] Playwright：同上讀回輸入框。
+- [x] brief §4.3、§12.2 已更新；`cargo xtask check`、`bench --check` 綠燈。
 
 ## Comments
-- 進度（2026-11-05，額度用完中斷）：只做完查證，核心、網頁、文件都還沒改。
-- 查證：librime `74bd5dc4`（2026-09-15，`feat(ascii_composer): commit_raw_input`）改寫 `inline_ascii`；改寫前的最後發佈版是 1.17.0（`33e78140`），`ascii_composer.cc` 從 1.16.0 到 `74bd5dc4^` 沒變。舊版 `ProcessKeyEvent`：`ascii_mode` 且組字中時 0x20–0x7f（含空白）一律 `PushInput`，其餘鍵交給後面的 processor；組字清空時 `OnContextUpdate` 關 `ascii_mode`。
-- 實測（鼠鬚管內建 librime 1.16.0、quick5，`scripts/experiments/rime-inline-ascii/run.sh`）：`anr`、左 Shift、`hello`、空白、`world`、Enter → 上屏 `anrhello world`、回中文。空白可連打兩個；數字、標點、`-` `=`、大寫都接上；退格逐字刪，刪光回中文；Esc 清空回中文；右 Shift（`commit_text`）上屏英文回中文；再按左 Shift 一律把目前整串當中文輸入碼重新組字（`anrx` → 中文「問的」組字、`anrx y` 的空白當分隔），不看打過字或退格過。已選定的分段留著（同 QIM 票 25 的偏離）。← / Home 移游標、Delete 刪游標後的字；Tab、PageDown、↑ ↓ 無作用。
-- 與票 25 不同、要改的：空白接進英文不結束；再按留碼的 Shift 一律回中文組字（英文全是方案字母時用它重建 lattice；含數字、空白、大寫、標點、`z` 時 QIM 的中文組字裝不下，改上屏英文回中文，brief 寫成偏離）；`InlineAscii.edited` 可刪。維持 QIM 的：方向鍵等吃下不動作（QIM 沒有輸入碼內的游標）、選定分段遇退格 / Esc 照票 25（舊版會把選定分段拆回英文、Esc 只清最後一段，不學）。
-- 要動的地方：`crates/qim-core/src/session.rs` 的 `toggle_ascii`、`handle_inline`（`Key::Space` 改成接 `' '`）；`crates/qim-core/tests/session.rs` 加驗收那條與再按 Shift 的測試；`web/e2e/key-table.spec.ts:183` 那條改成空白接進英文、加驗收的 Playwright；`web/src/main.ts:629` 的回報判斷確認仍對；brief §4.3 臨時英文那條、§12.2 加舊版一條（附 `74bd5dc4`、1.17.0）；plan §2.1 若有提空白也改。
+
+- 查證：librime `74bd5dc4`（2026-09-15，`feat(ascii_composer): commit_raw_input`）改寫 `inline_ascii`；改寫前的最後發佈版是 1.17.0（`33e78140`），`ascii_composer.cc` 從 1.16.0 到 `74bd5dc4^` 沒變。用鼠鬚管內建 librime 1.16.0 逐鍵實測（`scripts/experiments/rime-inline-ascii/`），結果記在 brief §12.2「舊版 ascii_composer」。驗收那條的實際行為與票上寫的相同：上屏 `anrhello world`。
+- 照舊版改的兩處（brief §4.3）：空白接進英文、不結束；再按留碼的 Shift 一律把英文當輸入碼回中文組字（`Lattice::from_input` 重建，選定的分段留著），不再看打過字或退格過，`InlineAscii.edited` 與整個結構刪掉，`Session.inline` 只存英文（plan §0 對照表跟著改）。
+- 偏離舊版：英文含方案字母以外的字元（空白、數字、大寫、標點、`z`）時再按留碼的 Shift 上屏英文：QIM 的中文組字只裝方案字母，舊版 librime 把它們切成原樣的分段、空白當分隔。← / Home / Delete 照票 25 吃下不動作（舊版移游標、刪游標後的字，QIM 沒有輸入碼內的游標）。選定的分段遇退格、Esc 照票 25（舊版第一下退格把選定的分段拆回英文、Esc 只清最後一段）。Shift＋空白在舊版會上屏，QIM 的 `Key::Space` 不分 Shift，照空白接進英文。
+- 網頁：臨時英文中空白、數字不再上屏，`main.ts` 原本排除它們算選字的判斷成了死碼，拿掉；`report.spec.ts` 那條改成打了空白與數字再按 Enter 上屏、仍不能回報。`key-table.spec.ts` 把「空白上屏英文加空白」那段換成兩條：驗收那條（`hello world`），和打了字再按左 Shift 回中文組字、含空白時上屏英文。
+- bench 前後：改動前 = `bench/baseline.json`（HEAD）；改動後 `cargo xtask bench --check` 通過，四個語料集合都沒有翻盤、固定題 25/25。只改臨時英文的處理，排序沒動。`cargo xtask data --verify` 通過。
+- 亂按：桌面兩輪各 1,500 步（字母為主，夾左右 Shift、空白、Enter、退格、Esc、數字、標點、大寫、方向鍵、Tab、翻頁、`z`、Ctrl+A，每 300 步換一次 Shift 設定），進臨時英文 186、161 步，沒有頁面錯誤與原生對話框，也沒有「沒組字卻有候選」「臨時英文卻有候選」。
+- code-review 已處理：brief 那條改成只寫現況（原本用「原本…現在」寫票 25 的舊行為，歷史留在 progress）；「整串都是方案字母」抽成 `Scheme::spells`，觸發詞的檢查也改用它；`toggle_ascii` 的區域變數 `inline` 與欄位同名，改成 `keeps_code`（`ShiftSwitch::inline` 跟著改名），用 `take_if` 拿掉 `expect`；補「左右都留碼」設定下按右 Shift 回中文組字的測試；brief 補觸控 `text` 在臨時英文中先上屏英文；§12.2 的鍵碼範圍照原始碼寫。
+- code-review 未處理：偏離舊版的四處（含方案字母以外的字元時再按 Shift 上屏、Shift＋空白接進英文、選定分段遇退格 / Esc 照票 25、← / Home / Delete 不動作）沒有另外問使用者，在總結裡請使用者確認；`Session.inline` 用 `Option<String>` 表示臨時英文（Primitive Obsession）：原本的結構只剩一個欄位，取最簡；`probe.c`、`run.sh` 的註解是英文，同旁邊 `rime-cases/` 的慣例。
