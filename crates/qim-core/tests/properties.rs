@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use proptest::prelude::*;
 use qim_core::{
     CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Pack, Packs,
-    Ranking, Scheme, Session, Snapshot, UserModel, Word,
+    Ranking, Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// 測試方案的最長碼；碼表裡有更長的碼，那些不是字的碼。
@@ -41,7 +41,7 @@ fn key() -> impl Strategy<Value = Key> {
         1 => Just(Key::PageDown),
         1 => Just(Key::Left),
         1 => Just(Key::Right),
-        1 => Just(Key::ToggleAscii),
+        1 => prop::sample::select(vec![ShiftKey::Left, ShiftKey::Right]).prop_map(Key::ToggleAscii),
         1 => Just(Key::Other),
         1 => prop::sample::select(vec![',', '.', '@', '-']).prop_map(Key::Punct),
     ]
@@ -71,13 +71,22 @@ fn act(session: &mut Session, engine: &Engine, user: &mut UserModel, action: Act
     }
 }
 
-/// 候選列的是哪一串輸入碼：目前分段的碼，沒有目前分段時是剩下沒選定的整串。
+/// 候選列的是哪一串輸入碼：目前分段的碼，沒有目前分段時是剩下沒選定的整串；臨時英文
+/// 沒有候選，是空字串。
 fn listed_input(snapshot: &Snapshot) -> &str {
     let composition = &snapshot.composition;
+    if inline_english(snapshot) {
+        return "";
+    }
     composition
         .segments
         .get(composition.focus)
         .map_or(composition.unselected_input(), |s| s.code.as_str())
+}
+
+/// 臨時英文（組字中單按留碼的 Shift）：最後一段是 `raw` 的分段。
+fn inline_english(snapshot: &Snapshot) -> bool {
+    snapshot.composition.segments.last().is_some_and(|s| s.raw)
 }
 
 fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<String>>) -> Engine {
@@ -269,6 +278,12 @@ proptest! {
             prop_assert_eq!(&codes, &composition.input, "{:?} 後", action);
             let selected = composition.segments.iter().take_while(|s| s.selected).count();
             prop_assert!(composition.segments[selected..].iter().all(|s| !s.selected), "{:?} 後", action);
+            // 臨時英文：沒選定的輸入碼整串是一段英文。
+            if inline_english(&snapshot) {
+                prop_assert_eq!(composition.segments.len(), selected + 1, "{:?} 後", action);
+                prop_assert_eq!(&composition.segments[selected].text, composition.unselected_input(), "{:?} 後", action);
+                continue;
+            }
 
             let mut fresh = Session::default();
             let mut fresh_user = user.clone();

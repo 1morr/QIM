@@ -33,6 +33,42 @@ pub struct Options {
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
+    /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
+    pub shift_switch: ShiftSwitch,
+}
+
+/// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
+/// 先上屏組字再切英文，`inline_ascii` 留著沒選定的輸入碼當英文接下去（[臨時英文]）。
+/// 沒有組字時兩邊都只切換。
+///
+/// [臨時英文]: Snapshot::ascii
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ShiftSwitch {
+    /// rime-prelude `default.yaml` 的預設：左 Shift `inline_ascii`、右 Shift `commit_text`。
+    #[default]
+    Rime,
+    /// 左右都先上屏組字（同一直按空白）再切英文。
+    CommitText,
+    /// 左右都留碼接英文。
+    InlineAscii,
+}
+
+impl ShiftSwitch {
+    /// 按了 `shift` 時要不要留碼接英文；否則先上屏組字。
+    fn inline(self, shift: ShiftKey) -> bool {
+        match self {
+            Self::Rime => shift == ShiftKey::Left,
+            Self::CommitText => false,
+            Self::InlineAscii => true,
+        }
+    }
+}
+
+/// 單按的是哪一邊的 Shift；殼分辨（網頁用 `KeyboardEvent.code`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShiftKey {
+    Left,
+    Right,
 }
 
 impl Options {
@@ -48,6 +84,7 @@ impl Default for Options {
             simplified: false,
             incognito: false,
             english_candidates: true,
+            shift_switch: ShiftSwitch::Rime,
         }
     }
 }
@@ -68,7 +105,8 @@ pub enum Key {
     PageDown,
     Left,
     Right,
-    ToggleAscii,
+    /// 單按 Shift（切中英，brief §4.3）；單按的判定在殼。
+    ToggleAscii(ShiftKey),
     /// 殼不轉成上面各種的鍵（Tab、Delete、↑ ↓、Home、End…）：組字中吃下，免得宿主拿它改輸入框。
     Other,
 }
@@ -128,6 +166,8 @@ pub struct Segment {
     pub original: String,
     /// 使用者已選定，重算時不動。
     pub selected: bool,
+    /// 臨時英文的分段（Rime 的 `raw` 標記）：`code` 原樣當英文，`text` 就是它，沒有字根。
+    pub raw: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,6 +192,8 @@ pub struct Snapshot {
     pub commit: Option<String>,
     /// `commit` 後處理前的原文（繁體），回報用；簡體模式以外和 `commit` 相同。
     pub commit_original: Option<String>,
+    /// 英文：沒有組字時是英文直通，鍵都交還宿主；組字中是臨時英文（[`ShiftSwitch`]），
+    /// 最後一段是 `raw` 的分段。
     pub ascii: bool,
     /// 每次候選變動加一，非同步重排用。
     pub generation: u64,
@@ -212,8 +254,20 @@ pub struct Session {
     page: usize,
     generation: u64,
     options: Options,
-    /// 英文直通（[`Key::ToggleAscii`]）：開著時沒有組字，鍵都交還宿主。
+    /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
+    /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態。中文的組字
+    /// （選定的分段、lattice）留著，英文沒動過就還原。
+    inline: Option<InlineAscii>,
+}
+
+/// 臨時英文：沒選定的輸入碼原樣當英文，接著打的可見字元接在後面。選定的分段照舊在前面。
+#[derive(Debug, Clone)]
+struct InlineAscii {
+    text: String,
+    /// 打過字或退格：再按留碼的 Shift 時只能上屏英文、不還原中文的組字。librime 退格時就丟掉
+    /// 進來前的輸入，打了又刪回原樣也不還原。
+    edited: bool,
 }
 
 impl Session {
@@ -226,7 +280,7 @@ impl Session {
     /// 依目前的選項重列候選、回到第一頁，組字不變；殼換了選項後呼叫（librime 換選項後也
     /// 重算組字）。不是按鍵，`handled` 恆為真。
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot {
-        if self.composing() {
+        if self.composing_chinese() {
             self.refresh_candidates(engine, user);
         }
         with_radicals(engine, self.snapshot(engine, true, None))
@@ -253,7 +307,7 @@ impl Session {
         if !self.composing() {
             return self.snapshot(engine, false, None);
         }
-        if segment <= self.segments().len() {
+        if self.composing_chinese() && segment <= self.segments().len() {
             self.move_focus(engine, user, segment);
         }
         with_radicals(engine, self.snapshot(engine, true, None))
@@ -332,7 +386,7 @@ impl Session {
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
-        if !self.listed_with.lists_like(&self.options) && self.composing() {
+        if !self.listed_with.lists_like(&self.options) && self.composing_chinese() {
             self.refresh_candidates(engine, user);
         }
         let snapshot = self.handle_key(engine, user, key);
@@ -340,16 +394,13 @@ impl Session {
     }
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
-        // 切中英（單按 Shift，brief §4.3）：組字中先上屏整個組字，同 Rime `ascii_composer` 的
-        // `commit_text`；要上屏輸入碼有 Enter。英文狀態下沒有組字，其他鍵都交還宿主。
-        if key == Key::ToggleAscii {
-            self.ascii = !self.ascii;
-            return if self.composing() {
-                self.commit_all_then(engine, user, Commit::plain(String::new()))
-            } else {
-                self.snapshot(engine, true, None)
-            };
+        if let Key::ToggleAscii(shift) = key {
+            return self.toggle_ascii(engine, user, shift);
         }
+        if self.inline.is_some() {
+            return self.handle_inline(engine, user, key);
+        }
+        // 英文直通沒有組字，鍵都交還宿主。
         if self.ascii {
             return self.snapshot(engine, false, None);
         }
@@ -432,8 +483,103 @@ impl Session {
             }
             // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、其他鍵：吃下不動作。
             // 切中英在上面處理過了。
-            Key::Letter(_) | Key::ToggleAscii | Key::Other => self.snapshot(engine, true, None),
+            Key::Letter(_) | Key::ToggleAscii(_) | Key::Other => self.snapshot(engine, true, None),
         }
+    }
+
+    /// 切中英（單按 Shift，brief §4.3），照 Rime `ascii_composer`：沒有組字時只切換；組字中
+    /// 依 [`ShiftSwitch`] 先上屏整個組字（`commit_text`）或留碼接英文（`inline_ascii`）。
+    /// 臨時英文中按留碼的 Shift，英文沒動過就還原中文的組字，否則和另一邊一樣上屏英文；
+    /// 兩種都回中文。
+    fn toggle_ascii(&mut self, engine: &Engine, user: &mut UserModel, shift: ShiftKey) -> Snapshot {
+        let inline = self.options.shift_switch.inline(shift);
+        if let Some(english) = &self.inline {
+            if inline && !english.edited {
+                self.inline = None;
+                self.refresh_candidates(engine, user);
+                return self.snapshot(engine, true, None);
+            }
+            return self.commit_inline(engine, Commit::plain(String::new()));
+        }
+        if !self.composing() {
+            self.ascii = !self.ascii;
+            return self.snapshot(engine, true, None);
+        }
+        // 組字中一定是中文：英文直通沒有組字。
+        if !inline {
+            self.ascii = true;
+            return self.commit_all_then(engine, user, Commit::plain(String::new()));
+        }
+        self.focus = None;
+        self.inline = Some(InlineAscii {
+            text: self.lattice.input().to_string(),
+            edited: false,
+        });
+        // 臨時英文沒有候選，同 librime 抹掉中文的候選選單。
+        self.candidates.clear();
+        self.page = 0;
+        self.generation += 1;
+        self.snapshot(engine, true, None)
+    }
+
+    /// 臨時英文中的鍵，照 librime `ascii_composer`：可見字元接在英文後面（數字、`-` / `=` 也是
+    /// 字元）；空白上屏英文加一個空白、Enter 上屏英文；退格刪光或 Esc 放棄。四種都回中文。
+    /// 其他鍵吃下不動作。
+    fn handle_inline(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        let typed = match key {
+            Key::Letter(c) | Key::Punct(c) => Some(c),
+            Key::Digit(d) => char::from_digit(u32::from(d), 10),
+            _ => None,
+        };
+        let english = self.inline.as_mut().expect("臨時英文中");
+        match key {
+            _ if typed.is_some() => {
+                english.text.extend(typed);
+                english.edited = true;
+                self.snapshot(engine, true, None)
+            }
+            Key::Space => self.commit_inline(engine, Commit::plain(" ".into())),
+            Key::Enter => self.commit_inline(engine, Commit::plain(String::new())),
+            Key::Backspace => {
+                english.text.pop();
+                english.edited = true;
+                if english.text.is_empty() {
+                    self.inline = None;
+                    // 和中文的退格相同：剩下的碼刪光了，最後選定的分段放回來重選。
+                    self.lattice = Lattice::default();
+                    match self.selected.pop() {
+                        Some(segment) => {
+                            self.recompose(engine, user, &segment.code);
+                            self.refresh_candidates(engine, user);
+                        }
+                        None => self.clear(),
+                    }
+                }
+                self.snapshot(engine, true, None)
+            }
+            Key::Escape => {
+                self.inline = None;
+                self.clear();
+                self.snapshot(engine, true, None)
+            }
+            _ => self.snapshot(engine, true, None),
+        }
+    }
+
+    /// 上屏選定的分段、臨時英文，再接 `tail`，回中文。和 Enter 一樣不學。
+    fn commit_inline(&mut self, engine: &Engine, tail: Commit) -> Snapshot {
+        let english = self.inline.take().expect("臨時英文中").text;
+        let mut commit = self.selected_commit(engine);
+        commit.text.push_str(&english);
+        commit.text.push_str(&tail.text);
+        commit.original.push_str(&english);
+        commit.original.push_str(&tail.original);
+        self.commit(engine, commit)
+    }
+
+    /// 中文組字中：組字中、不是臨時英文。只有這時才有候選、分段可移。
+    fn composing_chinese(&self) -> bool {
+        self.inline.is_none() && self.composing()
     }
 
     fn composing(&self) -> bool {
@@ -493,7 +639,9 @@ impl Session {
             text: self.output(engine, text),
             original: text.to_string(),
         };
-        let snapshot = if self.composing() {
+        let snapshot = if self.inline.is_some() {
+            self.commit_inline(engine, text)
+        } else if self.composing() {
             self.commit_all_then(engine, user, text)
         } else {
             self.snapshot(engine, true, Some(text))
@@ -753,8 +901,21 @@ impl Session {
 
     /// 組字：各分段的字詞經過後處理，另留原文。
     fn composition(&self, engine: &Engine) -> Composition {
-        let segments: Vec<Segment> = self
-            .segments()
+        let segments = match &self.inline {
+            Some(english) => self
+                .selected
+                .iter()
+                .cloned()
+                .chain([Segment {
+                    code: english.text.clone(),
+                    text: english.text.clone(),
+                    raw: true,
+                    ..Segment::default()
+                }])
+                .collect(),
+            None => self.segments(),
+        };
+        let segments: Vec<Segment> = segments
             .into_iter()
             .map(|s| Segment {
                 text: self.output(engine, &s.text),
@@ -786,7 +947,7 @@ impl Session {
             has_more: self.has_more(),
             commit,
             commit_original,
-            ascii: self.ascii,
+            ascii: self.ascii || self.inline.is_some(),
             generation: self.generation,
         }
     }
@@ -794,7 +955,7 @@ impl Session {
 
 /// 補上各分段的字根：分段在 `Session` 裡不帶字根，公開的方法回傳前都經過這裡。
 fn with_radicals(engine: &Engine, mut snapshot: Snapshot) -> Snapshot {
-    for segment in &mut snapshot.composition.segments {
+    for segment in snapshot.composition.segments.iter_mut().filter(|s| !s.raw) {
         segment.radicals = engine.scheme().radicals_of(&segment.code);
     }
     snapshot

@@ -2,7 +2,7 @@
 
 use qim_core::{
     CangjieVersion, Engine, EnglishPack, Key, Options, RadicalHintPack, RadicalHints, Scheme,
-    Session, SimplifierPack, Snapshot, UserModel,
+    Session, ShiftKey, ShiftSwitch, SimplifierPack, Snapshot, UserModel,
 };
 use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
@@ -133,10 +133,28 @@ impl WebSession {
         self.handle(Key::Right)
     }
 
-    /// 單按 Shift：切中英（brief §4.3）；組字中先上屏整個組字。
+    /// 單按 Shift：切中英（brief §4.3）；組字中照 [`WebSession::set_shift_switch`] 先上屏組字
+    /// 或留碼接英文。網頁用 `KeyboardEvent.code` 分辨左右。
     #[wasm_bindgen(js_name = toggleAscii)]
-    pub fn toggle_ascii(&mut self) -> WebSnapshot {
-        self.handle(Key::ToggleAscii)
+    pub fn toggle_ascii(&mut self, shift: WebShiftKey) -> WebSnapshot {
+        let shift = match shift {
+            WebShiftKey::Left => ShiftKey::Left,
+            // 字串 enum 另有一個不合法的值，JS 傳錯字串時落到這裡。
+            _ => ShiftKey::Right,
+        };
+        self.handle(Key::ToggleAscii(shift))
+    }
+
+    /// 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`），預設照 Rime。不是按鍵，臨時英文中
+    /// 換了也不動組字。
+    #[wasm_bindgen(js_name = setShiftSwitch)]
+    pub fn set_shift_switch(&mut self, value: WebShiftSwitch) {
+        self.options.shift_switch = match value {
+            WebShiftSwitch::CommitText => ShiftSwitch::CommitText,
+            WebShiftSwitch::InlineAscii => ShiftSwitch::InlineAscii,
+            _ => ShiftSwitch::Rime,
+        };
+        self.session.set_options(self.options);
     }
 
     /// 全部候選，不分頁（候選展開面板用）；選字照位置呼叫 [`WebSession::select`]。
@@ -252,7 +270,9 @@ impl WebSession {
                         layout.switch_page(page);
                         Key::Other
                     }
-                    Action::ToggleAscii => Key::ToggleAscii,
+                    // 觸控鍵盤的中英鍵先當右 Shift（先上屏組字，M1 票 23 的行為）；
+                    // 觸控的 Shift 鍵在 M1 票 27。
+                    Action::ToggleAscii => Key::ToggleAscii(ShiftKey::Right),
                     Action::NextKeyboard | Action::Text(_) => Key::Other,
                 };
                 self.session.handle(&self.engine, &mut self.user, key)
@@ -355,6 +375,7 @@ impl From<Snapshot> for WebSnapshot {
                     radicals: segment.radicals,
                     text: segment.text,
                     selected: segment.selected,
+                    raw: segment.raw,
                 })
                 .collect(),
             candidates_original: s.candidates.iter().map(|c| c.original.clone()).collect(),
@@ -390,6 +411,25 @@ pub struct WebSegment {
     pub text: String,
     #[wasm_bindgen(readonly)]
     pub selected: bool,
+    /// 臨時英文（組字中單按留碼的 Shift）：`text` 是原樣的英文，顯示它而不是字根。
+    #[wasm_bindgen(readonly)]
+    pub raw: bool,
+}
+
+/// 單按的是哪一邊的 Shift（`qim_core::ShiftKey`）。JS 端是字串 `"left" | "right"`。
+#[wasm_bindgen(js_name = ShiftKey)]
+pub enum WebShiftKey {
+    Left = "left",
+    Right = "right",
+}
+
+/// 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`）。JS 端是字串，網頁的選單直接用。
+#[wasm_bindgen(js_name = ShiftSwitch)]
+pub enum WebShiftSwitch {
+    /// 左 Shift 留碼接英文、右 Shift 先上屏組字（rime-prelude 的預設）。
+    Rime = "rime",
+    CommitText = "commit-text",
+    InlineAscii = "inline-ascii",
 }
 
 /// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根（plan §2.5）。JS 端叫 `RadicalHints`。
