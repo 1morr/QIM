@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use crate::lattice::{self, Lattice};
-use crate::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, PackError, Scheme};
+use crate::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, PackError, Scheme, UserModel};
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ pub struct Engine {
 pub(crate) struct Edge {
     pub start: usize,
     pub text: String,
-    /// 這一段的分數，已含 β 與 γ（plan §2.3）。
+    /// 這一段的分數，已含 β、γ 與 `personal`（plan §2.3）。
     pub score: f64,
 }
 
@@ -78,10 +78,10 @@ impl Engine {
         &self.scheme
     }
 
-    /// 整串輸入碼的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
+    /// 整串輸入碼在 `user` 之下的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
-    pub fn candidates(&self, input: &str) -> Vec<String> {
-        lattice::candidates(self, &Lattice::from_input(self, input))
+    pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
+        lattice::candidates(self, user, &Lattice::from_input(self, user, input))
             .into_iter()
             .map(|c| c.text)
             .collect()
@@ -91,17 +91,29 @@ impl Engine {
         usize::from(self.scheme.ranking.beam)
     }
 
-    /// 字的分數：ln 字頻的 unigram（加一平滑）− γ。
-    fn char_score(&self, c: char) -> f64 {
-        ((self.lexicon.char_frequency(c) + 1) as f64).ln()
-            - self.char_log_total
-            - self.scheme.ranking.segment_penalty
+    /// 字的 ln 機率：字頻的 unigram（加一平滑）。
+    fn char_log_prob(&self, c: char) -> f64 {
+        ((self.lexicon.char_frequency(c) + 1) as f64).ln() - self.char_log_total
     }
 
-    /// 詞的分數：ln 詞頻的 unigram + β − γ。
-    fn word_score(&self, frequency: u64) -> f64 {
-        (frequency.max(1) as f64).ln() - self.word_log_total + self.scheme.ranking.word_bonus
-            - self.scheme.ranking.segment_penalty
+    /// 詞的 ln 機率：詞頻的 unigram。
+    fn word_log_prob(&self, frequency: u64) -> f64 {
+        (frequency.max(1) as f64).ln() - self.word_log_total
+    }
+
+    /// 碼 `code` 的一段 `text` 的分數（plan §2.3）：ln 機率、詞加 β、扣 γ，加上 `personal`。
+    fn segment_score(
+        &self,
+        user: &UserModel,
+        code: &str,
+        text: &str,
+        log_prob: f64,
+        word: bool,
+    ) -> f64 {
+        let ranking = &self.scheme.ranking;
+        let bonus = if word { ranking.word_bonus } else { 0.0 };
+        log_prob + bonus - ranking.segment_penalty
+            + user.personal(&self.scheme.id, code, text, log_prob)
     }
 
     pub(crate) fn sentences(&self) -> usize {
@@ -119,40 +131,50 @@ impl Engine {
 
     /// 剛好是碼 `code` 的連打字集的字與詞。字依分數由高到低、最多 `limit` 個（字序在
     /// [`Engine::new`] 依字頻排過）；詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
-    fn exact(&self, code: &str, start: usize, limit: usize) -> impl Iterator<Item = Edge> {
+    fn exact<'a>(
+        &'a self,
+        user: &'a UserModel,
+        code: &'a str,
+        start: usize,
+        limit: usize,
+    ) -> impl Iterator<Item = Edge> + 'a {
         let chars = self
             .char_entries(code)
             .iter()
             .filter(|e| !e.extension)
             .take(limit)
-            .map(move |e| Edge {
-                start,
-                text: e.text.to_string(),
-                score: self.char_score(e.text),
+            .map(move |e| {
+                let text = e.text.to_string();
+                let score =
+                    self.segment_score(user, code, &text, self.char_log_prob(e.text), false);
+                Edge { start, text, score }
             });
-        let words = self.lexicon.lookup(code).iter().map(move |w| Edge {
-            start,
-            text: w.text.clone(),
-            score: self.word_score(w.frequency),
+        let words = self.lexicon.lookup(code).iter().map(move |w| {
+            let log_prob = self.word_log_prob(w.frequency);
+            Edge {
+                start,
+                text: w.text.clone(),
+                score: self.segment_score(user, code, &w.text, log_prob, true),
+            }
         });
         chars.chain(words)
     }
 
     /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取分數最高的 beam 個（再多也進不了
     /// beam），加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
-    pub(crate) fn edges_ending(&self, input: &str) -> Vec<Edge> {
+    pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let end = input.len();
         let longest = self
             .longest_word_code
             .max(usize::from(self.scheme.max_code_length));
         (end.saturating_sub(longest)..end)
-            .flat_map(|start| self.exact(&input[start..], start, self.beam()))
+            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
             .collect()
     }
 
     /// 碼 `code` 的全部連打字集的字與詞，依分數由高到低（同分照碼表、詞庫的順序）。
-    pub(crate) fn span(&self, code: &str) -> Vec<Edge> {
-        let mut edges: Vec<Edge> = self.exact(code, 0, usize::MAX).collect();
+    pub(crate) fn span(&self, user: &UserModel, code: &str) -> Vec<Edge> {
+        let mut edges: Vec<Edge> = self.exact(user, code, 0, usize::MAX).collect();
         edges.sort_by(|a, b| b.score.total_cmp(&a.score));
         edges
     }

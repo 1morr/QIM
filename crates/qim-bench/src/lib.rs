@@ -20,7 +20,7 @@ pub use latency::{
     LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, node_wasm_timer,
     percentile,
 };
-pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, Metrics, SetResult};
+pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};
 
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const PACK: &str = "build/packs/quick/quick.pack";
@@ -125,27 +125,17 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
     let mut latency_inputs: Vec<String> = fixed.iter().map(Item::input).collect();
     let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets: Vec<SetResult> = Vec::new();
-    for dir in CORPUS_DIRS {
-        for (name, path) in corpus_files(&root.join(dir))? {
-            if name == PERSONAL_SET {
-                return Err(format!(
-                    "語料不能叫 {PERSONAL_SET}，那是個人集的名字：{}",
-                    path.display()
-                ));
-            }
-            if sets.iter().any(|s| s.name == name) {
-                return Err(format!(
-                    "集合 {name} 在兩個語料目錄都有：{}",
-                    path.display()
-                ));
-            }
-            let items =
-                parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
-            latency_inputs.extend(items.iter().map(Item::input));
-            sets.push(score::score(&engine, &name, &items, false));
-        }
+    for (name, items) in load_corpora(root)? {
+        latency_inputs.extend(items.iter().map(Item::input));
+        sets.push(score::score(&engine, &name, &items, false));
     }
-    let personal = load_personal(root, &engine)?;
+    let personal = match load_personal(root)? {
+        PersonalItems::Ran(items) => {
+            Personal::Ran(score::score(&engine, PERSONAL_SET, &items, true))
+        }
+        PersonalItems::Missing => Personal::Missing,
+        PersonalItems::NotTranscoded => Personal::NotTranscoded,
+    };
     let pack_paths: Vec<PathBuf> = packs.iter().map(|p| root.join(&p.path)).collect();
     let latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
@@ -208,30 +198,87 @@ fn load_baseline(path: &Path, tolerate_bad_format: bool) -> Result<Option<Baseli
     }
 }
 
+/// 個人集的題目，或跳過的原因（同 [`Personal`]）。
+enum PersonalItems {
+    Ran(Vec<Item>),
+    Missing,
+    NotTranscoded,
+}
+
 /// 個人集：沒有 [`PERSONAL_USERDB`] 就跳過；題目檔第一行記的來源 sha256 要等於現在的
 /// [`PERSONAL_USERDB`]，否則是還沒轉出或換過資料沒重轉，也跳過，免得安靜地跑舊題目。
-fn load_personal(root: &Path, engine: &Engine) -> Result<Personal, String> {
+fn load_personal(root: &Path) -> Result<PersonalItems, String> {
     let userdb = root.join(PERSONAL_USERDB);
     if !userdb.exists() {
-        return Ok(Personal::Missing);
+        return Ok(PersonalItems::Missing);
     }
     let items = root.join(PERSONAL);
     if !items.exists() {
-        return Ok(Personal::NotTranscoded);
+        return Ok(PersonalItems::NotTranscoded);
     }
     let source = fs::read(&userdb).map_err(|e| format!("讀不到 {}：{e}", userdb.display()))?;
     let text = read(&items)?;
     let header = format!("{PERSONAL_SOURCE_HEADER}{}", sha256_hex(&source));
     if text.lines().next() != Some(header.as_str()) {
-        return Ok(Personal::NotTranscoded);
+        return Ok(PersonalItems::NotTranscoded);
     }
     let items = parse_personal(&text).map_err(|e| format!("{PERSONAL}：{e}"))?;
-    Ok(Personal::Ran(score::score(
-        engine,
-        PERSONAL_SET,
-        &items,
-        true,
-    )))
+    Ok(PersonalItems::Ran(items))
+}
+
+/// 各語料集合的名稱與題目，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
+fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
+    let mut sets: Vec<(String, Vec<Item>)> = Vec::new();
+    for dir in CORPUS_DIRS {
+        for (name, path) in corpus_files(&root.join(dir))? {
+            if name == PERSONAL_SET {
+                return Err(format!(
+                    "語料不能叫 {PERSONAL_SET}，那是個人集的名字：{}",
+                    path.display()
+                ));
+            }
+            if sets.iter().any(|(n, _)| *n == name) {
+                return Err(format!(
+                    "集合 {name} 在兩個語料目錄都有：{}",
+                    path.display()
+                ));
+            }
+            let items =
+                parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
+            sets.push((name, items));
+        }
+    }
+    Ok(sets)
+}
+
+/// 學習模式（`--learning`，plan §5.2）的結果。
+#[derive(Debug)]
+pub struct Learning {
+    pub packs: Vec<LoadedPack>,
+    /// 各語料集合，有個人集時接在最後。
+    pub sets: Vec<LearningSet>,
+}
+
+impl Learning {
+    /// 給人看的結果，Markdown 表；個人集只有數字。
+    pub fn report(&self) -> String {
+        report::render_learning(self)
+    }
+}
+
+/// 學習模式（`--learning`）：每個集合照檔案的順序模擬打每一題，比學習關（每題空白的
+/// `UserModel`）與學習開（整個集合共用一個 `UserModel`，打完一題學一題）的修正次數。
+/// 只報不擋，不讀也不寫 baseline。
+pub fn run_learning(root: &Path) -> Result<Learning, String> {
+    let (engine, packs) = load_engine(root)?;
+    let mut sets: Vec<LearningSet> = load_corpora(root)?
+        .into_iter()
+        .map(|(name, items)| score::learning(&engine, &name, &items, false))
+        .collect();
+    if let PersonalItems::Ran(items) = load_personal(root)? {
+        sets.push(score::learning(&engine, PERSONAL_SET, &items, true));
+    }
+    Ok(Learning { packs, sets })
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

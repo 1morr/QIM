@@ -1,6 +1,6 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`，不放邏輯（plan §1.3）。
 
-use qim_core::{Engine, Key, Session, Snapshot, UserModel};
+use qim_core::{Engine, Key, Options, Session, Snapshot, UserModel};
 use wasm_bindgen::prelude::*;
 
 /// 網頁的一個輸入框：速成與詞庫資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
@@ -9,6 +9,7 @@ pub struct WebSession {
     engine: Engine,
     user: UserModel,
     session: Session,
+    options: Options,
 }
 
 #[wasm_bindgen(js_class = Session)]
@@ -22,7 +23,15 @@ impl WebSession {
             engine,
             user: UserModel::default(),
             session: Session::default(),
+            options: Options::default(),
         })
+    }
+
+    /// 無痕模式：開著時不學習（plan §2.4）。
+    #[wasm_bindgen(js_name = setIncognito)]
+    pub fn set_incognito(&mut self, on: bool) {
+        self.options.incognito = on;
+        self.session.set_options(self.options);
     }
 
     pub fn letter(&mut self, c: char) -> WebSnapshot {

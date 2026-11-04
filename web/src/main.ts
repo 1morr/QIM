@@ -18,6 +18,7 @@ const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
+const incognito = element<HTMLInputElement>("#incognito");
 
 async function loadPack(url: string): Promise<Uint8Array> {
 	const response = await fetch(url);
@@ -83,6 +84,11 @@ async function start(): Promise<void> {
 		loadPack(LEXICON_URL),
 	]);
 	const session = new Session(pack, lexicon);
+	session.setIncognito(incognito.checked);
+	incognito.addEventListener("change", () => {
+		session.setIncognito(incognito.checked);
+		text.focus();
+	});
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);

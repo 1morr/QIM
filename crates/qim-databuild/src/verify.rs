@@ -6,7 +6,7 @@ use std::fmt;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use qim_core::{CodeTable, Engine, Lexicon, LexiconPack, Pack};
+use qim_core::{CodeTable, Engine, Lexicon, LexiconPack, Pack, UserModel};
 
 use crate::corpus::Counts;
 use crate::lexicon;
@@ -280,7 +280,8 @@ fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon
         .filter(|code| !(1..=2).contains(&code.chars().count()))
         .collect();
     let has = |code: &str, ch: char| pack.code_table.lookup(code).iter().any(|e| e.text == ch);
-    let top = |input: &str| engine.candidates(input).into_iter().next();
+    let user = UserModel::default();
+    let top = |input: &str| engine.candidates(&user, input).into_iter().next();
 
     report.continuous = continuous.len();
     report.extension = extension.len();
