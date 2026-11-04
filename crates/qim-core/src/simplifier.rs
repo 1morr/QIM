@@ -25,14 +25,11 @@ impl ConversionTable {
 
     /// `text` 開頭最長的鍵：（鍵的位元組長度, 轉換結果）。
     fn longest_prefix<'a>(&'a self, text: &str) -> Option<(usize, &'a str)> {
-        let ends: Vec<usize> = text
-            .char_indices()
+        text.char_indices()
             .map(|(i, c)| i + c.len_utf8())
             .take(self.longest)
-            .collect();
-        ends.into_iter()
-            .rev()
-            .find_map(|end| self.map.get(&text[..end]).map(|v| (end, v.as_str())))
+            .filter_map(|end| self.map.get(&text[..end]).map(|v| (end, v.as_str())))
+            .last()
     }
 }
 

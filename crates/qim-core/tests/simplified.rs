@@ -234,3 +234,12 @@ fn without_a_simplifier_pack_the_output_stays_traditional() {
     let mut ime = Ime::new(engine(), true);
     assert_eq!(texts(&ime.type_code("ef")), ["乾", "幹", "甲", "干"]);
 }
+
+/// 殼只換選項、沒呼叫 `refresh`：下一個鍵照新選項處理，上屏的和組字顯示的一致。
+#[test]
+fn a_key_after_switching_without_refresh_uses_the_new_option() {
+    let mut ime = Ime::simplified();
+    ime.type_code("anr");
+    ime.session.set_options(Options::default());
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
+}

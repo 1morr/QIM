@@ -109,13 +109,13 @@ pub struct Snapshot {
 
 /// 後處理過的一個候選：排序時的候選（學習用）與轉換過的文字。
 #[derive(Debug, Clone)]
-struct Listed {
+struct ShownCandidate {
     span: CandidateSpan,
     /// 簡體模式轉換後的文字；不轉換時是 `None`，顯示原文。
     converted: Option<String>,
 }
 
-impl Listed {
+impl ShownCandidate {
     /// 顯示、上屏的文字。
     fn text(&self) -> &str {
         self.converted.as_deref().unwrap_or(&self.span.text)
@@ -130,7 +130,9 @@ pub struct Session {
     /// 選定的分段之後、還沒選定的輸入碼的 lattice，逐鍵補算。
     lattice: Lattice,
     /// 剩下的輸入碼的全部候選，已經過後處理。
-    candidates: Vec<Listed>,
+    candidates: Vec<ShownCandidate>,
+    /// `candidates` 是在簡體模式下列的；和選項不同時下一個鍵先重列。
+    candidates_simplified: bool,
     /// 目前頁，從 0 起。
     page: usize,
     generation: u64,
@@ -138,7 +140,8 @@ pub struct Session {
 }
 
 impl Session {
-    /// 換選項；組字中要候選跟著換，接著呼叫 [`Session::refresh`]。
+    /// 換選項。組字中要畫面立刻跟著換，接著呼叫 [`Session::refresh`]；沒呼叫時下一個鍵
+    /// 先依新選項重列候選再處理。
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
     }
@@ -153,6 +156,10 @@ impl Session {
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        if self.candidates_simplified != self.options.simplified && !self.lattice.input().is_empty()
+        {
+            self.refresh_candidates(engine, user);
+        }
         if let Key::Letter(c) = key
             && engine.scheme().alphabet.contains(c)
         {
@@ -222,26 +229,20 @@ impl Session {
         let mut segments = self.selected_segments();
         let mut commit = self.shown_selected(engine);
         let mut rest = self.lattice.input().to_string();
-        let mut top = self
-            .candidates
-            .first()
-            .map(|c| (c.span.clone(), c.text().to_string()));
+        let mut top = self.candidates.first().cloned();
         let mut raw = String::new();
         while !rest.is_empty() {
-            let Some((choice, shown)) = top else {
+            let Some(choice) = top else {
                 raw = rest;
                 break;
             };
-            segments.extend(owned_segments(&rest, &choice));
-            commit.push_str(&shown);
-            rest.drain(..choice.len);
+            segments.extend(owned_segments(&rest, &choice.span));
+            commit.push_str(choice.text());
+            rest.drain(..choice.span.len);
             top = lattice::candidates(engine, user, &Lattice::from_input(engine, user, &rest))
                 .into_iter()
                 .next()
-                .map(|c| {
-                    let shown = self.output(engine, &c.text);
-                    (c, shown)
-                });
+                .map(|span| self.shown(engine, span));
         }
         if raw.is_empty() {
             self.learn(engine, user, &segments);
@@ -282,10 +283,19 @@ impl Session {
     /// 字詞經過後處理（plan §2.2）要顯示、上屏的樣子：簡體模式轉成簡體。
     /// 轉換的單位是一個候選或一個分段，所以看到的就是上屏的。
     fn output(&self, engine: &Engine, text: &str) -> String {
-        if self.options.simplified {
-            engine.simplify(text).into_owned()
-        } else {
-            text.to_string()
+        self.convert(engine, text)
+            .unwrap_or_else(|| text.to_string())
+    }
+
+    /// 簡體模式轉換後的文字；不轉換時是 `None`。
+    fn convert(&self, engine: &Engine, text: &str) -> Option<String> {
+        self.options.simplified.then(|| engine.simplify(text))
+    }
+
+    fn shown(&self, engine: &Engine, span: CandidateSpan) -> ShownCandidate {
+        ShownCandidate {
+            converted: self.convert(engine, &span.text),
+            span,
         }
     }
 
@@ -337,24 +347,14 @@ impl Session {
     /// 輸入碼或選項變了：重列候選、回到第一頁。後處理（plan §2.2）在排序之後：
     /// 簡體模式轉成簡體，轉換後文字重複的只留第一個。
     fn refresh_candidates(&mut self, engine: &Engine, user: &UserModel) {
-        let spans = lattice::candidates(engine, user, &self.lattice).into_iter();
-        self.candidates = if self.options.simplified {
-            let mut seen = HashSet::new();
-            spans
-                .map(|span| Listed {
-                    converted: Some(engine.simplify(&span.text).into_owned()),
-                    span,
-                })
-                .filter(|c| seen.insert(c.text().to_string()))
-                .collect()
-        } else {
-            spans
-                .map(|span| Listed {
-                    span,
-                    converted: None,
-                })
-                .collect()
-        };
+        // 排序時已去掉原文重複的，沒轉換的不必再比。
+        let mut seen = HashSet::new();
+        self.candidates = lattice::candidates(engine, user, &self.lattice)
+            .into_iter()
+            .map(|span| self.shown(engine, span))
+            .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
+            .collect();
+        self.candidates_simplified = self.options.simplified;
         self.page = 0;
         self.generation += 1;
     }
@@ -368,7 +368,7 @@ impl Session {
     }
 
     /// 目前頁的候選。
-    fn page_candidates(&self) -> &[Listed] {
+    fn page_candidates(&self) -> &[ShownCandidate] {
         let start = self.page * PAGE_SIZE;
         &self.candidates[start..self.candidates.len().min(start + PAGE_SIZE)]
     }

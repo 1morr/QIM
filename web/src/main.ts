@@ -179,7 +179,7 @@ async function start(): Promise<void> {
 	const applySimplified = (): void => {
 		const snapshot = session.setSimplified(simplified.checked);
 		try {
-			render(snapshot);
+			apply(snapshot);
 		} finally {
 			snapshot.free();
 		}

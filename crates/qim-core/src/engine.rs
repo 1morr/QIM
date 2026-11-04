@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 
@@ -94,10 +93,10 @@ impl Engine {
     }
 
     /// 簡體模式下輸出的文字；沒掛上簡繁資料包時照原樣。
-    pub(crate) fn simplify<'a>(&self, text: &'a str) -> Cow<'a, str> {
+    pub(crate) fn simplify(&self, text: &str) -> String {
         match &self.simplifier {
-            Some(simplifier) => Cow::Owned(simplifier.convert(text)),
-            None => Cow::Borrowed(text),
+            Some(simplifier) => simplifier.convert(text),
+            None => text.to_string(),
         }
     }
 

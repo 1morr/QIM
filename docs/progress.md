@@ -40,6 +40,7 @@
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
 | 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 | 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
+| 2026-11-04 | M1 16 | 簡體模式：OpenCC `fae2a0a` 建簡繁資料包，排序後轉換、去重，學習記繁體；網頁開關，`anr` 首選「门口」；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 
 ## 偏差與決定
 
@@ -89,3 +90,5 @@
 - 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
 - 2026-11-04 M1 19：`jsonschema` 讓網頁 WebAssembly 由 0.42 MB 變 4.6 MB；iOS 鍵盤擴充要不要略過 Schema 在 M2 量記憶體時定（plan §8）。
 - 2026-11-04 M1 19（使用者決定）：`touchInset` 改名 `extendedEdges`，與 Delta skin 同名同義（正數往外擴、負數往內縮），格式還沒發佈、不留舊名（plan §2.6）。
+- 2026-11-04 M1 16：簡繁不經 `ferrous-opencc`：它編得進 WebAssembly，但只能用內嵌的舊字典、不能從資料包載入；改自讀 OpenCC `fae2a0a` 建簡繁資料包，`qim-core` 照 OpenCC 規則轉換（plan §1.4、§4.4）。
+- 2026-11-04 M1 16：`@tofu-risk` 的罕用簡體字不轉、保留原字；簡繁資料包不由方案指名，由 `Engine::with_simplifier` 掛上；加 `Session::refresh` 給組字中換選項（plan §2.1、§4.4）。
