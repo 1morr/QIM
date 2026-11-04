@@ -97,6 +97,21 @@ impl WebSession {
         self.handle(Key::PageDown)
     }
 
+    /// 選全部候選的第 `index` 個（目前頁第 i 個是 `page × 9 + i`），例如點候選列。
+    pub fn select(&mut self, index: usize) -> WebSnapshot {
+        let snapshot = self.session.select(&self.engine, &mut self.user, index);
+        self.track_composing(snapshot)
+    }
+
+    /// 移到組字的第 `segment` 段，例如點組字裡的那一段；分段數是回到整串。
+    #[wasm_bindgen(js_name = focusSegment)]
+    pub fn focus_segment(&mut self, segment: usize) -> WebSnapshot {
+        let snapshot = self
+            .session
+            .focus_segment(&self.engine, &mut self.user, segment);
+        self.track_composing(snapshot)
+    }
+
     /// 點一下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）：做它的 `tap`，組字中照 `composing`。
     pub fn tap(&mut self, layout: &mut WebLayout, index: usize) -> Result<WebSnapshot, JsError> {
         let action = layout.key(index)?.tap_action(self.composing).clone();
@@ -140,7 +155,7 @@ impl WebSession {
                 self.session.handle(&self.engine, &mut self.user, key)
             }
         };
-        let mut snapshot = self.record_composing(snapshot);
+        let mut snapshot = self.track_composing(snapshot);
         snapshot.action = Some(action.name().into());
         snapshot.letter = match action {
             Action::Letter(c) => Some(c.to_string()),
@@ -151,14 +166,13 @@ impl WebSession {
 
     fn handle(&mut self, key: Key) -> WebSnapshot {
         let snapshot = self.session.handle(&self.engine, &mut self.user, key);
-        self.record_composing(snapshot)
+        self.track_composing(snapshot)
     }
 
-    /// 轉成給 JS 的樣子，並記下按完後是否還在組字。
-    fn record_composing(&mut self, snapshot: Snapshot) -> WebSnapshot {
-        let snapshot: WebSnapshot = snapshot.into();
-        self.composing = !snapshot.selected.is_empty() || !snapshot.unselected.is_empty();
-        snapshot
+    /// 記下事件之後還在不在組字（[`WebSession::composing`]），再轉成給 JS 的樣子。
+    fn track_composing(&mut self, snapshot: Snapshot) -> WebSnapshot {
+        self.composing = !snapshot.composition.input.is_empty();
+        snapshot.into()
     }
 }
 
@@ -171,18 +185,21 @@ pub struct WebSnapshot {
     /// 組字的整串輸入碼，含已選定的分段的碼；「回報」用。
     #[wasm_bindgen(readonly)]
     pub input: String,
-    /// 已選定的分段接起來的字詞，組字顯示在剩下的輸入碼前面。
+    /// 已選定的分段接起來的字詞；「回報」用。
     #[wasm_bindgen(readonly)]
     pub selected: String,
-    /// 還沒選定的輸入碼。
+    /// 組字的各分段，依輸入碼的順序。
     #[wasm_bindgen(readonly)]
-    pub unselected: String,
-    /// 還沒選定的輸入碼的字根，組字顯示它而不是輸入碼（brief §4.3）。
+    pub segments: Vec<WebSegment>,
+    /// 目前分段在 `segments` 的位置；等於 `segments.length` 時候選列整串（沒有目前分段）。
     #[wasm_bindgen(readonly)]
-    pub radicals: String,
+    pub focus: usize,
     /// 目前頁的候選。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<String>,
+    /// 目前頁，從 0 起。
+    #[wasm_bindgen(readonly)]
+    pub page: usize,
     #[wasm_bindgen(readonly)]
     pub commit: Option<String>,
     /// 觸控鍵盤做了的佈局動作（`Action::name`），長按時是選到的那個；核心沒吃下時網頁照它做宿主的預設動作。
@@ -200,14 +217,47 @@ impl From<Snapshot> for WebSnapshot {
             handled: s.handled,
             input: s.composition.input.clone(),
             selected: s.composition.selected_text(),
-            unselected: s.composition.unselected_input().to_string(),
-            radicals: s.composition.radicals,
+            focus: s.composition.focus,
+            segments: s
+                .composition
+                .segments
+                .into_iter()
+                .map(|segment| WebSegment {
+                    code: segment.code,
+                    radicals: segment.radicals,
+                    text: segment.text,
+                    selected: segment.selected,
+                })
+                .collect(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
+            page: s.page,
             commit: s.commit,
             action: None,
             letter: None,
         }
     }
+}
+
+/// 候選每頁的個數（`qim_core::PAGE_SIZE`）：網頁把目前頁的位置換算成 [`WebSession::select`] 的位置。
+#[wasm_bindgen(js_name = pageSize)]
+pub fn page_size() -> usize {
+    qim_core::PAGE_SIZE
+}
+
+/// 組字的一段（`qim_core::Segment`）。JS 端叫 `Segment`。
+#[wasm_bindgen(js_name = Segment, getter_with_clone)]
+#[derive(Clone)]
+pub struct WebSegment {
+    #[wasm_bindgen(readonly)]
+    pub code: String,
+    /// `code` 的字根；組字裡沒選定的分段顯示它（brief §4.3）。
+    #[wasm_bindgen(readonly)]
+    pub radicals: String,
+    /// 沒有路徑蓋得滿剩下的輸入碼時是空的。
+    #[wasm_bindgen(readonly)]
+    pub text: String,
+    #[wasm_bindgen(readonly)]
+    pub selected: bool,
 }
 
 /// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根（plan §2.5）。JS 端叫 `RadicalHints`。

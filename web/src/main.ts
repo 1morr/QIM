@@ -4,6 +4,7 @@ import "./style.css";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
+	pageSize,
 	RadicalHints,
 	Session,
 	type Snapshot,
@@ -90,6 +91,9 @@ function press(session: Session, key: Key): Snapshot {
 	}
 }
 
+/** 候選列目前頁，點候選時換算成全部候選的位置。 */
+let page = 0;
+
 /** 畫面上的組字與候選；切換字根提示時不必再問核心就能重畫。 */
 const shown = {
 	composing: false,
@@ -120,10 +124,29 @@ function hintText(candidate: string): string {
 		: parts.map((part) => part || "—").join(" ");
 }
 
+/**
+ * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示字根（brief §4.3）；目前分段標
+ * `aria-current`。點一段就移到那段（brief §4.4），由 `start` 掛的事件處理。
+ */
 function render(snapshot: Snapshot): void {
-	// 組字顯示選定的字詞，接著其餘輸入碼的字根（brief §4.3）。
-	composition.textContent = snapshot.selected + snapshot.radicals;
-	shown.composing = snapshot.selected !== "" || snapshot.unselected !== "";
+	const segments = snapshot.segments;
+	composition.replaceChildren(
+		...segments.map((segment, i) => {
+			const span = document.createElement("span");
+			span.className = "segment";
+			span.dataset.index = String(i);
+			span.textContent = segment.selected ? segment.text : segment.radicals;
+			if (i === snapshot.focus) {
+				span.setAttribute("aria-current", "true");
+			}
+			return span;
+		}),
+	);
+	shown.composing = segments.length > 0;
+	for (const segment of segments) {
+		segment.free();
+	}
+	page = snapshot.page;
 	shown.candidates = snapshot.candidates;
 	if (!shown.composing) {
 		shown.hints = false;
@@ -135,6 +158,7 @@ function renderCandidates(): void {
 	candidates.replaceChildren(
 		...shown.candidates.map((candidate, i) => {
 			const item = document.createElement("li");
+			item.dataset.index = String(i);
 			const index = document.createElement("span");
 			index.className = "index";
 			index.textContent = String(i + 1);
@@ -178,6 +202,17 @@ function apply(snapshot: Snapshot, chosen: boolean): void {
 	}
 	render(snapshot);
 	touchKeyboard?.refresh();
+}
+
+/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
+function applyHandled(snapshot: Snapshot, chosen: boolean): void {
+	try {
+		if (snapshot.handled) {
+			apply(snapshot, chosen);
+		}
+	} finally {
+		snapshot.free();
+	}
 }
 
 /** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
@@ -279,23 +314,35 @@ async function start(): Promise<void> {
 	const session = new Session(pack, lexicon, languageModel);
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
-	// 觸控：長按候選叫出字根提示（brief §4.4）。
+	// 點候選選字，長按叫出字根提示（brief §4.4）：放開時還沒到長按的門檻才選字。
 	let pressTimer: number | undefined;
+	/** 按下的候選在目前頁的位置；長按觸發或取消後是 `undefined`。 */
+	let pressed: number | undefined;
 	const cancelPress = () => {
 		window.clearTimeout(pressTimer);
 		pressTimer = undefined;
+		pressed = undefined;
 	};
 	candidates.addEventListener("pointerdown", (event) => {
 		// 不讓輸入框失去焦點，長按完還能接著打字。
 		event.preventDefault();
 		cancelPress();
+		const item = (event.target as Element).closest<HTMLElement>("li");
+		pressed = item ? Number(item.dataset.index) : undefined;
 		pressTimer = window.setTimeout(() => {
-			pressTimer = undefined;
+			cancelPress();
 			toggleHints();
 		}, LONG_PRESS_MS);
 	});
-	// 手指左右滑候選列時瀏覽器接手捲動、送 pointercancel，長按就取消。
-	for (const type of ["pointerup", "pointerleave", "pointercancel"]) {
+	candidates.addEventListener("pointerup", () => {
+		const index = pressed;
+		cancelPress();
+		if (index !== undefined) {
+			applyHandled(session.select(page * pageSize() + index), true);
+		}
+	});
+	// 手指左右滑候選列時瀏覽器接手捲動、送 pointercancel，長按與選字都取消。
+	for (const type of ["pointerleave", "pointercancel"]) {
 		candidates.addEventListener(type, cancelPress);
 	}
 	candidates.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -354,6 +401,16 @@ async function start(): Promise<void> {
 		navigator.clipboard.writeText(reports.value).catch((error: unknown) => {
 			status.textContent = `複製失敗：${String(error)}`;
 		});
+	});
+
+	// 點組字的一段就移到那段；取消預設動作，輸入框不失去焦點（同觸控鍵盤）。
+	composition.addEventListener("pointerdown", (event) => {
+		const segment = (event.target as Element).closest<HTMLElement>(".segment");
+		if (!segment) {
+			return;
+		}
+		event.preventDefault();
+		applyHandled(session.focusSegment(Number(segment.dataset.index)), false);
 	});
 
 	text.addEventListener("keydown", (event) => {

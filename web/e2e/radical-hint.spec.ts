@@ -80,11 +80,14 @@ test("沒有組字時 Tab 交還瀏覽器：焦點離開輸入框", async ({ pag
 	await expect(text).not.toBeFocused();
 });
 
-test("長按候選列出字根提示，點一下不會", async ({ page }) => {
-	const { items, hint } = ui(page);
+test("長按候選列出字根提示，點一下選字、不叫出提示", async ({ page }) => {
+	const { text, items, hint } = ui(page);
 	await page.keyboard.type("oj");
 	await items.first().click();
 	await expect(hint).toHaveCount(0);
+	await expect(text).toHaveValue("俾");
+
+	await page.keyboard.type("oj");
 
 	const box = await items.first().boundingBox();
 	if (!box) {

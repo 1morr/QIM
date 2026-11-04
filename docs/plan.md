@@ -23,7 +23,7 @@
 | 個人模型 | `UserModel` | 空間模型 | `SpatialModel` |
 | 重排 | `Rerank` | 譯詞 | `Gloss` |
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
-| 連打字集 / 擴展區 | `continuous` / `extension` | — | — |
+| 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
 
 ## 1. 架構總覽
 
@@ -139,7 +139,7 @@ pub struct Options { pub simplified: bool, pub incognito: bool, pub english_cand
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
-    pub composition: Composition,   // 輸入碼、還沒選定的輸入碼的字根、各分段（碼、字、是否已選定）、目前分段
+    pub composition: Composition,   // 輸入碼、各分段（碼、字根、字、是否已選定）、目前分段
     pub candidates: Vec<Candidate>, // 目前頁
     pub page: usize,
     pub has_more: bool,
@@ -163,7 +163,10 @@ impl Session {
 - `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它；組字中和標點相同，先上屏整個組字再接它，文字照原樣不轉全形（M1 票 20）。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 上下文（M3）：`Session::set_context(before: &str)`，n-gram 與個人 bigram 用前文當起點。
-- 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的字詞；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
+- 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的碼的字詞（和單打那個碼相同）；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
+  - `Composition.focus` 預設是分段數（像 librime 的 caret 在最後）：候選列剩下沒選定的整串；← 從最後一段往前，→ 走過最後一段回到整串；打字、退格回到整串。`select(index)` 的 `index` 是全部候選的位置（librime `select_candidate`）。
+  - 改選第 i 段時，前面的分段照顯示的字固定、不重算（使用者確認）：重算的輸入碼從頭建、不接選定的分段的字（和選開頭一段時相同，接前文等 M3 `set_context`），單獨重算前面只會丟掉跨段 bigram 選出、使用者看過的字。選的只蓋住第 i 段開頭時，那段剩下的碼和後面的分段一起重算；否則後面已選定的不動、沒選定的重算。都選定了就上屏。所以選定的分段永遠在開頭（M1 票 21）。
+  - 移到某一段時空白上屏整個組字，和組字中按標點相同。
 - 觸控機率（M4）：`Key` 加 `Weighted(Vec<(char, f32)>)`，由 `qim-layout` 依點擊位置與按鍵幾何算出，殼轉交；`qim-core` 不知道佈局。當時平台殼還沒開工，只改網頁綁定。
 - 欄位類型（M4）：`Options` 加 `field: FieldKind`（一般、email、網址、數字），由殼依平台的欄位資訊給。
 - 重排：`apply_rerank` 只接受目前的 `generation`，過期結果丟棄；重排過的候選最高只到第 2 位（afm-ime 做法，brief §1.3）。M1 只有介面與網頁的假實作，M3 起接雲端 LLM。
