@@ -4,7 +4,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Options, Pack, Packs, Ranking, Scheme, Session, UserModel,
+    CodeEntry, CodeTable, Engine, Key, Options, Pack, Packs, Ranking, Scheme, Session, ShiftKey,
+    UserModel,
 };
 
 fn pack_bytes() -> Vec<u8> {
@@ -204,11 +205,25 @@ fn keys_that_only_move_within_the_composition_keep_the_separator_waiting() {
 
 #[test]
 fn switching_to_english_commits_the_separator_half_width() {
+    for shift in [ShiftKey::Left, ShiftKey::Right] {
+        let mut ime = Ime::new();
+        ime.type_keys("3.");
+        let snapshot = ime.press(Key::ToggleAscii(shift));
+        assert!(snapshot.ascii, "{shift:?}");
+        assert_eq!(ime.text, "3.", "{shift:?}");
+    }
+}
+
+#[test]
+fn digits_and_punctuation_in_inline_english_stay_as_typed() {
+    // 留碼接英文（左 Shift 的預設，brief §4.3）時字元照原樣接在英文後，不套數字後半形。
     let mut ime = Ime::new();
-    ime.type_keys("3.");
-    let snapshot = ime.press(Key::ToggleAscii);
-    assert!(snapshot.ascii);
-    assert_eq!(ime.text, "3.");
+    ime.type_keys("a");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    ime.type_keys("3.5,0:1");
+    let snapshot = ime.press(Key::Enter);
+    assert_eq!(snapshot.commit.as_deref(), Some("a3.5,0:1"));
+    assert_eq!(ime.text, "a3.5,0:1");
 }
 
 #[test]

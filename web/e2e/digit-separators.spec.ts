@@ -54,3 +54,14 @@ test("關掉開關後數字後也是全形", async ({ page }) => {
 	await page.keyboard.type("3.5");
 	await expect(text).toHaveValue("3。5");
 });
+
+test("留碼接英文時數字與標點照原樣接在英文後", async ({ page }) => {
+	const { text } = await ready(page);
+	await text.focus();
+	await page.keyboard.type("anr");
+	// Playwright 的 `ShiftLeft` 是左 Shift，預設留碼接英文（brief §4.3）。
+	await page.keyboard.press("ShiftLeft");
+	await page.keyboard.type("3.5,0:1");
+	await page.keyboard.press("Enter");
+	await expect(text).toHaveValue("anr3.5,0:1");
+});
