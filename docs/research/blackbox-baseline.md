@@ -1,8 +1,8 @@
-# 黑箱基線：macOS、iOS 內建速成與 Gboard
+# 黑箱基線：macOS、iOS 內建速成、Gboard 與 QIM
 
-實測日期：2026-11-04。Apple 兩者在票 `.scratch/m1/issues/08-blackbox-apple.md`，Gboard 在票 `.scratch/m1/issues/09-blackbox-gboard.md`。照 `docs/research/closed-source-imes.md` §4 的 T1–T18，只打字、讀回畫面，不開產品的檔案、不逆向（ADR 0006）。
+實測日期：2026-11-04。Apple 兩者在票 `.scratch/m1/issues/08-blackbox-apple.md`，Gboard 在票 `.scratch/m1/issues/09-blackbox-gboard.md`，QIM（網頁 prototype）在 M1 收尾的票 `.scratch/m1/issues/24-m1-close.md`。照 `docs/research/closed-source-imes.md` §4 的 T1–T18，只打字、讀回畫面，不開產品的檔案、不逆向（ADR 0006）。
 
-截圖在 `.scratch/m1/evidence/`，檔名以 `08-mac-`、`08-ios-`、`09-android-` 開頭；下文寫成 `ev/<檔名>`。
+截圖在 `.scratch/m1/evidence/`，檔名以 `08-mac-`、`08-ios-`、`09-android-`、`24-` 開頭；下文寫成 `ev/<檔名>`。
 
 ## 環境：Apple
 
@@ -46,35 +46,47 @@ iPhone 版沒測：iPhone 上沒裝 Gboard，使用者決定不安裝。App Stor
 - 沒有錄影，T9 不量（見下）。
 - T5 系列 email 用英文鍵盤打：速成的字根頁沒有 `@`、英文字母要長按才出，那就不是速成的行為了。
 
+## 環境：QIM
+
+| 項目 | 網頁 prototype |
+| --- | --- |
+| 版本 | commit `56fb4d3`（M1 票 01–23 全部合併），資料包 sha256 開頭：速成 `ae3bc207ce7a`、詞庫 `20853183b2cc`、bigram `68b18859fd32`、英文 `1afd47942b69` |
+| 怎麼跑 | 乾淨 checkout（`git worktree add --detach`，照 `docs/development.md` 從零安裝），Vite 開發伺服器；Playwright 1.64.1 的 Chromium，實體鍵盤用 Desktop Chrome、觸控用 Pixel 7 模擬（412×915，觸控事件經 CDP） |
+| 設定 | 網頁預設：學習開（無痕關）、繁體、英文候選開、重排「原樣（假實作）」 |
+| 怎麼打 | `page.keyboard` 逐鍵送進輸入框，觸控點 `data-testid` 的按鍵；候選列、組字、輸入框的值從 DOM 讀回 |
+| 網路 | 本機；T10 載入後切離線 |
+
+腳本只在本票跑、不進 repo；每項只打 1 次（T3 / T4 / T16 照表重複），結果是確定的。網頁做不到的（真實 App 的欄位類型、密碼欄、跨 App、重開機、錄影量延遲）在下表註明。之後的修正（`4394683`）只動預設佈局的無障礙標籤與 NOTICE 文字，不影響下面的結果。
+
 ## 首選對照
 
 各碼打完、還沒選字時的第 1 個候選；「—」是沒測。`bench/fixed.tsv` 的競品案例引這張表。
 
-| 碼 | macOS | iOS | Gboard | 證據 |
-| --- | --- | --- | --- | --- |
-| `a` | 日 | 日 | 日 | ev/08-mac-a.png、ev/09-android-t10-1.png |
-| `r` | — | 口 | 口 | iOS：T17；ev/09-android-t10-1.png |
-| `an` | 門 | 門 | 門 | ev/08-mac-t1-an.png、ev/09-android-t10-1.png |
-| `hi` | 我 | 我 | 的（我 第 2） | ev/08-mac-t16-hi-1.png、ev/09-android-t16.png |
-| `kb` | 有 | 有（冇 第 2） | 有（冇 第 2） | ev/08-mac-t17-kb.png、ev/09-android-t10-1.png |
-| `ru` | 吧 | 嘅 | 嘅 | ev/08-mac-t17-ru.png、ev/09-android-t10-1.png |
-| `rn` | 吃 | 嘢 | 嘢 | ev/08-mac-t17-rn.png、ev/09-android-t10-1.png |
-| `ri` | 戰 | 啲 | 啲 | ev/08-mac-t17-ri.png、ev/09-android-t10-1.png |
-| `os` | 作 | 佢 | 作（佢 第 2） | ev/08-mac-t17-os.png、ev/09-android-t10-1.png |
-| `bc` | 具 | 賺 | 具 | ev/08-mac-t3-bc-0.png、ev/09-android-t3.png |
-| `oe` | — | 隻 | 假 | iOS：T6；ev/09-android-t10-2.png |
-| `dp` | — | 想 | 想 | iOS：打 `hidpovrn` 時這段自動取的首選；ev/09-android-t10-2.png |
-| `ov` | — | 食 | 食 | 同上 |
-| `bh` | — | 睇 | 睇 | iOS：T6 打「我想睇」時；ev/09-android-t10-2.png |
-| `hidpbh` | — | 我想睇（逐段首選：我、想、睇） | 我想睇 | iOS：T6；ev/09-android-t1.png |
-| `hidpovrn` | 英文串「hidpovrn」 | 我想食＋嘢（逐段首選） | 我想食嘢 | ev/08-mac-t1-hidpovrn.png；iOS：T1；ev/09-android-t1.png |
-| `anr` | 英文串「anr」 | — | 門口 | ev/08-mac-t1-anr.png、ev/09-android-t1.png |
-| `mir` | 英文串「mir」 | 耐口（逐段首選） | 一台 | ev/08-ios-t1-mir.png、ev/09-android-t1.png |
-| `hh` | — | — | 身 | ev/09-android-t17.png |
-| `yp` | — | — | 意 | 同上 |
-| `hv` | — | — | 很 | 同上 |
+| 碼 | macOS | iOS | Gboard | QIM | 證據 |
+| --- | --- | --- | --- | --- | --- |
+| `a` | 日 | 日 | 日 | 日 | ev/08-mac-a.png、ev/09-android-t10-1.png |
+| `r` | — | 口 | 口 | 口 | iOS：T17；ev/09-android-t10-1.png |
+| `an` | 門 | 門 | 門 | 門 | ev/08-mac-t1-an.png、ev/09-android-t10-1.png |
+| `hi` | 我 | 我 | 的（我 第 2） | 的（我 第 2） | ev/08-mac-t16-hi-1.png、ev/09-android-t16.png |
+| `kb` | 有 | 有（冇 第 2） | 有（冇 第 2） | 有（冇 第 2） | ev/08-mac-t17-kb.png、ev/09-android-t10-1.png |
+| `ru` | 吧 | 嘅 | 嘅 | 嘅 | ev/08-mac-t17-ru.png、ev/09-android-t10-1.png |
+| `rn` | 吃 | 嘢 | 嘢 | 嘢 | ev/08-mac-t17-rn.png、ev/09-android-t10-1.png |
+| `ri` | 戰 | 啲 | 啲 | 啲 | ev/08-mac-t17-ri.png、ev/09-android-t10-1.png |
+| `os` | 作 | 佢 | 作（佢 第 2） | 佢 | ev/08-mac-t17-os.png、ev/09-android-t10-1.png |
+| `bc` | 具 | 賺 | 具 | 具 | ev/08-mac-t3-bc-0.png、ev/09-android-t3.png |
+| `oe` | — | 隻 | 假 | 隻 | iOS：T6；ev/09-android-t10-2.png |
+| `dp` | — | 想 | 想 | 想 | iOS：打 `hidpovrn` 時這段自動取的首選；ev/09-android-t10-2.png |
+| `ov` | — | 食 | 食 | 食 | 同上 |
+| `bh` | — | 睇 | 睇 | 睇 | iOS：T6 打「我想睇」時；ev/09-android-t10-2.png |
+| `hidpbh` | — | 我想睇（逐段首選：我、想、睇） | 我想睇 | 我想睇 | iOS：T6；ev/09-android-t1.png |
+| `hidpovrn` | 英文串「hidpovrn」 | 我想食＋嘢（逐段首選） | 我想食嘢 | 我想食嘢 | ev/08-mac-t1-hidpovrn.png；iOS：T1；ev/09-android-t1.png |
+| `anr` | 英文串「anr」 | — | 門口 | 門口 | ev/08-mac-t1-anr.png、ev/09-android-t1.png |
+| `mir` | 英文串「mir」 | 耐口（逐段首選） | 一台 | 一台 | ev/08-ios-t1-mir.png、ev/09-android-t1.png |
+| `hh` | — | — | 身 | 物（身 第 3） | ev/09-android-t17.png |
+| `yp` | — | — | 意 | 意 | 同上 |
+| `hv` | — | — | 很 | 委（很 第 3） | 同上 |
 
-iOS 欄除了附截圖的，都是當場從無障礙樹讀到的候選列。
+iOS 欄除了附截圖的，都是當場從無障礙樹讀到的候選列。QIM 欄是 Playwright 讀回的候選列（M1 收尾時的資料包，學習資料空白），`a`、`anr`、`mir` 另有截圖 ev/24-rime-a.png、24-rime-anr.png、24-rime-mir.png。
 
 ## 結果：Apple
 
@@ -144,6 +156,33 @@ T5 系列對 `closed-source-imes.md` §3 四個假設的結論：
 
 使用者在真機上觀察到的「記得 email」，最可能是 H1 加上真機會存檔（這台模擬器重開就沒了，原因沒查出）；有登入帳號時可能還有 H3。
 
+## 結果：QIM 與競品並列
+
+QIM 在網頁 prototype 上重跑能做的項目，和競品並列；競品欄是上兩節的摘要。分類照 `closed-source-imes.md` §4：**缺功能**、**行為不同但合理**、**行為更差**；和競品之一相同、不算差異的寫「同 …」。缺功能與行為更差都註明去處。
+
+| ID | macOS | iOS | Gboard | QIM（網頁） | 分類 |
+| --- | --- | --- | --- | --- | --- |
+| T1 連打 | 不能連打，第 3 碼起變英文串 | 每 2 碼切一段，`mir` 耐口 | 整串解碼，選開頭一段後其餘重算；刪除先撤銷選擇 | **整串解碼**：`anr` 門口、`mir` 一台、`hidpovrn` 我想食嘢、`hidpbh` 我想睇都是首選；組字顯示分段字根（竹戈木心｜人女口弓）。選開頭一段「我想」後其餘重算（食嘢）；之後按刪除刪最後一碼，不撤銷選擇；← → 可移到中間分段改選。ev/24-qim-t1-*.png、24-segment-focus.png、24-segment-rechosen.png | 同 Gboard；刪除不撤銷選擇是行為不同但合理（改前段用 ← 移過去改選，票 21） |
+| T2a 容錯：替換 | — | 沒有 | 有空間模型，原樣讀法優先 | **沒有容錯**：`sn`、`ab` 第一頁沒有門；`snr`、`amr` 沒有門口；`ane` 讀成門＋`e`（門水） | 缺功能：觸控的空間模型與容錯在 M4（brief §4.8） |
+| T2b 容錯：漏、多、對調 | — | 沒有 | 不救；多一碼剛好能切時 `anrr` 門口 第 4 | **不救**：`na`、`ar`、`nar`、`arn` 沒有門或門口，`hidpvrn` → 我想女喇；`anrr` 門口 第 5，`annr`、`asnr` 沒有 | 同 Gboard；容錯在 M4 |
+| T3 頻率自適應 | 選一次就成首選 | 選一次就成首選 | 選 10 次都不前移 | **選兩次成首選**：`bc` 具、貝、賺、冥、贖…；選第 5 位「贖」1 次升到第 2，2 次第 1，10 次仍第 1。ev/24-qim-t3-bc-0.png、24-qim-t3-bc-10.png、24-learn-bc.png | 行為不同但合理：brief §4.5 刻意介於兩種極端之間 |
+| T3b 衰退 | 只看最近一次 | 只看最近一次 | 不適用 | 改選「賺」1 次升到第 3，2 次第 1，「贖」退到第 2：看次數與衰減，不是只看最近一次 | 行為不同但合理（brief §4.5） |
+| T4 學新詞 | 不學 | 不學 | 不學，連打分段選也不學 | **連打中分段選字會學**：`anbc` 分段選「門」「貝」1 次後首選仍是門具，2 次後是「門貝」（自動造詞加規則 2）。逐字上屏「門貝」10 次後 `an` 的候選不變，`anbc` 首選也變「門貝」，因為 `bc` 學到了「貝」。ev/24-qim-t4-anbc.png | 行為不同但合理：比三家多做了自動造詞（brief §4.5） |
+| T5a–T5f email | — | 速成打不出 email | 英文鍵盤 3 次內學到，跨 App、離線有效 | 網頁只有一個輸入框，沒有欄位類型、剪貼簿晶片與別的 App；英文狀態（單按 Shift）打 3 次 email 後打 `bc` 沒有候選，中文狀態 `bc` 只有中文字 | 缺功能：記住常打字串在 M3，欄位類型在 M4 |
+| T6 上下文 | 打碼不看前文 | 打碼不看前文，聯想看前文 | 打碼看前文，影響小 | **打碼不看前文**：輸入框先放「我想食」「我想睇」或空白，`oe` 都是 隻、飯、雙、假… | 同 iOS；輸入框上下文是缺功能，在 M3 |
+| T7 中文狀態英文 | 第 3 碼起，英文排第 1，大寫形在前 | 沒有 | 沒有 | **第 3 碼起完整英文字排第 2**：`ipad` → 憑閑、iPad；`iphone` → 能從發、iPhone；`github` → GitHub；`the`、`hello` 第 2；大小寫照詞典，專有名詞只給大寫形；`bc` 只有中文。ev/24-qim-t7-iphone.png、24-english-the.png | 行為不同但合理：第 2 位不搶首選（brief §4.3） |
+| T8 聯想 | 看前一詞，接到詞尾停 | 看前文，可一直接 | 看前文，接到句號停 | **沒有聯想**：上屏「日」後候選列是空的。ev/24-qim-t8-after-commit.png | 缺功能：聯想在 M3 |
+| T9 延遲 | 按鍵到組字 p95 9.76 ms（不含候選窗繪製） | 不能量 | 不能量 | `cargo xtask bench`（Apple M6）只量核心處理一鍵：原生 p50 29 µs、p95 40 µs；WebAssembly（Node）p50 38 µs、p95 51 µs；第 20 碼起 p95 42 µs、55 µs，長串只慢約一成。不含畫面更新 | 量法不同、不比高下；遠低於 spec 的原生 10 ms、WebAssembly 50 ms 預算 |
+| T10 離線 | 打字時沒有連線 | 飛航模式結果相同 | 飛航模式逐像素相同 | 載入後切離線，`a`、`an`、`anr`、`hidpovrn`、`the` 的候選和連線時相同，打字期間沒有任何網路請求 | 同三家：沒有雲端 |
+| T11 undo | — | 不適用 | 速成不適用 | 不適用：中文狀態沒有自動修正；英文自動修正在 M4（預設關） | — |
+| T12 post-correction | — | 沒發生 | 沒發生 | 沒有事後修正，上屏的字不會被改 | 同三家 |
+| T13 長按 | — | 字根鍵沒有長按 | 長按出英文字母；「。」「，」有清單 | 觸控：字母鍵長按出英文字母（`a` → a），第一排另含數字（`q` → q、1；`p` → p、0），放開上屏、不進組字。空白、Enter 與符號頁的鍵（含「。」「，」）沒有長按清單。符號頁：`1–0`、`@ # $ % & - + （ ） /`、`、 「 」 ： ； ？ ！`、底排「，」「。」。ev/24-long-press-a.png、24-qim-t13-symbols.png | 字母同 Gboard；「。」「，」沒有長按清單是缺功能：佈局格式已支援 `longPress`，使用者自己加在 M5 佈局編輯器 |
+| T14 持久化 | 關 App、殺程序後還在 | 重開 App 後還在 | 速成沒學到東西 | 重新載入頁面後學習還在（`localStorage`）：`bc` 賺、贖、具、貝…。沒有別的 App 可換，沒重開機。ev/24-qim-t14-reload-bc.png | 同 Apple；跨 App 由平台殼負責（M6 起） |
+| T15 隱私欄位 | — | 密碼欄換英文鍵盤 | 密碼欄換英文鍵盤，不學 | 網頁沒有密碼欄。改測無痕：無痕開著選「冥」3 次，關掉後 `bc` 順序不變 | 行為不同但合理：網頁靠使用者開無痕（票 13）；平台殼照系統在密碼欄換鍵盤（M6 起） |
+| T16 平手穩定性 | 10 次相同 | 10 次相同 | 10 次相同 | `hi` 打 10 次（每次重新載入）順序都是 的、我、得、等、特、風、鬼、射、符 | 同三家 |
+| T17 罕用字、簡繁 | 粵語字排很後；簡體排在繁體後 | 粵語字第 1；簡繁混排，`ls` 首選「门」；𨳊 `an` 第 10 | 粵語字第 1 或第 2；簡繁混排 | 粵語字 嘢、啲、嘅、佢 第 1，冇 第 2；`hi` 首選「的」。罕用字（展開面板的全部候選）：鬱 第 6、釁 第 9、鑿 第 8、爨 第 12、龘 第 25、齉 第 24。簡體字也在清單、排在繁體後：`ls` 门 第 9、`na` 阳 第 13、`hv` 农 第 21、`yk` 头 第 27、这 第 72。CJK 擴展 B 的 𨳊 `an` 第 3。ev/24-qim-t17-hv-panel.png | 粵語字序同 iOS。簡體字混在候選裡是行為更差：brief §1.3 定繁體模式不混簡體字，實測沒做到。HKSCS 收了「门」「农」「阳」「头」這類簡體字，照名詞表「連打字集」的定義（Big5 或 HKSCS）就進了連打字集；「这」不在 HKSCS，是擴展區的字，排在最後。𨳊（粵語粗口用字）在 `an` 第 3、比 iOS 前，也是行為更差。兩項去處 M3（詞庫擴充時一起定，見票 24 Comments） |
+| T18 標點與數字 | 標點先上屏首選；Enter 上屏首選；Shift＋字母改英文串 | 符號頁組字還在；打標點跳回字根頁 | 一切到符號頁就上屏首選；Enter 上屏首選 | 實體鍵盤：`a`＋`,` → 日，；`a`＋`1` 選字上屏「日」；`0` 吃下不動作（同 macOS）；`a`＋Shift＋`A` → 日A；Esc 清掉；`an`＋Enter 上屏 `an`；`an`＋`.` → 門。觸控：組字中切到符號頁組字留著，點 `1` → 日1 並留在符號頁，再點「？」仍在符號頁。ev/24-qim-t18-touch.png | 標點同三家；符號頁組字留著同 iOS、打完留在符號頁同 Gboard；Enter 上屏輸入碼、Shift＋字母先上屏再接字母是行為不同但合理（照 librime，brief §4.3） |
+
 ## 給 QIM 的取捨
 
 | 項目 | 競品 | QIM | 去處 |
@@ -153,14 +192,14 @@ T5 系列對 `closed-source-imes.md` §3 四個假設的結論：
 | 學習 | Apple 兩者選一次就成首選、只記最近一次；Gboard 速成選 10 次都不前移 | 選兩次成首選、頻率衰減（brief §4.5）；兩種極端都不學 | brief §1.3 |
 | 學新詞 | 三者都不學：「門貝」逐字上屏 10 次都沒學進，Gboard 在連打裡分段選也不學 | 自動造詞：連打中分段選字上屏的字串學成使用者詞（brief §4.5） | brief §1.3 |
 | 粵語字序 | iOS 嘢、啲、嘅、佢 第 1；Gboard 嘢、啲、嘅 第 1，佢 第 2；macOS 排很後 | 以 iOS 為目標；`rn` 嘢、`ri` 啲、`os` 佢、`hidpovrn` 我想食嘢 在票 12 調高口語語料權重後通過，`hi` 我 還沒過 | brief §1.3、票 12 調參 |
-| 簡繁 | macOS 簡體排在繁體後；iOS、Gboard 混排，`ls` 首選都是「门」 | 繁體模式只出繁體字形，簡體走 OpenCC 開關（票 16） | brief §1.3 |
+| 簡繁 | macOS 簡體排在繁體後；iOS、Gboard 混排，`ls` 首選都是「门」 | 定為繁體模式不混簡體字、簡體走 OpenCC 開關（票 16）；M1 收尾實測繁體模式的候選仍含簡體字，排在繁體之後（`ls` 门 第 9），還沒做到 | brief §1.3、M3 |
 | 聯想 | iOS、Gboard 看前文、給字也給詞、可一直接下去（Gboard 接到句號停）；macOS 只看前一詞、接到詞尾就停 | 聯想是 M3；以 iOS 為目標 | M3 |
 | 打碼時看前文 | Gboard 會讀游標前的欄位文字微調排序（「我想食」後 `oe` 的飯 第 3 → 第 2）；iOS 不看 | 輸入框上下文是 M3 | M3 |
 | 英文候選 | macOS 第 3 碼起英文才出現、排第 1，專有名詞大寫版排在小寫前；iOS、Gboard 速成沒有 | 完整英文字放第 2 位（brief §4.3），刻意不同；可參考 macOS 把 iPad 這類大寫形放在小寫前 | brief §1.3、票 15 |
 | 組字中按標點 | 三者都先上屏首選再輸入標點 | 照做：先上屏整個組字再接全形標點（票 10） | brief §4.3 |
 | 組字中按 Enter | macOS、Gboard 都上屏首選 | 照 librime express_editor 上屏輸入碼（選定的段上屏字），和兩者不同：首選已有空白（票 10） | brief §4.3 |
 | Shift＋字母 | macOS 把整串改成英文串 | 照 librime express_editor 先上屏整個組字再接那個字母，不學 macOS：要英文串有 Enter（票 10） | brief §4.3 |
-| 組字中切符號頁 | Gboard 一切就上屏首選；iOS 組字還在 | 票 20 做符號頁時決定 | 票 20 |
+| 組字中切符號頁 | Gboard 一切就上屏首選；iOS 組字還在 | 組字留著，按符號時才先上屏組字（票 20），和 iOS 相同 | 票 20 |
 | 打完符號 | iOS 打標點後跳回字根頁，打數字留在數字頁；Gboard 都留在數字頁 | 打完符號留在符號頁（brief §4.4），和 Gboard 相同 | brief §1.3 |
 | 長按 | iOS 字根鍵沒有長按子鍵；Gboard 長按出英文字母，放開直接上屏 | 長按出英文字母（brief §4.4），和 Gboard 相同 | brief §1.3 |
 | 隱私欄位 | iOS、Gboard 密碼欄都換成英文鍵盤、沒有候選；Gboard 不學密碼欄打的字 | 平台殼照系統行為；網頁的無痕在票 13 | — |

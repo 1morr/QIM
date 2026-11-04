@@ -15,128 +15,13 @@
 | 里程碑 | 票目錄 | 拆票前讀 | 備註 |
 | --- | --- | --- | --- |
 | M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 完成，[已封存](archive/M0.md) |
-| M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 進行中，24 張票，票序見 `.scratch/m1/spec.md` |
+| M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 完成，[已封存](archive/M1.md) |
+| M2 | `.scratch/m2/issues/` | brief §9、§11、§12.3；plan §1.4、§3、§7.3；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現） | 進行中，尚未拆票 |
 
 ## Session 紀錄
 
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
-| 2026-11-04 | M1 封存 M0 | 票 09：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過；M0 封存到 `docs/archive/M0.md`，M1 標進行中；細節見票 09 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
-| 2026-11-04 | M1 plan | M0 review 後依使用者同意改 plan §5.2、§7.2：語料管線與基準先行、拆 bigram 與佈局、學習模式、個人集改用 Rime 學習資料；brief §9、§12.2 同步 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
-| 2026-11-04 | M1 plan | 收到使用者小狼毫的 `quick5.userdb`，轉成 `bench/personal/rime-userdb.txt`（本機）；查出 Rime 記的是倉頡全碼而非按鍵，plan §5.2 改由自己轉碼 | 新 session 下 `/to-tickets docs/plan.md 拆 M1 的票` |
-| 2026-11-04 | M1 拆票 | 寫 `.scratch/m1/spec.md`，依使用者同意拆成 24 張票（票序在 spec）；plan §7.2 縮成連結，plan、brief 裡的「M1〈名稱〉」改成票號 | 新 session 下 `/implement .scratch/m1/issues/01-corpus-yue-wiki.md` |
-| 2026-11-04 | M1 01 | 粵語維基 → `bench/corpus/yue-wiki.tsv`（2,000 句）與 train / dev；`--verify` 加轉碼、洩漏、決定性三項，全過；細節見票 01 | 新 session 下 `/implement .scratch/m1/issues/02-bench-v0.md` |
-| 2026-11-04 | M1 02 | `qim-bench`、`cargo xtask bench`；M0 baseline：fixed 1/1、yue-wiki 答錯 2000/2000；細節見票 02 | 新 session 下 `/implement .scratch/m1/issues/03-corpus-zh-wiki-and-colloquial.md` |
-| 2026-11-04 | M1 03 | 中文維基、HKCanCor、Common Voice 進基準與訓練切分，字頻 `chars.tsv`；下載快取移到 repo 外；細節見票 03 | 新 session 下 `/implement .scratch/m1/issues/04-bench-corrections-and-personal.md` |
-| 2026-11-04 | M1 04 | 基準加修正次數、KSPC、跳動、依長度分組、翻盤清單與個人集（`cargo xtask data` 轉碼，只報數字）；細節見票 04 | 新 session 下 `/implement .scratch/m1/issues/05-bench-latency.md` |
-| 2026-11-04 | M1 05 | `cargo xtask bench` 報原生與 WebAssembly（Node）每鍵 p50 / p95，含第 20 碼起一組，只報不擋；M0 核心 p95 < 2 µs；細節見票 05 | 新 session 下 `/implement .scratch/m1/issues/06-lexicon-and-char-frequency.md` |
-| 2026-11-04 | M1 06 | rime-essay 詞庫資料包（25 萬詞）與語料字頻，`Engine` 依字頻排字序、整串查詞庫；`anr` 首選「門口」進 `fixed.tsv`，各集合修正/句約減半；細節見票 06 | 新 session 下 `/implement .scratch/m1/issues/07-continuous.md` |
-| 2026-11-04 | M1 07 | lattice、Viterbi + beam、unigram（β 2、γ 0）、選開頭一段後其餘重算；`anr`、`mir` 首選都對，維基答錯少 1/4 以上，口語修正次數變多；細節見票 07 | 新 session 下 `/implement .scratch/m1/issues/08-blackbox-apple.md` |
-| 2026-11-04 | M1 08 | macOS、iOS 內建速成 T1–T18 寫進 `docs/research/blackbox-baseline.md`；brief §1.3 更新，5 題進 `fixed.tsv`；細節見票 08 | 新 session 下 `/implement .scratch/m1/issues/09-blackbox-gboard.md` |
-| 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
-| 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
-| 2026-11-04 | M1 13 | 學習計數、規則 2、`personal`、無痕與 `set_options`、`bench --learning`（學習開修正較少）；細節見票 13 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md`（11、18 另在並行） |
-| 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
-| 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
-| 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
-| 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
-| 2026-11-04 | M1 20 | 長按、符號頁、自訂頁、放大預覽、深色、橫向；核心加 `Session::text`；Gboard 佈局直橫兩版過嚴格檢查；細節見票 20 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md` |
-| 2026-11-04 | M1 16 | 簡體模式：OpenCC `fae2a0a` 建簡繁資料包，排序後轉換、去重，學習記繁體；網頁開關，`anr` 首選「门口」；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
-| 2026-11-04 | M1 21 | ← / →、`focus_segment`、`select`；網頁點分段、點候選；改選中間段時前面固定、後面重算；bench 不變；細節見票 21 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等票 20 合併；22 另在並行） |
-| 2026-11-04 | M1 12 | 口語權重 64、β 1、γ 1、w 0.05，口語修正少三成；`bench --dev`、「回報」；細節見票 12 | 新 session 下 `/implement .scratch/m1/issues/17-cantonese-colloquial-lexicon.md`；另請使用者網頁試打並「回報」，案例由之後的票加進 `fixed.tsv` |
-| 2026-11-04 | M1 22 | 組字顯示字根；`cangjie-hint` 資料包與 `--verify` 抽查；組字中 Tab、觸控長按候選列出字根提示；細節見票 22 | 新 session 下 `/implement .scratch/m1/issues/23-panel-keys-and-rerank-stub.md`（等 20、21） |
-| 2026-11-04 | M1 17 | 粵語口語詞表 197 詞（使用者審過）進詞庫，4 句口語進 `fixed.tsv`，口語修正 −3%、−9.5%；細節見票 17 | 新 session 下 `/implement .scratch/m1/issues/17b-s2hk-keep-cantonese-chars.md` |
-| 2026-11-04 | M1 16 | merge main（票 22）：字根改在組字快照裡算，`refresh` 也帶字根；簡體模式的字根提示查的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
-| 2026-11-04 | M1 16 | merge main（票 12）：簡體開關改呼叫 `apply(snapshot, false)`；簡體模式下「回報」記的是簡體字，交協調者；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
-| 2026-11-04 | M1 16 | 快照的候選、分段與上屏帶繁體原文，回報與字根提示用原文（協調者決定）；merge main（票 21），轉換單位改為分段；細節見票 16 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
-| 2026-11-04 | M1 17b | 粵語語料改用 `t2hk`、「揾」寫成「搵」，`--verify` 查 9 個粵語字的字頻；「搵工」「走晒」「試吓」進 `fixed.tsv`，口語修正 −0.9%；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
-| 2026-11-04 | M1 17b | 字形用常見寫法（使用者決定）：34 組對照表換回「說溫群衛」，`--verify` 查換掉的寫法不在 train；`et` 溫、`sq` 群進 `fixed.tsv`；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（14、15、23 合併後） |
-| 2026-11-04 | M1 23 | 展開面板、單按 Shift 英文直通、重排介面與假實作、翻頁不加 `generation`、簡體文字鍵、組字中組合鍵吃下；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md`（14、17 另在並行） |
-| 2026-11-04 | M1 14 | 使用者詞與觸發詞、自動造詞、規則 1、3 與釘位骨架、`# qim-userdict v1` 匯出匯入、網頁 `localStorage`；規則 2 補「上屏 1 次不成首選」；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
-| 2026-11-04 | M1 14 | 使用者確認 9 欄格式與取代式匯入，網頁匯入前在頁面上確認；merge main（票 16、20、21、22）：改選第 2 段後上屏也造詞；細節見票 14 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
-| 2026-11-04 | M1 15 | ESDB 英文資料包 8.6 萬詞、排位規則 4（3 碼起排第 2、選了不學）、`Options.english_candidates` 與網頁開關；首選正確率不變；細節見票 15 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（等 17b、23 合併） |
-| 2026-11-04 | M1 23 | merge main（票 14、17）：衝突只在文件與 `main.ts` 的 `start()`；data --verify、bench --check、check 全套與亂按都過；細節見票 23 | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
-| 2026-11-04 | M1 15 | merge main（票 23）：英文狀態不出候選、切回中文英文候選照舊，補核心與 e2e 測試；check、data、bench 綠燈 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md`（等 17b 合併） |
-| 2026-11-04 | M1 17b | merge main（票 14、23）：`key-table` e2e 也改用 `anrkbof`；data --verify、bench --check（數字不變）、check 全套都過；細節見票 17b | 新 session 下 `/implement .scratch/m1/issues/15-english-candidates.md` |
-| 2026-11-04 | M1 15 | merge main（票 17b）：baseline 取合併後的值，hkcancor 修正 2595 → 2596 仍是 `bern` 那題；check、data、bench 綠燈 | 新 session 下 `/implement .scratch/m1/issues/24-m1-close.md` |
+| 2026-11-04 | M2 封存 M1 | 票 24：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過、黑箱在 QIM 重跑；M1 封存到 `docs/archive/M1.md`，M2 標進行中；細節見票 24 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 
 ## 偏差與決定
-
-- 2026-11-04 M1 plan：M1 改成語料管線 → 首選字基準 → 詞庫 → 連打…（plan §7.2）：原票 1 的字頻要用票 3 的語料，順序矛盾；先建基準，每張票才有前後數字可比。
-- 2026-11-04 M1 plan：bigram 拆成訓練、調參兩項，佈局拆成格式、觸控鍵盤兩項；M1 各項改用名稱稱呼，票號拆票時定。
-- 2026-11-04 M1 plan：組字中按鍵殘留（`z`、Enter、標點時 `handled` 為假但組字還在）由票 09 的去處 M1 票 8、9 提前到〈連打〉，因為連打後組字變長、更常碰到。
-- 2026-11-04 M1 plan：個人集由「≥ 100 句真實句子」改為使用者 Windows 小狼毫的 Rime 學習資料（使用者提供），句子改選填；內容只在本機、不送雲端（plan §5.2）。
-- 2026-11-04 M1 plan：基準加依長度分組、翻盤清單、`--learning` 學習模式（plan §5.2）；`fixed.tsv` 起始只放已過的 `a 日`，`anr`、`mir` 在通過時加入，`--check` 才不會一開始就紅。
-- 2026-11-04 M1 plan：個人集的輸入碼改由 `qim-databuild` 轉碼，不用 Rime 記下的碼：實測那是詞典的倉頡全碼（99.5%），不是使用者按的鍵，看不出打不打全碼（brief §12.2）。
-- 2026-11-04 M1 拆票：plan §7.2 的 14 項拆成 24 張票：語料管線、學習各 2 張，基準 3 張，黑箱分 Apple 與 Gboard，英文與簡繁分開，〈整合〉拆成字根、面板與重排、收尾 3 張。
-- 2026-11-04 M1 拆票：`bench --learning` 由首選字基準移到票 13（學習）：沒有學習前，開關學習的結果相同，量不出差別。
-- 2026-11-04 M1 拆票：組字中按鍵殘留由〈連打〉拆成票 10；`Left` / `Right` 在票 21 之前先吃下不動作，「`handled` 為假時組字是空的」才成立。
-- 2026-11-04 M1 拆票：佈局由「格式 → 觸控鍵盤」改成 tracer（票 18）→ 格式定稿（19）→ 觸控功能（20），第一張就從資料打通到網頁。
-- 2026-11-04 M1 拆票：票 06 先讓詞庫用整串輸入碼查，網頁 `anr` 就查得到「門口」；`anr 門口` 在哪張票通過就由哪張加進 `fixed.tsv`。
-- 2026-11-04 M1 01：維基語料改用 pages-articles 自己抽內文：CirrusSearch dump 搬到 `cirrus_search_index/` 且只留約 5 週，釘了很快下載不到（plan §4.3、brief §12.1）。
-- 2026-11-04 M1 01：「只留連打字集內的字」定為含字集外字元的句子整句丟掉，不拿掉個別字，免得拼出原文沒有的相鄰字（plan §4.3）。
-- 2026-11-04 M1 02：`bench --check` 對沒有 baseline 的集合、baseline 有但沒跑到的集合也紅（plan §5.2），新增語料的票要同 commit 跑 `--update-baseline`。
-- 2026-11-04 M1 03：中文維基改取 archive.org 的 `zhwiki-20220501` 第一分片：dumps.wikimedia.org 對大站只留約 7 個月，釘了很快下載不到（brief §12.1）。
-- 2026-11-04 M1 03：Tatoeba 不加：下載檔每週覆蓋、無版本與快照，又要逐句署名；口語改用 HKCanCor 與 Common Voice 的 CC0 句子檔（brief §5.2、plan §8）。
-- 2026-11-04 M1 03：下載快取由 `.cache/sources/` 改到 repo 外的使用者快取目錄（`QIM_CACHE_DIR` 可改），各 worktree 共用（`docs/development.md`）。
-- 2026-11-04 M1 04：個人集由 `cargo xtask data` 轉成本機的 `bench/personal/rime-userdb.tsv` 再給基準讀，`qim-bench` 不依賴 `qim-databuild`（plan §1.3、§5.2）。
-- 2026-11-04 M1 04：修正次數的模擬卡住時按 Esc（算一次修正）改逐字打，逐字也打不出時 `--check` 紅（plan §5.2、`GLOSSARY.md`）。
-- 2026-11-04 M1 05：WebAssembly 延遲用 Node 跑網頁綁定，不用瀏覽器：Chromium 計時粗化到 5 µs（隔離後），量不出現在的核心（`scripts/experiments/wasm-latency-browser/`）。
-- 2026-11-04 M1 05：長輸入不另造題，取基準句子中組字第 20 碼起的按鍵（plan §5.2、`docs/development.md`）。
-- 2026-11-04 M1 06：字頻放詞庫資料包，`Engine` 載入時依字頻重排字序；速成資料包的碼表照舊排年級 → Big5，不含語料衍生的資料（plan §4.1）。
-- 2026-11-04 M1 06：詞庫資料包的 `LICENSE` 除了 LGPL-3.0，另寫四份語料的 CC 授權全文，因為字頻來自語料（plan §4、brief §5.2、§11）。
-- 2026-11-04 M1 06：`sources.toml` 的授權三個欄位收成 `license_text` 一個 enum，多一種 `upstream_file`（`docs/development.md`）。
-- 2026-11-04 M1 06：`anr 門口` 由票 06 加進 `fixed.tsv`，查詢搬進 `Engine` 也提前在票 06 做完，票 07 不再做（plan §5.2）。
-- 2026-11-04 M1 07：`mir 一台` 由票 07 加進 `fixed.tsv`：unigram 連打已選對；票 11 改成換上 bigram 後仍要過（plan §5.2、§8）。
-- 2026-11-04 M1 07：空白改成選全部候選的第一個；沒有路徑蓋滿整串時第一個是開頭一段，按空白只固定它、不上屏（brief §4.3 的延伸，票 07 Comments）。
-- 2026-11-04 M1 07：口語兩集修正次數高於 baseline（連打錯一處就要選開頭一段），`--update-baseline` 只更新 `bench/baseline.json`，原因在票 07 Comments。
-- 2026-11-04 M1 09：iPhone 版 Gboard 沒測：使用者決定不在 iPhone 安裝，比照 plan §8 的備案只測 Android，有沒有速成記為未確認（票 09 Comments）。
-- 2026-11-04 M1 09 後（使用者決定）：會改寫打出的字或候選位置的行為都給開關，英文自動修正、英文句首自動大寫預設關，英文候選、容錯、聯想、雲端預設開（brief §4.7、§4.8、§7；plan §7.4、§7.5）。
-- 2026-11-04 M1 10：Enter 有選定分段時上屏「選定的字詞＋其餘輸入碼」，照 librime `CommitRawInput`；標點、大寫先上屏組字，不學 macOS 的英文串（brief §4.3）。
-- 2026-11-04 M1 10：`Key` 加 `Punct`、`Other`；亂按找到組字中 Tab、Delete、方向鍵改到輸入框，網頁沒對應的鍵都轉成 `Other`，組字中吃下（plan §2.1）。
-- 2026-11-04 M1 10：網頁加 `node:test` 單元測試與 `check` 的 `unit` 步驟，不加測試框架依賴（`docs/development.md`、plan §1.4）。
-- 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。
-- 2026-11-04 M1 13：tick 改成每個方案各自累加、只算學到東西的上屏（無痕、Enter 原樣上屏不算），規則 2 的 10,000 次照這個算（plan §2.4；librime 也是每個詞典各自計）。
-- 2026-11-04 M1 13：個人機率 = 衰減值 ÷ 上限 200.5，照 libime 用常數分母；改用實際上屏段數的衰減總和時 `bench --learning` 較差（plan §2.3、票 13 Comments）。
-- 2026-11-04 M1 13：排位規則只移動候選列已有的候選，前面的規則排定的位置後面不動；規則 3、4 的「第 2 位」由票 14、15 擴充（plan §2.4）。
-- 2026-11-04 M1 13：一般模式的基準模擬時開無痕，題內也不學；`--learning` 只報不擋、不寫 baseline（plan §5.2、`docs/development.md`）。
-- 2026-11-04 M1 13 後（使用者決定）：規則 2 的「上屏 ≥ 2 次」與「最近」只算整串輸入碼就是那個碼的上屏，句中各段只進 `personal`，免得句中用過的字搶到單打首選（plan §2.4、brief §4.5）。
-- 2026-11-04 M1 11：詞的段改成第一字用 bigram、詞內用詞頻（plan §2.3）：詞內也用字級 bigram 時同碼的詞分不出常用度，個人集答錯 1146 → 1452；票 12 用 dev 複核。
-- 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。
-- 2026-11-04 M1 12：口語語料權重放 `corpora.rs` 不放方案檔（票寫 `quick.toml`）：它屬於各方案共用的語言模型（plan §2.5、§4.3）。
-- 2026-11-04 M1 12：調參只看 dev，但個人集當守門：dev 偏好的低 β、詞內內插都讓個人集答錯變多，取過守門的 dev 最佳點（plan §2.3、§5.2，票 12）。
-- 2026-11-04 M1 12：`--update-baseline` 接受 zh-wiki 答錯 +20、修正 +4.3%，換口語兩集修正 −32%、−36%（brief §9：維基只防退步）。
-- 2026-11-04 M1 12：詞庫字頻也乘語料權重；bigram 剪枝看乘權重後的次數，口語字對全留（plan §4.2、§4.3）。
-- 2026-11-04 M1 19：佈局格式加四向 `swipe`（M5 才有作用）；鍵盤底色不進格式，由殼依淺深色決定；`touchInset` 正數往外擴（plan §2.6）。
-- 2026-11-04 M1 19：「切得回字母頁」只算點一下的 `switchPage`，長按、滑動、組字中的動作不算，免得頁面只靠它們回去而困住使用者（plan §2.6）。
-- 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
-- 2026-11-04 M1 19：`jsonschema` 讓網頁 WebAssembly 由 0.42 MB 變 4.6 MB；iOS 鍵盤擴充要不要略過 Schema 在 M2 量記憶體時定（plan §8）。
-- 2026-11-04 M1 19（使用者決定）：`touchInset` 改名 `extendedEdges`，與 Delta skin 同名同義（正數往外擴、負數往內縮），格式還沒發佈、不留舊名（plan §2.6）。
-- 2026-11-04 M1 20：組字中按觸控文字鍵先上屏組字再接文字（同票 10 的標點），核心加 `Session::text`，不用 `Key::Text` 以保住 `Key: Copy`（plan §2.1、§2.6）。
-- 2026-11-04 M1 20：觸控鍵改在放開時做動作，按住 400 ms 出長按清單；快打時前一指先當點一下做掉；轉向時留在同 id 的頁（plan §2.6）。
-- 2026-11-04 M1 20：預設佈局的字母鍵長按用 `text`，英文字母直接上屏不進組字，第一排字母在前、數字在後；切頁時組字留著（plan §2.6）。
-- 2026-11-04 M1 16：簡繁不經 `ferrous-opencc`：它編得進 WebAssembly，但只能用內嵌的舊字典、不能從資料包載入；改自讀 OpenCC `fae2a0a` 建簡繁資料包，`qim-core` 照 OpenCC 規則轉換（plan §1.4、§4.4）。
-- 2026-11-04 M1 16：`@tofu-risk` 的罕用簡體字不轉、保留原字；簡繁資料包不由方案指名，由 `Engine::with_simplifier` 掛上；加 `Session::refresh` 給組字中換選項（plan §2.1、§4.4）。
-- 2026-11-04 M1 21（使用者確認）：改選中間分段時，前面沒選定的分段照顯示的字固定、不重算，選定的分段因此永遠在開頭；預設的目前分段是分段數（像 librime caret 在最後）（plan §2.1）。
-- 2026-11-04 M1 12：合併 main 後 `personal` 的 w 由 0.2 改 0.05：新參數下 0.2 讓口語集學習開反而多修正；學習模式暫改讀 dev 掃出（plan §2.3、票 12）。
-- 2026-11-04 M1 22：字根提示用組字中的 Tab 叫出、觸控長按候選，fcitx5 table 是設定開關、沒有快捷鍵（brief §4.3、§4.4、§12.4）。
-- 2026-11-04 M1 22：`Composition.radicals` 只含還沒選定的輸入碼的字根，選定的分段顯示字詞（plan §2.1）。
-- 2026-11-04 M1 22：字根提示資料包不經 `Engine`，殼用 `RadicalHints::for_scheme` 另外載入；方案多了欄位，`FORMAT_VERSION` 4 → 5（plan §2.5、§4.1）。
-- 2026-11-04 M1 14：規則 2 補上「整串上屏剛好 1 次的候選不靠學到的分數成首選」：個人分壓過多字候選的靜態機率，選一次就成首選，違反 brief §4.5（plan §2.4、票 14）。
-- 2026-11-04 M1 14（使用者確認）：匯出格式由票上 7 欄改 9 欄，多記衰減值與整串上屏的 tick；匯入取代整份、壞一列整份不收，網頁匯入前在頁面上確認（plan §2.4、§3.1）。
-- 2026-11-04 M1 17：粵語口語詞表在 repo 裡、不經 `sources.toml`（不是下載的來源），詞庫資料包 `NOTICE` 記它的路徑與 sha256，授權用 `data/licenses/CC0-1.0.txt`（plan §4.2）。
-- 2026-11-04 M1 17（使用者決定）：詞表用「晒」「搵」；語料 `s2hk` 把它們換成「曬」「揾」，改前處理與基準題由票 17b 做，本票接受 hkcancor 1 題翻盤。
-- 2026-11-04 M1 16（協調者決定）：快照的候選、分段與上屏另帶繁體原文（`original`、`commit_original`），「回報」與字根提示用原文，簡體模式不停用回報（plan §2.1）。
-- 2026-11-04 M1 16：merge 票 21 後簡體的轉換單位由「一個候選」改為「一個分段」：選了多段候選後各段分開固定，候選列也要各段分開轉換，看到的才是上屏的（plan §2.1）。
-- 2026-11-04 M1 15：英文詞表取 ESDB release 的 hunspell-en_US zip 自己展開字首字尾，不跑 ESDB 的 Python + SQLite 工具；沒有逐詞 size，plan §4.4 刪掉「size 當常見度」。
-- 2026-11-04 M1 15：英文候選第 3 碼起才出（macOS 速成 T7）、只給剩下的整串、沒有中文候選不出、選了不學；同一小寫拼法只留一種大小寫（brief §4.3、plan §2.4）。
-- 2026-11-04 M1 15：英文佔第 2 位讓 hkcancor、個人集各多翻一頁（修正 +1），`--update-baseline` 接受；各集合首選正確率不變（票 15 Comments）。
-- 2026-11-04 M1 17b：粵語維基、HKCanCor、Common Voice 改用 OpenCC `t2hk`，只有中文維基用 `s2hk`：`s2hk` 把繁體裡也是簡體的字再轉一次，粵語維基換錯約 6.8 萬字（plan §4.3、brief §12.1）。
-- 2026-11-04 M1 17b（使用者決定）：字形用常見寫法、不用香港寫法：語料轉換後照 OpenCC `t2hk`、`t2tw` 逐字查出的對照表換回（「説→說」「羣→群」，34 組），不同碼的不換（brief §4.1、plan §4.3）。
-- 2026-11-04 M1 23：翻頁不再加 `generation`，翻頁中收到的重排結果照樣套用：重排只動第一頁，看得到的頁不變（plan §2.1，M0 票 09 留下的）。
-- 2026-11-04 M1 23：`apply_rerank` 多一個 `engine` 參數；名次變了才加 `generation`，原樣回傳不作廢另一層的結果（plan §2.1）。
-- 2026-11-04 M1 23：組字中單按 Shift 先上屏整個組字再切英文，照 Rime `commit_text`、不學 `inline_ascii`；判定 500 ms 在殼（brief §4.3、plan §2.1）。
-- 2026-11-04 M1 23：桌面展開面板用 ↓ / ↑，由殼攔下：Microsoft 速成的 Tab、→ 展開已給字根提示與分段（brief §4.3、§12.4，plan §3.1）。
-- 2026-11-04 M1 23：組字中 Ctrl / Cmd / Alt 組合鍵吃下不動作，Cmd+V 不再貼進輸入框；Cmd+C、Option＋字母組字中也沒作用（brief §4.3）。
-- 2026-11-04 M1 23（使用者決定）：簡體模式下觸控文字鍵也轉簡體，原文留繁體給回報與學習（plan §2.1）。
-- 2026-11-04 M1 23 後（使用者確認）：組字中單按 Shift 維持先上屏整個組字再切英文，左右 Shift 相同，要原碼用 Enter（brief §4.3）。
