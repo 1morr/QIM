@@ -1,7 +1,7 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{Engine, Key, Options, Session, Snapshot, UserModel};
-use qim_layout::Action;
+use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
 
 /// 網頁的一個輸入框：速成、詞庫與語言模型資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
@@ -11,6 +11,8 @@ pub struct WebSession {
     user: UserModel,
     session: Session,
     options: Options,
+    /// 上一個鍵之後還在組字：觸控鍵盤依它選 `composing` 的標籤與動作。
+    composing: bool,
 }
 
 #[wasm_bindgen(js_class = Session)]
@@ -29,6 +31,7 @@ impl WebSession {
             user: UserModel::default(),
             session: Session::default(),
             options: Options::default(),
+            composing: false,
         })
     }
 
@@ -91,25 +94,34 @@ impl WebSession {
         self.handle(Key::PageDown)
     }
 
-    /// 按下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）的 `tap` 動作。
+    /// 按下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）的動作；組字中照 `composing`。
+    /// 切頁、文字、切換鍵盤、中英切換在 M1 票 20 接上，現在當 `Key::Other`：組字中吃下，
+    /// 沒組字時交還網頁（文字鍵由網頁插入）。
     pub fn tap(&mut self, layout: &WebLayout, index: usize) -> Result<WebSnapshot, JsError> {
         let key = layout
             .page()
             .keys
             .get(index)
             .ok_or_else(|| JsError::new(&format!("佈局沒有第 {index} 個鍵")))?;
-        Ok(self.handle(match key.tap {
-            Action::Letter(c) => Key::Letter(c),
+        Ok(self.handle(match key.tap_action(self.composing) {
+            Action::Letter(c) => Key::Letter(*c),
             Action::Space => Key::Space,
             Action::Backspace => Key::Backspace,
             Action::Enter => Key::Enter,
+            Action::Text(_)
+            | Action::SwitchPage(_)
+            | Action::NextKeyboard
+            | Action::ToggleAscii => Key::Other,
         }))
     }
 
     fn handle(&mut self, key: Key) -> WebSnapshot {
-        self.session
+        let snapshot: WebSnapshot = self
+            .session
             .handle(&self.engine, &mut self.user, key)
-            .into()
+            .into();
+        self.composing = !snapshot.selected.is_empty() || !snapshot.unselected.is_empty();
+        snapshot
     }
 }
 
@@ -149,15 +161,46 @@ impl From<Snapshot> for WebSnapshot {
 #[wasm_bindgen(js_name = Layout)]
 pub struct WebLayout {
     layout: qim_layout::Layout,
+    /// 驗證與選版本的警告，給網頁印在 console。
+    warnings: Vec<String>,
+    /// 選到的佈局版本與目前頁在陣列的位置。
+    variant: usize,
+    page: usize,
 }
 
 #[wasm_bindgen(js_class = Layout)]
 impl WebLayout {
+    /// 讀佈局檔並依裝置（`phone`、`tablet`）與方向（`portrait`、`landscape`）選版本；
+    /// 有錯誤（plan §2.6）時失敗。
     #[wasm_bindgen(constructor)]
-    pub fn new(json: &str) -> Result<WebLayout, JsError> {
-        let layout =
-            qim_layout::Layout::from_json(json).map_err(|e| JsError::new(&e.to_string()))?;
-        Ok(Self { layout })
+    pub fn new(json: &str, device: &str, orientation: &str) -> Result<WebLayout, JsError> {
+        let wanted = When {
+            device: device.parse().map_err(|e: String| JsError::new(&e))?,
+            orientation: orientation.parse().map_err(|e: String| JsError::new(&e))?,
+        };
+        let (layout, warnings) = qim_layout::validate(json, Target::default())
+            .into_layout()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        let (variant, selection) = layout.select(wanted);
+        let page = layout.variants[variant]
+            .initial_page_index()
+            .expect("validate 保證 initialPage 存在、每個版本至少一頁");
+        let warnings = warnings
+            .iter()
+            .chain(&selection)
+            .map(ToString::to_string)
+            .collect();
+        Ok(Self {
+            layout,
+            warnings,
+            variant,
+            page,
+        })
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn warnings(&self) -> Vec<String> {
+        self.warnings.clone()
     }
 
     /// 設計尺寸的寬，按鍵座標以它為準。
@@ -171,26 +214,46 @@ impl WebLayout {
         self.variant().canvas.height
     }
 
-    /// 目前頁的按鍵，標籤省略時用 `session` 方案的字根。
+    /// 目前頁的按鍵：標籤省略時用 `session` 方案的字根，組字中照 `composing`。
     pub fn keys(&self, session: &WebSession) -> Vec<WebLayoutKey> {
         let radicals = &session.engine.scheme().radicals;
         self.page()
             .keys
             .iter()
-            .map(|key| WebLayoutKey {
-                id: key.id.clone(),
-                x: key.frame.x,
-                y: key.frame.y,
-                w: key.frame.w,
-                h: key.frame.h,
-                z: key.z,
-                label: key.display_label(|c| radicals.get(&c).map(String::as_str)),
-                hint: key.hint.clone(),
-                tap: key.tap.name().into(),
-                letter: match key.tap {
-                    Action::Letter(c) => Some(c.to_string()),
-                    _ => None,
-                },
+            .map(|key| {
+                let label =
+                    key.display_label(session.composing, |c| radicals.get(&c).map(String::as_str));
+                let style = key.style.clone().unwrap_or_default();
+                let [label_offset_x, label_offset_y] = style.label_offset.unwrap_or([0.0, 0.0]);
+                let tap = key.tap_action(session.composing);
+                WebLayoutKey {
+                    id: key.id.clone(),
+                    x: key.frame.x,
+                    y: key.frame.y,
+                    w: key.frame.w,
+                    h: key.frame.h,
+                    rotate: key.rotate,
+                    z: key.z,
+                    radius: key.shape.corner_radius(),
+                    a11y_label: key.accessibility_label(&label),
+                    label,
+                    hint: key.hint.clone(),
+                    fill: style.fill.map(|c| c.light),
+                    label_color: style.label_color.map(|c| c.light),
+                    opacity: style.opacity,
+                    label_size: style.label_size,
+                    label_offset_x,
+                    label_offset_y,
+                    tap: tap.name().into(),
+                    letter: match tap {
+                        Action::Letter(c) => Some(c.to_string()),
+                        _ => None,
+                    },
+                    text: match tap {
+                        Action::Text(text) => Some(text.clone()),
+                        _ => None,
+                    },
+                }
             })
             .collect()
     }
@@ -202,17 +265,16 @@ impl WebLayout {
 }
 
 impl WebLayout {
-    /// 佈局版本的選法在 M1 票 19；現在只有一個版本、一頁（`Layout::from_json` 保證至少一個）。
     fn variant(&self) -> &qim_layout::LayoutVariant {
-        &self.layout.variants[0]
+        &self.layout.variants[self.variant]
     }
 
     fn page(&self) -> &qim_layout::Page {
-        &self.variant().pages[0]
+        &self.variant().pages[self.page]
     }
 }
 
-/// 佈局的一個鍵給 JS 畫的樣子，座標是設計尺寸。JS 端叫 `LayoutKey`。
+/// 佈局的一個鍵給 JS 畫的樣子，座標是設計尺寸，顏色是淺色（深色在 M1 票 20）。JS 端叫 `LayoutKey`。
 #[wasm_bindgen(js_name = LayoutKey, getter_with_clone)]
 pub struct WebLayoutKey {
     #[wasm_bindgen(readonly)]
@@ -225,17 +287,41 @@ pub struct WebLayoutKey {
     pub w: f64,
     #[wasm_bindgen(readonly)]
     pub h: f64,
+    /// 以中心順時針旋轉的角度（度）。
+    #[wasm_bindgen(readonly)]
+    pub rotate: f64,
     #[wasm_bindgen(readonly)]
     pub z: i32,
+    /// 圓角半徑，設計尺寸。
+    #[wasm_bindgen(readonly)]
+    pub radius: f64,
     /// 主標籤，已照 [`qim_layout::Key::display_label`] 補上字根。
     #[wasm_bindgen(readonly)]
     pub label: String,
     #[wasm_bindgen(readonly)]
     pub hint: Option<String>,
-    /// `tap` 動作的種類：`letter`、`space`、`backspace`、`enter`；核心沒吃下時網頁照它做宿主的預設動作。
+    #[wasm_bindgen(readonly, js_name = a11yLabel)]
+    pub a11y_label: String,
+    #[wasm_bindgen(readonly)]
+    pub fill: Option<String>,
+    #[wasm_bindgen(readonly, js_name = labelColor)]
+    pub label_color: Option<String>,
+    #[wasm_bindgen(readonly)]
+    pub opacity: Option<f64>,
+    /// 主標籤字級，設計尺寸。
+    #[wasm_bindgen(readonly, js_name = labelSize)]
+    pub label_size: Option<f64>,
+    #[wasm_bindgen(readonly, js_name = labelOffsetX)]
+    pub label_offset_x: f64,
+    #[wasm_bindgen(readonly, js_name = labelOffsetY)]
+    pub label_offset_y: f64,
+    /// 點一下的動作種類（`Action::name`），組字中照 `composing`；核心沒吃下時網頁照它做宿主的預設動作。
     #[wasm_bindgen(readonly)]
     pub tap: String,
     /// `tap` 是 `letter` 時的字母。
     #[wasm_bindgen(readonly)]
     pub letter: Option<String>,
+    /// `tap` 是 `text` 時的文字。
+    #[wasm_bindgen(readonly)]
+    pub text: Option<String>,
 }

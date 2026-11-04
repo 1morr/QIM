@@ -1,6 +1,7 @@
-//! 按鍵標籤（plan §2.6）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母。
+//! 按鍵標籤與動作（plan §2.6）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母；
+//! 組字中改用 `composing` 寫的標籤與動作。
 
-use qim_layout::Layout;
+use qim_layout::{Action, Layout};
 
 fn keys(keys: &str) -> Layout {
     Layout::from_json(&format!(
@@ -26,9 +27,9 @@ fn letter_key_without_label_shows_the_scheme_radical_or_the_letter() {
         ]"#,
     );
     let page = &layout.variants[0].pages[0];
-    assert_eq!(page.keys[0].display_label(radical), "日");
+    assert_eq!(page.keys[0].display_label(false, radical), "日");
     assert_eq!(page.keys[0].hint.as_deref(), Some("a"));
-    assert_eq!(page.keys[1].display_label(radical), "z");
+    assert_eq!(page.keys[1].display_label(false, radical), "z");
 }
 
 #[test]
@@ -41,8 +42,49 @@ fn written_label_wins_and_other_keys_default_to_blank() {
         ]"#,
     );
     let page = &layout.variants[0].pages[0];
-    assert_eq!(page.keys[0].display_label(radical), "A");
+    assert_eq!(page.keys[0].display_label(false, radical), "A");
     assert_eq!(page.keys[0].hint, None);
-    assert_eq!(page.keys[1].display_label(radical), "");
-    assert_eq!(page.keys[2].display_label(radical), "⌫");
+    assert_eq!(page.keys[1].display_label(false, radical), "");
+    assert_eq!(page.keys[2].display_label(false, radical), "⌫");
+}
+
+#[test]
+fn composing_overrides_label_and_tap_only_while_composing() {
+    let layout = keys(
+        r#"[
+            { "id": "a", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" } },
+            { "id": "enter", "frame": { "x": 10, "y": 0, "w": 10, "h": 10 }, "tap": "enter", "label": "↵",
+              "composing": { "label": "確定", "tap": "space" } },
+            { "id": "space", "frame": { "x": 20, "y": 0, "w": 10, "h": 10 }, "tap": "space",
+              "composing": { "label": "選字" } },
+            { "id": "x", "frame": { "x": 30, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "x" }, "composing": null }
+        ]"#,
+    );
+    let page = &layout.variants[0].pages[0];
+    let (enter, space) = (&page.keys[1], &page.keys[2]);
+    assert_eq!(enter.display_label(false, radical), "↵");
+    assert_eq!(enter.display_label(true, radical), "確定");
+    assert_eq!(enter.tap_action(false), &Action::Enter);
+    assert_eq!(enter.tap_action(true), &Action::Space);
+    // 只寫標籤時動作不變。
+    assert_eq!(space.display_label(true, radical), "選字");
+    assert_eq!(space.tap_action(true), &Action::Space);
+    assert_eq!(page.keys[3].tap_action(true), &Action::Letter('x'));
+    assert_eq!(page.keys[0].display_label(true, radical), "日");
+}
+
+#[test]
+fn accessibility_label_defaults_to_the_shown_label_and_hint() {
+    let layout = keys(
+        r#"[
+            { "id": "a", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" }, "hint": "a" },
+            { "id": "space", "frame": { "x": 10, "y": 0, "w": 10, "h": 10 }, "tap": "space" },
+            { "id": "b", "frame": { "x": 20, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "b" }, "hint": "b",
+              "a11yLabel": "月，英文 b" }
+        ]"#,
+    );
+    let page = &layout.variants[0].pages[0];
+    assert_eq!(page.keys[0].accessibility_label("日"), "日，a");
+    assert_eq!(page.keys[1].accessibility_label(""), "空白");
+    assert_eq!(page.keys[2].accessibility_label("月"), "月，英文 b");
 }

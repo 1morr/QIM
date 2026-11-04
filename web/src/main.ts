@@ -1,6 +1,6 @@
 import { type Key, toKey } from "./keys.ts";
 import "./style.css";
-import { mountKeyboard } from "./touch.ts";
+import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
 	type LayoutKey,
@@ -31,6 +31,8 @@ const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+/** 觸控鍵盤；載入完成前是 `undefined`。 */
+let touchKeyboard: Keyboard | undefined;
 
 /** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
 async function load(url: string): Promise<Response> {
@@ -100,6 +102,7 @@ function apply(snapshot: Snapshot): void {
 		insert(snapshot.commit);
 	}
 	render(snapshot);
+	touchKeyboard?.refresh();
 }
 
 /** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
@@ -107,6 +110,9 @@ function hostDefault(key: LayoutKey): void {
 	switch (key.tap) {
 		case "letter":
 			insert(key.letter ?? "");
+			return;
+		case "text":
+			insert(key.text ?? "");
 			return;
 		case "space":
 			insert(" ");
@@ -130,6 +136,19 @@ function hostDefault(key: LayoutKey): void {
 	}
 }
 
+/** 選佈局版本用的裝置：短邊 600 px 以上當平板（Android 的 sw600dp 慣例）。 */
+function device(): "phone" | "tablet" {
+	return Math.min(window.screen.width, window.screen.height) >= 600
+		? "tablet"
+		: "phone";
+}
+
+function orientation(): "portrait" | "landscape" {
+	return window.matchMedia("(orientation: landscape)").matches
+		? "landscape"
+		: "portrait";
+}
+
 /** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
 function setTouch(on: boolean): void {
 	keyboard.hidden = !on;
@@ -151,8 +170,11 @@ async function start(): Promise<void> {
 		session.setIncognito(incognito.checked);
 		text.focus();
 	});
-	const layout = new Layout(layoutJson);
-	mountKeyboard(keyboard, layout, session, apply, hostDefault);
+	const layout = new Layout(layoutJson, device(), orientation());
+	for (const warning of layout.warnings) {
+		console.warn(`佈局：${warning}`);
+	}
+	touchKeyboard = mountKeyboard(keyboard, layout, session, apply, hostDefault);
 	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
 	setTouch(window.matchMedia("(pointer: coarse)").matches);
 	touchToggle.addEventListener("click", () => {

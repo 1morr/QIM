@@ -39,6 +39,7 @@
 | 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
 | 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
+| 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
 
 ## 偏差與決定
 
@@ -83,3 +84,8 @@
 - 2026-11-04 M1 13 後（使用者決定）：規則 2 的「上屏 ≥ 2 次」與「最近」只算整串輸入碼就是那個碼的上屏，句中各段只進 `personal`，免得句中用過的字搶到單打首選（plan §2.4、brief §4.5）。
 - 2026-11-04 M1 11：詞的段改成第一字用 bigram、詞內用詞頻（plan §2.3）：詞內也用字級 bigram 時同碼的詞分不出常用度，個人集答錯 1146 → 1452；票 12 用 dev 複核。
 - 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。
+- 2026-11-04 M1 19：佈局格式加四向 `swipe`（M5 才有作用）；鍵盤底色不進格式，由殼依淺深色決定；`touchInset` 正數往外擴（plan §2.6）。
+- 2026-11-04 M1 19：「切得回字母頁」只算點一下的 `switchPage`，長按、滑動、組字中的動作不算，免得頁面只靠它們回去而困住使用者（plan §2.6）。
+- 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
+- 2026-11-04 M1 19：`jsonschema` 讓網頁 WebAssembly 由 0.42 MB 變 4.6 MB；iOS 鍵盤擴充要不要略過 Schema 在 M2 量記憶體時定（plan §8）。
+- 2026-11-04 M1 19（使用者決定）：`touchInset` 改名 `extendedEdges`，與 Delta skin 同名同義（正數往外擴、負數往內縮），格式還沒發佈、不留舊名（plan §2.6）。
