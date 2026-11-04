@@ -88,6 +88,7 @@ QIM（暫名）。
 | Enter | 把輸入碼當英文原樣上屏；已選定的分段上屏字詞，其餘上屏輸入碼 |
 | Esc | 清除輸入碼 |
 | ← / → | 組字中移到前一段或後一段，候選改列該段的字詞 |
+| Tab | 組字中在候選旁列出或收起字根提示；沒有組字時交還宿主 |
 | Shift（單按） | 切換中英文 |
 | 標點 | 組字中先上屏整個組字再接標點；沒有組字時直接上屏標點 |
 | 大寫字母（Shift＋字母） | 組字中先上屏整個組字再接那個字母；沒有組字時照打 |
@@ -97,7 +98,8 @@ QIM（暫名）。
 - 參考：組字中按標點，macOS、iOS 速成與 Gboard 都先上屏首選再出標點（[黑箱基線](research/blackbox-baseline.md) T18）。Enter、大寫字母照 librime express_editor：Return 是 `CommitRawInput`（選定的段上屏字、其餘上屏原碼），方案以外的可見字元是 `DirectCommit`（先上屏組字、字元照打）。macOS、Gboard 的 Enter 上屏首選，macOS 的 Shift＋字母把整串改成英文，都不學：要首選有空白，要英文有 Enter。
 - 標點預設全形：`,` `.` `?` `!` `;` `:` `(` `)` `[` `]` `{` `}` `<` `>` `\` `^` `_` 依序轉成 ， 。 ？ ！ ； ： （ ） 「 」 『 』 《 》 、 …… ——，取 rime-prelude `punctuation.yaml` `half_shape` 每鍵第一個是全形的選項，不出標點選單。其他符號上屏半形：引號要配對（智慧標點，§4.7）；`/`（Rime 是「、」，和 `\` 重複，留給網址與分數）、`$`（Rime 是「￥」，香港用 $）不學 Rime；其餘 Rime 的第一個選項就是半形。`-` / `=` 是翻頁鍵，沒有組字時照打。
 - 英文候選：輸入碼剛好是完整英文單字時放第 2 位，不搶首選；不容錯、不補全，糾錯與預測只在英文模式（§4.7）。
-- 組字中顯示已打的字根（如「日弓口」）；候選旁不顯示碼，用快捷鍵查字根提示。
+- 組字中顯示已打的字根（如「日弓口」），已選定的分段顯示字詞；候選旁平常不顯示碼。
+- 字根提示：組字中按 Tab，目前頁每個候選旁逐字列出倉頡碼的字根與字母（「日弓(an) 口(r)」，多個碼以「／」分隔），再按一次收起，組字結束也收起；預設五代、可改三代（§4.2）。參考 fcitx5 table 引擎：組字列顯示字根、候選旁以「~ 」接提示，但它是設定開關、沒有快捷鍵（§12.4）；黑箱基線沒有測競品的字根提示。選 Tab：組字中它本來就吃下不動作，不必加修飾鍵，也不佔分段用的 ← / →。
 
 ### 4.4 手機觸控鍵盤【決定】
 
@@ -110,6 +112,7 @@ QIM（暫名）。
 - 候選列單列、可左右滑，右側展開鍵一次看全部候選（候選展開面板因此列入 MVP）。
 - 空白上屏首選；英文候選規則同 §4.3。
 - 按鍵時顯示放大預覽；點組字裡的某一段可改該段。
+- 長按候選列出或收起字根提示，同桌面的 Tab（§4.3）。
 - 候選列不因背景模型的結果改動首選（ADR 0005）。
 
 ### 4.5 學習與排位【決定】
@@ -318,6 +321,7 @@ QIM（暫名）。
 - Keyboard Designer（Android）可自由擺放按鍵並設定尺寸、標籤、顏色、邊框；官網沒提重疊、格線與吸附。[Keyboard Designer](https://www.keyboarddesigner.com)，2026-10-31 查。
 - iOS 鍵盤不能畫到鍵盤上緣之外；`needsInputModeSwitchKey` 為真時要自己提供切換鍵盤的按鈕。[App Extension Programming Guide](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/CustomKeyboard.html)、[needsInputModeSwitchKey](https://developer.apple.com/documentation/uikit/uiinputviewcontroller/needsinputmodeswitchkey)。
 - 開源佈局格式（FlorisBoard、Trime、Hamster、AnySoftKeyboard、HeliBoard）都只支援矩形按鍵。`docs/research/open-source-imes.md` §4。
+- fcitx5 table 引擎的字根提示是設定：`Hint`（Display Hint for word）開了才在候選旁接提示，分隔字預設「~ 」（`HintSeparator`）；`DisplayCustomHint` 讓組字列顯示碼表的 Prompt（字根），沒有叫出提示的快捷鍵。[`fcitx5-chinese-addons` `im/table/ime.h`](https://github.com/fcitx/fcitx5-chinese-addons/blob/master/im/table/ime.h)、`im/table/state.cpp`，2026-11-04 查。
 - 青簡（0.3.2）的兩個可選本地模型都在停鍵後（macOS 80 ms、Windows 30 ms）非同步改首選：知意（mmBERT-small 12 層加選詞頭，權重 Apache-2.0，Windows int8 ONNX 70 MB）讀游標前文，在前 5 / 9 / 18 條中挑首選；通变（自研 P2C，43 MB）在乾淨拼音 6 音節以上時把生成句排第一。作者開發集首選：通变 59.1%、知意 75.0%（含 79 MB 三元模型）。只防「翻過頁就不換」與過期結果，按空白時整句還沒換上的問題仍在。評測資料不入庫。`docs/research/qingjian.md` §4、§5。
 - 青簡沒有倉頡、速成；繁體是簡體核心在出口用 OpenCC 轉字形。拼寫糾錯只算一處編輯，替換限 QWERTY 鄰鍵，每段都讀得通時照原樣、糾正只當備選；雙拼與形碼（五筆）不糾錯。英文糾錯至少 4 個字母，對 9.4 萬詞的詞表查一處編輯。譯詞表（英、日、西、越、德，約 30 MB）由 LLM 與機器翻譯離線生成，修飾鍵加數字上屏。主題是一個目錄的 `theme.json` 加圖片，可繼承另一個主題、按淺深色給變數。宣傳影片示範句中英文混輸（`jin'tian'de'me'e'ting'qu'xiao'le` → 今天的Meeting取消了）時開著通变模型。`docs/research/qingjian.md` §1、§6、§7。
 - CyIME 九宮格拼音（自測）：真實聊天 130 句整段首選，原算法 54、詞級 bigram 92、詞級 trigram 97；trigram 203 MB，剪枝版 105 MB、約低 3 個百分點，每鍵約 5–7 ms，可選下載。34 MB 的神經整句重排因提升小、拖慢打字、停頓後改動候選而停用。GPL-3.0。`docs/research/cyime.md` §3。

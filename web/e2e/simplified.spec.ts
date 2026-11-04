@@ -38,7 +38,7 @@ test("組字中切換簡繁，候選立刻跟著換、組字不變", async ({ pa
 
 	await simplified.check();
 	await expect(items.first()).toHaveText("1门口");
-	await expect(composition).toHaveText("anr");
+	await expect(composition).toHaveText("日弓口");
 	await expect(text).toBeFocused();
 
 	await simplified.uncheck();
@@ -57,7 +57,7 @@ test("簡體模式下選定開頭一段，組字顯示簡體、上屏也是簡�
 	await expect(menKou).toHaveCount(1);
 	const label = (await menKou.textContent()) ?? "";
 	await page.keyboard.type(label.charAt(0));
-	await expect(composition).toHaveText("门口kbo");
+	await expect(composition).toHaveText("门口大月人");
 	await page.keyboard.type(" ");
 	await expect(text).toHaveValue(/^门口./);
 	await expect(text).not.toHaveValue(/[門們]/);

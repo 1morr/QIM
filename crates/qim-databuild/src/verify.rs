@@ -7,8 +7,8 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::{
-    CodeTable, Engine, Key, LanguageModelPack, Lexicon, LexiconPack, Options, Pack, Session,
-    SimplifierPack, UserModel,
+    CangjieVersion, CodeTable, Engine, Key, LanguageModelPack, Lexicon, LexiconPack, Options, Pack,
+    RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
 use crate::corpus::Counts;
@@ -19,7 +19,8 @@ use crate::{bigram, lexicon};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
-    /// `qim-core` 解得開建出的速成、詞庫、語言模型與簡繁資料包，詞庫與語言模型是方案指名的那份。
+    /// `qim-core` 解得開建出的速成、詞庫、語言模型、字根提示與簡繁資料包，詞庫、語言模型與
+    /// 字根提示是方案指名的那份。
     Decodes,
     /// 連打字集與擴展區的字數都等於來源中有倉頡碼的漢字數。
     NoMissingCharacters,
@@ -37,11 +38,15 @@ pub enum CheckId {
     WordCodesFromCharacters,
     /// 詞庫的 `anr` 有「門口」；連打用「門」+「口」也拼得出，所以直接查詞庫，首選由 `bench/fixed.tsv` 擋。
     MenKouForAnr,
+    /// 碼表的每個字（含擴展區）在字根提示裡都至少有一個倉頡碼。
+    RadicalHintCoversCharacters,
+    /// 抽查字根提示：「丟」三代 `hgi`、五代先列 `mgi`；「問」兩代都是 `anr`。
+    RadicalHintByVersion,
     /// 簡體模式打 `anr` 的候選有「门口」、沒有「門口」：簡繁資料包接得上核心（首選由核心測試擋）。
     SimplifiedMenKou,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
-    /// 同樣的來源建兩次，四份資料包的 sha256 都相同。
+    /// 同樣的來源建兩次，五份資料包的 sha256 都相同。
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
@@ -63,6 +68,8 @@ impl fmt::Display for CheckId {
             Self::RiIsTopForA => "抽查：a 的首選是「日」",
             Self::WordCodesFromCharacters => "詞的碼由字的速成碼組成",
             Self::MenKouForAnr => "抽查：詞庫的 anr 有「門口」",
+            Self::RadicalHintCoversCharacters => "字根提示涵蓋碼表的字",
+            Self::RadicalHintByVersion => "抽查：字根提示的三代與五代碼",
             Self::SimplifiedMenKou => "抽查：簡體模式 anr 有「门口」",
             Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
@@ -92,6 +99,7 @@ pub struct Report {
     pub sha256: String,
     pub lexicon_sha256: String,
     pub language_model_sha256: String,
+    pub radical_hint_sha256: String,
     pub simplifier_sha256: String,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
@@ -191,6 +199,7 @@ impl fmt::Display for Report {
         writeln!(f, "sha256：{}", self.sha256)?;
         writeln!(f, "詞庫 sha256：{}", self.lexicon_sha256)?;
         writeln!(f, "bigram sha256：{}", self.language_model_sha256)?;
+        writeln!(f, "字根提示 sha256：{}", self.radical_hint_sha256)?;
         writeln!(f, "簡繁 sha256：{}", self.simplifier_sha256)?;
         if let Some(lexicon) = &self.lexicon {
             writeln!(f, "{lexicon}")?;
@@ -219,12 +228,13 @@ impl fmt::Display for Report {
     }
 }
 
-/// 一次建置寫出的四份資料包的位元組。
+/// 一次建置寫出的五份資料包的位元組。
 #[derive(Debug, Clone, Copy)]
 pub struct PackBytes<'a> {
     pub quick: &'a [u8],
     pub lexicon: &'a [u8],
     pub language_model: &'a [u8],
+    pub radical_hint: &'a [u8],
     pub simplifier: &'a [u8],
 }
 
@@ -235,6 +245,7 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
             sha256_hex(p.quick),
             sha256_hex(p.lexicon),
             sha256_hex(p.language_model),
+            sha256_hex(p.radical_hint),
             sha256_hex(p.simplifier),
         )
     };
@@ -246,7 +257,8 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         sha256: first_sha256.0.clone(),
         lexicon_sha256: first_sha256.1.clone(),
         language_model_sha256: first_sha256.2.clone(),
-        simplifier_sha256: first_sha256.3.clone(),
+        radical_hint_sha256: first_sha256.3.clone(),
+        simplifier_sha256: first_sha256.4.clone(),
         lexicon: None,
         language_model: None,
         checks: Vec::new(),
@@ -254,7 +266,12 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         corpora: Vec::new(),
     };
     match decode(first) {
-        Ok((pack, lexicon, engine)) => pack_checks(&mut report, rows, &pack, &lexicon, &engine),
+        Ok(Decoded {
+            pack,
+            lexicon,
+            engine,
+            hints,
+        }) => pack_checks(&mut report, rows, &pack, &lexicon, &engine, &hints),
         Err(e) => report.checks.push(Check {
             id: CheckId::Decodes,
             passed: false,
@@ -274,25 +291,49 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
         id: CheckId::Deterministic,
         passed: first_sha256 == second_sha256,
         detail: format!(
-            "第二次速成 {}、詞庫 {}、bigram {}、簡繁 {}",
-            second_sha256.0, second_sha256.1, second_sha256.2, second_sha256.3
+            "第二次速成 {}、詞庫 {}、bigram {}、字根提示 {}、簡繁 {}",
+            second_sha256.0, second_sha256.1, second_sha256.2, second_sha256.3, second_sha256.4
         ),
     });
     report
 }
 
-fn decode(bytes: PackBytes) -> Result<(Pack, Lexicon, Engine), qim_core::PackError> {
+/// 解開的資料包；字根提示經殼用的 [`RadicalHints::for_scheme`] 取出，簡繁資料包掛在 `engine` 上。
+struct Decoded {
+    pack: Pack,
+    lexicon: Lexicon,
+    engine: Engine,
+    hints: RadicalHints,
+}
+
+fn decode(bytes: PackBytes) -> Result<Decoded, qim_core::PackError> {
     let pack = Pack::from_bytes(bytes.quick)?;
     let lexicon = LexiconPack::from_bytes(bytes.lexicon)?;
     let language_model = LanguageModelPack::from_bytes(bytes.language_model)?;
+    let hints = RadicalHints::for_scheme(
+        RadicalHintPack::from_bytes(bytes.radical_hint)?,
+        &pack.scheme,
+    )?;
     let simplifier = SimplifierPack::from_bytes(bytes.simplifier)?;
     let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))?
         .with_simplifier(simplifier);
-    Ok((pack, lexicon.lexicon, engine))
+    Ok(Decoded {
+        pack,
+        lexicon: lexicon.lexicon,
+        engine,
+        hints,
+    })
 }
 
 /// 解得開之後的各項檢查，依 plan §4.5 的順序加進 `report`。
-fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon, engine: &Engine) {
+fn pack_checks(
+    report: &mut Report,
+    rows: &[Row],
+    pack: &Pack,
+    lexicon: &Lexicon,
+    engine: &Engine,
+    hints: &RadicalHints,
+) {
     let mut continuous = BTreeSet::new();
     let mut extension = BTreeSet::new();
     for (_, entries) in pack.code_table.iter() {
@@ -336,7 +377,7 @@ fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon
             id: CheckId::Decodes,
             passed: true,
             detail: format!(
-                "格式版本 {}，速成、詞庫、bigram 與簡繁",
+                "格式版本 {}，速成、詞庫、bigram、字根提示與簡繁",
                 qim_core::FORMAT_VERSION
             ),
         },
@@ -369,6 +410,8 @@ fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon
             CheckId::MenKouForAnr,
             lexicon.lookup("anr").iter().any(|w| w.text == "門口"),
         ),
+        hint_coverage(&continuous, &extension, hints),
+        hint_by_version(hints),
         simplified_men_kou(engine),
     ]);
 }
@@ -391,6 +434,61 @@ fn simplified_men_kou(engine: &Engine) -> Check {
         id: CheckId::SimplifiedMenKou,
         passed: texts.contains(&"门口") && !texts.contains(&"門口"),
         detail: format!("第一頁：{}", texts.join(" ")),
+    }
+}
+
+/// 碼表的每個字都查得到至少一個倉頡碼，提示才不會在某個候選上落空。
+fn hint_coverage(
+    continuous: &BTreeSet<char>,
+    extension: &BTreeSet<char>,
+    hints: &RadicalHints,
+) -> Check {
+    let missing: Vec<String> = continuous
+        .iter()
+        .chain(extension)
+        .filter(|&&c| {
+            hints.codes(c, CangjieVersion::Cangjie3).is_empty()
+                && hints.codes(c, CangjieVersion::Cangjie5).is_empty()
+        })
+        .map(char::to_string)
+        .collect();
+    const SHOWN: usize = 10;
+    Check {
+        id: CheckId::RadicalHintCoversCharacters,
+        passed: missing.is_empty(),
+        detail: if missing.is_empty() {
+            format!("{} 字都有", continuous.len() + extension.len())
+        } else {
+            format!(
+                "缺 {} 字：{}",
+                missing.len(),
+                missing[..missing.len().min(SHOWN)].join("")
+            )
+        },
+    }
+}
+
+/// 三代與五代不同的「丟」、相同的「問」，各代的碼要對得上 libcangjie。
+fn hint_by_version(hints: &RadicalHints) -> Check {
+    let codes = |c: char, version: CangjieVersion| hints.codes(c, version).join(",");
+    let diu = (
+        codes('丟', CangjieVersion::Cangjie3),
+        codes('丟', CangjieVersion::Cangjie5),
+    );
+    let wen = (
+        codes('問', CangjieVersion::Cangjie3),
+        codes('問', CangjieVersion::Cangjie5),
+    );
+    Check {
+        id: CheckId::RadicalHintByVersion,
+        passed: diu.0 == "hgi"
+            && diu.1.split(',').next() == Some("mgi")
+            && wen.0 == "anr"
+            && wen.1 == "anr",
+        detail: format!(
+            "丟 三代 {}、五代 {}；問 三代 {}、五代 {}",
+            diu.0, diu.1, wen.0, wen.1
+        ),
     }
 }
 

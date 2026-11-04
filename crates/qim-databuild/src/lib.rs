@@ -1,4 +1,4 @@
-//! 資料管線：取得來源、推導速成碼表、建速成與詞庫資料包並驗證（plan §4）。
+//! 資料管線：取得來源、推導速成碼表、建速成、詞庫、語言模型與字根提示資料包並驗證（plan §4）。
 //!
 //! 入口是 `cargo xtask data [--verify]`，用法見 `docs/development.md`。
 
@@ -16,6 +16,7 @@ mod packing;
 pub mod personal;
 mod pipeline;
 pub mod quick;
+pub mod radical_hint;
 pub mod scheme;
 pub mod sources;
 pub mod transcode;

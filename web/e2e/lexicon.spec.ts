@@ -10,7 +10,7 @@ test("打 anr 候選有「門口」，按空白上屏首選", async ({ page }, t
 
 	await text.focus();
 	await page.keyboard.type("anr");
-	await expect(composition).toHaveText("anr");
+	await expect(composition).toHaveText("日弓口");
 	await expect(items.filter({ hasText: "門口" })).toHaveCount(1);
 	await page.screenshot({ path: testInfo.outputPath("type-anr.png") });
 

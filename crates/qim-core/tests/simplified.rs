@@ -42,6 +42,7 @@ fn engine() -> Engine {
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: Some("model".into()),
+            radical_hint: None,
         },
         ranking: Ranking::default(),
     };

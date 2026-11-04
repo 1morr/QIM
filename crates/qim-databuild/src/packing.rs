@@ -39,6 +39,13 @@ pub(crate) const SIMPLIFIER: [PackedSource; 1] = [PackedSource {
            HKVariants.txt and HKVariantsRevPhrases.txt: the dictionaries of the hk2s configuration",
 }];
 
+/// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。
+pub(crate) const RADICAL_HINT: [PackedSource; 1] = [PackedSource {
+    name: "libcangjie",
+    source_id: LIBCANGJIE,
+    used: "data/table.txt: Cangjie 3 and Cangjie 5 codes of Han characters",
+}];
+
 /// 詞庫資料包的 rime-essay；字頻的語料另由 [`lexicon_sources`] 從語料清單加上。
 const ESSAY: PackedSource = PackedSource {
     name: "rime-essay",

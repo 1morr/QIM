@@ -38,6 +38,7 @@ for (const input of inputs) {
 		const snapshot = session.letter(c);
 		void snapshot.selected;
 		void snapshot.unselected;
+		void snapshot.radicals;
 		void snapshot.candidates;
 		times.push(String(performance.now() - start));
 		snapshot.free();

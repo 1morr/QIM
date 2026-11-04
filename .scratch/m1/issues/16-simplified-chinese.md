@@ -76,3 +76,9 @@ Blocked by: 13
   - 名詞表加「簡體模式」。
 - code-review 未處理：
   - `qim-databuild` 每多一份資料包，`Outcome`、`Report`、`PackBytes`、`main.rs` 都要改，sha256 用 4-tuple 取值。這是沿用原本的寫法，等再多一份資料包（票 15 的英文、票 22 的字根提示）時再收成清單。
+- merge main（票 22、資料包格式 5）：
+  - 票 22 在 `handle` 之後才填組字的字根，`refresh` 回傳的快照會少字根。改成在組字快照裡算（`Session::composition`），每份快照都帶，`handle_key` 併回 `handle`。
+  - `--verify` 的決定性檢查變成五份資料包；簡繁資料包的 sha256 因格式版本 5 改變，內容不變。
+  - e2e 對組字的期待改成字根（「日弓口」「门口大月人」）。
+  - 未處理，交協調者：簡體模式下 Tab 叫出的字根提示查的是顯示的簡體字，「门口」顯示 `lis r`（「门」的倉頡碼），不是打出它的 `an r`（「門」）。要改得讓快照帶原文給提示用，牽涉票 22 的介面。
+  - merge 後 `data --verify`、`bench --check`（各集合與 baseline 相同、沒有翻盤、固定題 11/11）、`check`（e2e 40 個）都通過。

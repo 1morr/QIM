@@ -46,7 +46,7 @@ pub enum Key {
 pub struct Composition {
     /// 已打的輸入碼。
     pub input: String,
-    /// 已打的字根，如「日弓口」（M1）。
+    /// 還沒選定的輸入碼的字根，如 `anr` 的「日弓口」；殼在選定的字詞後面顯示它（brief §4.3）。
     pub radicals: String,
     /// 連打的各分段：選定的在前，接著剩下的輸入碼的首選路徑。
     pub segments: Vec<Segment>,
@@ -414,8 +414,9 @@ impl Session {
                 })
                 .chain(unselected)
                 .collect(),
+            // 還沒選定的輸入碼的字根（brief §4.3），每份快照都帶，`refresh` 也是。
+            radicals: engine.scheme().radicals_of(rest),
             focus: self.selected.len(),
-            ..Composition::default()
         }
     }
 

@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CharModel, CodeEntry, CodeTable, ConversionTable, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Pack, Simplifier, SimplifierPack, Word,
+    CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, LanguageModel,
+    LanguageModelPack, Lexicon, LexiconPack, Pack, RadicalHintPack, RadicalHints, Simplifier,
+    SimplifierPack, Word,
 };
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::verify::{self, CheckId, PackBytes, Report};
-use qim_databuild::{bigram, build_pack, lexicon, scheme};
+use qim_databuild::{bigram, build_pack, lexicon, radical_hint, scheme};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字。
 const TABLE: &str = "\
@@ -31,6 +32,7 @@ max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
 language_model = "t-bigram"
+radical_hint = "t-hint"
 [radicals]
 a = "日"
 b = "月"
@@ -104,6 +106,33 @@ fn simplifier() -> SimplifierPack {
     }
 }
 
+/// 由同一份 libcangjie 的列建的字根提示。
+fn radical_hint() -> RadicalHintPack {
+    radical_hint_from(radical_hint::hints(&rows()))
+}
+
+fn radical_hint_from(hints: RadicalHints) -> RadicalHintPack {
+    RadicalHintPack {
+        id: "t-hint".into(),
+        hints,
+    }
+}
+
+/// 改動字根提示後重建資料包。
+fn edited_hint(edit: impl FnOnce(&mut BTreeMap<char, CangjieCodes>)) -> RadicalHintPack {
+    let mut chars: BTreeMap<char, CangjieCodes> = radical_hint()
+        .hints
+        .iter()
+        .map(|(c, codes)| (c, codes.clone()))
+        .collect();
+    edit(&mut chars);
+    radical_hint_from(RadicalHints::new(chars))
+}
+
+fn run_with_hint(hint: &RadicalHintPack) -> Report {
+    report(&pack(), &lexicon(), &language_model(), hint)
+}
+
 fn run_with(pack: &Pack, lexicon: &LexiconPack) -> Report {
     run_with_language_model(pack, lexicon, &language_model())
 }
@@ -113,14 +142,25 @@ fn run_with_language_model(
     lexicon: &LexiconPack,
     language_model: &LanguageModelPack,
 ) -> Report {
+    report(pack, lexicon, language_model, &radical_hint())
+}
+
+fn report(
+    pack: &Pack,
+    lexicon: &LexiconPack,
+    language_model: &LanguageModelPack,
+    radical_hint: &RadicalHintPack,
+) -> Report {
     let quick = pack.to_bytes().unwrap();
     let lexicon = lexicon.to_bytes().unwrap();
     let language_model = language_model.to_bytes().unwrap();
+    let radical_hint = radical_hint.to_bytes().unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
     let bytes = PackBytes {
         quick: &quick,
         lexicon: &lexicon,
         language_model: &language_model,
+        radical_hint: &radical_hint,
         simplifier: &simplifier,
     };
     verify::run(&rows(), bytes, bytes)
@@ -202,6 +242,8 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::RiIsTopForA,
             CheckId::WordCodesFromCharacters,
             CheckId::MenKouForAnr,
+            CheckId::RadicalHintCoversCharacters,
+            CheckId::RadicalHintByVersion,
             CheckId::SimplifiedMenKou,
             CheckId::LanguageModelSize,
             CheckId::Deterministic,
@@ -220,11 +262,15 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
         .unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
     let language_model = language_model().to_bytes().unwrap();
+    let radical_hint = radical_hint_from(radical_hint::hints(&rows))
+        .to_bytes()
+        .unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
     let both = PackBytes {
         quick: &bytes,
         lexicon: &lexicon,
         language_model: &language_model,
+        radical_hint: &radical_hint,
         simplifier: &simplifier,
     };
     let report = verify::run(&rows, both, both);
@@ -337,10 +383,12 @@ fn a_simplifier_pack_that_does_not_convert_fails_the_spot_check() {
     let mut identity = simplifier();
     identity.simplifier = Simplifier::new(vec![], ConversionTable::new([]), vec![]);
     let identity = identity.to_bytes().unwrap();
+    let hint = radical_hint().to_bytes().unwrap();
     let bytes = PackBytes {
         quick: &quick,
         lexicon: &lexicon,
         language_model: &model,
+        radical_hint: &hint,
         simplifier: &identity,
     };
     assert_eq!(
@@ -366,17 +414,19 @@ fn different_bytes_from_the_second_build_fail_determinism() {
         pack().to_bytes().unwrap(),
         lexicon().to_bytes().unwrap(),
         language_model().to_bytes().unwrap(),
+        radical_hint().to_bytes().unwrap(),
         simplifier().to_bytes().unwrap(),
     ];
-    fn bytes(b: &[Vec<u8>; 4]) -> PackBytes<'_> {
+    fn bytes(b: &[Vec<u8>; 5]) -> PackBytes<'_> {
         PackBytes {
             quick: &b[0],
             lexicon: &b[1],
             language_model: &b[2],
-            simplifier: &b[3],
+            radical_hint: &b[3],
+            simplifier: &b[4],
         }
     }
-    for changed in 0..4 {
+    for changed in 0..5 {
         let mut second = first.clone();
         *second[changed].last_mut().unwrap() ^= 1;
         let report = verify::run(&rows(), bytes(&first), bytes(&second));
@@ -396,20 +446,75 @@ fn undecodable_pack_fails_without_panicking() {
     let model = language_model().to_bytes().unwrap();
     other_model.id = "other".into();
     let other_model = other_model.to_bytes().unwrap();
+    let hint = radical_hint().to_bytes().unwrap();
+    let mut other_hint = radical_hint();
+    other_hint.id = "other".into();
+    let other_hint = other_hint.to_bytes().unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
-    for (quick, lexicon, language_model, simplifier) in [
-        (&b"garbage"[..], &lexicon[..], &model[..], &simplifier[..]),
-        (&quick[..], &b"garbage"[..], &model[..], &simplifier[..]),
-        (&quick[..], &lexicon[..], &b"garbage"[..], &simplifier[..]),
-        (&quick[..], &lexicon[..], &model[..], &b"garbage"[..]),
-        // 都解得開，但詞庫或語言模型不是方案指名的那份。
-        (&quick[..], &quick[..], &model[..], &simplifier[..]),
-        (&quick[..], &lexicon[..], &other_model[..], &simplifier[..]),
+    for (quick, lexicon, language_model, radical_hint, simplifier) in [
+        (
+            &b"garbage"[..],
+            &lexicon[..],
+            &model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &b"garbage"[..],
+            &model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &b"garbage"[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &model[..],
+            &b"garbage"[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &model[..],
+            &hint[..],
+            &b"garbage"[..],
+        ),
+        // 都解得開，但詞庫、語言模型或字根提示不是方案指名的那份。
+        (
+            &quick[..],
+            &quick[..],
+            &model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &other_model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &model[..],
+            &other_hint[..],
+            &simplifier[..],
+        ),
     ] {
         let bytes = PackBytes {
             quick,
             lexicon,
             language_model,
+            radical_hint,
             simplifier,
         };
         let report = verify::run(&rows(), bytes, bytes);
@@ -436,6 +541,29 @@ fn language_model_over_the_size_limit_fails_the_size_check() {
     assert_eq!(failed(&report), [CheckId::LanguageModelSize]);
     // 剛建好的小模型不超過。
     assert_eq!(failed(&run(&pack())), []);
+}
+
+#[test]
+fn hint_without_a_character_of_the_code_table_fails_the_coverage_check() {
+    let hint = edited_hint(|chars| {
+        chars.remove(&'嘅');
+    });
+    assert_eq!(
+        failed(&run_with_hint(&hint)),
+        [CheckId::RadicalHintCoversCharacters]
+    );
+}
+
+#[test]
+fn hint_with_cangjie3_and_cangjie5_swapped_fails_the_version_check() {
+    let hint = edited_hint(|chars| {
+        let diu = chars.get_mut(&'丟').unwrap();
+        std::mem::swap(&mut diu.cangjie3, &mut diu.cangjie5);
+    });
+    assert_eq!(
+        failed(&run_with_hint(&hint)),
+        [CheckId::RadicalHintByVersion]
+    );
 }
 
 mod corpus {
