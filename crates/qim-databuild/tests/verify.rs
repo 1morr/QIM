@@ -30,6 +30,11 @@ lexicon = "t-lexicon"
 [radicals]
 a = "日"
 b = "月"
+[ranking]
+word_bonus = 0.0
+segment_penalty = 0.0
+beam = 20
+sentences = 3
 "#;
 
 const ESSAY: &str = "門口\t9435\n丟丟\t200\n";

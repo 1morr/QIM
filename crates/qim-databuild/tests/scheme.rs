@@ -12,6 +12,12 @@ max_code_length = 2
 [radicals]
 a = "日"
 b = "月"
+
+[ranking]
+word_bonus = 1.5
+segment_penalty = 0.5
+beam = 8
+sentences = 2
 "#;
 
 #[test]
@@ -66,4 +72,37 @@ fn packs_table_names_the_lexicon_pack() {
     );
     let typo = format!("{MINIMAL}\n[packs]\nlexicons = \"t-lexicon\"\n");
     assert!(scheme::parse(&typo).is_err());
+}
+
+#[test]
+fn ranking_table_sets_word_bonus_segment_penalty_and_beam() {
+    let r = scheme::parse(MINIMAL).unwrap().ranking;
+    assert_eq!(
+        (r.word_bonus, r.segment_penalty, r.beam, r.sentences),
+        (1.5, 0.5, 8, 2)
+    );
+}
+
+#[test]
+fn ranking_table_is_required_with_finite_scores_and_a_beam_of_at_least_one() {
+    let start = MINIMAL.find("[ranking]").unwrap();
+    assert!(scheme::parse(&MINIMAL[..start]).is_err());
+    assert!(scheme::parse(&MINIMAL.replace("sentences = 2\n", "")).is_err());
+    assert!(scheme::parse(&MINIMAL.replace("1.5", "nan")).is_err());
+    assert!(scheme::parse(&MINIMAL.replace("0.5", "-inf")).is_err());
+    assert!(scheme::parse(&MINIMAL.replace("sentences = 2", "sentences = 0")).is_ok());
+    assert!(scheme::parse(&MINIMAL.replace("beam = 8", "beam = 0")).is_err());
+    assert!(scheme::parse(&MINIMAL.replace("beam = 8", "beam = 1")).is_ok());
+}
+
+#[test]
+fn alphabet_is_ascii_letters() {
+    let wide = MINIMAL
+        .replace("alphabet = \"ab\"", "alphabet = \"aｂ\"")
+        .replace("b = \"月\"", "ｂ = \"月\"");
+    assert!(scheme::parse(&wide).is_err());
+    let digit = MINIMAL
+        .replace("alphabet = \"ab\"", "alphabet = \"a1\"")
+        .replace("b = \"月\"", "1 = \"月\"");
+    assert!(scheme::parse(&digit).is_err());
 }

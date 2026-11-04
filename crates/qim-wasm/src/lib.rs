@@ -68,9 +68,12 @@ pub struct WebSnapshot {
     /// 為假時網頁不攔截這個鍵，交給瀏覽器。
     #[wasm_bindgen(readonly)]
     pub handled: bool,
-    /// 輸入碼。
+    /// 已選定的分段接起來的字詞，組字顯示在剩下的輸入碼前面。
     #[wasm_bindgen(readonly)]
-    pub input: String,
+    pub selected: String,
+    /// 還沒選定的輸入碼。
+    #[wasm_bindgen(readonly)]
+    pub unselected: String,
     /// 目前頁的候選。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<String>,
@@ -82,7 +85,8 @@ impl From<Snapshot> for WebSnapshot {
     fn from(s: Snapshot) -> Self {
         Self {
             handled: s.handled,
-            input: s.composition.input,
+            selected: s.composition.selected_text(),
+            unselected: s.composition.unselected_input().to_string(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
             commit: s.commit,
         }

@@ -1,15 +1,32 @@
 use std::cmp::Reverse;
+use std::collections::HashSet;
 
-use crate::{CodeTable, Lexicon, LexiconPack, Pack, PackError, Scheme};
+use crate::lattice::{self, Lattice};
+use crate::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, PackError, Scheme};
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
 #[derive(Debug, Clone)]
 pub struct Engine {
     scheme: Scheme,
-    /// 每個碼的字已依字頻重排（[`by_frequency`]）。
+    /// 每個碼的字已依字頻重排（[`by_frequency`]），也就是依字的分數由高到低。
     code_table: CodeTable,
     /// 方案沒指名詞庫時是空的。
     lexicon: Lexicon,
+    /// 字的 unigram 的分母取 ln：字頻總和加連打字集的字數（加一平滑）。
+    char_log_total: f64,
+    /// 詞的 unigram 的分母取 ln：每個詞（不論幾個碼）的詞頻總和。
+    word_log_total: f64,
+    /// 詞庫裡最長的碼的長度，lattice 往回找詞的上限。
+    longest_word_code: usize,
+}
+
+/// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Edge {
+    pub start: usize,
+    pub text: String,
+    /// 這一段的分數，已含 β 與 γ（plan §2.3）。
+    pub score: f64,
 }
 
 impl Engine {
@@ -23,9 +40,30 @@ impl Engine {
             });
         }
         let lexicon = lexicon.map(|l| l.lexicon).unwrap_or_default();
+        let continuous: HashSet<char> = pack
+            .code_table
+            .iter()
+            .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
+            .collect();
+        let char_total: u64 = continuous.iter().map(|&c| lexicon.char_frequency(c)).sum();
+        let mut seen = HashSet::new();
+        let word_total: u64 = lexicon
+            .iter()
+            .flat_map(|(_, words)| words)
+            .filter(|w| seen.insert(w.text.as_str()))
+            .map(|w| w.frequency)
+            .sum();
+        let longest_word_code = lexicon
+            .iter()
+            .map(|(code, _)| code.len())
+            .max()
+            .unwrap_or(0);
         Ok(Self {
             code_table: by_frequency(&pack.code_table, &lexicon),
             scheme: pack.scheme,
+            char_log_total: ((char_total + continuous.len() as u64) as f64).ln(),
+            word_log_total: (word_total.max(1) as f64).ln(),
+            longest_word_code,
             lexicon,
         })
     }
@@ -40,24 +78,91 @@ impl Engine {
         &self.scheme
     }
 
-    /// 整串輸入碼的全部候選。暫時的合排（票 07 換成 plan §2.3 的打分）：碼表裡連打字集的字、
-    /// 詞庫的詞（依建置時的詞頻順序）、擴展區的字。輸入碼超過方案的最長碼時不查碼表。
+    /// 整串輸入碼的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
+    /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, input: &str) -> Vec<String> {
-        let chars = if input.chars().count() <= usize::from(self.scheme.max_code_length) {
-            self.code_table.lookup(input)
+        lattice::candidates(self, &Lattice::from_input(self, input))
+            .into_iter()
+            .map(|c| c.text)
+            .collect()
+    }
+
+    pub(crate) fn beam(&self) -> usize {
+        usize::from(self.scheme.ranking.beam)
+    }
+
+    /// 字的分數：ln 字頻的 unigram（加一平滑）− γ。
+    fn char_score(&self, c: char) -> f64 {
+        ((self.lexicon.char_frequency(c) + 1) as f64).ln()
+            - self.char_log_total
+            - self.scheme.ranking.segment_penalty
+    }
+
+    /// 詞的分數：ln 詞頻的 unigram + β − γ。
+    fn word_score(&self, frequency: u64) -> f64 {
+        (frequency.max(1) as f64).ln() - self.word_log_total + self.scheme.ranking.word_bonus
+            - self.scheme.ranking.segment_penalty
+    }
+
+    pub(crate) fn sentences(&self) -> usize {
+        usize::from(self.scheme.ranking.sentences)
+    }
+
+    /// 碼表裡碼 `code` 的字；碼比方案的最長碼長時不是字的碼，是空的。
+    fn char_entries(&self, code: &str) -> &[CodeEntry] {
+        if code.len() <= usize::from(self.scheme.max_code_length) {
+            self.code_table.lookup(code)
         } else {
             &[]
-        };
-        let chars_where = |extension: bool| {
-            chars
-                .iter()
-                .filter(move |e| e.extension == extension)
-                .map(|e| e.text.to_string())
-        };
-        chars_where(false)
-            .chain(self.lexicon.lookup(input).iter().map(|w| w.text.clone()))
-            .chain(chars_where(true))
+        }
+    }
+
+    /// 剛好是碼 `code` 的連打字集的字與詞。字依分數由高到低、最多 `limit` 個（字序在
+    /// [`Engine::new`] 依字頻排過）；詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
+    fn exact(&self, code: &str, start: usize, limit: usize) -> impl Iterator<Item = Edge> {
+        let chars = self
+            .char_entries(code)
+            .iter()
+            .filter(|e| !e.extension)
+            .take(limit)
+            .map(move |e| Edge {
+                start,
+                text: e.text.to_string(),
+                score: self.char_score(e.text),
+            });
+        let words = self.lexicon.lookup(code).iter().map(move |w| Edge {
+            start,
+            text: w.text.clone(),
+            score: self.word_score(w.frequency),
+        });
+        chars.chain(words)
+    }
+
+    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取分數最高的 beam 個（再多也進不了
+    /// beam），加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
+    pub(crate) fn edges_ending(&self, input: &str) -> Vec<Edge> {
+        let end = input.len();
+        let longest = self
+            .longest_word_code
+            .max(usize::from(self.scheme.max_code_length));
+        (end.saturating_sub(longest)..end)
+            .flat_map(|start| self.exact(&input[start..], start, self.beam()))
             .collect()
+    }
+
+    /// 碼 `code` 的全部連打字集的字與詞，依分數由高到低（同分照碼表、詞庫的順序）。
+    pub(crate) fn span(&self, code: &str) -> Vec<Edge> {
+        let mut edges: Vec<Edge> = self.exact(code, 0, usize::MAX).collect();
+        edges.sort_by(|a, b| b.score.total_cmp(&a.score));
+        edges
+    }
+
+    /// 碼 `code` 的擴展區的字，依碼表的順序。
+    pub(crate) fn extension(&self, code: &str) -> impl Iterator<Item = char> {
+        self.char_entries(code)
+            .iter()
+            .filter(|e| e.extension)
+            .map(|e| e.text)
     }
 }
 

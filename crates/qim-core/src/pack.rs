@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{CodeTable, Lexicon, Scheme};
 
 /// 資料包格式的版本，兩種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// 輸入方案資料包檔頭的魔數。
 const SCHEME_MAGIC: &[u8; 4] = b"QIMP";
@@ -16,7 +16,7 @@ const LEXICON_MAGIC: &[u8; 4] = b"QIML";
 /// 一個輸入方案的資料包：方案與它的碼表。
 ///
 /// 位元組格式：魔數 `QIMP`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Pack {
     pub scheme: Scheme,
     pub code_table: CodeTable,

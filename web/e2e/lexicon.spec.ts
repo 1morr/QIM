@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// 詞庫資料包（M1 票 06）：整串輸入碼查得到詞；連打（票 07）之前，`anr` 只有詞庫的詞。
+// 詞庫資料包（M1 票 06）：整串輸入碼查得到詞，按空白上屏首選。
 test("打 anr 候選有「門口」，按空白上屏首選", async ({ page }, testInfo) => {
 	await page.goto("/");
 	const text = page.getByRole("textbox", { name: "輸入框" });

@@ -59,3 +59,6 @@
 - 2026-11-04 M1 06：詞庫資料包的 `LICENSE` 除了 LGPL-3.0，另寫四份語料的 CC 授權全文，因為字頻來自語料（plan §4、brief §5.2、§11）。
 - 2026-11-04 M1 06：`sources.toml` 的授權三個欄位收成 `license_text` 一個 enum，多一種 `upstream_file`（`docs/development.md`）。
 - 2026-11-04 M1 06：`anr 門口` 由票 06 加進 `fixed.tsv`，查詢搬進 `Engine` 也提前在票 06 做完，票 07 不再做（plan §5.2）。
+- 2026-11-04 M1 07：`mir 一台` 由票 07 加進 `fixed.tsv`：unigram 連打已選對；票 11 改成換上 bigram 後仍要過（plan §5.2、§8）。
+- 2026-11-04 M1 07：空白改成選全部候選的第一個；沒有路徑蓋滿整串時第一個是開頭一段，按空白只固定它、不上屏（brief §4.3 的延伸，票 07 Comments）。
+- 2026-11-04 M1 07：口語兩集修正次數高於 baseline（連打錯一處就要選開頭一段），`--update-baseline` 只更新 `bench/baseline.json`，原因在票 07 Comments。

@@ -16,7 +16,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
-use qim_core::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Packs, Scheme, Word};
+use qim_core::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Word};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
@@ -44,6 +44,7 @@ fn pack_bytes_with(table: &[(&str, &str)], lexicon: Option<&str>) -> Vec<u8> {
         packs: Packs {
             lexicon: lexicon.map(Into::into),
         },
+        ranking: Ranking::default(),
     };
     let code_table = CodeTable::from_entries(
         table
@@ -144,13 +145,14 @@ fn simulation_counts_corrections_keystrokes_and_jitter() {
         .iter()
         .map(|i| (i.correction_count, i.keys, i.jitter, i.finished))
         .collect();
+    // `a b` 日月：整串的候選是 明、日月、曰月…，選第 2 個「日月」（修正 1），共 3 鍵。
     assert_eq!(
         per_item,
-        [(0, 2, 0, true), (1, 2, 0, true), (1, 7, 1, true)]
+        [(0, 2, 0, true), (1, 2, 0, true), (1, 3, 1, true)]
     );
     assert_eq!(toy.correction_count(), 2);
     let m = toy.metrics(false);
-    assert_eq!(m.kspc, 11.0 / 4.0);
+    assert_eq!(m.kspc, 7.0 / 4.0);
     assert_eq!(m.correction_count, 2.0 / 3.0);
     assert_eq!(m.jitter, 1.0 / 3.0);
 }
@@ -165,6 +167,24 @@ fn simulation_turns_the_page_when_the_first_page_does_not_connect() {
     assert_eq!(
         (item.correction_count, item.keys, item.finished),
         (2, 3, true)
+    );
+}
+
+#[test]
+fn simulation_selects_a_beginning_and_goes_on_composing_the_rest() {
+    let repo = repo();
+    // `cb` 整串的句子（一月、二月、三月）都接不上；第二頁的「十」只蓋住 `c`：翻頁、選「十」
+    // （各算一次修正），「十」固定、`b` 繼續組字，首選「月」接得上就按空白。
+    write(
+        repo.path(),
+        "bench/corpus/toy.tsv",
+        "c b\t十月\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let item = &outcome.sets[0].items[0];
+    assert_eq!(
+        (item.correction_count, item.keys, item.finished),
+        (2, 5, true)
     );
 }
 
@@ -375,7 +395,7 @@ fn report_lists_each_set_with_its_baseline() {
         .unwrap_or_else(|| panic!("沒有 toy 那一列：{report}"));
     // 題數、整句首選正確、字正確率、答錯、baseline 答錯、修正/句、修正、baseline 修正、KSPC、跳動/句、打不出
     assert!(
-        toy.contains("| 3 | 1（33.33%） | 25.00% | 2 | 5 | 0.67 | 2 | 6 | 2.75 | 0.33 | 0 |"),
+        toy.contains("| 3 | 1（33.33%） | 25.00% | 2 | 5 | 0.67 | 2 | 6 | 1.75 | 0.33 | 0 |"),
         "{toy}"
     );
 }

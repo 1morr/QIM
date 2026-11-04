@@ -68,7 +68,7 @@
 | [08](issues/08-blackbox-apple.md) | — | macOS、iOS 內建速成的 T1–T18 |
 | [09](issues/09-blackbox-gboard.md) | — | Gboard（Android、iPhone）的 T1–T18 |
 | [10](issues/10-composition-key-residue.md) | 07 | `handled` 為假時組字是空的；Enter、`z`、標點、大寫、方向鍵 |
-| [11](issues/11-bigram-training.md) | 03, 07 | KN bigram ≤ 8 MB；`mir` 一台 |
+| [11](issues/11-bigram-training.md) | 03, 07 | KN bigram ≤ 8 MB；`mir` 仍是一台 |
 | [12](issues/12-bigram-tuning-and-report.md) | 04, 05, 08, 09, 11 | β、γ、口語權重；延遲預算；網頁「回報」；請使用者試打 |
 | [13](issues/13-learning-counts-and-ranking.md) | 04, 07 | 學習計數、規則 2、`personal`、無痕、`set_options`、`bench --learning` |
 | [14](issues/14-user-words-auto-phrase-export.md) | 13 | 使用者詞與觸發詞、自動造詞、`# qim-userdict v1`、`localStorage` |

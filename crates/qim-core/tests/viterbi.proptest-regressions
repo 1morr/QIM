@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6773db52cfd202a9b3f2085c3c7cde0c8f696d43047fb3933634147e622c84cc # shrinks to data = Data { table: {"b": ['一', '丁'], "c": ['一']}, words: {"cb": [("一丁", 1)]}, chars: {}, ranking: Ranking { word_bonus: 0.0, segment_penalty: 0.0, beam: 1, sentences: 3 } }, input = "bcb"
