@@ -507,6 +507,12 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     })
 }
 
+/// 詞庫（字頻）與語言模型資料包的 NOTICE 共用的一句：語料怎麼前處理。
+const CORPUS_PREPROCESSING: &str = "Each corpus is extracted, converted to Hong Kong\n\
+     Traditional Chinese with OpenCC and split into clauses as described in\n\
+     bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
+     repository.\n";
+
 /// 詞庫資料包 NOTICE 最後一段：怎麼用來源。
 fn lexicon_about(id: &str, scheme: &str) -> String {
     format!(
@@ -519,12 +525,11 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
-         each corpus, added together. Each corpus is extracted, converted to Hong Kong\n\
-         Traditional Chinese with OpenCC and split into clauses as described in\n\
-         bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
-         repository.\n",
+         each corpus, multiplied by the weight of that corpus ({weights}) and\n\
+         added together. {CORPUS_PREPROCESSING}",
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
+        weights = corpus_weights(),
     )
 }
 
@@ -534,13 +539,21 @@ fn language_model_about(id: &str) -> String {
     format!(
         "{id} is a character bigram language model trained by QIM with interpolated\n\
          Kneser-Ney smoothing. It was trained on the training split of each corpus listed\n\
-         above, counting adjacent characters within each clause, and pruned to the pairs\n\
-         seen at least {min} times. Each corpus is extracted, converted to Hong Kong\n\
-         Traditional Chinese with OpenCC and split into clauses as described in\n\
-         bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
-         repository.\n",
+         above, counting adjacent characters within each clause and multiplying the counts\n\
+         of each corpus by its weight ({weights}), and pruned to the pairs whose weighted\n\
+         count is at least {min}. {CORPUS_PREPROCESSING}",
         min = bigram::MIN_COUNT,
+        weights = corpus_weights(),
     )
+}
+
+/// 各語料的權重（plan §4.3），寫進 NOTICE：`yue-wiki 1, zh-wiki 1, …`。
+fn corpus_weights() -> String {
+    CORPORA
+        .iter()
+        .map(|c| format!("{} {}", c.name, c.weight))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// 有 [`personal::USERDB`] 就轉出 [`personal::ITEMS`]；沒有就刪掉上次轉出的，基準才不會跑舊題目。

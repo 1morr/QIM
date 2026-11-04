@@ -23,7 +23,7 @@ pub use latency::{
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};
 
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
-pub const PACK: &str = "build/packs/quick/quick.pack";
+pub const QUICK_PACK: &str = "build/packs/quick/quick.pack";
 pub const PACKS: &str = "build/packs";
 /// 英文資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著英文候選，基準照網頁掛上。
 /// WebAssembly 的延遲腳本依檔頭魔數分辨各資料包，不靠參數的位置。
@@ -65,7 +65,7 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct Outcome {
-    /// 讀進來的資料包：速成，有詞庫時接著詞庫。前後對照時 sha256 一樣就是沒重建。
+    /// 讀進來的資料包：速成、方案指名的詞庫與語言模型、英文。前後對照時 sha256 一樣就是沒重建。
     pub packs: Vec<LoadedPack>,
     pub fixed: SetResult,
     /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
@@ -396,7 +396,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 讀 [`PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]，建 `Engine`；
+/// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]，建 `Engine`；
 /// `overrides` 蓋掉方案的打分參數。
 /// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
 fn load_engine(
@@ -414,8 +414,8 @@ fn load_engine(
         let sha256 = sha256_hex(&bytes);
         Ok((bytes, LoadedPack { path: rel, sha256 }))
     };
-    let (bytes, loaded) = load(PACK.into())?;
-    let mut pack = Pack::from_bytes(&bytes).map_err(|e| format!("{PACK}：{e}"))?;
+    let (bytes, loaded) = load(QUICK_PACK.into())?;
+    let mut pack = Pack::from_bytes(&bytes).map_err(|e| format!("{QUICK_PACK}：{e}"))?;
     for (key, value) in overrides {
         override_ranking(&mut pack.scheme.ranking, key, value)?;
     }
@@ -441,7 +441,7 @@ fn load_engine(
     let english = EnglishPack::from_bytes(&bytes).map_err(|e| format!("{ENGLISH_PACK}：{e}"))?;
     packs.push(loaded);
     let engine = Engine::new(pack, lexicon, language_model)
-        .map_err(|e| format!("{PACK}：{e}"))?
+        .map_err(|e| format!("{QUICK_PACK}：{e}"))?
         .with_english(english);
     Ok((engine, packs, copy))
 }

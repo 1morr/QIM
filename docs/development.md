@@ -199,7 +199,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 `cargo xtask web` 做兩件事，邏輯在 `xtask/src/web.rs`：
 
 1. 用 release 編 `qim-wasm` 到 `wasm32-unknown-unknown`，`wasm-bindgen --target web` 產生到 `web/src/wasm/`，`web/src/main.ts` 直接 import。
-2. 把 `build/packs/`、`build/layouts/` 整個複製到 `web/public/packs/`、`web/public/layouts/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`、`/packs/quick-lexicon/quick-lexicon.pack`、`/packs/zh-hant-bigram/zh-hant-bigram.pack`、`/packs/cangjie-hint/cangjie-hint.pack`、簡體模式的 `/packs/opencc-hk2s/opencc-hk2s.pack`、英文候選的 `/packs/scowl-en-us/scowl-en-us.pack` 與觸控鍵盤的 `/layouts/gboard-quick.json`。有一個不存在就失敗，先跑 `cargo xtask data`。
+2. 把 `build/packs/`、`build/layouts/` 整個複製到 `web/public/packs/`、`web/public/layouts/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`、`/packs/quick-lexicon/quick-lexicon.pack`、`/packs/zh-hant-bigram/zh-hant-bigram.pack`、`/packs/cangjie-hint/cangjie-hint.pack`、簡體模式的 `/packs/opencc-hk2s/opencc-hk2s.pack`、英文候選的 `/packs/scowl-en-us/scowl-en-us.pack` 與觸控鍵盤的 `/layouts/gboard-quick.json`。`build/packs/` 或 `build/layouts/` 不存在時這一步失敗；目錄在但少了某個檔（例如舊的建置沒有後來加的資料包），要到網頁載入時才失敗。兩種都先跑 `cargo xtask data`。
 
 這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 

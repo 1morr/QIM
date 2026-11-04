@@ -251,7 +251,9 @@ fn page(id: &str, rows: Vec<Row>, geometry: &Geometry) -> Page {
                 extended_edges: Insets::default(),
                 label: cell.label,
                 hint: cell.hint,
-                a11y_label: None,
+                // 標籤是符號（⌫、↵）的鍵給文字標籤，讀屏才不唸符號名。
+                a11y_label: matches!(cell.tap, Action::Backspace | Action::Enter)
+                    .then(|| cell.tap.spoken()),
                 style: Some(style(&cell.tap)),
                 tap: cell.tap,
                 long_press: cell.long_press,

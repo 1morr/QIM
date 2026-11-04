@@ -9,7 +9,7 @@ export interface Keyboard {
 }
 
 /** 按住多久算長按。 */
-const LONG_PRESS_MS = 400;
+const KEY_LONG_PRESS_MS = 400;
 
 /** 一根手指按下到放開之間的狀態。 */
 interface Press {
@@ -251,7 +251,7 @@ export function mountKeyboard(
 			choice: undefined,
 			timer:
 				key.longPress.length > 0
-					? window.setTimeout(() => showPopup(key), LONG_PRESS_MS)
+					? window.setTimeout(() => showPopup(key), KEY_LONG_PRESS_MS)
 					: undefined,
 		};
 		container.setPointerCapture(event.pointerId);
