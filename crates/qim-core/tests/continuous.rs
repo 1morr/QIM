@@ -377,6 +377,29 @@ fn an_uppercase_letter_commits_the_composition_then_itself() {
 }
 
 #[test]
+fn text_from_a_touch_key_commits_the_composition_then_the_text_as_is() {
+    // 觸控鍵盤的文字鍵（佈局的 `text` 動作）：和標點相同先上屏組字，文字照原樣、不轉全形。
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anra");
+    ime.select(&typed, "門");
+    let pressed = ime.session.text(&ime.engine, &mut ime.user, "!");
+    assert!(pressed.handled);
+    assert_eq!(pressed.commit.as_deref(), Some("門口日!"));
+    assert_eq!(pressed.composition.input, "");
+    assert!(pressed.candidates.is_empty());
+}
+
+#[test]
+fn text_from_a_touch_key_without_composition_is_committed() {
+    let mut ime = Ime::new(&men_kou());
+    let pressed = ime.session.text(&ime.engine, &mut ime.user, "唔該");
+    assert!(pressed.handled);
+    assert_eq!(pressed.commit.as_deref(), Some("唔該"));
+    // 之後照常組字。
+    assert_eq!(ime.type_code("anr").composition.input, "anr");
+}
+
+#[test]
 fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_the_host() {
     let mut ime = Ime::new(&men_kou());
     let comma = ime.press(Key::Punct(','));

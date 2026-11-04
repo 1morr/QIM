@@ -185,6 +185,15 @@ impl Session {
         }
     }
 
+    /// 直接輸入一段文字，不經組字（觸控鍵盤的 `text` 動作，plan §2.6）：沒有組字時上屏 `text`；
+    /// 組字中和標點相同，先上屏整個組字再接 `text`。文字照原樣，不轉全形。
+    pub fn text(&mut self, engine: &Engine, _user: &mut UserModel, text: &str) -> Snapshot {
+        if self.lattice.input().is_empty() {
+            return self.snapshot(true, Some(text.to_string()));
+        }
+        self.commit_all_then(engine, text)
+    }
+
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
     /// 剩下沒有字的碼原樣上屏。
     fn commit_all_then(&mut self, engine: &Engine, tail: &str) -> Snapshot {
