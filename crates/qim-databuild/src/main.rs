@@ -39,6 +39,7 @@ fn main() -> ExitCode {
             println!("資料包：{}", shown(&outcome.pack_path));
             println!("詞庫資料包：{}", shown(&outcome.lexicon_path));
             println!("bigram 資料包：{}", shown(&outcome.language_model_path));
+            println!("字根提示資料包：{}", shown(&outcome.radical_hint_path));
             println!("佈局：{}", shown(&outcome.layout_path));
             // 個人集只印數字（plan §5.2）。
             match outcome.personal {
@@ -65,6 +66,7 @@ fn main() -> ExitCode {
                     println!("sha256：{}", outcome.sha256);
                     println!("詞庫 sha256：{}", outcome.lexicon_sha256);
                     println!("bigram sha256：{}", outcome.language_model_sha256);
+                    println!("字根提示 sha256：{}", outcome.radical_hint_sha256);
                     println!("{}", outcome.lexicon);
                     println!("{}", outcome.language_model);
                     for corpus in &outcome.corpora {

@@ -28,7 +28,7 @@ test("依序點 a、n、r，首選「門口」；點空白上屏「門口」", a
 	for (const id of ["a", "n", "r"]) {
 		await page.getByTestId(`key-${id}`).tap();
 	}
-	await expect(page.getByTestId("composition")).toHaveText("anr");
+	await expect(page.getByTestId("composition")).toHaveText("日弓口");
 	await expect(items.first()).toHaveText("1門口");
 	await page.screenshot({ path: testInfo.outputPath("touch-anr.png") });
 
@@ -46,7 +46,7 @@ test("點在兩鍵之間的縫，由 qim-layout 取最近的鍵", async ({ page 
 	const gapX = a.x + a.width + 0.5;
 	expect(gapX).toBeLessThan(s.x);
 	await page.touchscreen.tap(gapX, a.y + a.height / 2);
-	await expect(page.getByTestId("composition")).toHaveText("a");
+	await expect(page.getByTestId("composition")).toHaveText("日");
 });
 
 test("核心沒吃下的鍵照宿主的預設動作：空白插入空格、刪除刪字、Enter 換行", async ({
@@ -79,7 +79,7 @@ test("組字與候選出現、上屏後，鍵盤的位置不動", async ({ page 
 	for (const id of ["a", "n", "r"]) {
 		await page.getByTestId(`key-${id}`).tap();
 	}
-	await expect(page.getByTestId("composition")).toHaveText("anr");
+	await expect(page.getByTestId("composition")).toHaveText("日弓口");
 	expect(await keyboard.boundingBox()).toEqual(before);
 	await page.getByTestId("key-space").tap();
 	await expect(page.getByTestId("composition")).toHaveText("");

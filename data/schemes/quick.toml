@@ -9,6 +9,7 @@ max_code_length = 2
 [packs] # 另外的資料包的 id，由 qim-databuild 建到 build/packs/<id>/
 lexicon = "quick-lexicon"
 language_model = "zh-hant-bigram" # 字級 bigram（plan §4.3）
+radical_hint = "cangjie-hint"     # 字根提示用的倉頡三代 / 五代碼，不進 lattice（ADR 0003）
 
 [ranking] # 連打的打分（plan §2.3）；M1 票 12 在 dev 切分上格點搜尋，個人集只當守門，過程在票 12 的 Comments
 word_bonus = 1.0      # β：每個詞庫的段加的分；再低 dev 會好，但個人集（多是兩字詞）答錯變多

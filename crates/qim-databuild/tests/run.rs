@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::Path;
 
-use qim_core::{Engine, LanguageModelPack, LexiconPack, Pack};
+use qim_core::{CangjieVersion, Engine, LanguageModelPack, LexiconPack, Pack, RadicalHintPack};
 use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
 
@@ -501,6 +501,33 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
 }
 
 #[test]
+fn builds_radical_hint_pack_named_by_the_scheme_with_the_libcangjie_license_only() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/cangjie-hint");
+    assert_eq!(outcome.radical_hint_path, dir.join("cangjie-hint.pack"));
+    let bytes = std::fs::read(&outcome.radical_hint_path).unwrap();
+    assert_eq!(outcome.radical_hint_sha256, sha256_hex(&bytes));
+    let pack = RadicalHintPack::from_bytes(&bytes).unwrap();
+    assert_eq!(pack.id, "cangjie-hint");
+    assert_eq!(pack.hints.codes('丟', CangjieVersion::Cangjie3), ["hgi"]);
+    assert_eq!(
+        pack.hints.codes('丟', CangjieVersion::Cangjie5),
+        ["mgi", "xxmgi"]
+    );
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains(STATEMENT), "{license}");
+    assert!(!license.contains("Unicode-3.0"), "{license}");
+    assert!(!license.contains("LGPL"), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(notice.contains(&sha256_hex(TABLE.as_bytes())), "{notice}");
+    assert!(!notice.contains("Unihan"), "{notice}");
+}
+
+#[test]
 fn writes_the_default_gboard_layout_for_the_web() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
@@ -573,7 +600,12 @@ fn second_build_uses_the_cache_and_gives_the_same_bytes() {
     let first_bytes = std::fs::read(&first.pack_path).unwrap();
     let first_lexicon = std::fs::read(&first.lexicon_path).unwrap();
     let first_language_model = std::fs::read(&first.language_model_path).unwrap();
+    let first_radical_hint = std::fs::read(&first.radical_hint_path).unwrap();
     let second = run(root.path(), &Offline, false).unwrap();
+    assert_eq!(
+        std::fs::read(&second.radical_hint_path).unwrap(),
+        first_radical_hint
+    );
     assert_eq!(std::fs::read(&second.pack_path).unwrap(), first_bytes);
     assert_eq!(std::fs::read(&second.lexicon_path).unwrap(), first_lexicon);
     assert_eq!(
