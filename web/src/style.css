@@ -51,6 +51,8 @@ textarea {
 	background: #e8eaed;
 	touch-action: none;
 	user-select: none;
+	/* 按鍵的圓角與字級以 cqw 依鍵盤寬度縮放（touch.ts）。 */
+	container-type: inline-size;
 }
 
 #keyboard[hidden] {
@@ -68,7 +70,6 @@ body:has(#keyboard:not([hidden])) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 6px;
 	background: #fff;
 	box-shadow: 0 1px 0 #9aa0a6;
 	font-size: 1.25rem;

@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qim-layout/1",
+  "description": "QIM 的觸控佈局：一張畫布，每個按鍵各自記位置、大小、旋轉、形狀與上下層順序（docs/plan.md §2.6、ADR 0004）。型別在 crates/qim-layout/src/model.rs，兩邊同時改。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "variants"],
+  "properties": {
+    "format": { "const": "qim-layout/1" },
+    "variants": {
+      "description": "佈局版本，依裝置與方向選：都符合的 → 方向符合的 → 第一個（縮放並警告）。",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/variant" }
+    }
+  },
+  "$defs": {
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["when", "canvas", "pages"],
+      "properties": {
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["device", "orientation"],
+          "properties": {
+            "device": { "enum": ["phone", "tablet"] },
+            "orientation": { "enum": ["portrait", "landscape"] }
+          }
+        },
+        "canvas": {
+          "description": "設計尺寸；frame 以它為座標，殼等比例縮放到實際鍵盤寬度。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "$ref": "#/$defs/positive" },
+            "height": { "$ref": "#/$defs/positive" }
+          }
+        },
+        "grid": {
+          "description": "編輯器的格線與吸附，不影響鍵盤本身。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["columns", "rows", "snap"],
+          "properties": {
+            "columns": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "rows": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "snap": { "type": "boolean" }
+          }
+        },
+        "initialPage": {
+          "description": "一開始顯示的頁面 id；省略時是第一頁。",
+          "type": "string",
+          "minLength": 1
+        },
+        "pages": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/page" }
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "keys"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "keys": { "type": "array", "items": { "$ref": "#/$defs/key" } }
+      }
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "frame", "tap"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "frame": {
+          "description": "旋轉前的矩形，左上角 (x, y)，畫布座標。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "w", "h"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "w": { "$ref": "#/$defs/positive" },
+            "h": { "$ref": "#/$defs/positive" }
+          }
+        },
+        "rotate": {
+          "description": "以 frame 中心順時針旋轉的角度（度）。",
+          "type": "number",
+          "default": 0
+        },
+        "z": {
+          "description": "上下層順序，大的在上；同一層時陣列裡後面的在上。",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647,
+          "default": 0
+        },
+        "shape": { "$ref": "#/$defs/shape" },
+        "extendedEdges": {
+          "description": "觸控範圍比 frame 每邊往外擴的距離，負數往內縮（同 Delta skin 的 extendedEdges，同名同義）。",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "top": { "type": "number" },
+            "bottom": { "type": "number" },
+            "left": { "type": "number" },
+            "right": { "type": "number" }
+          }
+        },
+        "label": {
+          "description": "主標籤；省略時字母鍵用方案的字根，沒有字根用字母。",
+          "type": "string"
+        },
+        "hint": { "description": "角標。", "type": "string" },
+        "a11yLabel": {
+          "description": "無障礙標籤；省略時由顯示的標籤與 hint 組成。",
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fill": { "$ref": "#/$defs/themeColor" },
+            "labelColor": { "$ref": "#/$defs/themeColor" },
+            "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "labelSize": { "$ref": "#/$defs/positive" },
+            "labelOffset": {
+              "description": "主標籤離鍵中心的位移 [x, y]，畫布座標。",
+              "type": "array",
+              "prefixItems": [{ "type": "number" }, { "type": "number" }],
+              "items": false,
+              "minItems": 2
+            }
+          }
+        },
+        "tap": { "$ref": "#/$defs/action" },
+        "longPress": {
+          "description": "長按的選項，第一個是預設。",
+          "type": "array",
+          "items": { "$ref": "#/$defs/action" }
+        },
+        "swipe": {
+          "description": "四個方向的滑動動作；M5 才有作用。",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "up": { "$ref": "#/$defs/action" },
+            "down": { "$ref": "#/$defs/action" },
+            "left": { "$ref": "#/$defs/action" },
+            "right": { "$ref": "#/$defs/action" }
+          }
+        },
+        "composing": {
+          "description": "組字中改用的標籤與動作（同 Trime 的 composing）；null 與省略相同。",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": { "type": "string" },
+                "tap": { "$ref": "#/$defs/action" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "shape": {
+      "description": "rect 可帶圓角；ellipse、polygon 的繪製與點擊判定在 M5，現在當矩形並警告。",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "rect" },
+            "radius": { "type": "number", "minimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": { "type": { "const": "ellipse" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "points"],
+          "properties": {
+            "type": { "const": "polygon" },
+            "points": {
+              "description": "頂點，以 frame 為 0–1 的座標。",
+              "type": "array",
+              "minItems": 3,
+              "items": {
+                "type": "array",
+                "prefixItems": [
+                  { "type": "number", "minimum": 0, "maximum": 1 },
+                  { "type": "number", "minimum": 0, "maximum": 1 }
+                ],
+                "items": false,
+                "minItems": 2
+              }
+            }
+          }
+        }
+      ]
+    },
+    "action": {
+      "description": "帶資料的動作寫成單一鍵的物件，不帶的寫成名字。",
+      "oneOf": [
+        { "enum": ["backspace", "space", "enter", "nextKeyboard", "toggleAscii"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["letter"],
+          "properties": { "letter": { "type": "string", "pattern": "^[a-z]$" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": { "text": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["switchPage"],
+          "properties": { "switchPage": { "type": "string", "minLength": 1 } }
+        }
+      ]
+    },
+    "themeColor": {
+      "description": "淺色與深色各一個顏色。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "dark"],
+      "properties": {
+        "light": { "$ref": "#/$defs/color" },
+        "dark": { "$ref": "#/$defs/color" }
+      }
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+    },
+    "positive": { "type": "number", "exclusiveMinimum": 0 }
+  }
+}

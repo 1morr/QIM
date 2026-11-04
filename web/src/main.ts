@@ -1,7 +1,7 @@
 import { type Key, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
 import "./style.css";
-import { mountKeyboard } from "./touch.ts";
+import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
 	type LayoutKey,
@@ -29,6 +29,7 @@ const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
+const incognito = element<HTMLInputElement>("#incognito");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const reportButton = element<HTMLButtonElement>("#report");
@@ -38,6 +39,8 @@ const copyReports = element<HTMLButtonElement>("#copy-reports");
 /** 回報清單存在 `localStorage`，重新整理不會不見。 */
 const REPORTS_KEY = "qim.reports";
 let report = initialReport;
+/** 觸控鍵盤；載入完成前是 `undefined`。 */
+let touchKeyboard: Keyboard | undefined;
 
 /** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
 async function load(url: string): Promise<Response> {
@@ -112,6 +115,7 @@ function apply(snapshot: Snapshot, chosen: boolean): void {
 		insert(snapshot.commit);
 	}
 	render(snapshot);
+	touchKeyboard?.refresh();
 }
 
 /** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
@@ -143,6 +147,9 @@ function hostDefault(key: LayoutKey): void {
 		case "letter":
 			insert(key.letter ?? "");
 			return;
+		case "text":
+			insert(key.text ?? "");
+			return;
 		case "space":
 			insert(" ");
 			return;
@@ -165,6 +172,19 @@ function hostDefault(key: LayoutKey): void {
 	}
 }
 
+/** 選佈局版本用的裝置：短邊 600 px 以上當平板（Android 的 sw600dp 慣例）。 */
+function device(): "phone" | "tablet" {
+	return Math.min(window.screen.width, window.screen.height) >= 600
+		? "tablet"
+		: "phone";
+}
+
+function orientation(): "portrait" | "landscape" {
+	return window.matchMedia("(orientation: landscape)").matches
+		? "landscape"
+		: "portrait";
+}
+
 /** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
 function setTouch(on: boolean): void {
 	keyboard.hidden = !on;
@@ -181,8 +201,16 @@ async function start(): Promise<void> {
 		load(LAYOUT_URL).then((response) => response.text()),
 	]);
 	const session = new Session(pack, lexicon, languageModel);
-	const layout = new Layout(layoutJson);
-	mountKeyboard(
+	session.setIncognito(incognito.checked);
+	incognito.addEventListener("change", () => {
+		session.setIncognito(incognito.checked);
+		text.focus();
+	});
+	const layout = new Layout(layoutJson, device(), orientation());
+	for (const warning of layout.warnings) {
+		console.warn(`佈局：${warning}`);
+	}
+	touchKeyboard = mountKeyboard(
 		keyboard,
 		layout,
 		session,

@@ -20,7 +20,7 @@ pub use latency::{
     LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, node_wasm_timer,
     percentile,
 };
-pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, Metrics, SetResult};
+pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};
 
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const PACK: &str = "build/packs/quick/quick.pack";
@@ -118,14 +118,24 @@ pub struct LoadedPack {
     pub sha256: String,
 }
 
-/// 個人集這次的狀況。
+/// 個人集這次的狀況；`Ran` 平常是結果，讀檔時是題目。
 #[derive(Debug)]
-pub enum Personal {
-    Ran(SetResult),
+pub enum Personal<T = SetResult> {
+    Ran(T),
     /// 沒有 [`PERSONAL_USERDB`]：跳過。
     Missing,
     /// 有 [`PERSONAL_USERDB`]，但 [`PERSONAL`] 不是由它轉出（還沒轉，或資料換過）：跳過，提示先跑 `cargo xtask data`。
     NotTranscoded,
+}
+
+impl<T> Personal<T> {
+    fn map<U>(self, f: impl FnOnce(T) -> U) -> Personal<U> {
+        match self {
+            Personal::Ran(t) => Personal::Ran(f(t)),
+            Personal::Missing => Personal::Missing,
+            Personal::NotTranscoded => Personal::NotTranscoded,
+        }
+    }
 }
 
 /// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
@@ -135,12 +145,12 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
     let mut latency_inputs: Vec<String> = fixed.iter().map(Item::input).collect();
     let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets: Vec<SetResult> = Vec::new();
-    for (name, path) in corpus_sets(root)? {
-        let items = parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
+    for (name, items) in load_corpora(root)? {
         latency_inputs.extend(items.iter().map(Item::input));
         sets.push(score::score(&engine, &name, &items, false));
     }
-    let personal = load_personal(root, &engine)?;
+    let personal =
+        load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
     let pack_paths: Vec<PathBuf> = packs.iter().map(|p| root.join(&p.path)).collect();
     let latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
@@ -188,29 +198,6 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
     })
 }
 
-/// [`CORPUS_DIRS`] 下的集合名與題目檔，依目錄、再依名稱；集合名不能重複，也不能是個人集的名字。
-fn corpus_sets(root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
-    let mut sets: Vec<(String, PathBuf)> = Vec::new();
-    for dir in CORPUS_DIRS {
-        for (name, path) in corpus_files(&root.join(dir))? {
-            if name == PERSONAL_SET {
-                return Err(format!(
-                    "語料不能叫 {PERSONAL_SET}，那是個人集的名字：{}",
-                    path.display()
-                ));
-            }
-            if sets.iter().any(|(n, _)| *n == name) {
-                return Err(format!(
-                    "集合 {name} 在兩個語料目錄都有：{}",
-                    path.display()
-                ));
-            }
-            sets.push((name, path));
-        }
-    }
-    Ok(sets)
-}
-
 /// dev 模式的結果：調參用（plan §2.3、§5.2），只報、不比 baseline，不跑個人集與每鍵延遲。
 #[derive(Debug)]
 pub struct DevOutcome {
@@ -249,7 +236,7 @@ pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> 
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets = Vec::new();
-    for (name, _) in corpus_sets(root)? {
+    for (name, _) in load_corpora(root)? {
         let rel = dev_items(&name);
         let path = root.join(&rel);
         let text = fs::read_to_string(&path)
@@ -325,7 +312,7 @@ fn load_baseline(path: &Path, tolerate_bad_format: bool) -> Result<Option<Baseli
 
 /// 個人集：沒有 [`PERSONAL_USERDB`] 就跳過；題目檔第一行記的來源 sha256 要等於現在的
 /// [`PERSONAL_USERDB`]，否則是還沒轉出或換過資料沒重轉，也跳過，免得安靜地跑舊題目。
-fn load_personal(root: &Path, engine: &Engine) -> Result<Personal, String> {
+fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
     let userdb = root.join(PERSONAL_USERDB);
     if !userdb.exists() {
         return Ok(Personal::Missing);
@@ -341,12 +328,62 @@ fn load_personal(root: &Path, engine: &Engine) -> Result<Personal, String> {
         return Ok(Personal::NotTranscoded);
     }
     let items = parse_personal(&text).map_err(|e| format!("{PERSONAL}：{e}"))?;
-    Ok(Personal::Ran(score::score(
-        engine,
-        PERSONAL_SET,
-        &items,
-        true,
-    )))
+    Ok(Personal::Ran(items))
+}
+
+/// 各語料集合的名稱與題目，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
+fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
+    let mut sets: Vec<(String, Vec<Item>)> = Vec::new();
+    for dir in CORPUS_DIRS {
+        for (name, path) in corpus_files(&root.join(dir))? {
+            if name == PERSONAL_SET {
+                return Err(format!(
+                    "語料不能叫 {PERSONAL_SET}，那是個人集的名字：{}",
+                    path.display()
+                ));
+            }
+            if sets.iter().any(|(n, _)| *n == name) {
+                return Err(format!(
+                    "集合 {name} 在兩個語料目錄都有：{}",
+                    path.display()
+                ));
+            }
+            let items =
+                parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
+            sets.push((name, items));
+        }
+    }
+    Ok(sets)
+}
+
+/// 學習模式（`--learning`，plan §5.2）的結果。
+#[derive(Debug)]
+pub struct Learning {
+    pub packs: Vec<LoadedPack>,
+    /// 各語料集合，有個人集時接在最後。
+    pub sets: Vec<LearningSet>,
+}
+
+impl Learning {
+    /// 給人看的結果，Markdown 表；個人集只有數字。
+    pub fn report(&self) -> String {
+        report::render_learning(self)
+    }
+}
+
+/// 學習模式（`--learning`）：每個集合照檔案的順序模擬打每一題，比學習關（每題空白的
+/// `UserModel`）與學習開（整個集合共用一個 `UserModel`，打完一題學一題）的修正次數。
+/// 只報不擋，不讀也不寫 baseline。
+pub fn run_learning(root: &Path) -> Result<Learning, String> {
+    let (engine, packs, _) = load_engine(root, &[])?;
+    let mut sets: Vec<LearningSet> = load_corpora(root)?
+        .into_iter()
+        .map(|(name, items)| score::learning(&engine, &name, &items, false))
+        .collect();
+    if let Personal::Ran(items) = load_personal(root)? {
+        sets.push(score::learning(&engine, PERSONAL_SET, &items, true));
+    }
+    Ok(Learning { packs, sets })
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

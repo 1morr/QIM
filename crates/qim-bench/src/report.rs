@@ -4,12 +4,50 @@
 use crate::baseline::SetBaseline;
 use crate::score::{LENGTH_GROUPS, Metrics, SetResult};
 use crate::{
-    DevOutcome, Latency, LoadedPack, Outcome, PERSONAL, PERSONAL_USERDB, Personal, SHORT_INPUTS,
-    WASM_BINDINGS,
+    DevOutcome, Latency, Learning, LoadedPack, Outcome, PERSONAL, PERSONAL_USERDB, Personal,
+    SHORT_INPUTS, WASM_BINDINGS,
 };
 
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
+
+/// 前 12 碼足以分辨；`cargo xtask data` 印的是完整 sha256，開頭對得上就是同一份。
+fn packs_line(packs: &[LoadedPack]) -> String {
+    let packs: Vec<String> = packs
+        .iter()
+        .map(|p| format!("{}（sha256 {}）", p.path, &p.sha256[..12]))
+        .collect();
+    format!("資料包 {}\n\n", packs.join("、"))
+}
+
+/// 學習模式的表：各集合的修正次數，學習關與學習開。
+pub fn render_learning(learning: &Learning) -> String {
+    let mut out = packs_line(&learning.packs);
+    out.push_str(
+        "| 集合 | 題數 | 修正（學習關） | 修正（學習開） | 修正/句（關） | 修正/句（開） |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: |\n",
+    );
+    for set in &learning.sets {
+        let per = |n: usize| {
+            if set.total == 0 {
+                0.0
+            } else {
+                n as f64 / set.total as f64
+            }
+        };
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {:.2} | {:.2} |\n",
+            set.name,
+            set.total,
+            set.corrections_off,
+            set.corrections_on,
+            per(set.corrections_off),
+            per(set.corrections_on),
+        ));
+    }
+    out.push_str("\n每個集合照檔案的順序打；學習開時整個集合共用一個 `UserModel`。\n");
+    out
+}
 
 pub fn render(outcome: &Outcome) -> String {
     let mut out = packs_line(&outcome.packs);
@@ -119,15 +157,6 @@ fn is_short(set: &SetResult) -> bool {
 
 const METRICS_HEADER: &str = "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 | 修正/句 | 修正 | baseline 修正 | KSPC | 跳動/句 | 打不出 |\n\
      | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n";
-
-/// 資料包與 sha256 的前 12 碼：足以分辨；`cargo xtask data` 印的是完整 sha256，開頭對得上就是同一份。
-fn packs_line(packs: &[LoadedPack]) -> String {
-    let packs: Vec<String> = packs
-        .iter()
-        .map(|p| format!("{}（sha256 {}）", p.path, &p.sha256[..12]))
-        .collect();
-    format!("資料包 {}\n\n", packs.join("、"))
-}
 
 /// 依長度分組表：每格「整句首選正確率 · 修正/句（題數）」。
 fn length_groups<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {

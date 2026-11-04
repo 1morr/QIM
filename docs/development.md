@@ -37,7 +37,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`、預設佈局到 `build/layouts/`，見〈資料建置〉 |
-| `cargo xtask bench [--check \| --update-baseline \| --dev [--set <鍵>=<值>]…]` | 首選字基準，見〈首選字基準〉；`--dev` 調參用，見〈dev 切分調參〉 |
+| `cargo xtask bench [--check \| --update-baseline \| --learning \| --dev [--set <鍵>=<值>]…]` | 首選字基準，見〈首選字基準〉；`--dev` 調參用，見〈dev 切分調參〉 |
 
 ## 資料建置
 
@@ -56,7 +56,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包、bigram 進語言模型資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分乘上語料權重相加的字頻（plan §4.2），在語料之後建；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建。三種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
-- 預設佈局：`build/layouts/gboard-quick.json`，Gboard 速成的手機直向，由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式定義在 `crates/qim-layout`。不讀來源、沒有授權檔。
+- 預設佈局：`build/layouts/gboard-quick.json`，Gboard 速成的手機直向，由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式 `qim-layout/1` 的型別與 JSON Schema 在 `crates/qim-layout`（`schema/qim-layout-1.schema.json`）。不讀來源、沒有授權檔。內建佈局的嚴格檢查（plan §5.3）是 `crates/qim-databuild/tests/gboard.rs` 的測試，跟著 `cargo xtask check` 的 `test` 跑；網頁載入佈局時把驗證的警告印在瀏覽器 console。
 - 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`dev.tsv`（dev 切分的調參題，取法與格式同基準檔，見〈首選字基準〉的〈dev 切分調參〉）、`chars.tsv`（字頻，見〈語料〉），後四者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 45 秒，`--verify` 把語料再建一次、bigram 再訓練一次比 sha256，約 80 秒（Apple M6，release）。
 
 `--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、三份資料包的 sha256、詞庫的詞數與被門檻和字集濾掉的數量、有字頻的字數、bigram 的字數與剪枝前後的相鄰字對數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）與 `anr` 的「門口」經 `qim-core` 的 `Engine` 查，與網頁同一條路。
@@ -115,9 +115,10 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 cargo xtask bench                     # 印結果
 cargo xtask bench --check             # 固定題全過、各集合答錯數與修正次數 ≤ baseline、每題打得出，否則 exit 非零
 cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.json（有個人集時連 bench/personal/baseline.json）
+cargo xtask bench --learning          # 學習模式：比學習開關的修正次數，見〈學習模式〉
 ```
 
-`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`：
+`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、開無痕（題內也不學）、只經 `Session::handle`：
 
 1. 逐鍵打完輸入碼、不選字，取當下的第一個候選當首選；沒有候選時首選是空字串。途中的首選拿來算跳動。
 2. 模擬使用者選字打出整題，算修正次數與按鍵數：
@@ -177,7 +178,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 ### 每鍵延遲
 
-每次 `cargo xtask bench`（不論哪個模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。
@@ -186,6 +187,10 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
 
 改核心的票貼前後對照時，在同一台機器、不跑其他重負載時跑；差距小於幾成多半是雜訊，重跑兩三次看是否穩定。
+
+### 學習模式
+
+`cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開（plan §5.2）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關同一般模式，每題用空白的 `UserModel`、開無痕（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
 
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 

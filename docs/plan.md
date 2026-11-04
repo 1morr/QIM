@@ -112,11 +112,11 @@ flowchart LR
 | `zip` | 9.3.0 | `qim-databuild` 讀 Unihan.zip、HKCanCor 的 zip | Unicode 只發 zip；只開 deflate 解壓 |
 | `dirs` | 7.0.0 | `qim-databuild` 找平台的使用者快取目錄，放下載的來源 | 各平台的快取目錄慣例（macOS `~/Library/Caches`、XDG、Windows `LocalAppData`）不必自己寫 |
 | `bzip2` / `quick-xml` | 0.6.1 / 0.42.0 | `qim-databuild` 讀維基 dump（`pages-articles.xml.bz2`） | `bzip2` 預設用純 Rust 的 libbz2-rs-sys；串流讀 XML，不必整份載入 |
-| `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證 | 佈局要給 TS、Swift、Kotlin 直接讀 |
+| `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證；`jsonschema` 關掉預設 features（不要網路與檔案的 `$ref` 解析） | 佈局要給 TS、Swift、Kotlin 直接讀 |
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2） | 一份介面產生兩種語言 |
 | `ferrous-opencc` | 0.4.0 | 簡繁轉換；`qim-databuild` 前處理語料的 `s2hk`（用它內建的字典） | 純 Rust、Apache-2.0；能否編 WebAssembly 在 M1 票 16 開工時驗證 |
-| `proptest` | 1.12.0 | 核心的性質測試（dev） | — |
+| `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
 | `@playwright/test` | 1.64.1 | 網頁 e2e 與驗收 | 使用者指定 |
@@ -202,19 +202,24 @@ P_段內 = 1（單字）
 - `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看文字，所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比；同樣的文字當成一個詞或拆成單字，段內的分數不同（詞用詞頻）。組字開頭的字沒有前文，用字頻的 unigram（M3 的 `set_context` 再接上前文）。方案沒指名語言模型時每個字都是 0 分。
 - 詞的段：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，前後文由字級 bigram 接，詞內由 rime-essay 的詞頻估（每個詞算一次的詞頻總和當分母）。詞內也用字級 bigram 時，同碼的詞分不出常用度，個人集答錯多 27%（M1 票 11 Comments）。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；由首選字基準的 dev 切分調出（`cargo xtask bench --dev`），寫進方案檔。速成是 β = 1、γ = 1（M1 票 12）：dev 偏好更小的 β，但個人集（多是兩字詞）答錯變多，個人集只當守門、不拿來調。
-- `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` 初值 0.2（`docs/research/open-source-imes.md` §5）；沒學過的段為 0。個人機率由衰減值換算，公式在 M1 票 13 定。M3 再加個人 bigram（前一字詞 → 這一段）。
+- `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` 初值 0.2（`docs/research/libime-user-model.md` §1）；沒學過的段為 0。所以 `personal(段) = max(0, ln((1−w)·P + w·P_personal) − ln P)`，`P` 是這一段接在前一字後的靜態機率：首字 bigram 乘詞內機率，不含 β、γ。M3 再加個人 bigram（前一字詞 → 這一段）。
+  - 個人機率 `P_personal = d_now ÷ D_max`：`d_now` 是（方案, 碼, 字詞）的衰減值衰減到這個方案現在的 tick（`d · e^(−(tick − 最後 tick)/200)`），`D_max = 1 / (1 − e^(−1/200)) ≈ 200.5` 是每次上屏都是它時衰減值的上限，所以 `P_personal` 在 (0, 1]。分母取常數，照 libime 除以滿載歷史的總量：學過一次的段 `P_personal ≈ 0.005`，不會因為才學幾次就壓過所有詞。
+  - 分母改用實際上屏的段數衰減總和時，`bench --learning` 四個公開集合的修正次數都較多（M1 票 13 Comments，當時是 unigram），所以用常數。
 - 詞內在詞頻與字級 bigram 之間內插（權重 0.4–0.6）在 dev 上口語略好、維基答錯少約 3–5%，但個人集答錯多 5–16%，不採用（M1 票 12 Comments）。
-- 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；下一段的分數看部分路徑的最後一個字，所以 beam 剪掉的路徑可能本來會勝出，beam 夠寬才等於窮舉。每個起點的每個碼只取字頻最高的 beam 個字進 lattice（詞全進），前文再支持第 21 名以後的同碼字也進不來；票 12 量過全收或 beam 40，dev 只差 1 題，不放寬。每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
+- `personal` 的 w 仍是 0.2，由票 12 和 β、γ 一起調（換上 bigram 後 w 0.2 讓 zh-wiki 學習開變差，數字在票 13 Comments）。
+- 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；下一段的分數看部分路徑的最後一個字，所以 beam 剪掉的路徑可能本來會勝出，beam 夠寬才等於窮舉。每個起點的每個碼只取字頻最高的 beam 個字進 lattice（詞全進），另加使用者學過的字（它們有 `personal`）；前文再支持第 21 名以後沒學過的同碼字也進不來；票 12 量過全收或 beam 40，dev 只差 1 題，不放寬。每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
 - Unicode 擴展區的字不進 lattice；整串輸入碼就是一個字的碼時，排在一般字之後（brief §4.1）。
 - 候選列：蓋滿整串的字、詞與分數最高的幾條多段路徑（方案檔 `ranking.sentences`，速成 3 條）依分數排 → 擴展區的字 → 只蓋住開頭一段的字詞，蓋得長的在前、同長依分數；文字重複的只留第一個。多段路徑放多：維基集修正次數降、口語集升（票 07 Comments）。
 
 ### 2.4 學習與排位（brief §4.5）
 
-- 學習計數以「(輸入方案, 輸入碼, 候選文字)」為鍵，同一串碼在不同方案互不影響（速成與倉頡都有 `ab`）；M1 用第二份測試方案驗證。之後的個人 bigram 只看文字，跨方案共用。計數記三個值：上屏次數、衰減值、最後上屏的 tick。tick 是上屏次數，由 `UserModel` 自己累加，不讀系統時間。衰減值參考 librime `formula_d`（時間常數 200 次上屏，brief §12.2）。
-- 上屏時，整串輸入碼和路徑的每一段都各記一次，所以學過的詞在更長的連打裡也有效（§2.3 的 `personal`）。
-- 排位規則依序套用在 Viterbi 結果上，比對的是整串輸入碼。次數不衰減，用來判斷門檻；衰減值只決定個人分高低，不參與門檻（衰減後選兩次只有約 1.995，永遠到不了 2）：
+- 學習計數以「(輸入方案, 輸入碼, 候選文字)」為鍵，同一串碼在不同方案互不影響（速成與倉頡都有 `ab`）；M1 用第二份測試方案驗證。之後的個人 bigram 只看文字，跨方案共用。計數記：整串上屏的次數與最後一次的 tick、衰減值與它最後更新的 tick。tick 是學習過的上屏次數，每個方案各自累加，由 `UserModel` 自己算，不讀系統時間；無痕與 Enter 原樣上屏輸入碼不算。衰減值照 librime `formula_d`：每次上屏 `d ← 1 + d · e^(−(tick − 最後 tick)/200)`（時間常數 200 次上屏，brief §12.2）。
+- 上屏時記兩種，用途不同（使用者決定）：
+  - 整串上屏：整串輸入碼就是那個碼、上屏的就是那個候選，記一次上屏次數。只有它算排位規則 2 的門檻與「最近」；句中用過的字詞不會因此搶到單打時的首選。
+  - 衰減值：整串和路徑的每一段各加一次（同一組鍵在一次上屏裡只加一次），只給 §2.3 的 `personal`，所以學過的詞在更長的連打裡也有效。選了開頭一段的，每個選定的分段算一段；選的是多段路徑的，路徑的每一段各算一段。標點、大寫先上屏組字時照樣學，但有沒有字的輸入碼原樣上屏時整次不學。
+- 排位規則依序套用在 Viterbi 結果上，前面的規則排定的位置後面的規則不動；只移動候選列裡已有的候選。比對的是整串輸入碼，也就是候選列的那串：選定開頭一段之後是剩下的輸入碼。次數不衰減，用來判斷門檻；衰減值只決定個人分高低，不參與門檻（衰減後選兩次只有約 1.995，永遠到不了 2）：
   1. 觸發詞完全符合的使用者詞 → 首選。
-  2. 上屏次數 ≥ 2，且距最後上屏不超過 10,000 次上屏（初值）的候選 → 首選；多個符合時取最近上屏的。
+  2. 整串上屏 ≥ 2 次，且距最後一次整串上屏不超過 10,000 次上屏（初值）的候選 → 首選；多個符合時取最近整串上屏的。
   3. 上屏次數 ≥ 1 的使用者詞（含自動造詞）→ 至少第 2 位。
   4. 英文候選：輸入碼剛好是完整英文單字時放第 2 位（brief §4.3）。
 - 自動造詞：一次組字分兩段以上選定後上屏，把「整串輸入碼 → 上屏文字」記成使用者詞，上屏次數 1。
@@ -272,54 +277,57 @@ sentences = 3         # 候選列最多放幾條多段路徑
 
 佈局是一張畫布，每個按鍵各自記位置、大小、旋轉、形狀和上下層順序，不靠「第幾排」決定位置。Gboard 預設佈局也只是一份資料，由 `qim-databuild` 依排列算出來。
 
-參考的慣例：
+格式 `qim-layout/1` 在 M1 票 19 定稿：JSON Schema 是 `crates/qim-layout/schema/qim-layout-1.schema.json`（draft 2020-12），型別在 `crates/qim-layout/src/model.rs`，兩邊同時改。之後改格式要加版本（`qim-layout/2`）並提供轉換；讀到別的版本時錯誤訊息直接講「只讀得懂 qim-layout/1」。
 
-- Delta skin：設計尺寸（`mappingSize`）、每鍵 `frame`、可擴大的觸控範圍（`extendedEdges`）、依裝置與方向分開的佈局版本（brief §12.4）。
-- Trime：組字中行為欄位、JSON Schema 驗證。
-- FlorisBoard keyboard3：長按清單、切頁鍵（`docs/research/open-source-imes.md` §4）。
+採用的慣例：
+
+- Delta skin：設計尺寸（`canvas`，同 `mappingSize`）、每鍵 `frame`、可擴大的觸控範圍（`extendedEdges`，同名同義：正數往外擴、負數往內縮）、依裝置與方向分開的佈局版本（brief §12.4）。
+- Trime：組字中改用的行為（`composing`）、JSON Schema 驗證、圓角欄位（`radius`，同 `round_corner`）。
+- FlorisBoard keyboard3：長按清單（`longPress`，第一個是預設，同 `longPressKeyIds` 加 `longPressDefaultKeyId`）、切頁鍵（`switchPage`，同 `layerId`）、四向滑動（`swipe`，同 `<flicks>`；Trime 的 `swipe_up` 等也是四向）（`docs/research/open-source-imes.md` §4）。
+- 自己定的（開源格式都只有矩形、以排為單位）：`rotate`、`z`、`shape` 的橢圓與多邊形、淺色與深色成對的顏色、編輯器的 `grid`。鍵盤底色不在格式裡，由殼依淺色或深色決定；外觀主題是之後的功能（brief §4.6）。
 
 ```jsonc
 {
   "format": "qim-layout/1",
   "variants": [{
     "when": { "device": "phone", "orientation": "portrait" }, // device: phone | tablet；orientation: portrait | landscape
-    "canvas": { "width": 390, "height": 260 },   // 設計尺寸，等比例縮放到實際鍵盤寬度
-    "grid": { "columns": 40, "rows": 24, "snap": true },
-    "initialPage": "letters",
+    "canvas": { "width": 390, "height": 216 },   // 設計尺寸，等比例縮放到實際鍵盤寬度
+    "grid": { "columns": 40, "rows": 24, "snap": true },  // 可省略；只給編輯器，不影響鍵盤
+    "initialPage": "letters",                    // 可省略，預設第一頁
     "pages": [{
       "id": "letters",
       "keys": [{
-        "id": "a",
-        "frame": { "x": 12, "y": 80, "w": 36, "h": 48 },
-        "rotate": 0,
-        "z": 0,
-        "shape": { "type": "rect", "radius": 6 },  // rect | ellipse | polygon（points 以 frame 為 0–1）
-        "touchInset": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+        "id": "a",                                 // 同一頁內不重複
+        "frame": { "x": 12, "y": 80, "w": 36, "h": 48 }, // 旋轉前的矩形，w、h > 0
+        "rotate": 0,                               // 可省略；以 frame 中心順時針的度數（同 CSS rotate）
+        "z": 0,                                    // 可省略；大的在上，同一層時陣列裡後面的在上
+        "shape": { "type": "rect", "radius": 6 },  // 可省略（直角矩形）；rect | ellipse | polygon（points 以 frame 為 0–1）
+        "extendedEdges": { "top": 0, "bottom": 0, "left": 0, "right": 0 }, // 可省略；正數往外擴、負數往內縮
         // "label": "日",                         // 可省略：字母鍵用方案的字根，沒有字根的方案用字母；有寫就固定顯示
-        "hint": "a",
-        "a11yLabel": "日，英文 a",                  // 可省略，預設由實際顯示的標籤與 hint 組成
-        "style": {
+        "hint": "a",                               // 可省略；角標
+        "a11yLabel": "日，英文 a",                  // 可省略，預設「顯示的標籤，hint」（「日，a」），沒有標籤的鍵用動作的說法（「空白」）
+        "style": {                                 // 可省略，每項也都可省略；顏色 #rrggbb 或 #rrggbbaa，淺色與深色成對
           "fill": { "light": "#ffffff", "dark": "#3a3a3c" },
           "labelColor": { "light": "#000000", "dark": "#ffffff" },
-          "opacity": 1, "labelSize": 18, "labelOffset": [0, 0]
+          "opacity": 1, "labelSize": 18, "labelOffset": [0, 0] // 字級與位移是設計尺寸
         },
         "tap": { "letter": "a" },
-        "longPress": [{ "text": "a" }],
-        "composing": null
+        "longPress": [{ "text": "a" }],            // 可省略；第一個是預設
+        "swipe": { "up": { "text": "1" } },        // 可省略；up | down | left | right，M5 才有作用
+        "composing": { "label": "確定", "tap": "enter" } // 可省略或 null；組字中改用的標籤與動作，各自可省略
       }]
     }]
   }]
 }
 ```
 
-- 佈局版本的選法：裝置與方向都符合的版本；其次方向符合的；再其次第一個版本等比例縮放（給警告）。
-- 動作（`tap`、`longPress` 的項目、`swipe`）：`letter`、`text`、`backspace`、`space`、`enter`、`switchPage`、`nextKeyboard`、`toggleAscii`。
-- 欄位在 M1 票定稿，之後改格式要加版本並提供轉換。
-- 點擊判定在 `qim-layout`：依 `z` 由上往下，落在形狀內（含 `touchInset`）的第一個按鍵；都沒有時取距離最近的按鍵。各平台共用同一份。
+- 佈局版本的選法（`Layout::select`，傳入要的 `when`）：裝置與方向都符合的版本；其次方向符合的；再其次第一個版本等比例縮放（給警告）。網頁以螢幕短邊 600 px 為手機與平板的界線（Android `sw600dp` 的慣例）。
+- 動作（`tap`、`composing.tap`、`longPress` 的項目、`swipe` 的四向）：不帶資料的寫名字 `"backspace"`、`"space"`、`"enter"`、`"nextKeyboard"`、`"toggleAscii"`；帶資料的寫單一鍵的物件 `{ "letter": "a" }`（`a`–`z`）、`{ "text": "，" }`（直接輸入，不經組字）、`{ "switchPage": "symbols" }`（同一個版本的頁 id）。
+- 點擊判定在 `qim-layout`（`Page::hit`）：依 `z` 由上往下，落在形狀內（含 `extendedEdges`）的第一個按鍵；都沒有時取距離最近的按鍵，一樣近時取上層的。旋轉前的左、上邊算在內，右、下邊不算；圓角外的角落不算。橢圓與多邊形的判定在 M5，現在當矩形。各平台共用同一份。
 - 容錯與滑動輸入用按鍵的實際位置算鄰近關係，不假設有「排」。佈局亂排時準確度下降但不會壞。
-- 驗證分兩級（brief §4.6）：
-  - 錯誤（不能存檔），每個佈局版本各自檢查：檔案壞掉；頁面之間切不回有字母的頁面；iOS 需要切換鍵盤鍵時卻沒有。
-  - 警告（可存檔）：按鍵重疊、完全被蓋住、超出畫布、缺字母、缺少直向或橫向的版本。
+- 驗證分兩級（brief §4.6，`qim_layout::validate`）：先過 JSON Schema，再查 Schema 表達不了的。
+  - 錯誤（不能存檔），每個佈局版本各自檢查：檔案壞掉（不是 JSON、不符合 Schema、頁或鍵的 `id` 重複、`initialPage` 或 `switchPage` 指到不存在的頁）；從一開始的頁面切得到的頁中，有頁切不回有字母的頁面（頁面之間只算點一下的 `switchPage`；長按、滑動、組字中的動作不是隨時都在，只靠它們回去的頁仍算切不回；「有字母」也只看 `tap`）；需要切換鍵盤鍵時（iOS `needsInputModeSwitchKey`，由殼傳入），有頁切不到有 `nextKeyboard` 鍵的頁面。
+  - 警告（可存檔）：按鍵重疊（畫出來的旋轉矩形重疊面積大於 0，只碰到邊不算，不計圓角）、完全被蓋住（觸控範圍 16 × 16 的取樣點含貼邊的點全落在上層的鍵裡；比格距窄的空隙抓不到，觸控範圍縮成 0 的鍵不算）、超出畫布、缺字母（`a`–`z`，只算 `tap`）、有這種裝置卻缺直向或橫向的版本、橢圓與多邊形還不支援、滑動還沒有作用。
 
 ### 2.7 模型分層（ADR 0005）
 
@@ -434,7 +442,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 指標：固定題通過數、整句首選正確率、字正確率、修正次數、每字按鍵數、首選跳動、每鍵延遲 p50 / p95（原生與 WebAssembly 各量一次，WebAssembly 用 Node 跑網頁同一份綁定；只報不擋，另報組字第 20 碼起的按鍵）。
 - 依長度分組：正確率與修正次數另按目標的字數分組（1、2、3–4、5–8、9 以上）。熟手多半打幾個字就上屏，長句的整句正確率低且雜訊大，分組才看得出變化。
 - 翻盤清單：和 baseline 比，列出由錯變對、由對變錯的題目（個人集只列題號）。只看總數會把一處變好、一處變壞看成沒變。
-- 學習模式（`--learning`）：照固定順序打一個集合，模擬使用者選字並讓 `UserModel` 學習，和同一順序不學習時比修正次數。基準其他模式都用空白的 `UserModel`。
+- 學習模式（`--learning`）：照檔案的順序打每個語料集合與個人集，模擬使用者選字（同修正次數的模擬）並讓整個集合共用的 `UserModel` 學習，和同一順序、每題空白的 `UserModel` 比修正次數。只報不擋，不讀也不寫 baseline。基準其他模式都用空白的 `UserModel`。
 - 修正次數：模擬使用者打完整句輸入碼，首選能接上目標句就按空白，否則選能接上的最長候選，第一頁沒有就翻頁。每次選非首選或翻頁算一次，以每句平均回報。每字按鍵數把這些動作和輸入碼都算進去（文字輸入研究常用的 KSPC）。卡住（翻完都接不上）時按 Esc 清掉（算一次修正）改成一個字一個字打；一個字一個字也打不出就算「打不出」，`--check` 紅。細節見 `docs/development.md`〈首選字基準〉。
 - 首選跳動：逐碼打字時，首選開頭已打完的字被下一鍵改掉的次數，每句平均。先只回報，不擋 commit。
 - `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline、沒有打不出的題，否則失敗；集合沒有 baseline、或 baseline 的集合沒跑到也算失敗。改核心或資料包時必跑。
@@ -446,8 +454,8 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 ### 5.3 佈局
 
 - 所有佈局：通過 JSON Schema 與 §2.6 的錯誤級驗證；測試雙向（造出每種錯誤會紅，只有警告不紅）。
-- 內建佈局（`data/layouts/`）另加嚴格檢查：有直向與橫向的版本、淺色與深色都有顏色、按鍵不重疊、不超出畫布、字母齊全、長按清單的動作都有效。
-- 點擊判定的性質測試：上層優先、旋轉與多邊形內外判定正確、縮放後結果不變。
+- 內建佈局（`data/layouts/` 與 `qim-databuild` 算出的預設佈局）另加嚴格檢查（`qim_layout::check_builtin`）：警告一個都不能有（有直向與橫向的版本、按鍵不重疊、不超出畫布、字母齊全），每個鍵的 `fill`、`labelColor` 都有淺色與深色；長按清單的動作是否有效由 Schema 與錯誤級的檢查保證。檢查固定用不需要切換鍵盤鍵的 `Target`：iOS 的預設佈局要不要放地球鍵（`needsInputModeSwitchKey` 只在部分機型為真）在 M7 iOS 殼開工時定。
+- 點擊判定的性質測試（`crates/qim-layout/tests/hit_properties.rs`）：上層優先、旋轉後內外判定正確、縮放後結果不變；多邊形的內外判定在 M5 加。
 
 ### 5.4 平台殼
 
@@ -623,6 +631,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
 | `ferrous-opencc` 不能編 WebAssembly | M1 票 16 | 票開工時 | 改自讀 OpenCC 字典，記偏差 |
 | iOS 鍵盤擴充放不下核心與資料包 | M3 的模型大小、M7 | M2 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
+| `jsonschema` 讓程式碼變大（M1 票 19：網頁 WebAssembly 由 0.42 MB 變 4.6 MB，gzip 1.2 MB，多半是它帶的 regex 與大數） | iOS 鍵盤擴充的記憶體（brief §9） | M2 | 鍵盤擴充只讀存檔時驗過的佈局，Schema 驗證留在主 App 與編輯器（`qim-layout` 加 feature 關掉），改 §1.3、§1.4 |
 | 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
 | 延遲超過預算 | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢 | M3 範圍 | §7.8 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |

@@ -9,7 +9,7 @@ mod web;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask bench [--check | --update-baseline | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -21,6 +21,8 @@ fn main() -> ExitCode {
         ["data", "--verify"] => release_run("qim-databuild", &["--verify"]),
         ["bench"] => bench(&[]),
         ["bench", flag @ ("--check" | "--update-baseline")] => bench(&[flag]),
+        // 學習模式不量延遲，不必重編 WebAssembly 綁定。
+        ["bench", "--learning"] => release_run("qim-bench", &["--learning"]),
         // dev 模式只量正確率，不量每鍵延遲，不必重編 WebAssembly 綁定。
         ["bench", "--dev", ..] => release_run("qim-bench", &args[1..]),
         ["web"] => {
