@@ -139,7 +139,7 @@ pub struct Options { pub simplified: bool, pub incognito: bool, pub english_cand
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
-    pub composition: Composition,   // 輸入碼、已打的字根、各分段（碼、字、是否已選定）、目前分段
+    pub composition: Composition,   // 輸入碼、各分段（碼、字根、字、是否已選定）、目前分段
     pub candidates: Vec<Candidate>, // 目前頁
     pub page: usize,
     pub has_more: bool,
@@ -247,7 +247,7 @@ b = "月"
 [packs]               # 另外的資料包；碼表和方案一起編進方案自己的資料包
 lexicon = "quick-lexicon"
 language_model = "zh-hant-bigram"
-radical_hint = "cangjie-hint"   # 字根提示用的倉頡碼，不進 lattice（ADR 0003）
+radical_hint = "cangjie-hint"   # 字根提示用的倉頡碼，不進 lattice（ADR 0003）；Engine 不載入，殼用 RadicalHints::for_scheme 另外載入
 
 [ranking]
 word_bonus = 0.0      # β，M1 由基準調出
@@ -377,7 +377,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 2. 只取 Big5 或 HKSCS 旗標為 1 的漢字當連打字集；其他漢字標成擴展區（只在單字查詢時出現）。
 3. 由倉頡三代與五代碼推導速成碼，取聯集（brief §4.2）。
 4. 字的排序先用字頻；再來是 Unihan `kGradeLevel`，有年級的字依年級排前面；都沒有的退回 libcangjie 的 Big5 排序值。資料包裡的碼表只排到年級 → Big5，字頻在詞庫資料包（§4.2），`Engine` 載入兩份資料包時才依字頻重排：速成資料包不含語料衍生的資料，授權只有 libcangjie 與 Unihan（M1 票 06）。
-5. 另產一份字根提示資料包（字 → 倉頡三代 / 五代碼），只給字根提示用。
+5. 另產一份字根提示資料包（字 → 倉頡三代 / 五代碼，id `cangjie-hint`），只給字根提示用：每個漢字合併各列的碼、各代依列序去重；授權只有 libcangjie。核心的 `RadicalHints` 不在 `Engine` 裡，倉頡碼結構上進不了 lattice（ADR 0003）；殼查候選每個字的碼，用方案的 `[radicals]` 換成字根顯示（M1 票 22）。
 
 ### 4.2 詞庫
 
@@ -414,7 +414,8 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 詞庫：每個詞的碼都由詞裡每個字的一個速成碼接成；報告列詞數、被門檻與字集濾掉的數量。
 - Unihan `kCangjie` 交叉比對，差異清單輸出成報表，不擋建置。
 - bigram 資料包 ≤ 8 MB（§4.3）。
-- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫與 bigram 三份）。
+- 字根提示：碼表的每個字（含擴展區）都有至少一個倉頡碼；抽查「丟」三代 `hgi`、五代先列 `mgi`，「問」兩代都是 `anr`。
+- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫、bigram 與字根提示四份）。
 
 ## 5. 測試策略
 

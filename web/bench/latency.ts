@@ -37,6 +37,7 @@ for (const input of inputs) {
 		const start = performance.now();
 		const snapshot = session.letter(c);
 		for (const segment of snapshot.segments) {
+			void segment.radicals;
 			segment.free();
 		}
 		void snapshot.focus;

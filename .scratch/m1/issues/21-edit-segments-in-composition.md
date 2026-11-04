@@ -30,4 +30,7 @@ Blocked by: 10, 18
 - 性質測試加 `Action`（按鍵、`focus_segment`、`select`）進隨機序列，新增「沒選定的分段等於把剩下的輸入碼從頭打一次」。
 - bench 前後對照：改動前 = `bench/baseline.json`（HEAD）；改動後 `cargo xtask bench --check` 通過，各集合答錯、修正次數都和 baseline 相同（yue-wiki 1139 / 4607、zh-wiki 1121 / 4495、common-voice-yue 1213 / 6236、hkcancor 811 / 4518、personal 1106 / 1500），預設路徑行為沒變。
 - code-review 未處理：`Session::segments()` 每次呼叫都回溯首選路徑，← / → 一次算 4–5 次；打字的熱路徑每鍵仍只算一次，每鍵延遲 p95 沒變，不快取。改選中間段後上屏會學到前面照顯示固定的分段，和組字中按標點上屏整個組字時一樣，不另處理。
-- 票 22 的提醒（協調者轉告）：它在 `Session::handle` 補組字的字根；本票的 `select`、`focus_segment` 經同一個 `snapshot()` 產生組字，merge main 時確認字根補在共用處。
+- 前面固定、不重算這個決定已由使用者確認（協調者轉告），plan §2.1 與 progress 偏差已註明。
+- merge main（票 13、22）：字根改放在每個分段（`Segment.radicals`），`handle`、`select`、`focus_segment` 回傳前都經 `with_radicals` 補上；`Composition.radicals` 改成 `unselected_radicals()`，不留兩份。網頁沒選定的分段顯示字根，本票 e2e 改讀字根。
+- 點候選和票 22 的長按候選衝突（都在 `pointerdown`）：改成放開時才選字、長按到門檻切換提示不選字、按住滑動兩者都不做（Gboard 的做法），brief §4.4 補上；票 22 的兩個 e2e 原本「點一下不叫出提示」，現在點一下會選字上屏，改成先驗選字再重打。
+- merge 後重跑：`data --verify` 通過（格式 5），`bench --check` 通過、各集合答錯與修正次數和 baseline 相同，`cargo xtask check` 全套通過（e2e 41 項）。

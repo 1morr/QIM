@@ -5,6 +5,7 @@ import init, {
 	Layout,
 	type LayoutKey,
 	pageSize,
+	RadicalHints,
 	Session,
 	type Snapshot,
 } from "./wasm/qim_wasm.js";
@@ -14,6 +15,8 @@ const PACK_URL = "/packs/quick/quick.pack";
 const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
 /** 速成方案檔 `[packs]` 指名的語言模型資料包（字級 bigram）。 */
 const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
+/** 速成方案檔 `[packs]` 指名的字根提示資料包（倉頡三代 / 五代碼）。 */
+const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 
@@ -32,6 +35,9 @@ const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+const hintVersion = element<HTMLSelectElement>("#hint-version");
+/** 長按候選多久叫出字根提示（毫秒）；和 Android 的長按門檻同級。 */
+const LONG_PRESS_MS = 500;
 /** 觸控鍵盤；載入完成前是 `undefined`。 */
 let touchKeyboard: Keyboard | undefined;
 
@@ -80,9 +86,39 @@ function press(session: Session, key: Key): Snapshot {
 /** 候選列目前頁，點候選時換算成全部候選的位置。 */
 let page = 0;
 
+/** 畫面上的組字與候選；切換字根提示時不必再問核心就能重畫。 */
+const shown = {
+	composing: false,
+	candidates: [] as string[],
+	/** 候選旁顯示字根提示；組字結束就關掉（brief §4.3）。 */
+	hints: false,
+};
+/** 字根提示；載入完成前是 `undefined`。 */
+let radicalHints: RadicalHints | undefined;
+
 /**
- * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示輸入碼；目前分段標 `aria-current`。
- * 點一段就移到那段（brief §4.4），由 `start` 掛的事件處理。
+ * 一個候選的字根提示：每個字的字根接著倉頡碼，如「日弓(an) 口(r)」；詞裡沒有碼的字是「—」。
+ * 整個候選都沒有碼（英文候選）時是空字串，不顯示。
+ */
+function hintText(candidate: string): string {
+	if (!radicalHints) {
+		return "";
+	}
+	const hints = radicalHints.hint(candidate, hintVersion.value);
+	const parts = hints.map((hint) =>
+		hint.codes.map((code, i) => `${hint.radicals[i]}(${code})`).join("／"),
+	);
+	for (const hint of hints) {
+		hint.free();
+	}
+	return parts.every((part) => part === "")
+		? ""
+		: parts.map((part) => part || "—").join(" ");
+}
+
+/**
+ * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示字根（brief §4.3）；目前分段標
+ * `aria-current`。點一段就移到那段（brief §4.4），由 `start` 掛的事件處理。
  */
 function render(snapshot: Snapshot): void {
 	const segments = snapshot.segments;
@@ -91,28 +127,53 @@ function render(snapshot: Snapshot): void {
 			const span = document.createElement("span");
 			span.className = "segment";
 			span.dataset.index = String(i);
-			span.textContent = segment.selected ? segment.text : segment.code;
+			span.textContent = segment.selected ? segment.text : segment.radicals;
 			if (i === snapshot.focus) {
 				span.setAttribute("aria-current", "true");
 			}
 			return span;
 		}),
 	);
+	shown.composing = segments.length > 0;
 	for (const segment of segments) {
 		segment.free();
 	}
 	page = snapshot.page;
+	shown.candidates = snapshot.candidates;
+	if (!shown.composing) {
+		shown.hints = false;
+	}
+	renderCandidates();
+}
+
+function renderCandidates(): void {
 	candidates.replaceChildren(
-		...snapshot.candidates.map((candidate, i) => {
+		...shown.candidates.map((candidate, i) => {
 			const item = document.createElement("li");
 			item.dataset.index = String(i);
 			const index = document.createElement("span");
 			index.className = "index";
 			index.textContent = String(i + 1);
 			item.append(index, candidate);
+			const text = shown.hints ? hintText(candidate) : "";
+			if (text !== "") {
+				const hint = document.createElement("span");
+				hint.className = "radical-hint";
+				hint.dataset.testid = `hint-${i + 1}`;
+				hint.textContent = text;
+				item.append(hint);
+			}
 			return item;
 		}),
 	);
+}
+
+/** 組字中才有候選可查；切換候選旁的字根提示。 */
+function toggleHints(): void {
+	if (shown.composing) {
+		shown.hints = !shown.hints;
+		renderCandidates();
+	}
 }
 
 /** 上屏：插入輸入框游標處，取代選取的文字。 */
@@ -128,6 +189,17 @@ function apply(snapshot: Snapshot): void {
 	}
 	render(snapshot);
 	touchKeyboard?.refresh();
+}
+
+/** 點分段、點候選的結果：核心吃下才畫，用完釋放。 */
+function applyHandled(snapshot: Snapshot): void {
+	try {
+		if (snapshot.handled) {
+			apply(snapshot);
+		}
+	} finally {
+		snapshot.free();
+	}
 }
 
 /** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
@@ -182,14 +254,50 @@ function setTouch(on: boolean): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack, lexicon, languageModel, layoutJson] = await Promise.all([
-		init(),
-		loadPack(PACK_URL),
-		loadPack(LEXICON_URL),
-		loadPack(LANGUAGE_MODEL_URL),
-		load(LAYOUT_URL).then((response) => response.text()),
-	]);
+	const [, pack, lexicon, languageModel, radicalHint, layoutJson] =
+		await Promise.all([
+			init(),
+			loadPack(PACK_URL),
+			loadPack(LEXICON_URL),
+			loadPack(LANGUAGE_MODEL_URL),
+			loadPack(RADICAL_HINT_URL),
+			load(LAYOUT_URL).then((response) => response.text()),
+		]);
 	const session = new Session(pack, lexicon, languageModel);
+	radicalHints = new RadicalHints(radicalHint, session);
+	hintVersion.addEventListener("change", renderCandidates);
+	// 點候選選字，長按叫出字根提示（brief §4.4）：放開時還沒到長按的門檻才選字。
+	let pressTimer: number | undefined;
+	/** 按下的候選在目前頁的位置；長按觸發或取消後是 `undefined`。 */
+	let pressed: number | undefined;
+	const cancelPress = () => {
+		window.clearTimeout(pressTimer);
+		pressTimer = undefined;
+		pressed = undefined;
+	};
+	candidates.addEventListener("pointerdown", (event) => {
+		// 不讓輸入框失去焦點，長按完還能接著打字。
+		event.preventDefault();
+		cancelPress();
+		const item = (event.target as Element).closest<HTMLElement>("li");
+		pressed = item ? Number(item.dataset.index) : undefined;
+		pressTimer = window.setTimeout(() => {
+			cancelPress();
+			toggleHints();
+		}, LONG_PRESS_MS);
+	});
+	candidates.addEventListener("pointerup", () => {
+		const index = pressed;
+		cancelPress();
+		if (index !== undefined) {
+			applyHandled(session.select(page * pageSize() + index));
+		}
+	});
+	// 手指左右滑候選列時瀏覽器接手捲動、送 pointercancel，長按與選字都取消。
+	for (const type of ["pointerleave", "pointercancel"]) {
+		candidates.addEventListener(type, cancelPress);
+	}
+	candidates.addEventListener("contextmenu", (event) => event.preventDefault());
 	session.setIncognito(incognito.checked);
 	incognito.addEventListener("change", () => {
 		session.setIncognito(incognito.checked);
@@ -206,34 +314,25 @@ async function start(): Promise<void> {
 		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
 	});
 
-	// 點組字的一段、點候選：用 pointerdown 並取消預設動作，輸入框不失去焦點（同觸控鍵盤）。
-	const onPointer = (
-		list: HTMLElement,
-		selector: string,
-		act: (index: number) => Snapshot,
-	) => {
-		list.addEventListener("pointerdown", (event) => {
-			const target = (event.target as Element).closest<HTMLElement>(selector);
-			if (!target || !list.contains(target)) {
-				return;
-			}
-			event.preventDefault();
-			const snapshot = act(Number(target.dataset.index));
-			try {
-				if (snapshot.handled) {
-					apply(snapshot);
-				}
-			} finally {
-				snapshot.free();
-			}
-		});
-	};
-	onPointer(composition, ".segment", (i) => session.focusSegment(i));
-	onPointer(candidates, "li", (i) => session.select(page * pageSize() + i));
+	// 點組字的一段就移到那段；取消預設動作，輸入框不失去焦點（同觸控鍵盤）。
+	composition.addEventListener("pointerdown", (event) => {
+		const segment = (event.target as Element).closest<HTMLElement>(".segment");
+		if (!segment) {
+			return;
+		}
+		event.preventDefault();
+		applyHandled(session.focusSegment(Number(segment.dataset.index)));
+	});
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);
 		if (!key) {
+			return;
+		}
+		// 組字中按 Tab 切換字根提示（brief §4.3）；核心本來就吃下不動作，不必轉給它。
+		if (event.key === "Tab" && shown.composing) {
+			event.preventDefault();
+			toggleHints();
 			return;
 		}
 		const snapshot = press(session, key);

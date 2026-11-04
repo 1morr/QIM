@@ -40,14 +40,14 @@ test("點兩鍵重疊處，輸出上層的鍵", async ({ page }, testInfo) => {
 	await page.screenshot({ path: testInfo.outputPath("overlap-layout.png") });
 
 	await page.touchscreen.tap(x, y);
-	await expect(page.getByTestId("composition")).toHaveText("n");
+	await expect(page.getByTestId("composition")).toHaveText("弓");
 	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
 	await expect(items.first()).toHaveText("1弓");
 	await page.screenshot({ path: testInfo.outputPath("overlap-tap.png") });
 
 	// 只有下層的地方是 a。
 	await page.touchscreen.tap(a.x + 10, y);
-	await expect(page.getByTestId("composition")).toHaveText("na");
+	await expect(page.getByTestId("composition")).toHaveText("弓日");
 });
 
 test("組字中空白鍵換成 composing 的標籤，上屏後換回", async ({ page }) => {

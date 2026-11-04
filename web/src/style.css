@@ -49,6 +49,12 @@ textarea {
 	white-space: nowrap;
 }
 
+#candidates .radical-hint {
+	margin-left: 0.25rem;
+	color: gray;
+	font-size: 0.875rem;
+}
+
 #candidates .index {
 	color: gray;
 	font-size: 1rem;

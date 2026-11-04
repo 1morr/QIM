@@ -1,8 +1,15 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
 // 組字中修改（M1 票 21）：移到中間的分段改選，其餘沒選定的分段重算（plan §2.1）。
+// 組字裡選定的分段顯示字詞，沒選定的顯示字根。
 // `anrkboa` 的首選路徑是「門口｜有｜智」三段，中間一段 `kb` 有別的字可選。
 const INPUT = "anrkboa";
+/** 組字裡沒選定的分段顯示字根（`data/schemes/quick.toml` 的 `[radicals]`）。 */
+const RADICALS: Record<string, string> = {
+	anr: "日弓口",
+	kb: "大月",
+	oa: "人日",
+};
 
 function ui(page: Page) {
 	return {
@@ -22,7 +29,7 @@ async function candidateTexts(page: Page): Promise<string[]> {
 /** 單打 `code` 時的候選：在空的組字打完讀回，再按 Esc 清掉。 */
 async function candidatesOf(page: Page, code: string): Promise<string[]> {
 	await page.keyboard.type(code);
-	await expect(ui(page).composition).toHaveText(code);
+	await expect(ui(page).composition).toHaveText(RADICALS[code]);
 	const texts = await candidateTexts(page);
 	await page.keyboard.press("Escape");
 	await expect(ui(page).composition).toHaveText("");
@@ -44,7 +51,7 @@ test.describe("實體鍵盤", () => {
 		const [oa] = await candidatesOf(page, "oa");
 
 		await page.keyboard.type(INPUT);
-		await expect(segments).toHaveText(["anr", "kb", "oa"]);
+		await expect(segments).toHaveText(["日弓口", "大月", "人日"]);
 		await expect(items.first()).toHaveText("1門口有智");
 
 		await page.keyboard.press("ArrowLeft");
@@ -58,7 +65,7 @@ test.describe("實體鍵盤", () => {
 		const other = kb[1];
 		await page.keyboard.type("2");
 		// 前面的「門口」照顯示的字固定，改選的段固定，`oa` 重算。
-		await expect(segments).toHaveText(["門口", other, "oa"]);
+		await expect(segments).toHaveText(["門口", other, "人日"]);
 		await expect(text).toHaveValue("");
 		await page.screenshot({ path: testInfo.outputPath("rechosen.png") });
 
@@ -102,7 +109,7 @@ test.describe("觸控", () => {
 		/** 單打 `code` 時的候選，讀回後點退格刪光。 */
 		const tappedCandidates = async (code: string) => {
 			await tapKeys(code);
-			await expect(composition).toHaveText(code);
+			await expect(composition).toHaveText(RADICALS[code]);
 			const texts = await candidateTexts(page);
 			for (const _ of code) {
 				await page.getByTestId("key-backspace").tap();
@@ -114,7 +121,7 @@ test.describe("觸控", () => {
 		const [oa] = await tappedCandidates("oa");
 
 		await tapKeys(INPUT);
-		await expect(segments).toHaveText(["anr", "kb", "oa"]);
+		await expect(segments).toHaveText(["日弓口", "大月", "人日"]);
 		await segments.nth(1).tap();
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
 		expect(await candidateTexts(page)).toEqual(kb);
@@ -122,7 +129,7 @@ test.describe("觸控", () => {
 
 		const other = kb[1];
 		await items.nth(1).tap();
-		await expect(segments).toHaveText(["門口", other, "oa"]);
+		await expect(segments).toHaveText(["門口", other, "人日"]);
 		await expect(items.first()).toHaveText(`1${oa}`);
 
 		await page.getByTestId("key-space").tap();

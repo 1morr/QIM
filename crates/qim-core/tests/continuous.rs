@@ -26,10 +26,11 @@ fn engine(data: &Data) -> Engine {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
-        radicals: BTreeMap::new(),
+        radicals: BTreeMap::from([('a', "日".into()), ('n', "弓".into()), ('r', "口".into())]),
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: Some("unigram".into()),
+            ..Packs::default()
         },
         ranking: data.ranking,
     };
@@ -189,6 +190,35 @@ fn selecting_a_beginning_fixes_that_segment_and_composes_the_rest_again() {
     assert_eq!(texts(&selected), ["口"]);
 
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
+}
+
+#[test]
+fn composition_shows_the_radicals_of_the_input_not_yet_selected() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    assert_eq!(typed.composition.unselected_radicals(), "日弓口");
+    let selected = ime.select(&typed, "門");
+    assert_eq!(selected.composition.unselected_radicals(), "口");
+    assert_eq!(ime.press(Key::Escape).composition.unselected_radicals(), "");
+}
+
+#[test]
+fn every_segment_carries_its_radicals_after_focusing_or_selecting_too() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anra");
+    let radicals = |snapshot: &Snapshot| -> Vec<String> {
+        snapshot
+            .composition
+            .segments
+            .iter()
+            .map(|s| s.radicals.clone())
+            .collect()
+    };
+    let focused = ime.focus_segment(0);
+    assert_eq!(radicals(&focused), ["日弓口", "日"]);
+    let selected = ime.session.select(&ime.engine, &mut ime.user, 0);
+    assert_eq!(radicals(&selected), ["日弓口", "日"]);
+    assert_eq!(selected.composition.unselected_radicals(), "日");
 }
 
 #[test]

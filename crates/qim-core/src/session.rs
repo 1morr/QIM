@@ -43,8 +43,6 @@ pub enum Key {
 pub struct Composition {
     /// 已打的輸入碼。
     pub input: String,
-    /// 已打的字根，如「日弓口」（M1）。
-    pub radicals: String,
     /// 連打的各分段：選定的在前，接著剩下的輸入碼的首選路徑；碼接起來是 `input`。
     pub segments: Vec<Segment>,
     /// 目前分段在 `segments` 的位置，候選列它的字詞（← / →、[`Session::focus_segment`]）。
@@ -72,12 +70,23 @@ impl Composition {
             .sum();
         &self.input[selected..]
     }
+
+    /// 還沒選定的輸入碼的字根，如 `anr` 的「日弓口」；殼在選定的字詞後面顯示它（brief §4.3）。
+    pub fn unselected_radicals(&self) -> String {
+        self.segments
+            .iter()
+            .filter(|s| !s.selected)
+            .map(|s| s.radicals.as_str())
+            .collect()
+    }
 }
 
 /// 連打的一個分段：一段輸入碼和它的字詞。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Segment {
     pub code: String,
+    /// `code` 的字根，如 `anr` 的「日弓口」（方案的 `[radicals]`）。
+    pub radicals: String,
     pub text: String,
     /// 使用者已選定，重算時不動。
     pub selected: bool,
@@ -129,10 +138,12 @@ impl Session {
 
     /// 選全部候選（不只目前頁）的第 `index` 個，和按那個候選的數字鍵相同。
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
-        if !self.composing() {
-            return self.snapshot(false, None);
-        }
-        self.select_at(engine, user, index)
+        let snapshot = if self.composing() {
+            self.select_at(engine, user, index)
+        } else {
+            self.snapshot(false, None)
+        };
+        with_radicals(engine, snapshot)
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有
@@ -149,10 +160,15 @@ impl Session {
         if segment <= self.segments().len() {
             self.move_focus(engine, user, segment);
         }
-        self.snapshot(true, None)
+        with_radicals(engine, self.snapshot(true, None))
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        let snapshot = self.handle_key(engine, user, key);
+        with_radicals(engine, snapshot)
+    }
+
+    fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         if let Key::Letter(c) = key
             && engine.scheme().alphabet.contains(c)
         {
@@ -248,14 +264,13 @@ impl Session {
             .map(|s| Segment {
                 code: rest[s.start..s.end].to_string(),
                 text: s.text,
-                selected: false,
+                ..Segment::default()
             })
             .collect();
         if unselected.is_empty() && !rest.is_empty() {
             unselected.push(Segment {
                 code: rest.to_string(),
-                text: String::new(),
-                selected: false,
+                ..Segment::default()
             });
         }
         self.selected.iter().cloned().chain(unselected).collect()
@@ -378,6 +393,7 @@ impl Session {
                         code,
                         text,
                         selected: true,
+                        ..Segment::default()
                     }),
             )
             .collect();
@@ -447,7 +463,6 @@ impl Session {
             input: segments.iter().map(|s| s.code.as_str()).collect(),
             focus: self.focus.unwrap_or(segments.len()),
             segments,
-            ..Composition::default()
         }
     }
 
@@ -469,6 +484,14 @@ impl Session {
             generation: self.generation,
         }
     }
+}
+
+/// 補上各分段的字根：分段在 `Session` 裡不帶字根，公開的方法回傳前都經過這裡。
+fn with_radicals(engine: &Engine, mut snapshot: Snapshot) -> Snapshot {
+    for segment in &mut snapshot.composition.segments {
+        segment.radicals = engine.scheme().radicals_of(&segment.code);
+    }
+    snapshot
 }
 
 /// 候選 `choice` 的各段的（輸入碼, 字詞）；`input` 是它所在的那串輸入碼。
