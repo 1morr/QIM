@@ -31,6 +31,7 @@ fn engine(data: &Data) -> Engine {
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: Some("model".into()),
+            ..Packs::default()
         },
         ranking: Ranking::default(),
     };

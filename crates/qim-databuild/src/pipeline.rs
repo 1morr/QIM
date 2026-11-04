@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use qim_core::{LanguageModelPack, LexiconPack, Pack};
+use qim_core::{LanguageModelPack, LexiconPack, Pack, RadicalHintPack};
 
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
@@ -15,7 +15,8 @@ use crate::verify::{
     self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
 };
 use crate::{
-    Error, bigram, build_pack, gboard, lexicon, libcangjie, packing, personal, scheme, unihan,
+    Error, bigram, build_pack, gboard, lexicon, libcangjie, packing, personal, radical_hint,
+    scheme, unihan,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -42,6 +43,13 @@ come first by grade, then libcangjie's Big5 order. At run time QIM puts characte
 with a higher frequency in the lexicon pack first.
 ";
 
+/// 字根提示資料包 NOTICE 最後一段：怎麼用來源。
+const RADICAL_HINT_ABOUT: &str = "\
+For each Han character in the libcangjie file, this pack lists its Cangjie 3 and
+Cangjie 5 codes from every row, in file order without duplicates. QIM shows them
+as a hint of how to type a candidate; they are not input codes of any scheme.
+";
+
 /// 建一次速成資料包的結果；`--verify` 會再建一次比 `bytes`。
 struct QuickBuild {
     rows: Vec<libcangjie::Row>,
@@ -49,6 +57,9 @@ struct QuickBuild {
     dictionary_like: String,
     pack: Pack,
     bytes: Vec<u8>,
+    /// 方案指名的字根提示資料包的 id，與由同樣的列建的資料包（[`radical_hint::hints`]）。
+    radical_hint_id: String,
+    radical_hint: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -61,6 +72,8 @@ pub struct Outcome {
     pub language_model_path: PathBuf,
     pub language_model_sha256: String,
     pub language_model: bigram::Summary,
+    pub radical_hint_path: PathBuf,
+    pub radical_hint_sha256: String,
     /// 預設 Gboard 速成佈局（[`gboard::layout`]）。
     pub layout_path: PathBuf,
     /// 各語料的句數。
@@ -73,7 +86,8 @@ pub struct Outcome {
 
 /// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`、建各語料，再用語料的字頻
 /// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`、用語料的 train 切分訓練方案指名的語言模型
-/// 資料包到 `build/packs/<語言模型 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
+/// 資料包到 `build/packs/<語言模型 id>/`、由 libcangjie 建方案指名的字根提示資料包到
+/// `build/packs/<字根提示 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
 /// 另把預設 Gboard 速成佈局寫到 `build/layouts/`。
 /// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
@@ -99,6 +113,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let quick_packed = packing::resolve(&packing::QUICK, &all, load_text, read)?;
     let lexicon_packed = packing::resolve(&lexicon_sources, &all, load_text, read)?;
     let language_model_packed = packing::resolve(&language_model_sources, &all, load_text, read)?;
+    let radical_hint_packed = packing::resolve(&packing::RADICAL_HINT, &all, load_text, read)?;
 
     // 每次都從快取與方案檔重讀，`--verify` 的第二次建置才是真的重建。
     let build_quick = || -> Result<QuickBuild, Error> {
@@ -109,11 +124,25 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let bytes = pack
             .to_bytes()
             .map_err(|e| Error::invalid("資料包", e.to_string()))?;
+        let radical_hint_id = pack.scheme.packs.radical_hint.clone().ok_or_else(|| {
+            Error::invalid(
+                QUICK_SCHEME,
+                "要在 [packs] 寫 radical_hint：字根提示資料包的 id",
+            )
+        })?;
+        let radical_hint = RadicalHintPack {
+            id: radical_hint_id.clone(),
+            hints: radical_hint::hints(&rows),
+        }
+        .to_bytes()
+        .map_err(|e| Error::invalid("字根提示資料包", e.to_string()))?;
         Ok(QuickBuild {
             rows,
             dictionary_like,
             pack,
             bytes,
+            radical_hint_id,
+            radical_hint,
         })
     };
     let quick = build_quick()?;
@@ -137,6 +166,16 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let dir = root.join(PACKS).join(&id);
     packing::write(&dir, &id, &quick.bytes, &quick_packed, QUICK_ABOUT)?;
     let pack_path = dir.join(format!("{id}.pack"));
+    let radical_hint_id = &quick.radical_hint_id;
+    let radical_hint_dir = root.join(PACKS).join(radical_hint_id);
+    packing::write(
+        &radical_hint_dir,
+        radical_hint_id,
+        &quick.radical_hint,
+        &radical_hint_packed,
+        RADICAL_HINT_ABOUT,
+    )?;
+    let radical_hint_path = radical_hint_dir.join(format!("{radical_hint_id}.pack"));
     let write =
         |path: PathBuf, contents: &[u8]| std::fs::write(&path, contents).map_err(Error::io(path));
 
@@ -313,11 +352,13 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 quick: &quick.bytes,
                 lexicon: &lexicon_bytes,
                 language_model: &language_model_bytes,
+                radical_hint: &quick.radical_hint,
             },
             PackBytes {
                 quick: &second_quick.bytes,
                 lexicon: &second_lexicon,
                 language_model: &second_language_model,
+                radical_hint: &second_quick.radical_hint,
             },
         );
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
@@ -349,6 +390,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         language_model_path,
         language_model_sha256: sha256_hex(&language_model_bytes),
         language_model: language_model_summary,
+        radical_hint_sha256: sha256_hex(&quick.radical_hint),
+        radical_hint_path,
         layout_path,
         corpora,
         personal,

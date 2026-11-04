@@ -1,6 +1,9 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
-use qim_core::{Engine, Key, Options, Session, Snapshot, UserModel};
+use qim_core::{
+    CangjieVersion, Engine, Key, Options, RadicalHintPack, RadicalHints, Scheme, Session, Snapshot,
+    UserModel,
+};
 use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
 
@@ -137,6 +140,9 @@ pub struct WebSnapshot {
     /// 還沒選定的輸入碼。
     #[wasm_bindgen(readonly)]
     pub unselected: String,
+    /// 還沒選定的輸入碼的字根，組字顯示它而不是輸入碼（brief §4.3）。
+    #[wasm_bindgen(readonly)]
+    pub radicals: String,
     /// 目前頁的候選。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<String>,
@@ -150,10 +156,60 @@ impl From<Snapshot> for WebSnapshot {
             handled: s.handled,
             selected: s.composition.selected_text(),
             unselected: s.composition.unselected_input().to_string(),
+            radicals: s.composition.radicals,
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
             commit: s.commit,
         }
     }
+}
+
+/// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根（plan §2.5）。JS 端叫 `RadicalHints`。
+#[wasm_bindgen(js_name = RadicalHints)]
+pub struct WebRadicalHints {
+    hints: RadicalHints,
+    /// 建立時的方案，換字根用。
+    scheme: Scheme,
+}
+
+#[wasm_bindgen(js_class = RadicalHints)]
+impl WebRadicalHints {
+    /// 由字根提示資料包的位元組建立；要是 `session` 的方案指名的那份。
+    #[wasm_bindgen(constructor)]
+    pub fn new(bytes: &[u8], session: &WebSession) -> Result<WebRadicalHints, JsError> {
+        let error = |e: qim_core::PackError| JsError::new(&e.to_string());
+        let scheme = session.engine.scheme().clone();
+        let pack = RadicalHintPack::from_bytes(bytes).map_err(error)?;
+        let hints = RadicalHints::for_scheme(pack, &scheme).map_err(error)?;
+        Ok(Self { hints, scheme })
+    }
+
+    /// 候選 `text` 每個字的提示；`version` 是 `cangjie5` 或 `cangjie3`。
+    pub fn hint(&self, text: &str, version: &str) -> Result<Vec<WebRadicalHint>, JsError> {
+        let version: CangjieVersion = version.parse().map_err(|e: String| JsError::new(&e))?;
+        Ok(self
+            .hints
+            .hint(&self.scheme, text, version)
+            .into_iter()
+            .map(|hint| WebRadicalHint {
+                text: hint.text.to_string(),
+                codes: hint.codes,
+                radicals: hint.radicals,
+            })
+            .collect())
+    }
+}
+
+/// 候選裡一個字的字根提示。JS 端叫 `RadicalHint`。
+#[wasm_bindgen(js_name = RadicalHint, getter_with_clone)]
+pub struct WebRadicalHint {
+    #[wasm_bindgen(readonly)]
+    pub text: String,
+    /// 倉頡碼，沒有時是空的。
+    #[wasm_bindgen(readonly)]
+    pub codes: Vec<String>,
+    /// 每個碼的字根，和 `codes` 一一對應。
+    #[wasm_bindgen(readonly)]
+    pub radicals: Vec<String>,
 }
 
 /// 觸控佈局：網頁 fetch 的佈局檔讀進 `qim-layout`，網頁只照 [`WebLayout::keys`] 畫、

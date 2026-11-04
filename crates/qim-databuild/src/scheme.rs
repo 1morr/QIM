@@ -27,6 +27,7 @@ struct SchemeFile {
 struct PacksTable {
     lexicon: Option<String>,
     language_model: Option<String>,
+    radical_hint: Option<String>,
 }
 
 /// 方案檔的 `[ranking]`：連打的打分參數（plan §2.3），每個方案自己調，所以必填。
@@ -88,6 +89,7 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
         packs: Packs {
             lexicon: file.packs.lexicon,
             language_model: file.packs.language_model,
+            radical_hint: file.packs.radical_hint,
         },
         ranking: Ranking {
             word_bonus: file.ranking.word_bonus,

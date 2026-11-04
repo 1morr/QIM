@@ -13,5 +13,5 @@ test("桌面預設不顯示觸控鍵盤，按「觸控鍵盤」打開", async ({
 	await toggle.click();
 	await expect(page.getByTestId("keyboard")).toBeVisible();
 	await page.getByTestId("key-a").click();
-	await expect(page.getByTestId("composition")).toHaveText("a");
+	await expect(page.getByTestId("composition")).toHaveText("日");
 });

@@ -10,7 +10,7 @@ test("打 a 首選是「日」，按空白上屏「日」", async ({ page }, tes
 
 	await text.focus();
 	await page.keyboard.type("a");
-	await expect(composition).toHaveText("a");
+	await expect(composition).toHaveText("日");
 	await expect(items.first()).toHaveText("1日");
 	await page.screenshot({ path: testInfo.outputPath("type-a.png") });
 

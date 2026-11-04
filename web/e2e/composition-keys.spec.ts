@@ -37,7 +37,7 @@ test("選了開頭一段再按 Enter，上屏選定的字與其餘的輸入碼",
 	const at = texts.indexOf("門口");
 	expect(at, `候選：${texts.join(" ")}`).not.toBe(-1);
 	await page.keyboard.press(String(at + 1));
-	await expect(composition).toHaveText("門口kbo");
+	await expect(composition).toHaveText("門口大月人");
 
 	await page.keyboard.press("Enter");
 	await expect(text).toHaveValue("門口kbo");
@@ -51,7 +51,7 @@ test("組字中按 z、←、→ 吃下不動作", async ({ page }, testInfo) =>
 	for (const key of ["z", "ArrowLeft", "ArrowRight", "ArrowLeft"]) {
 		await page.keyboard.press(key);
 		await expect(text, key).toHaveValue("");
-		await expect(composition, key).toHaveText("anr");
+		await expect(composition, key).toHaveText("日弓口");
 		await expect(items, key).toHaveText(before);
 	}
 	await page.screenshot({ path: testInfo.outputPath("swallowed.png") });
@@ -70,7 +70,7 @@ test("組字中按 Tab、Delete、↑、↓、Home、End 吃下不動作", async
 		await page.keyboard.press(key);
 		await expect(text, key).toBeFocused();
 		await expect(text, key).toHaveValue("日月");
-		await expect(composition, key).toHaveText("anr");
+		await expect(composition, key).toHaveText("日弓口");
 	}
 	await page.keyboard.type(" ");
 	await expect(text).toHaveValue("日門口月");

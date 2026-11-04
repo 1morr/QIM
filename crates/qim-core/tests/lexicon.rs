@@ -32,6 +32,7 @@ fn scheme(lexicon: Option<&str>) -> Scheme {
         packs: Packs {
             lexicon: lexicon.map(Into::into),
             language_model: None,
+            ..Packs::default()
         },
         ranking: Ranking::default(),
     }

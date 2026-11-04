@@ -40,6 +40,17 @@ fn every_key_of_the_alphabet_needs_exactly_one_radical() {
 }
 
 #[test]
+fn packs_name_the_radical_hint_pack() {
+    let named = MINIMAL.replace(
+        "[radicals]",
+        "[packs]\nradical_hint = \"t-hint\"\n\n[radicals]",
+    );
+    let s = scheme::parse(&named).unwrap();
+    assert_eq!(s.packs.radical_hint.as_deref(), Some("t-hint"));
+    assert_eq!(scheme::parse(MINIMAL).unwrap().packs.radical_hint, None);
+}
+
+#[test]
 fn unknown_field_is_an_error() {
     let typo = MINIMAL.replace("max_code_length", "max_code_len");
     assert!(scheme::parse(&typo).is_err());
