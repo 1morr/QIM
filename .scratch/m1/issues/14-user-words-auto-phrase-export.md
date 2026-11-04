@@ -81,3 +81,7 @@ Blocked by: 13
   - 先紅：`user-dict.spec.ts` 新增「匯入前在頁面上說明會覆蓋…」，紅在確認區塊不出現；原本的匯出匯入那條也紅，因為選了檔就直接匯入。
   - 做法：選了檔先用 `checkUserDict` 檢查格式。格式不對就直接報錯，不必確認。格式對就在頁面上寫出「匯入 X（n 筆）會覆蓋目前的 m 筆學習資料」，按「確定匯入」才取代，按「取消」不動。匯入欄下方另有一行常駐說明。
 
+- merge main（票 16、20、21、22）：
+  - 衝突在 `session.rs`。main 的 `select_at` 改成可改選任一分段，取 main 的版本後重新套上自動造詞。
+  - 造詞條件推廣成「這次之前已有選定的分段，或改選的是第 2 段以後」。用 `changing_a_later_segment_before_committing_also_learns_an_auto_phrase` 驗證，條件改回舊的時它紅。plan §2.4 同步改寫。
+  - 其餘衝突（`lib.rs`、`qim-wasm`、`main.ts`、`learning.rs`）都是兩邊各加一段，兩邊保留。

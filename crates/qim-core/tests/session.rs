@@ -115,7 +115,7 @@ fn a_key_with_no_radical_in_the_scheme_shows_as_its_letter() {
     let mut ime = Ime::new();
     ime.press(Key::Letter('a'));
     let snapshot = ime.press(Key::Letter('c'));
-    assert_eq!(snapshot.composition.radicals, "日c");
+    assert_eq!(snapshot.composition.unselected_radicals(), "日c");
 }
 
 #[test]

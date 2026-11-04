@@ -1,6 +1,6 @@
 # 20: 觸控鍵盤功能
 
-Status: ready-for-agent
+Status: done
 Blocked by: 19
 讀: plan §2.6、§3.1、§5.3；brief §4.4、§4.6；spec〈共同規則〉
 
@@ -23,9 +23,67 @@ Blocked by: 19
 
 ## 驗收
 
-- [ ] Playwright（行動裝置 viewport）：點按鍵打出「門口」；長按字母鍵讀回彈出的英文字母，選了上屏該字母；長按第一排讀回含數字。
-- [ ] Playwright：切到符號頁打兩個符號，讀回仍在符號頁；按「ABC」回字母頁；切到自訂頁面並輸入。
-- [ ] Playwright：轉成橫向 viewport 後仍打得出「門口」；切深色讀回按鍵顏色是深色版本。
-- [ ] 內建佈局通過嚴格檢查（含直向與橫向）。
+- [x] Playwright（行動裝置 viewport）：點按鍵打出「門口」；長按字母鍵讀回彈出的英文字母，選了上屏該字母；長按第一排讀回含數字。
+- [x] Playwright：切到符號頁打兩個符號，讀回仍在符號頁；按「ABC」回字母頁；切到自訂頁面並輸入。
+- [x] Playwright：轉成橫向 viewport 後仍打得出「門口」；切深色讀回按鍵顏色是深色版本。
+- [x] 內建佈局通過嚴格檢查（含直向與橫向）。
 
 ## Comments
+
+- 2026-11-04 預設佈局（`crates/qim-databuild/src/gboard.rs`）：直向（畫布 390 × 216）與橫向（844 × 160，鍵變寬、排變矮）用同一份排列，只換畫布、排高與縫。三頁：字母（最下排 `?123`、`，`、空白、`。`、Enter）、符號（數字、常用符號、中文標點；左下「ABC」，左邊「常用」）、常用（自訂頁面的示範：10 個表情與 7 句粵語常用語，示範 `switchPage` 與多字的 `text`）。切頁鍵與刪除、Enter 同一個深一階的底色。
+- 2026-11-04 長按：字母鍵長按是 `text`（英文字母直接上屏、不進組字，plan §2.6 例子就是這樣寫），第一排另含數字，字母在前（角標是字母，預設跟著角標）。網頁按住 400 ms 出清單、橫向滑動換選項、放開做選到的；靠左半的鍵清單往右展開、右半往左，免得超出畫面。
+- 2026-11-04 組字中按文字鍵（票 19 留下的）：核心加 `Session::text`，和票 10 的標點相同先上屏整個組字再接文字，文字照原樣不轉全形；沒組字時核心直接上屏，網頁不再自己插入文字。沒用 `Key::Text(String)`：`Key` 是 `Copy`，各處以值比對，加帶 `String` 的變體要動到所有用法；M4 的 `Weighted` 屆時再一起考慮。plan §2.1、§2.6 已補。
+- 2026-11-04 切頁：狀態在綁定的 `WebLayout`（`tap` / `longPress` 收 `&mut Layout`），核心收到 `Key::Other`，組字中吃下、組字留著，所以「組字中切符號頁再按符號」= 先上屏組字再接符號。`nextKeyboard` 網頁沒有對應，也當 `Key::Other`；`toggleAscii` 轉 `Key::ToggleAscii`（票 23 接）。
+- 2026-11-04 深色與轉向（票 19 留下的）：綁定把淺色與深色都給網頁，網頁用 CSS `light-dark()`，`color-scheme` 跟 `prefers-color-scheme`，「深色」開關在根元素寫 `data-theme` 蓋過；鍵盤底色、預覽與長按清單也用 `light-dark()`。轉向時 `Layout.select` 重選佈局版本、有同 id 的頁就留在那頁；鍵盤寬度取 `min(100%, 45vh × 畫布寬高比)`，`body` 的 `padding-bottom` 改由 `ResizeObserver` 量鍵盤實際高度（不再寫死 390 × 216）。
+- 2026-11-04 動作改在放開時做（原本按下就做）：要分辨點一下與長按；預覽在按下時顯示。快打時前一指還沒放開就按下一鍵，前一鍵先當點一下做掉（Playwright 雙向驗過：改回「不理第二指」時紅，打出 `ar` 而非 `anr`）；長按清單開著時不理新的手指。
+- 2026-11-04 Playwright 寫測試時抓到兩個釋放順序的錯：沒組字時按切頁鍵，重畫先釋放了舊頁的鍵、`hostDefault` 才讀它（`null pointer passed to rust`）；組字中按切頁鍵，`refresh` 拿新頁的鍵對舊頁的元素。`touch-features.spec.ts` 每個測試結尾檢查沒有 page error，兩個都先紅再修。
+- 2026-11-04 亂按：Pixel 7 viewport，暫時的種子腳本（沒進 repo）4 個種子 × 150 步，隨機點鍵、長按並滑動、兩指交疊、按住時轉向、切深色、關開觸控鍵盤，三頁都走到；沒有 page error 或 console 錯誤，每次放開後預覽與長按清單都收起。第一版的亂數產生器（模 2³¹ 的 LCG）低位元太差，永遠點不到切頁鍵，換成 mulberry32 後才真的走到三頁。
+- 2026-11-04 驗證：`cargo xtask check` 通過（e2e `42 passed`）。`cargo xtask bench --check` exit 0：資料包 quick `f9499e401df5`、quick-lexicon `fe79d8a13d48`、zh-hant-bigram `088a93199bd2`，各集合答錯數、修正次數都和 baseline 相同，沒有翻盤，固定題 11/11。`Session::text` 是新方法，基準走的 `handle` 沒變，前後一樣是預期的結果。每鍵 p95：原生 50.46 µs、WebAssembly 59.79 µs，比票 19 的 18.92 / 23.92 µs 高。這次沒動 `handle`，並行的 worktree 同時在跑建置，多半是機器負載；只報不擋。截圖：`.scratch/m1/evidence/20-*.png`（長按 a、長按 q 選 1、符號頁、常用頁、放大預覽、深色、橫向）。
+- 2026-11-04 code-review（`25834f0` 起）已處理：
+  - 轉向留在同頁的規則移到 `qim-layout`（`LayoutVariant::page_index_or_initial`），綁定不放這條規則。
+  - 「要不要放大預覽」移到 `qim-layout`（`Key::shows_preview`），也照 `composing` 判斷。
+  - 核心沒吃下長按選的動作時，網頁原本照鍵的 `tap` 做。改成綁定在 `Snapshot` 帶上做了的 `action` 與 `letter`，`LayoutKey` 拿掉 `tap` / `letter`。補了自訂佈局「長按選刪除」的 Playwright，先紅（打出 `！！a`）再修。
+  - `toggleAscii` 改回 `Key::Other`，票 23 再接、補測試。
+  - 改名：`left` / `top` 改成 `ofWidth` / `ofHeight`，`after` 改成 `record_composing`。重畫判斷收成 `followPage`。
+  - `touch.ts` 開頭的註解改正，寫明目前頁記在綁定。
+  - 深色測試加 Enter 的淺色斷言，分得出佈局顏色和 CSS 預設底色。
+- 2026-11-04 code-review 沒處理：
+  - 綁定裡 `Action` 轉 `Key`：`qim-layout` 不能依賴 `qim-core`（plan §1.3），只能放在綁定。M2 的 `qim-ffi` 要用時，再決定要不要抽成共用。
+  - 淺深兩組顏色攤平成四個欄位：wasm-bindgen 的 getter 不好回傳巢狀物件，網頁也只把它們接成 `light-dark()`。
+  - 放開才做動作、兩指交疊：票沒寫，但分辨點一下與長按一定會帶出這兩點。已寫進 plan §2.6，平台殼照做。
+- 2026-11-04 合併 main（票 13，`0736054`）：沒有文字衝突，但有一處語意衝突：票 13 讓 `commit_all_then` 多收 `&mut UserModel`（標點先上屏組字時照樣學），`Session::text` 編不過。改成把 `user` 傳下去，觸控文字鍵和標點一樣學。`tests/learning.rs` 補「文字鍵與標點學到的 `UserModel` 相同且不是空的」，雙向驗過：改成學進丟掉的 `UserModel` 時會紅。合併後 `cargo xtask data` 通過（資料包 sha256 不變：quick `f9499e401df5`、quick-lexicon `fe79d8a13d48`、zh-hant-bigram `088a93199bd2`）；`bench --check` exit 0，各集合沒有翻盤，固定題 11/11；`cargo xtask check` 通過（e2e `44 passed`）。合併後觸控亂按：4 個種子 × 150 步，加切換無痕，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 22，`391a30a`）：三個檔衝突。`docs/development.md` 的資料包說明取 main（多了字根提示資料包），預設佈局取本票。`web/index.html` 用 main 的 `.settings`，放觸控鍵盤、深色、字根提示三個控制項；本票的 `.toggles` 樣式改名成 `.settings`。`web/src/main.ts` 兩邊的常數都留，import 拿掉已經沒人用的 `LayoutKey`。語意衝突：票 22 把組字改成顯示字根，本票 `touch-features.spec.ts` 的四個組字斷言照票 22 的寫法改成字根（`手`、`日弓口`、`弓`）。合併後 `cargo xtask data --verify` 通過（`verify 通過`，25 項全過；資料包格式 5，sha256：quick `0fd82b8adae0`、quick-lexicon `f17de0b58ac6`、zh-hant-bigram `baf9cc30a7b6`、cangjie-hint `9e755488f431`）；`bench --check` exit 0，各集合答錯與修正數都和 baseline 相同、沒有翻盤，固定題 11/11；`cargo xtask check` 通過（e2e `51 passed`）。觸控亂按：4 個種子 × 150 步，加切換無痕，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 12，`82d476e`）：四個檔衝突。
+  - `docs/development.md`：資料包與語料說明取 main（語料權重），預設佈局取本票。
+  - `web/style.css`：兩邊的樣式都留。
+  - `web/src/main.ts`：回報與深色、轉向兩邊都留。
+  - `web/src/touch.ts`：用本票的版本。票 12 讓 `onSnapshot` 多收按的鍵，用 `key.tap === "space"` 判斷是不是選字（回報用）；本票的 `LayoutKey` 已拿掉 `tap`，綁定改在 `Snapshot` 帶實際做的 `action`，所以改成 `snapshot.action === "space"`，`onSnapshot` 仍只收 `Snapshot`。這樣長按與組字中的動作也照實際做的算。
+  - 自動合併時，票 12 的 `onSnapshot(snapshot, key)` 落進本票的 `finish`，那裡沒有 `key`，改回 `onSnapshot(snapshot)`。
+  - 補 Playwright「觸控空白鍵選字可以回報，組字中點符號上屏不算」：改成恆為 `false`、恆為 `true` 時各自紅。
+  - 合併後的檢查：
+    - `cargo xtask data --verify`：`verify 通過`，25 項全過。sha256：quick `ae3bc207ce7a`、quick-lexicon `95e8f43e91cb`、zh-hant-bigram `d5c20a5a307e`、cangjie-hint `9e755488f431`。
+    - `bench --check`：exit 0，公開語料四集的答錯與修正數都和 baseline 相同、沒有翻盤，固定題 15/15。個人集答錯 1106 → 1096，由錯變對 40 題、由對變錯 30 題，都來自票 12 的調參；個人集的 baseline 只在本機，合併時沒更新，本票沒動打分。
+    - `cargo xtask check`：通過（e2e `54 passed`）。
+  - 觸控亂按：4 個種子 × 150 步，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 21 等，`8bb2231`）：兩個檔衝突。
+  - `crates/qim-wasm/src/lib.rs`：兩邊各加了「記下還在不在組字」的 helper（本票 `record_composing`、票 21 `track_composing`）。留票 21 的：它看 `composition.input`，有分段時比較準；本票的 `perform` 改呼叫它。票 21 的 `select`、`focus_segment` 與本票的 `tap`、`longPress`、`perform` 都留，票 21 那份舊的 `tap`（文字、切頁都當 `Key::Other`）拿掉。
+  - `web/src/main.ts`：import 留 `pageSize`，拿掉沒人用的 `LayoutKey`。
+  - `touch.ts` 票 21 沒動。點候選、點分段在候選列與組字上，長按與預覽在 `#keyboard` 裡，選字後經 `apply` → `refresh` 重畫鍵上的標籤。
+  - 補 Playwright「點候選選字之後，長按與放大預覽照常」。
+  - 合併後的檢查：
+    - `cargo xtask data`：通過，資料包 sha256 和上次合併相同：quick `ae3bc207ce7a`、quick-lexicon `95e8f43e91cb`、zh-hant-bigram `d5c20a5a307e`。
+    - `bench --check`：exit 0，公開語料四集沒有翻盤，固定題 15/15。個人集的數字和上次合併相同。
+    - `cargo xtask check`：通過（e2e `60 passed`）。
+  - 觸控亂按兩輪，各 4 個種子 × 150 步，加了點候選與點分段，第二輪加重這兩項：共點候選 55 次、點分段 44 次，三頁都走到，沒有錯誤。
+- 2026-11-04 合併 main（票 16，`3ce5440`）：三個檔衝突。
+  - `crates/qim-wasm/src/lib.rs`：`WebSnapshot` 兩邊的欄位都留（本票 `action`、`letter`，票 16 `commitOriginal`）。
+  - `docs/development.md`：資料包說明取 main，預設佈局取本票。
+  - `docs/plan.md`：§2.1 本票的 `text` 與票 16 的簡體模式兩段都留。
+  - 語意衝突：票 16 把 `snapshot` 改成收 `engine` 與 `Commit`（帶原文），`Session::text` 沒組字的那條路編不過。改成 `Commit::plain`，和標點相同，修正放在合併 commit 裡，合併 commit 本身就編得過。文字鍵照原樣不轉簡體（plan §2.1「文字照原樣」）：組字照簡體上屏，原文是繁體。
+  - 補 `tests/simplified.rs` 一例（組字中按文字鍵、沒組字時按文字鍵的上屏與原文），補 Playwright「簡體模式下觸控打字」。
+  - progress.md 本票那一列的下一步照協調者要求改成票 23。
+  - 合併後的檢查：
+    - `cargo xtask data`：通過（簡繁資料包 sha256 `1c5ab2aa21e6`，其餘同上次合併）。
+    - `bench --check`：exit 0，公開語料四集沒有翻盤，固定題 15/15，個人集的數字同上次合併。
+    - `cargo xtask check`：通過（e2e `66 passed`）。
+  - 觸控亂按：4 個種子 × 150 步，加點候選、點分段、切無痕與簡體（簡體 12 次、無痕 11 次、點候選 24 次、點分段 36 次），三頁都走到，沒有錯誤。

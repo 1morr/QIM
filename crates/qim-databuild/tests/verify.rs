@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CangjieCodes, CharModel, CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Pack, RadicalHintPack, RadicalHints, Word,
+    CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, LanguageModel,
+    LanguageModelPack, Lexicon, LexiconPack, Pack, RadicalHintPack, RadicalHints, Simplifier,
+    SimplifierPack, Word,
 };
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
@@ -26,7 +27,7 @@ const SCHEME: &str = r#"
 id = "t"
 name = "測試"
 version = "1"
-alphabet = "ab"
+alphabet = "abnr"
 max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
@@ -35,6 +36,8 @@ radical_hint = "t-hint"
 [radicals]
 a = "日"
 b = "月"
+n = "弓"
+r = "口"
 [ranking]
 word_bonus = 0.0
 segment_penalty = 0.0
@@ -91,6 +94,18 @@ fn language_model_from(corpus: &str) -> LanguageModelPack {
     }
 }
 
+/// 只轉「門」的簡繁資料包。
+fn simplifier() -> SimplifierPack {
+    SimplifierPack {
+        id: "opencc-hk2s".into(),
+        simplifier: Simplifier::new(
+            vec![],
+            ConversionTable::new([]),
+            vec![vec![ConversionTable::new([("門".into(), "门".into())])]],
+        ),
+    }
+}
+
 /// 由同一份 libcangjie 的列建的字根提示。
 fn radical_hint() -> RadicalHintPack {
     radical_hint_from(radical_hint::hints(&rows()))
@@ -140,11 +155,13 @@ fn report(
     let lexicon = lexicon.to_bytes().unwrap();
     let language_model = language_model.to_bytes().unwrap();
     let radical_hint = radical_hint.to_bytes().unwrap();
+    let simplifier = simplifier().to_bytes().unwrap();
     let bytes = PackBytes {
         quick: &quick,
         lexicon: &lexicon,
         language_model: &language_model,
         radical_hint: &radical_hint,
+        simplifier: &simplifier,
     };
     verify::run(&rows(), bytes, bytes)
 }
@@ -227,6 +244,7 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::MenKouForAnr,
             CheckId::RadicalHintCoversCharacters,
             CheckId::RadicalHintByVersion,
+            CheckId::SimplifiedMenKou,
             CheckId::LanguageModelSize,
             CheckId::Deterministic,
         ]
@@ -247,11 +265,13 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     let radical_hint = radical_hint_from(radical_hint::hints(&rows))
         .to_bytes()
         .unwrap();
+    let simplifier = simplifier().to_bytes().unwrap();
     let both = PackBytes {
         quick: &bytes,
         lexicon: &lexicon,
         language_model: &language_model,
         radical_hint: &radical_hint,
+        simplifier: &simplifier,
     };
     let report = verify::run(&rows, both, both);
     assert_eq!(failed(&report), []);
@@ -354,6 +374,29 @@ fn word_code_not_made_of_its_characters_quick_codes_fails() {
     }
 }
 
+/// 簡繁資料包沒轉「門」：簡體模式的候選還是繁體。
+#[test]
+fn a_simplifier_pack_that_does_not_convert_fails_the_spot_check() {
+    let quick = pack().to_bytes().unwrap();
+    let lexicon = lexicon().to_bytes().unwrap();
+    let model = language_model().to_bytes().unwrap();
+    let mut identity = simplifier();
+    identity.simplifier = Simplifier::new(vec![], ConversionTable::new([]), vec![]);
+    let identity = identity.to_bytes().unwrap();
+    let hint = radical_hint().to_bytes().unwrap();
+    let bytes = PackBytes {
+        quick: &quick,
+        lexicon: &lexicon,
+        language_model: &model,
+        radical_hint: &hint,
+        simplifier: &identity,
+    };
+    assert_eq!(
+        failed(&verify::run(&rows(), bytes, bytes)),
+        [CheckId::SimplifiedMenKou]
+    );
+}
+
 #[test]
 fn missing_men_kou_for_anr_fails() {
     let lexicon = edited_lexicon(|w| {
@@ -372,16 +415,18 @@ fn different_bytes_from_the_second_build_fail_determinism() {
         lexicon().to_bytes().unwrap(),
         language_model().to_bytes().unwrap(),
         radical_hint().to_bytes().unwrap(),
+        simplifier().to_bytes().unwrap(),
     ];
-    fn bytes(b: &[Vec<u8>; 4]) -> PackBytes<'_> {
+    fn bytes(b: &[Vec<u8>; 5]) -> PackBytes<'_> {
         PackBytes {
             quick: &b[0],
             lexicon: &b[1],
             language_model: &b[2],
             radical_hint: &b[3],
+            simplifier: &b[4],
         }
     }
-    for changed in 0..4 {
+    for changed in 0..5 {
         let mut second = first.clone();
         *second[changed].last_mut().unwrap() ^= 1;
         let report = verify::run(&rows(), bytes(&first), bytes(&second));
@@ -405,21 +450,72 @@ fn undecodable_pack_fails_without_panicking() {
     let mut other_hint = radical_hint();
     other_hint.id = "other".into();
     let other_hint = other_hint.to_bytes().unwrap();
-    for (quick, lexicon, language_model, radical_hint) in [
-        (&b"garbage"[..], &lexicon[..], &model[..], &hint[..]),
-        (&quick[..], &b"garbage"[..], &model[..], &hint[..]),
-        (&quick[..], &lexicon[..], &b"garbage"[..], &hint[..]),
-        (&quick[..], &lexicon[..], &model[..], &b"garbage"[..]),
+    let simplifier = simplifier().to_bytes().unwrap();
+    for (quick, lexicon, language_model, radical_hint, simplifier) in [
+        (
+            &b"garbage"[..],
+            &lexicon[..],
+            &model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &b"garbage"[..],
+            &model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &b"garbage"[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &model[..],
+            &b"garbage"[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &model[..],
+            &hint[..],
+            &b"garbage"[..],
+        ),
         // 都解得開，但詞庫、語言模型或字根提示不是方案指名的那份。
-        (&quick[..], &quick[..], &model[..], &hint[..]),
-        (&quick[..], &lexicon[..], &other_model[..], &hint[..]),
-        (&quick[..], &lexicon[..], &model[..], &other_hint[..]),
+        (
+            &quick[..],
+            &quick[..],
+            &model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &other_model[..],
+            &hint[..],
+            &simplifier[..],
+        ),
+        (
+            &quick[..],
+            &lexicon[..],
+            &model[..],
+            &other_hint[..],
+            &simplifier[..],
+        ),
     ] {
         let bytes = PackBytes {
             quick,
             lexicon,
             language_model,
             radical_hint,
+            simplifier,
         };
         let report = verify::run(&rows(), bytes, bytes);
         assert_eq!(failed(&report), [CheckId::Decodes]);

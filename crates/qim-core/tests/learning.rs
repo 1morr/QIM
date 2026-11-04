@@ -472,3 +472,49 @@ fn the_top_committed_once_stays_the_top() {
     ime.choose(&mut user, "ab", "甲");
     assert_eq!(ime.top_of(&mut user, "ab"), "甲");
 }
+
+/// 觸控鍵盤的文字鍵（`Session::text`，M1 票 20）組字中和標點相同：先上屏組字，照樣學。
+#[test]
+fn a_touch_text_key_learns_the_composition_like_punctuation() {
+    let mut by_punct = UserModel::default();
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code(&mut by_punct, "anr");
+    let punct = ime.press(&mut by_punct, Key::Punct(','));
+
+    let mut by_text = UserModel::default();
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code(&mut by_text, "anr");
+    let text = ime.session.text(&ime.engine, &mut by_text, "，");
+
+    assert_eq!(text.commit, punct.commit);
+    assert_ne!(by_text, UserModel::default());
+    assert_eq!(by_text, by_punct);
+}
+
+/// 連打後移到第 2 段改選再上屏（M1 票 21 的組字中修改）也是分兩次以上選定：前面的分段照
+/// 顯示的字固定，整串學成自動造詞。
+#[test]
+fn changing_a_later_segment_before_committing_also_learns_an_auto_phrase() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰"), ("b", "月肉")],
+        words: vec![],
+        chars: vec![('日', 1000), ('曰', 500), ('月', 100), ('肉', 0)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    ime.type_code(&mut user, "ab");
+    let focused = ime.session.focus_segment(&ime.engine, &mut user, 1);
+    let at = texts(&focused).iter().position(|t| t == "肉").unwrap();
+    let committed = ime.press(&mut user, Key::Digit(u8::try_from(at + 1).unwrap()));
+    assert_eq!(committed.commit.as_deref(), Some("日肉"));
+
+    assert!(
+        user.export()
+            .contains("quick\t日肉\tab\t1\t1\t1\t1\tauto\t\n"),
+        "{}",
+        user.export()
+    );
+    let shown = ime.type_code(&mut user, "ab");
+    assert_eq!(texts(&shown)[1], "日肉");
+}
