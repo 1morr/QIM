@@ -101,6 +101,8 @@ let page = 0;
 const shown = {
 	composing: false,
 	candidates: [] as string[],
+	/** 候選的繁體原文，字根提示用：簡體模式下要提示的是打得出的繁體字。 */
+	originals: [] as string[],
 	/** 候選旁顯示字根提示；組字結束就關掉（brief §4.3）。 */
 	hints: false,
 };
@@ -151,6 +153,7 @@ function render(snapshot: Snapshot): void {
 	}
 	page = snapshot.page;
 	shown.candidates = snapshot.candidates;
+	shown.originals = snapshot.candidatesOriginal;
 	if (!shown.composing) {
 		shown.hints = false;
 	}
@@ -166,7 +169,7 @@ function renderCandidates(): void {
 			index.className = "index";
 			index.textContent = String(i + 1);
 			item.append(index, candidate);
-			const text = shown.hints ? hintText(candidate) : "";
+			const text = shown.hints ? hintText(shown.originals[i] ?? candidate) : "";
 			if (text !== "") {
 				const hint = document.createElement("span");
 				hint.className = "radical-hint";
@@ -218,13 +221,16 @@ function applyHandled(snapshot: Snapshot, chosen: boolean): void {
 	}
 }
 
-/** `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。 */
+/**
+ * `Snapshot` 是 WebAssembly 的物件、用完就釋放，回報只留要的欄位。
+ * 候選與上屏取繁體原文：`fixed.tsv` 的期望首選是繁體，簡體模式下也一樣。
+ */
 function readReported(snapshot: Snapshot) {
 	return {
 		input: snapshot.input,
 		selected: snapshot.selected,
-		candidates: snapshot.candidates,
-		commit: snapshot.commit,
+		candidates: snapshot.candidatesOriginal,
+		commit: snapshot.commitOriginal,
 	};
 }
 

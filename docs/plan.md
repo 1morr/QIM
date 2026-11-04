@@ -139,11 +139,12 @@ pub struct Options { pub simplified: bool, pub incognito: bool, pub english_cand
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
-    pub composition: Composition,   // 輸入碼、各分段（碼、字根、字、是否已選定）、目前分段
-    pub candidates: Vec<Candidate>, // 目前頁
+    pub composition: Composition,   // 輸入碼、各分段（碼、字根、字與原文、是否已選定）、目前分段
+    pub candidates: Vec<Candidate>, // 目前頁；每個候選是字（`text`）與原文（`original`）
     pub page: usize,
     pub has_more: bool,
     pub commit: Option<String>,     // 這次事件要上屏的文字
+    pub commit_original: Option<String>, // `commit` 的原文
     pub ascii: bool,
     pub generation: u64,            // 每次候選變動 +1，非同步重排用
 }
@@ -160,7 +161,8 @@ impl Session {
 ```
 
 - `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
-- 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉，轉換的單位是一個候選或一個分段，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
+- 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
+  - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 上下文（M3）：`Session::set_context(before: &str)`，n-gram 與個人 bigram 用前文當起點。
 - 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的碼的字詞（和單打那個碼相同）；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。

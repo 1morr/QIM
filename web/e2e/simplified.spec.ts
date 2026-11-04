@@ -62,3 +62,30 @@ test("簡體模式下選定開頭一段，組字顯示簡體、上屏也是簡�
 	await expect(text).toHaveValue(/^门口./);
 	await expect(text).not.toHaveValue(/[門們]/);
 });
+
+// 回報與字根提示用繁體原文（協調者決定）：`fixed.tsv` 的期望首選是繁體，字根提示要對應打得出的字。
+test("簡體模式選「门口」後按回報，存下的是繁體「門口」", async ({ page }) => {
+	const { text, simplified, items } = await ready(page);
+	const report = page.getByRole("button", { name: "回報", exact: true });
+	const reports = page.getByRole("textbox", { name: /回報的固定題/ });
+	await simplified.check();
+	await text.focus();
+	await page.keyboard.type("anr");
+	await expect(items.first()).toHaveText("1门口");
+	await page.keyboard.press("1");
+	await expect(text).toHaveValue("门口");
+
+	await report.click();
+	await expect(reports).toHaveValue("anr\t門口\t網頁回報（首選 門口）");
+});
+
+test("簡體模式按 Tab，字根提示對應繁體「門口」", async ({ page }) => {
+	const { text, simplified, items } = await ready(page);
+	await simplified.check();
+	await text.focus();
+	await page.keyboard.type("anr");
+	await expect(items.first()).toHaveText("1门口");
+	await page.keyboard.press("Tab");
+	// 「門」的五代是 an，不是「门」的 lis。
+	await expect(page.getByTestId("hint-1")).toHaveText("日弓(an) 口(r)");
+});

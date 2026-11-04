@@ -244,3 +244,35 @@ fn a_key_after_switching_without_refresh_uses_the_new_option() {
     ime.session.set_options(Options::default());
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
 }
+
+/// 快照的候選、組字與上屏都另帶繁體原文（字根提示與回報用）。
+#[test]
+fn snapshots_carry_the_traditional_original() {
+    let mut ime = Ime::simplified();
+    let shown = ime.type_code("anr");
+    assert_eq!(
+        (
+            shown.candidates[0].text.as_str(),
+            shown.candidates[0].original.as_str()
+        ),
+        ("门口", "門口")
+    );
+    let segment = &shown.composition.segments[0];
+    assert_eq!(
+        (segment.text.as_str(), segment.original.as_str()),
+        ("门口", "門口")
+    );
+    let committed = ime.press(Key::Space);
+    assert_eq!(committed.commit.as_deref(), Some("门口"));
+    assert_eq!(committed.commit_original.as_deref(), Some("門口"));
+}
+
+/// 繁體模式的原文就是顯示的字。
+#[test]
+fn in_traditional_mode_the_original_is_the_text() {
+    let mut ime = Ime::new(engine().with_simplifier(simplifier()), false);
+    let shown = ime.type_code("anr");
+    assert_eq!(shown.candidates[0].original, shown.candidates[0].text);
+    let committed = ime.press(Key::Punct(','));
+    assert_eq!(committed.commit, committed.commit_original);
+}

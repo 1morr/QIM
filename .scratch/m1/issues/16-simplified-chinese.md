@@ -87,3 +87,9 @@ Blocked by: 13
   - 未處理，交協調者：簡體模式下按「回報」，期望首選記的是上屏的簡體字（例如「门口」），`fixed.tsv` 要繁體，這行會讓 `bench --check` 紅。要改得讓快照帶繁體原文，或簡體模式下停用回報。
   - 新參數下簡體 `anr` 首選仍是「门口」，`simplified.spec.ts` 照過。
   - merge 後 `data --verify`、`bench --check`（固定題 15/15，公開集合與 baseline 相同、沒有翻盤）、`check`（e2e 42 個）都通過。
+- 協調者決定「回報」與字根提示用繁體原文（簡體模式不停用回報），同時 merge main（票 21）：
+  - 票 21 把 `session.rs` 改成以目前分段為中心，衝突大。改以 main 的版本為底，重新套上簡體模式。先 merge 再改原文欄位，免得同一段程式寫兩次、在新程式上再解一次衝突。
+  - 票 21 選了多段候選後各段分開固定，所以轉換單位由「一個候選」改成「一個分段」：候選列也各段分開轉換再接起來，看到的仍是上屏的（plan §2.1、progress 偏差）。
+  - `Candidate`、`Segment` 加 `original`，`Snapshot` 加 `commit_original`。網頁綁定加 `candidatesOriginal`、`commitOriginal`，「回報」與字根提示改用它們。
+  - 先紅：`simplified.spec.ts` 新加兩條。回報那條紅在 `Received: "anr\t门口\t網頁回報（首選 门口）"`，字根提示那條紅在 `Received: "中戈尸(lis) 口(r)"`。改網頁後轉綠。
+  - 核心的原文欄位在 merge 重寫 `session.rs` 時先做了，`snapshots_carry_the_traditional_original` 是補上的，沒有先紅。

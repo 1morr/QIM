@@ -179,14 +179,20 @@ pub struct WebSnapshot {
     /// 目前分段在 `segments` 的位置；等於 `segments.length` 時候選列整串（沒有目前分段）。
     #[wasm_bindgen(readonly)]
     pub focus: usize,
-    /// 目前頁的候選。
+    /// 目前頁的候選，經過後處理（簡體模式是簡體）。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<String>,
+    /// 目前頁的候選的繁體原文，和 `candidates` 一一對應；字根提示與「回報」用。
+    #[wasm_bindgen(readonly, js_name = candidatesOriginal)]
+    pub candidates_original: Vec<String>,
     /// 目前頁，從 0 起。
     #[wasm_bindgen(readonly)]
     pub page: usize,
     #[wasm_bindgen(readonly)]
     pub commit: Option<String>,
+    /// `commit` 的繁體原文；「回報」用。
+    #[wasm_bindgen(readonly, js_name = commitOriginal)]
+    pub commit_original: Option<String>,
 }
 
 impl From<Snapshot> for WebSnapshot {
@@ -207,9 +213,11 @@ impl From<Snapshot> for WebSnapshot {
                     selected: segment.selected,
                 })
                 .collect(),
+            candidates_original: s.candidates.iter().map(|c| c.original.clone()).collect(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
             page: s.page,
             commit: s.commit,
+            commit_original: s.commit_original,
         }
     }
 }
