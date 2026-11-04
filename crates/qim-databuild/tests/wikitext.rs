@@ -109,6 +109,8 @@ fn language_conversion_keeps_plain_text_and_the_traditional_variant() {
         "甲記憶體儲乙"
     );
     assert_eq!(text("甲-{zh-cn:网络;zh-sg:网路}-乙"), "甲网络乙");
+    // 文字剛好含 zh、但不是規則時照留。
+    assert_eq!(text("甲-{zhang}-乙"), "甲zhang乙");
     // 單向規則 `原文=>變體:文字`。
     assert_eq!(text("甲-{巴士=>zh-hant:公車;}-乙"), "甲公車乙");
 }

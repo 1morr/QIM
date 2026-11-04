@@ -48,7 +48,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 `cargo xtask data` 用 release 編 `qim-databuild` 並在 repo 根目錄執行，步驟見 plan §4：
 
 - 來源列在 `data/sources.toml`：每個來源釘 `version`（git 來源填 commit，其他填上游版本號）與每個檔的 sha256。下載到 `<快取>/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網，下載是邊收邊寫檔，不整份讀進記憶體。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 version、url 與 sha256，快取路徑跟著換。
-- `<快取>` 在 repo 外，所有 worktree 共用，新 worktree 不必重下約 500 MB 的來源：環境變數 `QIM_CACHE_DIR` 有設就用它，否則是平台的使用者快取目錄下的 `qim/`（macOS `~/Library/Caches/qim`、Linux `$XDG_CACHE_HOME/qim` 或 `~/.cache/qim`、Windows `%LOCALAPPDATA%\qim`）。路徑含釘住的 sha256，不同 worktree 釘不同版本也不會互相蓋掉。
+- `<快取>` 在 repo 外，所有 worktree 共用，新 worktree 不必重下約 360 MB 的來源：環境變數 `QIM_CACHE_DIR` 有設就用它，否則是平台的使用者快取目錄下的 `qim/`（macOS `~/Library/Caches/qim`、Linux `$XDG_CACHE_HOME/qim` 或 `~/.cache/qim`、Windows `%LOCALAPPDATA%\qim`）。路徑含釘住的 sha256，不同 worktree 釘不同版本也不會互相蓋掉。下載中被中斷時會留下 `<檔名>.part<行程 id>`，可以直接刪。
 - 進資料包的來源要寫授權，二選一，都寫或都不寫時建置失敗：
   - `license_file` 加 `license_statement`：照抄上游檔裡的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`（libcangjie）。
   - `license_text`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 的 `kGradeLevel` 進速成資料包，用 `data/licenses/Unicode-3.0.txt`）。

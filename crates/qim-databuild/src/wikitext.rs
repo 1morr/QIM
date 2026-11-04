@@ -163,10 +163,7 @@ fn conversion_text(inner: &str) -> Option<&str> {
     if flags.contains(['H', 'T', '-']) {
         return None;
     }
-    if !body.contains("zh") {
-        return Some(body);
-    }
-    // 每條規則 `變體:文字`，單向規則 `原文=>變體:文字`。
+    // 每條規則 `變體:文字`，單向規則 `原文=>變體:文字`；一條都沒有就是純文字。
     let rules: Vec<(&str, &str)> = body
         .split(';')
         .filter_map(|rule| {
@@ -174,7 +171,11 @@ fn conversion_text(inner: &str) -> Option<&str> {
             let (variant, text) = rule.split_once(':')?;
             Some((variant.trim(), text.trim()))
         })
+        .filter(|(variant, _)| variant.starts_with("zh"))
         .collect();
+    if rules.is_empty() {
+        return Some(body);
+    }
     VARIANTS
         .iter()
         .find_map(|v| rules.iter().find(|(variant, _)| variant == v))

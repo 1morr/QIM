@@ -1,4 +1,4 @@
-//! `data/sources.toml` 與下載快取（`.cache/sources/`）。
+//! `data/sources.toml` 與下載快取（repo 外、各 worktree 共用，見 [`cache_dir`]）。
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -176,37 +176,44 @@ pub fn cached(
 /// 下載到 `partial`，回傳內容的 sha256。
 fn download(partial: &Path, file: &SourceFile, fetch: &dyn Fetch) -> Result<String, Error> {
     let out = File::create(partial).map_err(Error::io(partial))?;
-    let mut out = HashingWriter {
-        inner: BufWriter::new(out),
-        hasher: Sha256::new(),
-    };
+    let mut out = Hashed::new(BufWriter::new(out));
     fetch
         .fetch(&file.url, &mut out)
         .map_err(|reason| Error::Fetch {
             url: file.url.clone(),
             reason,
         })?;
-    out.inner.flush().map_err(Error::io(partial))?;
-    Ok(hex(&out.hasher.finalize()))
+    out.flush().map_err(Error::io(partial))?;
+    Ok(out.sha256())
 }
 
 fn sha256_of(mut reader: impl Read) -> io::Result<String> {
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0; 1 << 16];
-    loop {
-        match reader.read(&mut buf)? {
-            0 => return Ok(hex(&hasher.finalize())),
-            n => hasher.update(&buf[..n]),
-        }
-    }
+    let mut sink = Hashed::new(io::sink());
+    io::copy(&mut reader, &mut sink)?;
+    Ok(sink.sha256())
 }
 
-struct HashingWriter<W> {
+/// 寫入的同時算 sha256。
+pub(crate) struct Hashed<W> {
     inner: W,
     hasher: Sha256,
 }
 
-impl<W: Write> Write for HashingWriter<W> {
+impl<W: Write> Hashed<W> {
+    pub(crate) fn new(inner: W) -> Self {
+        Self {
+            inner,
+            hasher: Sha256::new(),
+        }
+    }
+
+    /// 寫過的內容的 sha256；沒 flush 的部分也算在內。
+    pub(crate) fn sha256(self) -> String {
+        hex(&self.hasher.finalize())
+    }
+}
+
+impl<W: Write> Write for Hashed<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let n = self.inner.write(buf)?;
         self.hasher.update(&buf[..n]);

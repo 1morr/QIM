@@ -63,8 +63,6 @@ pub struct Corpus {
     pub source_id: &'static str,
     pub group: Group,
     format: Format,
-    /// 讀哪些來源檔（`sources.toml` 的 `path`），依序讀。
-    pub files: &'static [&'static str],
     /// 署名：來源名稱、網址、作者與引用、授權網址、QIM 怎麼抽出文字。
     title: &'static str,
     site: &'static str,
@@ -83,7 +81,6 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "yue_wiki",
         group: Group::Wiki,
         format: Format::WikiDump,
-        files: &["zh_yuewiki-20261101-pages-articles.xml.bz2"],
         title: "Cantonese Wikipedia",
         site: "https://zh-yue.wikipedia.org/",
         credit: WIKI_CREDIT,
@@ -95,7 +92,6 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "zh_wiki",
         group: Group::Wiki,
         format: Format::WikiDump,
-        files: &["zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"],
         title: "Chinese Wikipedia",
         site: "https://zh.wikipedia.org/",
         credit: WIKI_CREDIT,
@@ -107,7 +103,6 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "hkcancor",
         group: Group::Colloquial,
         format: Format::HkCanCor,
-        files: &["data/hkcancor-utf8.zip"],
         title: "Hong Kong Cantonese Corpus (HKCanCor), transcriptions",
         site: "https://github.com/fcbond/hkcancor",
         credit: "created by Luke Kang Kwong; please cite K. K. Luke and May L.Y. Wong (2015) The Hong Kong Cantonese Corpus: Design and Uses, Journal of Chinese Linguistics Monograph Series 25, 312-333",
@@ -119,10 +114,6 @@ pub const CORPORA: [Corpus; 4] = [
         source_id: "common_voice",
         group: Group::Colloquial,
         format: Format::Lines,
-        files: &[
-            "server/data/yue/sentence-collector.txt",
-            "server/data/zh-HK/sentence-collector.txt",
-        ],
         title: "Mozilla Common Voice sentence collection, Cantonese (yue and zh-HK)",
         site: "https://github.com/common-voice/common-voice",
         credit: "sentences contributed by Common Voice users",
@@ -132,7 +123,8 @@ pub const CORPORA: [Corpus; 4] = [
 ];
 
 impl Corpus {
-    /// 逐段交出轉成香港繁體（OpenCC `s2hk`）的文字。`paths` 是 [`Corpus::files`] 在快取裡的檔，順序相同。
+    /// 逐段交出轉成香港繁體（OpenCC `s2hk`）的文字。`paths` 是來源在 `sources.toml` 列的每個檔
+    /// 在快取裡的位置，依列出的順序讀；換 dump 日期只改 `sources.toml`。
     pub fn texts(
         &self,
         paths: &[PathBuf],
@@ -160,16 +152,18 @@ impl Corpus {
     }
 
     /// `ATTRIBUTION.md` 裡這份語料的段落。
-    pub fn attribution(&self, source: &Source) -> Result<String, Error> {
-        let mut files = String::new();
-        for path in self.files {
-            let file = source.file(path)?;
-            files.push_str(&format!(
-                "- File: {} (sha256 {}), {}\n",
-                file.path, file.sha256, file.url
-            ));
-        }
-        Ok(format!(
+    pub fn attribution(&self, source: &Source) -> String {
+        let files: String = source
+            .files
+            .iter()
+            .map(|file| {
+                format!(
+                    "- File: {} (sha256 {}), {}\n",
+                    file.path, file.sha256, file.url
+                )
+            })
+            .collect();
+        format!(
             "## {name}.tsv\n\
              \n\
              - Source: {title}, {site}, {credit}.\n\
@@ -185,7 +179,7 @@ impl Corpus {
             license = source.license,
             license_url = self.license_url,
             extraction = self.extraction,
-        ))
+        )
     }
 }
 

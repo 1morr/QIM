@@ -4,11 +4,9 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use sha2::{Digest, Sha256};
-
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
-use crate::sources::{self, Fetch, SOURCES, Source, hex, sha256_hex};
+use crate::sources::{self, Fetch, Hashed, SOURCES, Source, sha256_hex};
 use crate::transcode::Transcoder;
 use crate::verify::{self, CorpusDigests, CorpusSummary, Report, UnihanSummary};
 use crate::{Error, build_pack, libcangjie, scheme, unihan};
@@ -149,10 +147,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let mut trains = Vec::new();
     for corpus in &CORPORA {
         let source = source_of(corpus.source_id)?;
-        let paths = corpus
+        let paths = source
             .files
             .iter()
-            .map(|path| sources::cached(&cache, corpus.source_id, source.file(path)?, fetch))
+            .map(|file| sources::cached(&cache, corpus.source_id, file, fetch))
             .collect::<Result<Vec<_>, _>>()?;
         let dir = corpora::build_dir(root, corpus);
         std::fs::create_dir_all(&dir).map_err(Error::io(&dir))?;
@@ -181,7 +179,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             bench_sentences: first.bench.lines().count(),
             bench: bench_rel.into(),
         });
-        attributions.push((corpus.group, corpus.attribution(source)?));
+        attributions.push((corpus.group, corpus.attribution(source)));
         if verify {
             // 第二次從快取重讀來源，只算 sha256、不寫檔。
             let sink = || Hashed::new(io::sink());
@@ -304,37 +302,6 @@ impl Built {
             dev: self.dev.clone(),
             chars: sha256_hex(self.chars.as_bytes()),
         }
-    }
-}
-
-/// 寫入的同時算 sha256。
-struct Hashed<W> {
-    inner: W,
-    hasher: Sha256,
-}
-
-impl<W: Write> Hashed<W> {
-    fn new(inner: W) -> Self {
-        Self {
-            inner,
-            hasher: Sha256::new(),
-        }
-    }
-
-    fn sha256(self) -> String {
-        hex(&self.hasher.finalize())
-    }
-}
-
-impl<W: Write> Write for Hashed<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = self.inner.write(buf)?;
-        self.hasher.update(&buf[..n]);
-        Ok(n)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
     }
 }
 
