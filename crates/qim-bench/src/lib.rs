@@ -4,6 +4,7 @@
 
 mod baseline;
 mod items;
+mod latency;
 mod report;
 mod score;
 
@@ -15,6 +16,10 @@ use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
 pub use items::{Item, Unit, parse_corpus, parse_fixed, parse_personal};
+pub use latency::{
+    LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, node_wasm_timer,
+    percentile,
+};
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, Metrics, SetResult};
 
 /// 基準用的資料包，由 `cargo xtask data` 產生。
@@ -56,6 +61,8 @@ pub struct Outcome {
     pub baseline: Option<Baseline>,
     /// 跑之前的個人集 baseline；沒有檔案時是 `None`。
     pub personal_baseline: Option<Baseline>,
+    /// 每鍵延遲：只報，不進違規也不進 baseline。
+    pub latency: Latency,
     /// 擋退步的違規；空的就是通過。
     pub violations: Vec<String>,
 }
@@ -101,10 +108,11 @@ pub enum Personal {
     NotTranscoded,
 }
 
-/// 在 repo 根目錄 `root` 跑基準。
-pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
+/// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
+pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> {
     let (engine, pack_sha256) = load_engine(&root.join(PACK))?;
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
+    let mut latency_inputs: Vec<String> = fixed.iter().map(Item::input).collect();
     let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets: Vec<SetResult> = Vec::new();
     for dir in CORPUS_DIRS {
@@ -123,10 +131,12 @@ pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
             }
             let items =
                 parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
+            latency_inputs.extend(items.iter().map(Item::input));
             sets.push(score::score(&engine, &name, &items, false));
         }
     }
     let personal = load_personal(root, &engine)?;
+    let latency = latency::measure(&engine, &root.join(PACK), &latency_inputs, wasm)?;
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
     let tolerate_bad_format = mode == Mode::UpdateBaseline;
     let baseline = load_baseline(&root.join(BASELINE), tolerate_bad_format)?;
@@ -167,6 +177,7 @@ pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
         personal,
         baseline,
         personal_baseline,
+        latency,
         violations,
     })
 }

@@ -29,6 +29,7 @@
 | 2026-11-04 | M1 02 | `qim-bench`、`cargo xtask bench`；M0 baseline：fixed 1/1、yue-wiki 答錯 2000/2000；細節見票 02 | 新 session 下 `/implement .scratch/m1/issues/03-corpus-zh-wiki-and-colloquial.md` |
 | 2026-11-04 | M1 03 | 中文維基、HKCanCor、Common Voice 進基準與訓練切分，字頻 `chars.tsv`；下載快取移到 repo 外；細節見票 03 | 新 session 下 `/implement .scratch/m1/issues/04-bench-corrections-and-personal.md` |
 | 2026-11-04 | M1 04 | 基準加修正次數、KSPC、跳動、依長度分組、翻盤清單與個人集（`cargo xtask data` 轉碼，只報數字）；細節見票 04 | 新 session 下 `/implement .scratch/m1/issues/05-bench-latency.md` |
+| 2026-11-04 | M1 05 | `cargo xtask bench` 報原生與 WebAssembly（Node）每鍵 p50 / p95，含第 20 碼起一組，只報不擋；M0 核心 p95 < 2 µs；細節見票 05 | 新 session 下 `/implement .scratch/m1/issues/06-lexicon-and-char-frequency.md` |
 
 ## 偏差與決定
 
@@ -51,3 +52,5 @@
 - 2026-11-04 M1 03：下載快取由 `.cache/sources/` 改到 repo 外的使用者快取目錄（`QIM_CACHE_DIR` 可改），各 worktree 共用（`docs/development.md`）。
 - 2026-11-04 M1 04：個人集由 `cargo xtask data` 轉成本機的 `bench/personal/rime-userdb.tsv` 再給基準讀，`qim-bench` 不依賴 `qim-databuild`（plan §1.3、§5.2）。
 - 2026-11-04 M1 04：修正次數的模擬卡住時按 Esc（算一次修正）改逐字打，逐字也打不出時 `--check` 紅（plan §5.2、`GLOSSARY.md`）。
+- 2026-11-04 M1 05：WebAssembly 延遲用 Node 跑網頁綁定，不用瀏覽器：Chromium 計時粗化到 5 µs（隔離後），量不出現在的核心（`scripts/experiments/wasm-latency-browser/`）。
+- 2026-11-04 M1 05：長輸入不另造題，取基準句子中組字第 20 碼起的按鍵（plan §5.2、`docs/development.md`）。

@@ -156,6 +156,18 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 `.gitignore` 的 `/bench/personal` 不帶結尾斜線，目錄與軟連結都排除；帶斜線只比對目錄，軟連結會變成未追蹤檔。接上後各 worktree 共用同一份 `rime-userdb.tsv` 與 `baseline.json`：在任一個 worktree 跑 `cargo xtask data` 或 `--update-baseline` 都會改到主 checkout 那份。
 
+### 每鍵延遲
+
+每次 `cargo xtask bench`（不論哪個模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+
+- 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
+- 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。
+- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts`，它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `letter()` 加讀出網頁畫候選要的欄位（輸入碼、候選），每題之間按 Esc（不計時）。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
+- 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`。
+- 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
+
+改核心的票貼前後對照時，在同一台機器、不跑其他重負載時跑；差距小於幾成多半是雜訊，重跑兩三次看是否穩定。
+
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 
 ## 網頁
@@ -167,7 +179,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 兩個目錄都不進 git。改了 `qim-core` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
-Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。
+Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 
 ## 全部檢查
 
@@ -187,7 +199,7 @@ cargo xtask check
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
 | `docs` | 文件規則（plan §6）：`docs/progress.md` 的段落、表格、長度、里程碑標記、下一步指令，與 `.scratch/` 的 spec | 跑 |
 | `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
-| `tsc` | `web/` 的 `tsc --noEmit`（`npm run typecheck`） | 跑 |
+| `tsc` | `web/` 的 `tsc --noEmit`，再對 `web/bench/` 跑一次（`npm run typecheck`） | 跑 |
 | `biome` | `web/` 的 `biome check`（`npm run lint`） | 跑 |
 | `e2e` | 複製資料包（〈網頁〉第 2 步）後跑 Playwright（`npm run e2e`）；要先跑過 `cargo xtask data` | 跳過 |
 

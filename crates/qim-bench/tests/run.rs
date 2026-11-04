@@ -8,12 +8,14 @@
 //!   `a` 空白、`b` 空白，共 7 鍵；逐鍵打時 `a` 的首選「日」被 `b` 改成「明」，跳動 1；答錯（錯 2 字）。
 //!
 //! 合計修正 2、按鍵 11、字數 4（KSPC 2.75）、跳動 1，答錯第 2、3 行。
+//!
+//! WebAssembly 的每鍵延遲一律用 [`slow_wasm`]：每鍵都遠超預算，`--check` 與 baseline 照樣不受影響。
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use qim_bench::{Mode, PERSONAL_SOURCE_HEADER, Personal, run};
+use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{CodeEntry, CodeTable, Pack, Scheme};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -69,6 +71,25 @@ fn repo() -> TempDir {
         "a\t日\na\t曰\na b\t日月\n".as_bytes(),
     );
     dir
+}
+
+fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
+    qim_bench::run(root, mode, &slow_wasm)
+}
+
+/// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒，遠超每鍵 50 ms 的預算。
+fn slow_wasm(_pack: &Path, inputs: &[String]) -> Result<Timing, String> {
+    Ok(Timing {
+        runtime: "假".into(),
+        per_key_ms: inputs
+            .iter()
+            .map(|input| {
+                (1..=input.chars().count())
+                    .map(|i| 100.0 * i as f64)
+                    .collect()
+            })
+            .collect(),
+    })
 }
 
 fn write(root: &Path, path: &str, bytes: &[u8]) {
@@ -698,4 +719,88 @@ fn items_left_behind_without_a_userdb_are_not_run() {
         "{:?}",
         outcome.personal
     );
+}
+
+/// `long` 一句 21 碼（`ab` 交替，一個字一個碼）：和固定題 `a`、toy 三句一起量延遲。
+fn repo_with_long_input() -> TempDir {
+    let repo = repo();
+    let codes = ["a b"; 10].join(" ") + " a";
+    write(
+        repo.path(),
+        "bench/corpus/long.tsv",
+        format!("{codes}\t{}日\n", "日月".repeat(10)).as_bytes(),
+    );
+    repo
+}
+
+#[test]
+fn latency_reports_native_and_wasm_percentiles_with_a_long_input_group() {
+    let repo = repo_with_long_input();
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let report = outcome.report();
+    let rows: Vec<&str> = report
+        .lines()
+        .filter(|line| line.contains("| 第 20 碼起 |") || line.contains("| 全部 |"))
+        .collect();
+    // 全部：固定題 `a`（1 鍵）、toy `a`、`a`、`ab`（4 鍵）、long（21 鍵），共 5 個輸入 26 鍵。
+    // 假計時器的 26 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、21），p50 第 13 個是 8、p95 第 25 個是 20。
+    // 第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
+    assert_eq!(rows.len(), 4, "{report}");
+    let native = if cfg!(debug_assertions) {
+        "原生（debug）"
+    } else {
+        "原生（release）"
+    };
+    assert!(
+        rows[0].starts_with(&format!("| {native} | 全部 | 5 | 26 | ")),
+        "{report}"
+    );
+    assert!(
+        rows[1].starts_with(&format!("| {native} | 第 20 碼起 | 1 | 2 | ")),
+        "{report}"
+    );
+    assert_eq!(
+        rows[2],
+        "| WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 |"
+    );
+    assert_eq!(
+        rows[3],
+        "| WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 |"
+    );
+    assert!(report.contains("只報不擋"), "{report}");
+}
+
+#[test]
+fn check_and_update_baseline_ignore_latency() {
+    let repo = repo_with_long_input();
+    run(repo.path(), Mode::UpdateBaseline).unwrap();
+    let written = fs::read_to_string(repo.path().join("bench/baseline.json")).unwrap();
+    assert!(
+        !written.contains("ms") && !written.contains("latency"),
+        "{written}"
+    );
+    let outcome = run(repo.path(), Mode::Check).unwrap();
+    assert!(
+        outcome
+            .latency
+            .wasm
+            .per_key_ms
+            .iter()
+            .flatten()
+            .all(|&ms| ms >= 100.0)
+    );
+    assert_eq!(outcome.violations, Vec::<String>::new());
+}
+
+#[test]
+fn a_wasm_timer_that_misses_keys_is_an_error() {
+    let repo = repo();
+    let error = qim_bench::run(repo.path(), Mode::Report, &|_: &Path, _: &[String]| {
+        Ok(Timing {
+            runtime: "假".into(),
+            per_key_ms: vec![vec![1.0]],
+        })
+    })
+    .unwrap_err();
+    assert!(error.contains("WebAssembly"), "{error}");
 }

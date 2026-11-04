@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use qim_bench::{Mode, run};
+use qim_bench::{Mode, node_wasm_timer, run};
 
 const USAGE: &str = "用法：qim-bench [--check | --update-baseline]";
 
@@ -23,7 +23,8 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let outcome = match run(Path::new("."), mode) {
+    let root = Path::new(".");
+    let outcome = match run(root, mode, &node_wasm_timer(root)) {
         Ok(outcome) => outcome,
         Err(error) => {
             eprintln!("{error}");
