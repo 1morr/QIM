@@ -16,6 +16,19 @@ textarea {
 #composition {
 	min-height: 1.5rem;
 	font-family: ui-monospace, monospace;
+	display: flex;
+	gap: 0.25rem;
+}
+
+/* 分段之間留空隙、加底線，看得出段落；目前分段反白（brief §4.3 的 ← / →）。 */
+#composition .segment {
+	border-bottom: 1px solid currentColor;
+	cursor: pointer;
+}
+
+#composition .segment[aria-current="true"] {
+	background: #1a73e8;
+	color: #fff;
 }
 
 #candidates {
@@ -32,6 +45,7 @@ textarea {
 
 #candidates li {
 	flex-shrink: 0;
+	cursor: pointer;
 	white-space: nowrap;
 }
 
