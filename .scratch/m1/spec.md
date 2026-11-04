@@ -76,6 +76,7 @@
 | [16](issues/16-simplified-chinese.md) | 13 | `ferrous-opencc`、簡體 `anr` 首選「门口」 |
 | [17](issues/17-cantonese-colloquial-lexicon.md) | 12 | 粵語詞表（使用者審）、3–5 句口語固定題 |
 | [17b](issues/17b-s2hk-keep-cantonese-chars.md) | 17 | 語料前處理保留「晒」「搵」等粵語用字（票 17 審閱時使用者決定） |
+| [17c](issues/17c-lexicon-common-forms.md) | — | M1 封存後補（使用者試用）：詞庫也用常見寫法（羣組→群組）|
 | [18](issues/18-layout-tracer-touch.md) | 07 | `qim-layout`、最小格式、點擊判定、Gboard 直向；觸控點出「門口」 |
 | [19](issues/19-layout-format-final.md) | 18 | 格式定稿、JSON Schema、兩級驗證、旋轉與圓角、重疊佈局 |
 | [20](issues/20-touch-keyboard-features.md) | 19 | 長按、符號頁、自訂頁、橫向、深色、放大預覽 |
