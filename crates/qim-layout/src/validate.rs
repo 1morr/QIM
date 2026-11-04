@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::geometry::convex_overlap;
-use crate::model::{Action, Device, FORMAT, Key, Layout, LayoutVariant, Orientation, Shape};
+use crate::model::{Action, Device, FORMAT, Key, Layout, LayoutVariant, Orientation, Shape, When};
 
 /// 佈局檔的 JSON Schema（draft 2020-12）。
 pub const SCHEMA: &str = include_str!("../schema/qim-layout-1.schema.json");
@@ -33,11 +33,11 @@ impl fmt::Display for LayoutError {
         match self {
             LayoutError::Broken(message) => write!(f, "檔案壞掉：{message}"),
             LayoutError::NoWayBackToLetters { variant, page } => {
-                write!(f, "版本 {variant} 頁 {page}：切不回有字母的頁面")
+                write!(f, "佈局版本 {variant} 頁 {page}：切不回有字母的頁面")
             }
             LayoutError::MissingNextKeyboard { variant, page } => write!(
                 f,
-                "版本 {variant} 頁 {page}：切不到有「下一個鍵盤」鍵（nextKeyboard）的頁面，iOS 需要它"
+                "佈局版本 {variant} 頁 {page}：切不到有「下一個鍵盤」鍵（nextKeyboard）的頁面，iOS 需要它"
             ),
         }
     }
@@ -87,10 +87,7 @@ pub enum Warning {
         key: String,
     },
     /// 沒有裝置與方向相符的版本，用第一個版本等比例縮放。
-    NoMatchingVariant {
-        device: Device,
-        orientation: Orientation,
-    },
+    NoMatchingVariant { wanted: When },
 }
 
 impl fmt::Display for Warning {
@@ -100,25 +97,25 @@ impl fmt::Display for Warning {
                 variant,
                 page,
                 keys: [a, b],
-            } => write!(f, "版本 {variant} 頁 {page}：{a} 與 {b} 重疊"),
+            } => write!(f, "佈局版本 {variant} 頁 {page}：{a} 與 {b} 重疊"),
             Warning::Covered { variant, page, key } => {
                 write!(
                     f,
-                    "版本 {variant} 頁 {page}：{key} 完全被上層的鍵蓋住，點不到"
+                    "佈局版本 {variant} 頁 {page}：{key} 完全被上層的鍵蓋住，點不到"
                 )
             }
             Warning::OutOfCanvas { variant, page, key } => {
-                write!(f, "版本 {variant} 頁 {page}：{key} 超出畫布")
+                write!(f, "佈局版本 {variant} 頁 {page}：{key} 超出畫布")
             }
             Warning::MissingLetters { variant, letters } => {
-                write!(f, "版本 {variant}：缺字母 {letters}")
+                write!(f, "佈局版本 {variant}：缺字母 {letters}")
             }
             Warning::MissingOrientation {
                 device,
                 orientation,
             } => write!(
                 f,
-                "有 {} 的版本，卻缺 {} 的版本",
+                "有 {} 的佈局版本，卻缺 {} 的",
                 device.name(),
                 orientation.name()
             ),
@@ -129,19 +126,16 @@ impl fmt::Display for Warning {
                 shape,
             } => write!(
                 f,
-                "版本 {variant} 頁 {page}：{key} 的形狀 {shape} 還不支援，現在當矩形畫與判定"
+                "佈局版本 {variant} 頁 {page}：{key} 的形狀 {shape} 還不支援，現在當矩形畫與判定"
             ),
             Warning::UnsupportedSwipe { variant, page, key } => {
-                write!(f, "版本 {variant} 頁 {page}：{key} 的滑動還沒有作用")
+                write!(f, "佈局版本 {variant} 頁 {page}：{key} 的滑動還沒有作用")
             }
-            Warning::NoMatchingVariant {
-                device,
-                orientation,
-            } => write!(
+            Warning::NoMatchingVariant { wanted } => write!(
                 f,
-                "沒有 {} {} 的版本，用第一個版本等比例縮放",
-                device.name(),
-                orientation.name()
+                "沒有 {} {} 的佈局版本，用第一個佈局版本等比例縮放",
+                wanted.device.name(),
+                wanted.orientation.name()
             ),
         }
     }
@@ -160,6 +154,20 @@ impl Report {
     /// 沒有錯誤就可以存檔；警告不擋。
     pub fn can_save(&self) -> bool {
         self.errors.is_empty()
+    }
+
+    /// 可以存檔時給佈局與警告；有錯誤時把錯誤接成一句。
+    pub fn into_layout(self) -> Result<(Layout, Vec<Warning>), crate::Error> {
+        match self.layout {
+            Some(layout) if self.can_save() => Ok((layout, self.warnings)),
+            _ => Err(crate::Error(
+                self.errors
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("；"),
+            )),
+        }
     }
 }
 
@@ -248,7 +256,7 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
         for page in &variant.pages {
             if !page_ids.insert(page.id.as_str()) {
                 errors.push(LayoutError::Broken(format!(
-                    "版本 {index}：頁 id {} 重複",
+                    "佈局版本 {index}：頁 id {} 重複",
                     page.id
                 )));
             }
@@ -256,7 +264,7 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
             for key in &page.keys {
                 if !key_ids.insert(key.id.as_str()) {
                     errors.push(LayoutError::Broken(format!(
-                        "版本 {index} 頁 {}：鍵 id {} 重複",
+                        "佈局版本 {index} 頁 {}：鍵 id {} 重複",
                         page.id, key.id
                     )));
                 }
@@ -265,7 +273,7 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
                         && variant.page_index(target).is_none()
                     {
                         errors.push(LayoutError::Broken(format!(
-                            "版本 {index} 頁 {} 鍵 {}：switchPage 指到不存在的頁 {target}",
+                            "佈局版本 {index} 頁 {} 鍵 {}：switchPage 指到不存在的頁 {target}",
                             page.id, key.id
                         )));
                     }
@@ -276,7 +284,7 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
             && variant.page_index(initial).is_none()
         {
             errors.push(LayoutError::Broken(format!(
-                "版本 {index}：initialPage 指到不存在的頁 {initial}"
+                "佈局版本 {index}：initialPage 指到不存在的頁 {initial}"
             )));
         }
     }
@@ -284,7 +292,8 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
 }
 
 /// 從一開始的頁面切得到、卻切不到「有符合 `wanted` 的鍵」的頁面的頁 id。
-/// 頁面之間只靠 `switchPage`（點、長按、滑動、組字中都算）走。
+/// 頁面之間只算點一下（`tap`）的 `switchPage`：長按、滑動、組字中的動作不是隨時都在，
+/// 只靠它們回去的頁仍會困住使用者。
 fn pages_without(variant: &LayoutVariant, wanted: impl Fn(&Key) -> bool) -> Vec<String> {
     let edges: Vec<Vec<usize>> = variant
         .pages
@@ -292,8 +301,7 @@ fn pages_without(variant: &LayoutVariant, wanted: impl Fn(&Key) -> bool) -> Vec<
         .map(|page| {
             page.keys
                 .iter()
-                .flat_map(Key::actions)
-                .filter_map(|action| match action {
+                .filter_map(|key| match &key.tap {
                     Action::SwitchPage(id) => variant.page_index(id),
                     _ => None,
                 })
@@ -384,9 +392,11 @@ fn warnings(layout: &Layout) -> Vec<Warning> {
             for (rank, &i) in order.iter().enumerate() {
                 let above = &order[..rank];
                 let samples = page.keys[i].touch_samples();
-                let covered = samples
-                    .iter()
-                    .all(|&(x, y)| above.iter().any(|&upper| page.keys[upper].contains(x, y)));
+                // 觸控範圍縮成 0 的鍵本來就點不到，不是被蓋住。
+                let covered = !samples.is_empty()
+                    && samples
+                        .iter()
+                        .all(|&(x, y)| above.iter().any(|&upper| page.keys[upper].contains(x, y)));
                 if covered {
                     let (variant, page, key) = at(&page.keys[i]);
                     warnings.push(Warning::Covered { variant, page, key });
@@ -445,13 +455,9 @@ pub enum StrictIssue {
         page: String,
         key: String,
     },
-    /// 佈局版本沒有 `background`。
-    MissingBackground {
-        variant: usize,
-    },
 }
 
-/// 內建佈局的嚴格檢查：錯誤與警告都算，另外每個鍵與每個版本都要有淺色與深色的顏色。
+/// 內建佈局的嚴格檢查：錯誤與警告都算，另外每個鍵都要有淺色與深色的顏色。
 /// 長按清單的動作是否有效由 Schema 與錯誤級的檢查保證（`letter` 是 `a`–`z`、`switchPage` 的頁存在）。
 pub fn check_builtin(text: &str) -> Vec<StrictIssue> {
     let report = validate(text, Target::default());
@@ -465,9 +471,6 @@ pub fn check_builtin(text: &str) -> Vec<StrictIssue> {
         return issues;
     };
     for (index, variant) in layout.variants.iter().enumerate() {
-        if variant.background.is_none() {
-            issues.push(StrictIssue::MissingBackground { variant: index });
-        }
         for page in &variant.pages {
             for key in &page.keys {
                 let colored = key
@@ -485,25 +488,4 @@ pub fn check_builtin(text: &str) -> Vec<StrictIssue> {
         }
     }
     issues
-}
-
-impl Layout {
-    /// 選佈局版本（plan §2.6）：裝置與方向都符合的；其次方向符合的；再其次第一個版本，
-    /// 等比例縮放並給警告。回傳版本在 `variants` 的位置。
-    pub fn select(&self, device: Device, orientation: Orientation) -> (usize, Option<Warning>) {
-        let find =
-            |matches: &dyn Fn(&LayoutVariant) -> bool| self.variants.iter().position(matches);
-        if let Some(index) = find(&|v| v.when.device == device && v.when.orientation == orientation)
-            .or_else(|| find(&|v| v.when.orientation == orientation))
-        {
-            return (index, None);
-        }
-        (
-            0,
-            Some(Warning::NoMatchingVariant {
-                device,
-                orientation,
-            }),
-        )
-    }
 }

@@ -2,7 +2,7 @@
 //!
 //! 座標都是畫布座標，y 往下。旋轉以 `frame` 中心順時針（同 CSS `rotate`）。
 
-use crate::model::{Key, Page, Shape};
+use crate::model::{Key, Page};
 
 /// 把畫布上的點轉成按鍵自己的座標：原點在 `frame` 中心、沒有旋轉。
 fn to_local(key: &Key, x: f64, y: f64) -> (f64, f64) {
@@ -13,6 +13,14 @@ fn to_local(key: &Key, x: f64, y: f64) -> (f64, f64) {
     }
     let (sin, cos) = key.rotate.to_radians().sin_cos();
     (dx * cos + dy * sin, -dx * sin + dy * cos)
+}
+
+/// 按鍵自己座標的點轉回畫布座標（[`to_local`] 的反向）。
+fn to_world(key: &Key, lx: f64, ly: f64) -> (f64, f64) {
+    let frame = &key.frame;
+    let (cx, cy) = (frame.x + frame.w / 2.0, frame.y + frame.h / 2.0);
+    let (sin, cos) = key.rotate.to_radians().sin_cos();
+    (cx + lx * cos - ly * sin, cy + lx * sin + ly * cos)
 }
 
 /// 觸控範圍在按鍵座標的左、上、右、下邊與圓角半徑。
@@ -31,12 +39,10 @@ fn touch_area(key: &Key) -> TouchArea {
     let right = (hw + inset.right).max(left);
     let top = -hh - inset.top;
     let bottom = (hh + inset.bottom).max(top);
-    // 橢圓與多邊形在 M5；現在當矩形。
-    let radius = match key.shape {
-        Shape::Rect { radius } => radius,
-        Shape::Ellipse | Shape::Polygon { .. } => 0.0,
-    };
-    let radius = radius.clamp(0.0, (right - left).min(bottom - top) / 2.0);
+    let radius = key
+        .shape
+        .corner_radius()
+        .clamp(0.0, (right - left).min(bottom - top) / 2.0);
     TouchArea {
         left,
         top,
@@ -92,30 +98,29 @@ impl Key {
     }
 
     /// 畫出來的矩形（旋轉後、不含 `touchInset` 與圓角）的四個角，順時針。
-    pub fn corners(&self) -> [(f64, f64); 4] {
-        let frame = &self.frame;
-        let (cx, cy) = (frame.x + frame.w / 2.0, frame.y + frame.h / 2.0);
-        let (hw, hh) = (frame.w / 2.0, frame.h / 2.0);
-        let (sin, cos) = self.rotate.to_radians().sin_cos();
-        [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]
-            .map(|(lx, ly)| (cx + lx * cos - ly * sin, cy + lx * sin + ly * cos))
+    pub(crate) fn corners(&self) -> [(f64, f64); 4] {
+        let (hw, hh) = (self.frame.w / 2.0, self.frame.h / 2.0);
+        [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)].map(|(lx, ly)| to_world(self, lx, ly))
     }
 
-    /// 觸控範圍內的取樣點（畫布座標），給「完全被蓋住」的檢查用。
+    /// 觸控範圍內的取樣點（畫布座標），給「完全被蓋住」的檢查用：16 × 16 格，含貼著四邊的點。
+    /// 比格距窄的空隙抓不到，所以這是警告不是錯誤。
     pub(crate) fn touch_samples(&self) -> Vec<(f64, f64)> {
-        const N: usize = 8;
+        const N: usize = 16;
+        // 貼邊但在範圍內：右、下邊不算在內。
+        const EDGE: f64 = 1e-6;
         let area = touch_area(self);
-        let frame = &self.frame;
-        let (cx, cy) = (frame.x + frame.w / 2.0, frame.y + frame.h / 2.0);
-        let (sin, cos) = self.rotate.to_radians().sin_cos();
+        let along = |from: f64, to: f64, i: usize| {
+            from + (to - from) * (EDGE + (1.0 - 2.0 * EDGE) * i as f64 / (N - 1) as f64)
+        };
         let mut samples = Vec::new();
         for i in 0..N {
             for j in 0..N {
-                let lx = area.left + (area.right - area.left) * (i as f64 + 0.5) / N as f64;
-                let ly = area.top + (area.bottom - area.top) * (j as f64 + 0.5) / N as f64;
-                let point = (cx + lx * cos - ly * sin, cy + lx * sin + ly * cos);
-                if self.contains(point.0, point.1) {
-                    samples.push(point);
+                let lx = along(area.left, area.right, i);
+                let ly = along(area.top, area.bottom, j);
+                let (x, y) = to_world(self, lx, ly);
+                if self.contains(x, y) {
+                    samples.push((x, y));
                 }
             }
         }
@@ -142,7 +147,7 @@ impl Page {
     }
 
     /// 由上層往下層的按鍵位置：`z` 大的先，同一層時陣列裡後面的先。
-    pub fn top_down(&self) -> Vec<usize> {
+    pub(crate) fn top_down(&self) -> Vec<usize> {
         let mut order: Vec<usize> = (0..self.keys.len()).rev().collect();
         // 穩定排序，同一層保留反轉後的順序。
         order.sort_by_key(|&index| std::cmp::Reverse(self.keys[index].z));

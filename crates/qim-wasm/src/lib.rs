@@ -1,7 +1,7 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{Engine, Key, Session, Snapshot, UserModel};
-use qim_layout::{Action, Device, Orientation, Shape, Target};
+use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
 
 /// 網頁的一個輸入框：速成與詞庫資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
@@ -161,30 +161,18 @@ impl WebLayout {
     /// 有錯誤（plan §2.6）時失敗。
     #[wasm_bindgen(constructor)]
     pub fn new(json: &str, device: &str, orientation: &str) -> Result<WebLayout, JsError> {
-        let device = match device {
-            "phone" => Device::Phone,
-            "tablet" => Device::Tablet,
-            other => return Err(JsError::new(&format!("不認得裝置 {other:?}"))),
+        let wanted = When {
+            device: device.parse().map_err(|e: String| JsError::new(&e))?,
+            orientation: orientation.parse().map_err(|e: String| JsError::new(&e))?,
         };
-        let orientation = match orientation {
-            "portrait" => Orientation::Portrait,
-            "landscape" => Orientation::Landscape,
-            other => return Err(JsError::new(&format!("不認得方向 {other:?}"))),
-        };
-        let report = qim_layout::validate(json, Target::default());
-        let layout = match report.layout {
-            Some(layout) if report.can_save() => layout,
-            _ => {
-                let errors: Vec<String> = report.errors.iter().map(ToString::to_string).collect();
-                return Err(JsError::new(&errors.join("；")));
-            }
-        };
-        let (variant, selection) = layout.select(device, orientation);
+        let (layout, warnings) = qim_layout::validate(json, Target::default())
+            .into_layout()
+            .map_err(|e| JsError::new(&e.to_string()))?;
+        let (variant, selection) = layout.select(wanted);
         let page = layout.variants[variant]
             .initial_page_index()
             .expect("validate 保證 initialPage 存在、每個版本至少一頁");
-        let warnings = report
-            .warnings
+        let warnings = warnings
             .iter()
             .chain(&selection)
             .map(ToString::to_string)
@@ -213,12 +201,6 @@ impl WebLayout {
         self.variant().canvas.height
     }
 
-    /// 鍵盤底色（淺色）；深色在 M1 票 20。
-    #[wasm_bindgen(getter)]
-    pub fn background(&self) -> Option<String> {
-        self.variant().background.as_ref().map(|c| c.light.clone())
-    }
-
     /// 目前頁的按鍵：標籤省略時用 `session` 方案的字根，組字中照 `composing`。
     pub fn keys(&self, session: &WebSession) -> Vec<WebLayoutKey> {
         let radicals = &session.engine.scheme().radicals;
@@ -239,11 +221,7 @@ impl WebLayout {
                     h: key.frame.h,
                     rotate: key.rotate,
                     z: key.z,
-                    // 橢圓與多邊形在 M5，現在當矩形畫。
-                    radius: match key.shape {
-                        Shape::Rect { radius } => radius,
-                        Shape::Ellipse | Shape::Polygon { .. } => 0.0,
-                    },
+                    radius: key.shape.corner_radius(),
                     a11y_label: key.accessibility_label(&label),
                     label,
                     hint: key.hint.clone(),

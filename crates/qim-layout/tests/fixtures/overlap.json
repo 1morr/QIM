@@ -25,6 +25,12 @@
               "tap": { "letter": "a" }
             },
             {
+              "id": "bang",
+              "frame": { "x": 290, "y": 30, "w": 70, "h": 90 },
+              "label": "！",
+              "tap": { "text": "！" }
+            },
+            {
               "id": "space",
               "frame": { "x": 30, "y": 150, "w": 330, "h": 50 },
               "tap": "space",

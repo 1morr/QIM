@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::validate::Warning;
+
 /// 一份佈局檔。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,13 +27,28 @@ pub struct LayoutVariant {
     /// 編輯器的格線與吸附；不影響鍵盤本身。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid: Option<Grid>,
-    /// 鍵盤底色。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub background: Option<ThemeColor>,
     /// 一開始顯示的頁面；省略時是第一頁。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_page: Option<String>,
     pub pages: Vec<Page>,
+}
+
+impl Layout {
+    /// 選佈局版本（plan §2.6）：裝置與方向都符合的；其次方向符合的；再其次第一個版本，
+    /// 等比例縮放並給警告。回傳版本在 `variants` 的位置。
+    pub fn select(&self, wanted: When) -> (usize, Option<Warning>) {
+        let find = |matches: &dyn Fn(&When) -> bool| {
+            self.variants
+                .iter()
+                .position(|variant| matches(&variant.when))
+        };
+        match find(&|when| *when == wanted)
+            .or_else(|| find(&|when| when.orientation == wanted.orientation))
+        {
+            Some(index) => (index, None),
+            None => (0, Some(Warning::NoMatchingVariant { wanted })),
+        }
+    }
 }
 
 impl LayoutVariant {
@@ -72,6 +89,9 @@ pub enum Orientation {
 }
 
 impl Device {
+    const ALL: [Device; 2] = [Device::Phone, Device::Tablet];
+
+    /// 在佈局檔裡的名字，同 `serde` 的寫法。
     pub fn name(self) -> &'static str {
         match self {
             Device::Phone => "phone",
@@ -81,11 +101,38 @@ impl Device {
 }
 
 impl Orientation {
+    const ALL: [Orientation; 2] = [Orientation::Portrait, Orientation::Landscape];
+
+    /// 在佈局檔裡的名字，同 `serde` 的寫法。
     pub fn name(self) -> &'static str {
         match self {
             Orientation::Portrait => "portrait",
             Orientation::Landscape => "landscape",
         }
+    }
+}
+
+impl std::str::FromStr for Device {
+    type Err = String;
+
+    /// 由 [`Device::name`] 讀回；殼傳裝置給綁定時用。
+    fn from_str(name: &str) -> Result<Self, String> {
+        Device::ALL
+            .into_iter()
+            .find(|device| device.name() == name)
+            .ok_or_else(|| format!("不認得裝置 {name:?}"))
+    }
+}
+
+impl std::str::FromStr for Orientation {
+    type Err = String;
+
+    /// 由 [`Orientation::name`] 讀回。
+    fn from_str(name: &str) -> Result<Self, String> {
+        Orientation::ALL
+            .into_iter()
+            .find(|orientation| orientation.name() == name)
+            .ok_or_else(|| format!("不認得方向 {name:?}"))
     }
 }
 
@@ -174,9 +221,7 @@ impl Key {
         radical: impl FnOnce(char) -> Option<&'r str>,
     ) -> String {
         let composing_label = self
-            .composing
-            .as_ref()
-            .filter(|_| composing)
+            .composing_override(composing)
             .and_then(|c| c.label.as_ref());
         match (composing_label.or(self.label.as_ref()), &self.tap) {
             (Some(label), _) => label.clone(),
@@ -189,11 +234,14 @@ impl Key {
 
     /// 點一下的動作：組字中且 `composing` 有寫 `tap` 就用它，否則是 `tap`。
     pub fn tap_action(&self, composing: bool) -> &Action {
-        self.composing
-            .as_ref()
-            .filter(|_| composing)
+        self.composing_override(composing)
             .and_then(|c| c.tap.as_ref())
             .unwrap_or(&self.tap)
+    }
+
+    /// 組字中時的 `composing`；沒在組字或沒寫時是 `None`。
+    fn composing_override(&self, composing: bool) -> Option<&Composing> {
+        self.composing.as_ref().filter(|_| composing)
     }
 
     /// 無障礙標籤：有寫 `a11yLabel` 就用它；否則是顯示的標籤加角標（「日，a」），
@@ -263,6 +311,14 @@ impl Default for Shape {
 impl Shape {
     fn is_default(&self) -> bool {
         *self == Shape::default()
+    }
+
+    /// 現在畫與點擊判定用的圓角半徑：矩形照寫；橢圓與多邊形在 M5，現在當直角矩形。
+    pub fn corner_radius(&self) -> f64 {
+        match self {
+            Shape::Rect { radius } => *radius,
+            Shape::Ellipse | Shape::Polygon { .. } => 0.0,
+        }
     }
 
     /// 形狀在佈局檔裡的名字。

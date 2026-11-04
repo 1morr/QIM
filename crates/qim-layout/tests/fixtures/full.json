@@ -5,7 +5,6 @@
       "when": { "device": "phone", "orientation": "portrait" },
       "canvas": { "width": 390, "height": 216 },
       "grid": { "columns": 40, "rows": 24, "snap": true },
-      "background": { "light": "#e8eaed", "dark": "#202124" },
       "initialPage": "letters",
       "pages": [
         {

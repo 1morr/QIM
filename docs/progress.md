@@ -36,6 +36,7 @@
 | 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
 | 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
 | 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
+| 2026-11-04 | M1 19 | `qim-layout/1` 定稿：JSON Schema、兩級驗證、版本選法、旋轉與圓角的點擊判定與性質測試；重疊佈局在 Rust 與網頁都點出上層鍵；細節見票 19 | 新 session 下 `/implement .scratch/m1/issues/20-touch-keyboard-features.md` |
 
 ## 偏差與決定
 
@@ -74,3 +75,7 @@
 - 2026-11-04 M1 10：網頁加 `node:test` 單元測試與 `check` 的 `unit` 步驟，不加測試框架依賴（`docs/development.md`、plan §1.4）。
 - 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。
 - 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。
+- 2026-11-04 M1 19：佈局格式加四向 `swipe`（M5 才有作用）；鍵盤底色不進格式，由殼依淺深色決定；`touchInset` 正數往外擴（plan §2.6）。
+- 2026-11-04 M1 19：「切得回字母頁」只算點一下的 `switchPage`，長按、滑動、組字中的動作不算，免得頁面只靠它們回去而困住使用者（plan §2.6）。
+- 2026-11-04 M1 19：內建佈局嚴格檢查不含 iOS 地球鍵規則，iOS 預設佈局要不要放地球鍵在 M7 定（plan §5.3）。
+- 2026-11-04 M1 19：`jsonschema` 讓網頁 WebAssembly 由 0.42 MB 變 4.6 MB；iOS 鍵盤擴充要不要略過 Schema 在 M2 量記憶體時定（plan §8）。

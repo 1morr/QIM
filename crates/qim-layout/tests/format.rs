@@ -1,6 +1,6 @@
 //! 佈局檔的格式（plan §2.6）：讀檔、存檔與動作的寫法。
 
-use qim_layout::{Action, Layout};
+use qim_layout::{Action, Device, Layout, Orientation, Shape};
 
 const KEY_A: &str =
     r#"{ "id": "a", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" } }"#;
@@ -83,5 +83,31 @@ fn action_names_match_the_json_tags() {
             .or_else(|| json.as_object().and_then(|o| o.keys().next().cloned()))
             .unwrap();
         assert_eq!(action.name(), tag);
+    }
+}
+
+#[test]
+fn device_orientation_and_shape_names_match_the_json() {
+    for device in [Device::Phone, Device::Tablet] {
+        assert_eq!(serde_json::to_value(device).unwrap(), device.name());
+        assert_eq!(device.name().parse::<Device>(), Ok(device));
+    }
+    for orientation in [Orientation::Portrait, Orientation::Landscape] {
+        assert_eq!(
+            serde_json::to_value(orientation).unwrap(),
+            orientation.name()
+        );
+        assert_eq!(orientation.name().parse::<Orientation>(), Ok(orientation));
+    }
+    assert!("watch".parse::<Device>().is_err());
+    assert!("upside-down".parse::<Orientation>().is_err());
+    for shape in [
+        Shape::Rect { radius: 6.0 },
+        Shape::Ellipse,
+        Shape::Polygon {
+            points: vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        },
+    ] {
+        assert_eq!(serde_json::to_value(&shape).unwrap()["type"], shape.name());
     }
 }

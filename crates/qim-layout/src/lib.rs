@@ -16,7 +16,7 @@ pub use validate::{
 
 /// 讀不了的佈局檔：[`validate`] 有錯誤時，把錯誤接成一句。
 #[derive(Debug)]
-pub struct Error(String);
+pub struct Error(pub(crate) String);
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,18 +29,9 @@ impl std::error::Error for Error {}
 impl Layout {
     /// 讀佈局檔；[`validate`]（[`Target::default`]）有錯誤時失敗，警告不管。
     pub fn from_json(text: &str) -> Result<Self, Error> {
-        let report = validate(text, Target::default());
-        match report.layout {
-            Some(layout) if report.errors.is_empty() => Ok(layout),
-            _ => Err(Error(
-                report
-                    .errors
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join("；"),
-            )),
-        }
+        validate(text, Target::default())
+            .into_layout()
+            .map(|(layout, _)| layout)
     }
 
     pub fn to_json(&self) -> String {

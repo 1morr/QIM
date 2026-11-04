@@ -14,7 +14,7 @@ fn every_field_of_the_format_is_read_and_saved_back() {
     assert_eq!(Layout::from_json(&layout.to_json()).unwrap(), layout);
 }
 
-use qim_layout::{Device, LayoutError, Orientation, Warning};
+use qim_layout::{Device, LayoutError, Orientation, Warning, When};
 use serde_json::{Value, json};
 
 /// 一個鍵，`tap` 照寫。
@@ -155,6 +155,10 @@ fn file_that_breaks_the_schema_is_broken() {
             }),
         ),
         (
+            "/variants/0/pages/0/keys/0/z",
+            Box::new(|v| v["variants"][0]["pages"][0]["keys"][0]["z"] = json!(1u64 << 40)),
+        ),
+        (
             "/variants/0/pages/0/keys/0/composing",
             Box::new(|v| v["variants"][0]["pages"][0]["keys"][0]["composing"] = json!("enter")),
         ),
@@ -210,8 +214,32 @@ fn page_that_cannot_switch_back_to_letters_is_an_error() {
         json!({ "id": "symbols", "keys": [key("more", 0.0, json!({ "switchPage": "more" }))] });
     let more =
         json!({ "id": "more", "keys": [key("abc", 0.0, json!({ "switchPage": "letters" }))] });
-    let report = check(&layout(vec![letters(vec![to_symbols]), symbols, more]));
+    let report = check(&layout(vec![
+        letters(vec![to_symbols.clone()]),
+        symbols,
+        more,
+    ]));
     assert_eq!(report.errors, []);
+
+    // 只靠長按、滑動或組字中的動作才回得去不算：它們不是隨時都在。
+    for (field, action) in [
+        ("longPress", json!([{ "switchPage": "letters" }])),
+        ("swipe", json!({ "up": { "switchPage": "letters" } })),
+        ("composing", json!({ "tap": { "switchPage": "letters" } })),
+    ] {
+        let mut back = key("abc", 0.0, json!({ "text": "，" }));
+        back[field] = action;
+        let symbols = json!({ "id": "symbols", "keys": [back] });
+        let report = check(&layout(vec![letters(vec![to_symbols.clone()]), symbols]));
+        assert!(
+            report.errors.contains(&LayoutError::NoWayBackToLetters {
+                variant: 0,
+                page: "symbols".into()
+            }),
+            "{field}：{:?}",
+            report.errors
+        );
+    }
 
     // 一個字母鍵都沒有。
     let no_letters = json!({ "id": "letters", "keys": [key("space", 0.0, json!("space"))] });
@@ -326,7 +354,7 @@ fn warnings_alone_still_save() {
 }
 
 #[test]
-fn strict_check_wants_colors_everywhere_and_no_warnings() {
+fn strict_check_wants_key_colors_and_no_warnings() {
     use qim_layout::{StrictIssue, check_builtin};
     let colored = |mut key: Value| {
         key["style"] = json!({
@@ -337,22 +365,11 @@ fn strict_check_wants_colors_everywhere_and_no_warnings() {
     };
     let mut value = layout(vec![letters(vec![])]);
     for variant in value["variants"].as_array_mut().unwrap() {
-        variant["background"] = json!({ "light": "#e8eaed", "dark": "#202124" });
         for key in variant["pages"][0]["keys"].as_array_mut().unwrap() {
             *key = colored(key.take());
         }
     }
     assert_eq!(check_builtin(&value.to_string()), []);
-
-    let mut no_background = value.clone();
-    no_background["variants"][1]
-        .as_object_mut()
-        .unwrap()
-        .remove("background");
-    assert_eq!(
-        check_builtin(&no_background.to_string()),
-        [StrictIssue::MissingBackground { variant: 1 }]
-    );
 
     let mut no_dark_label = value.clone();
     no_dark_label["variants"][0]["pages"][0]["keys"][3]["style"]
@@ -398,16 +415,25 @@ fn variant_selection_prefers_device_and_orientation_then_orientation_then_the_fi
     ] });
     let layout = Layout::from_json(&value.to_string()).unwrap();
     assert_eq!(
-        layout.select(Device::Phone, Orientation::Portrait),
+        layout.select(When {
+            device: Device::Phone,
+            orientation: Orientation::Portrait
+        }),
         (2, None)
     );
     assert_eq!(
-        layout.select(Device::Tablet, Orientation::Portrait),
+        layout.select(When {
+            device: Device::Tablet,
+            orientation: Orientation::Portrait
+        }),
         (0, None)
     );
     // 沒有平板橫向：方向符合的手機橫向。
     assert_eq!(
-        layout.select(Device::Tablet, Orientation::Landscape),
+        layout.select(When {
+            device: Device::Tablet,
+            orientation: Orientation::Landscape
+        }),
         (1, None)
     );
 
@@ -415,13 +441,50 @@ fn variant_selection_prefers_device_and_orientation_then_orientation_then_the_fi
         json!({ "format": "qim-layout/1", "variants": [variant("tablet", "portrait")] });
     let layout = Layout::from_json(&only_tablet.to_string()).unwrap();
     assert_eq!(
-        layout.select(Device::Phone, Orientation::Landscape),
+        layout.select(When {
+            device: Device::Phone,
+            orientation: Orientation::Landscape
+        }),
         (
             0,
             Some(Warning::NoMatchingVariant {
-                device: Device::Phone,
-                orientation: Orientation::Landscape
+                wanted: When {
+                    device: Device::Phone,
+                    orientation: Orientation::Landscape
+                }
             })
         )
+    );
+}
+
+#[test]
+fn key_with_no_touch_area_is_not_reported_as_covered() {
+    // 負的 touchInset 把 a 的觸控範圍縮成 0：點不到，但不是被誰蓋住。
+    let mut value = layout(vec![letters(vec![])]);
+    value["variants"][0]["pages"][0]["keys"][0]["touchInset"] = json!({ "left": -6, "right": -6 });
+    let report = check(&value);
+    assert!(
+        !report
+            .warnings
+            .iter()
+            .any(|w| matches!(w, Warning::Covered { .. })),
+        "{:?}",
+        report.warnings
+    );
+}
+
+#[test]
+fn key_covered_except_for_a_thin_strip_is_not_covered() {
+    // big 蓋住 a 除了右邊寬 1 的一條（a 寬 10，取樣格距約 0.67）。
+    let big = json!({ "id": "big", "frame": { "x": 0, "y": 0, "w": 9, "h": 10 }, "z": 1, "tap": { "text": "!" } });
+    let report = check(&layout(vec![letters(vec![big])]));
+    assert!(
+        !report.warnings.contains(&Warning::Covered {
+            variant: 0,
+            page: "letters".into(),
+            key: "a".into()
+        }),
+        "{:?}",
+        report.warnings
     );
 }

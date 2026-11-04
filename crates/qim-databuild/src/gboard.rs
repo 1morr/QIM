@@ -161,7 +161,6 @@ pub fn layout() -> Layout {
                 height: rows.len() as f64 * ROW_HEIGHT,
             },
             grid: None,
-            background: Some(color("#e8eaed", "#1f1f1f")),
             initial_page: None,
             pages: vec![Page {
                 id: "letters".into(),

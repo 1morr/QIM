@@ -76,3 +76,9 @@ test("照佈局的外觀畫：上層鍵的顏色、透明度與圓角", async ({
 	expect(radius).toBeCloseTo((8 / 390) * keyboard.width, 1);
 	await expect(n).toHaveAttribute("aria-label", "弓，n");
 });
+
+test("沒在組字時，文字鍵直接插入它的文字", async ({ page }) => {
+	await page.getByTestId("key-bang").tap();
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("！");
+	await expect(page.getByTestId("composition")).toHaveText("");
+});

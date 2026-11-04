@@ -22,9 +22,6 @@ export function mountKeyboard(
 	const width = layout.canvasWidth;
 	const height = layout.canvasHeight;
 	container.style.aspectRatio = `${width} / ${height}`;
-	if (layout.background !== undefined) {
-		container.style.background = layout.background;
-	}
 	const percent = (value: number, of: number) => `${(value / of) * 100}%`;
 	// 長度依鍵盤寬度縮放：`#keyboard` 是 inline-size 容器，1cqw 是它寬度的 1%。
 	const scaled = (value: number) => `${(value / width) * 100}cqw`;

@@ -45,12 +45,11 @@
           "additionalProperties": false,
           "required": ["columns", "rows", "snap"],
           "properties": {
-            "columns": { "type": "integer", "minimum": 1 },
-            "rows": { "type": "integer", "minimum": 1 },
+            "columns": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "rows": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
             "snap": { "type": "boolean" }
           }
         },
-        "background": { "$ref": "#/$defs/themeColor" },
         "initialPage": {
           "description": "一開始顯示的頁面 id；省略時是第一頁。",
           "type": "string",
@@ -98,6 +97,8 @@
         "z": {
           "description": "上下層順序，大的在上；同一層時陣列裡後面的在上。",
           "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647,
           "default": 0
         },
         "shape": { "$ref": "#/$defs/shape" },
