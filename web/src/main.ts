@@ -1,12 +1,20 @@
 import { type Key, toKey } from "./keys.ts";
 import "./style.css";
-import init, { Session, type Snapshot } from "./wasm/qim_wasm.js";
+import { mountKeyboard } from "./touch.ts";
+import init, {
+	Layout,
+	type LayoutKey,
+	Session,
+	type Snapshot,
+} from "./wasm/qim_wasm.js";
 
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
 const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
 /** 速成方案檔 `[packs]` 指名的語言模型資料包（字級 bigram）。 */
 const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
+/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
+const LAYOUT_URL = "/layouts/gboard-quick.json";
 
 function element<T extends HTMLElement>(selector: string): T {
 	const found = document.querySelector<T>(selector);
@@ -20,13 +28,20 @@ const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
+const keyboard = element<HTMLElement>("#keyboard");
+const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 
-async function loadPack(url: string): Promise<Uint8Array> {
+/** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
+async function load(url: string): Promise<Response> {
 	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error(`${url}：${response.status}，先跑 cargo xtask web`);
 	}
-	return new Uint8Array(await response.arrayBuffer());
+	return response;
+}
+
+async function loadPack(url: string): Promise<Uint8Array> {
+	return new Uint8Array(await (await load(url)).arrayBuffer());
 }
 
 function press(session: Session, key: Key): Snapshot {
@@ -78,14 +93,65 @@ function insert(commit: string): void {
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。 */
+function apply(snapshot: Snapshot): void {
+	if (snapshot.commit !== undefined) {
+		insert(snapshot.commit);
+	}
+	render(snapshot);
+}
+
+/** 觸控鍵盤上核心沒吃下的鍵：照輸入框收到實體按鍵時的預設動作。 */
+function hostDefault(key: LayoutKey): void {
+	switch (key.tap) {
+		case "letter":
+			insert(key.letter ?? "");
+			return;
+		case "space":
+			insert(" ");
+			return;
+		case "enter":
+			insert("\n");
+			return;
+		case "backspace": {
+			const { selectionStart: start, selectionEnd: end } = text;
+			if (start === end && start > 0) {
+				// 刪游標前一個字元，不切開代理對。
+				const before = Array.from(text.value.slice(0, start));
+				const removed = before.pop()?.length ?? 0;
+				text.setRangeText("", start - removed, start, "end");
+			} else {
+				text.setRangeText("", start, end, "end");
+			}
+			text.dispatchEvent(new Event("input", { bubbles: true }));
+			return;
+		}
+	}
+}
+
+/** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
+function setTouch(on: boolean): void {
+	keyboard.hidden = !on;
+	touchToggle.setAttribute("aria-pressed", String(on));
+	text.inputMode = on ? "none" : "";
+}
+
 async function start(): Promise<void> {
-	const [, pack, lexicon, languageModel] = await Promise.all([
+	const [, pack, lexicon, languageModel, layoutJson] = await Promise.all([
 		init(),
 		loadPack(PACK_URL),
 		loadPack(LEXICON_URL),
 		loadPack(LANGUAGE_MODEL_URL),
+		load(LAYOUT_URL).then((response) => response.text()),
 	]);
 	const session = new Session(pack, lexicon, languageModel);
+	const layout = new Layout(layoutJson);
+	mountKeyboard(keyboard, layout, session, apply, hostDefault);
+	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
+	setTouch(window.matchMedia("(pointer: coarse)").matches);
+	touchToggle.addEventListener("click", () => {
+		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
+	});
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);
@@ -98,10 +164,7 @@ async function start(): Promise<void> {
 				return;
 			}
 			event.preventDefault();
-			if (snapshot.commit !== undefined) {
-				insert(snapshot.commit);
-			}
-			render(snapshot);
+			apply(snapshot);
 		} finally {
 			snapshot.free();
 		}

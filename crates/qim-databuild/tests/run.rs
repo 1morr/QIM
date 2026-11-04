@@ -501,6 +501,23 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
 }
 
 #[test]
+fn writes_the_default_gboard_layout_for_the_web() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    assert_eq!(
+        outcome.layout_path,
+        root.path().join("build/layouts/gboard-quick.json")
+    );
+    let text = std::fs::read_to_string(&outcome.layout_path).unwrap();
+    assert_eq!(
+        qim_layout::Layout::from_json(&text).unwrap(),
+        qim_databuild::gboard::layout()
+    );
+}
+
+#[test]
 fn verify_writes_the_unihan_report_and_still_passes_with_differences() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);

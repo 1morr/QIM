@@ -1,6 +1,7 @@
-//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`，不放邏輯（plan §1.3）。
+//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{Engine, Key, Session, Snapshot, UserModel};
+use qim_layout::Action;
 use wasm_bindgen::prelude::*;
 
 /// 網頁的一個輸入框：速成、詞庫與語言模型資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
@@ -81,6 +82,21 @@ impl WebSession {
         self.handle(Key::PageDown)
     }
 
+    /// 按下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）的 `tap` 動作。
+    pub fn tap(&mut self, layout: &WebLayout, index: usize) -> Result<WebSnapshot, JsError> {
+        let key = layout
+            .page()
+            .keys
+            .get(index)
+            .ok_or_else(|| JsError::new(&format!("佈局沒有第 {index} 個鍵")))?;
+        Ok(self.handle(match key.tap {
+            Action::Letter(c) => Key::Letter(c),
+            Action::Space => Key::Space,
+            Action::Backspace => Key::Backspace,
+            Action::Enter => Key::Enter,
+        }))
+    }
+
     fn handle(&mut self, key: Key) -> WebSnapshot {
         self.session
             .handle(&self.engine, &mut self.user, key)
@@ -117,4 +133,100 @@ impl From<Snapshot> for WebSnapshot {
             commit: s.commit,
         }
     }
+}
+
+/// 觸控佈局：網頁 fetch 的佈局檔讀進 `qim-layout`，網頁只照 [`WebLayout::keys`] 畫、
+/// 把點擊位置交給 [`WebLayout::hit`]。JS 端叫 `Layout`。
+#[wasm_bindgen(js_name = Layout)]
+pub struct WebLayout {
+    layout: qim_layout::Layout,
+}
+
+#[wasm_bindgen(js_class = Layout)]
+impl WebLayout {
+    #[wasm_bindgen(constructor)]
+    pub fn new(json: &str) -> Result<WebLayout, JsError> {
+        let layout =
+            qim_layout::Layout::from_json(json).map_err(|e| JsError::new(&e.to_string()))?;
+        Ok(Self { layout })
+    }
+
+    /// 設計尺寸的寬，按鍵座標以它為準。
+    #[wasm_bindgen(getter, js_name = canvasWidth)]
+    pub fn canvas_width(&self) -> f64 {
+        self.variant().canvas.width
+    }
+
+    #[wasm_bindgen(getter, js_name = canvasHeight)]
+    pub fn canvas_height(&self) -> f64 {
+        self.variant().canvas.height
+    }
+
+    /// 目前頁的按鍵，標籤省略時用 `session` 方案的字根。
+    pub fn keys(&self, session: &WebSession) -> Vec<WebLayoutKey> {
+        let radicals = &session.engine.scheme().radicals;
+        self.page()
+            .keys
+            .iter()
+            .map(|key| WebLayoutKey {
+                id: key.id.clone(),
+                x: key.frame.x,
+                y: key.frame.y,
+                w: key.frame.w,
+                h: key.frame.h,
+                z: key.z,
+                label: key.display_label(|c| radicals.get(&c).map(String::as_str)),
+                hint: key.hint.clone(),
+                tap: key.tap.name().into(),
+                letter: match key.tap {
+                    Action::Letter(c) => Some(c.to_string()),
+                    _ => None,
+                },
+            })
+            .collect()
+    }
+
+    /// 點在畫布座標 `(x, y)` 時按到的鍵在 [`WebLayout::keys`] 的位置。
+    pub fn hit(&self, x: f64, y: f64) -> Option<usize> {
+        self.page().hit(x, y)
+    }
+}
+
+impl WebLayout {
+    /// 佈局版本的選法在 M1 票 19；現在只有一個版本、一頁（`Layout::from_json` 保證至少一個）。
+    fn variant(&self) -> &qim_layout::LayoutVariant {
+        &self.layout.variants[0]
+    }
+
+    fn page(&self) -> &qim_layout::Page {
+        &self.variant().pages[0]
+    }
+}
+
+/// 佈局的一個鍵給 JS 畫的樣子，座標是設計尺寸。JS 端叫 `LayoutKey`。
+#[wasm_bindgen(js_name = LayoutKey, getter_with_clone)]
+pub struct WebLayoutKey {
+    #[wasm_bindgen(readonly)]
+    pub id: String,
+    #[wasm_bindgen(readonly)]
+    pub x: f64,
+    #[wasm_bindgen(readonly)]
+    pub y: f64,
+    #[wasm_bindgen(readonly)]
+    pub w: f64,
+    #[wasm_bindgen(readonly)]
+    pub h: f64,
+    #[wasm_bindgen(readonly)]
+    pub z: i32,
+    /// 主標籤，已照 [`qim_layout::Key::display_label`] 補上字根。
+    #[wasm_bindgen(readonly)]
+    pub label: String,
+    #[wasm_bindgen(readonly)]
+    pub hint: Option<String>,
+    /// `tap` 動作的種類：`letter`、`space`、`backspace`、`enter`；核心沒吃下時網頁照它做宿主的預設動作。
+    #[wasm_bindgen(readonly)]
+    pub tap: String,
+    /// `tap` 是 `letter` 時的字母。
+    #[wasm_bindgen(readonly)]
+    pub letter: Option<String>,
 }

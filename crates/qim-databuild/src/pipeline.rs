@@ -14,10 +14,14 @@ use crate::transcode::Transcoder;
 use crate::verify::{
     self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
 };
-use crate::{Error, bigram, build_pack, lexicon, libcangjie, packing, personal, scheme, unihan};
+use crate::{
+    Error, bigram, build_pack, gboard, lexicon, libcangjie, packing, personal, scheme, unihan,
+};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 const PACKS: &str = "build/packs";
+/// 由排列算出的預設佈局，網頁載入（plan §2.6）。
+const LAYOUTS: &str = "build/layouts";
 pub(crate) const LIBCANGJIE: &str = "libcangjie";
 const TABLE: &str = "data/table.txt";
 pub(crate) const UNIHAN: &str = "unihan";
@@ -57,6 +61,8 @@ pub struct Outcome {
     pub language_model_path: PathBuf,
     pub language_model_sha256: String,
     pub language_model: bigram::Summary,
+    /// 預設 Gboard 速成佈局（[`gboard::layout`]）。
+    pub layout_path: PathBuf,
     /// 各語料的句數。
     pub corpora: Vec<CorpusSummary>,
     /// 個人集轉出的統計；沒有 [`personal::USERDB`] 時是 `None`。
@@ -68,6 +74,7 @@ pub struct Outcome {
 /// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`、建各語料，再用語料的字頻
 /// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`、用語料的 train 切分訓練方案指名的語言模型
 /// 資料包到 `build/packs/<語言模型 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
+/// 另把預設 Gboard 速成佈局寫到 `build/layouts/`。
 /// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     let read = |rel: &str| {
@@ -278,6 +285,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         &language_model_about(&language_model_id),
     )?;
     let language_model_path = language_model_dir.join(format!("{language_model_id}.pack"));
+    let layouts = root.join(LAYOUTS);
+    std::fs::create_dir_all(&layouts).map_err(Error::io(&layouts))?;
+    let layout_path = layouts.join(gboard::FILE);
+    write(layout_path.clone(), gboard::layout().to_json().as_bytes())?;
 
     let personal = build_personal(root, &transcoder)?;
     if verify {
@@ -338,6 +349,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         language_model_path,
         language_model_sha256: sha256_hex(&language_model_bytes),
         language_model: language_model_summary,
+        layout_path,
         corpora,
         personal,
         report,

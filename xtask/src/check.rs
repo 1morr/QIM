@@ -126,7 +126,10 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             command
         }
         Action::E2e => {
-            let Some(command) = crate::web::packs(root).then(|| npm(root, "e2e")).flatten() else {
+            let Some(command) = crate::web::serve_data_outputs(root)
+                .then(|| npm(root, "e2e"))
+                .flatten()
+            else {
                 return false;
             };
             command

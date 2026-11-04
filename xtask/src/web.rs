@@ -1,7 +1,7 @@
-//! `cargo xtask web`：準備網頁要的 WebAssembly 綁定與資料包。
+//! `cargo xtask web`：準備網頁要的 WebAssembly 綁定、資料包與佈局。
 //!
 //! - [`wasm_bindings`]：用 release 編 `qim-wasm`，`wasm-bindgen --target web` 產生到 [`BINDINGS_DIR`]。
-//! - [`packs`]：把 `build/packs/` 複製到 [`PACKS_DIR`]，網頁 fetch 它。
+//! - [`serve_data_outputs`]：把 `cargo xtask data` 的產物複製到 `web/public/` 下，網頁 fetch 它們。
 
 use std::fs;
 use std::io;
@@ -10,10 +10,11 @@ use std::process::Command;
 
 /// `wasm-bindgen` 產生的 JS 與 `.wasm`，`web/src/` 直接 import；不進 git。
 pub const BINDINGS_DIR: &str = "web/src/wasm";
-/// 網頁的資料包，Vite 原樣提供；不進 git（plan §1.2）。
-pub const PACKS_DIR: &str = "web/public/packs";
-/// `cargo xtask data` 的產物。
-const BUILT_PACKS_DIR: &str = "build/packs";
+/// 網頁的資料包與佈局，Vite 原樣提供；不進 git（plan §1.2）。
+const PACKS_DIR: &str = "web/public/packs";
+const LAYOUTS_DIR: &str = "web/public/layouts";
+/// `cargo xtask data` 的產物目錄 → 網頁的位置。
+const DATA_OUTPUTS: &[(&str, &str)] = &[("build/packs", PACKS_DIR), ("build/layouts", LAYOUTS_DIR)];
 const TARGET: &str = "wasm32-unknown-unknown";
 
 /// 編 `qim-wasm` 並產生 JS 綁定；回傳是否成功，失敗原因印到終端機。
@@ -59,25 +60,25 @@ fn try_wasm_bindings(root: &Path) -> Result<(), String> {
         .arg(wasm))
 }
 
-/// 把 `build/packs/` 整個複製到 `web/public/packs/`，先清掉舊的；回傳是否成功。
-pub fn packs(root: &Path) -> bool {
-    let from = root.join(BUILT_PACKS_DIR);
-    if !from.is_dir() {
-        eprintln!("{BUILT_PACKS_DIR} 不存在：先跑 `cargo xtask data`");
-        return false;
-    }
-    let to = root.join(PACKS_DIR);
-    let result = match fs::remove_dir_all(&to) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
-        _ => copy_dir(&from, &to),
-    };
-    match result {
-        Ok(()) => true,
-        Err(e) => {
-            eprintln!("複製資料包到 {PACKS_DIR} 失敗：{e}");
-            false
+/// 把 [`DATA_OUTPUTS`] 的每個目錄整個複製到網頁，先清掉舊的；回傳是否成功。
+pub fn serve_data_outputs(root: &Path) -> bool {
+    for (built, served) in DATA_OUTPUTS {
+        let from = root.join(built);
+        if !from.is_dir() {
+            eprintln!("{built} 不存在：先跑 `cargo xtask data`");
+            return false;
+        }
+        let to = root.join(served);
+        let result = match fs::remove_dir_all(&to) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+            _ => copy_dir(&from, &to),
+        };
+        if let Err(e) = result {
+            eprintln!("複製 {built} 到 {served} 失敗：{e}");
+            return false;
         }
     }
+    true
 }
 
 fn run(command: &mut Command) -> Result<(), String> {
@@ -152,23 +153,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
     }
 
     #[test]
-    fn copies_packs_and_drops_stale_files() {
+    fn copies_packs_and_layouts_and_drops_stale_files() {
         let root = tempfile::tempdir().unwrap();
-        let built = root.path().join(BUILT_PACKS_DIR).join("quick");
+        let built = root.path().join("build/packs/quick");
         fs::create_dir_all(&built).unwrap();
         fs::write(built.join("quick.pack"), b"pack").unwrap();
+        let layouts = root.path().join("build/layouts");
+        fs::create_dir_all(&layouts).unwrap();
+        fs::write(layouts.join("gboard-quick.json"), b"{}").unwrap();
         let stale = root.path().join(PACKS_DIR).join("old");
         fs::create_dir_all(&stale).unwrap();
+        let stale_layout = root.path().join(LAYOUTS_DIR).join("old.json");
+        fs::create_dir_all(stale_layout.parent().unwrap()).unwrap();
+        fs::write(&stale_layout, b"{}").unwrap();
 
-        assert!(packs(root.path()));
+        assert!(serve_data_outputs(root.path()));
         let copied = root.path().join(PACKS_DIR).join("quick/quick.pack");
         assert_eq!(fs::read(copied).unwrap(), b"pack");
+        let layout = root.path().join(LAYOUTS_DIR).join("gboard-quick.json");
+        assert_eq!(fs::read(layout).unwrap(), b"{}");
         assert!(!stale.exists());
+        assert!(!stale_layout.exists());
     }
 
     #[test]
-    fn packs_fail_when_data_was_not_built() {
+    fn serve_data_outputs_fails_when_data_was_not_built() {
         let root = tempfile::tempdir().unwrap();
-        assert!(!packs(root.path()));
+        assert!(!serve_data_outputs(root.path()));
+        // 只有資料包、沒有佈局（`cargo xtask data` 是舊版時建的）也失敗。
+        fs::create_dir_all(root.path().join("build/packs/quick")).unwrap();
+        assert!(!serve_data_outputs(root.path()));
     }
 }
