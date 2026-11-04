@@ -30,6 +30,7 @@
 | 2026-11-04 | M1 03 | 中文維基、HKCanCor、Common Voice 進基準與訓練切分，字頻 `chars.tsv`；下載快取移到 repo 外；細節見票 03 | 新 session 下 `/implement .scratch/m1/issues/04-bench-corrections-and-personal.md` |
 | 2026-11-04 | M1 04 | 基準加修正次數、KSPC、跳動、依長度分組、翻盤清單與個人集（`cargo xtask data` 轉碼，只報數字）；細節見票 04 | 新 session 下 `/implement .scratch/m1/issues/05-bench-latency.md` |
 | 2026-11-04 | M1 05 | `cargo xtask bench` 報原生與 WebAssembly（Node）每鍵 p50 / p95，含第 20 碼起一組，只報不擋；M0 核心 p95 < 2 µs；細節見票 05 | 新 session 下 `/implement .scratch/m1/issues/06-lexicon-and-char-frequency.md` |
+| 2026-11-04 | M1 06 | rime-essay 詞庫資料包（25 萬詞）與語料字頻，`Engine` 依字頻排字序、整串查詞庫；`anr` 首選「門口」進 `fixed.tsv`，各集合修正/句約減半；細節見票 06 | 新 session 下 `/implement .scratch/m1/issues/07-continuous.md` |
 
 ## 偏差與決定
 
@@ -54,3 +55,7 @@
 - 2026-11-04 M1 04：修正次數的模擬卡住時按 Esc（算一次修正）改逐字打，逐字也打不出時 `--check` 紅（plan §5.2、`GLOSSARY.md`）。
 - 2026-11-04 M1 05：WebAssembly 延遲用 Node 跑網頁綁定，不用瀏覽器：Chromium 計時粗化到 5 µs（隔離後），量不出現在的核心（`scripts/experiments/wasm-latency-browser/`）。
 - 2026-11-04 M1 05：長輸入不另造題，取基準句子中組字第 20 碼起的按鍵（plan §5.2、`docs/development.md`）。
+- 2026-11-04 M1 06：字頻放詞庫資料包，`Engine` 載入時依字頻重排字序；速成資料包的碼表照舊排年級 → Big5，不含語料衍生的資料（plan §4.1）。
+- 2026-11-04 M1 06：詞庫資料包的 `LICENSE` 除了 LGPL-3.0，另寫四份語料的 CC 授權全文，因為字頻來自語料（plan §4、brief §5.2、§11）。
+- 2026-11-04 M1 06：`sources.toml` 的授權三個欄位收成 `license_text` 一個 enum，多一種 `upstream_file`（`docs/development.md`）。
+- 2026-11-04 M1 06：`anr 門口` 由票 06 加進 `fixed.tsv`，查詢搬進 `Engine` 也提前在票 06 做完，票 07 不再做（plan §5.2）。
