@@ -47,3 +47,4 @@ Blocked by: 18
   - `variant`、`page`、`key` 三個欄位在多個 `Warning` 重複（Data Clumps）：等 M5 編輯器要用位置標警告時再收成一個型別。
   - 網頁照 `style`、`rotate`、`radius`、`a11yLabel` 畫鍵算票外：不照畫的話，旋轉或圓角的鍵畫的位置和點擊判定對不上，保留。
 - 2026-11-04（使用者決定，經協調者）：`touchInset` 改名 `extendedEdges`，語意不變（正數往外擴、負數往內縮），與 Delta skin 同名同義；格式還沒發佈，舊名不留相容，寫舊名的檔案不符合 Schema（`tests/validate.rs` 有一例）。上面 Comments 提到的 `touchInset` 都指這個欄位。
+- 2026-11-04 合併 main（票 11，`f67d86f`）：`docs/development.md`（資料包說明取 main、預設佈局取本票）與 `web/src/main.ts`（三個資料包取 main、佈局版本選法取本票）有衝突，其餘自動合併。合併後 `cargo xtask data` 通過（quick `f9499e401df5`、quick-lexicon `fe79d8a13d48`、zh-hant-bigram `088a93199bd2`）；`cargo xtask bench --check` exit 0，公開語料四集沒有翻盤、固定題 11/11；個人集有 81 題由錯變對、41 題由對變錯，來自票 11 的 bigram（個人集的 baseline 只在本機，合併時沒更新），本票沒動核心與資料包；`cargo xtask check` 通過（e2e `28 passed`）。
