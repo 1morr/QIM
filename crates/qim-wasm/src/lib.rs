@@ -4,7 +4,7 @@ use qim_core::{
     CangjieVersion, Engine, EnglishPack, Key, Options, RadicalHintPack, RadicalHints, Scheme,
     Session, SimplifierPack, Snapshot, UserModel,
 };
-use qim_layout::{Action, Target, When};
+use qim_layout::{Action, KeyState, Shift, Target, When};
 use wasm_bindgen::prelude::*;
 
 /// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁與英文資料包、一個個人模型、一個 `Session`。
@@ -214,10 +214,24 @@ impl WebSession {
         self.track_composing(snapshot)
     }
 
-    /// 點一下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）：做它的 `tap`，組字中照 `composing`。
-    pub fn tap(&mut self, layout: &mut WebLayout, index: usize) -> Result<WebSnapshot, JsError> {
-        let action = layout.key(index)?.tap_action(self.composing).clone();
-        Ok(self.perform(layout, action))
+    /// 點一下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）：做它的 `tap`，組字中照 `composing`、
+    /// Shift 開著時字母鍵輸入大寫字母。`quick_repeat` 是同一個鍵剛點過（網頁量時間），
+    /// 快速點兩下 Shift 鎖定大寫（[`Shift::after_shift_tap`]）。
+    pub fn tap(
+        &mut self,
+        layout: &mut WebLayout,
+        index: usize,
+        quick_repeat: bool,
+    ) -> Result<WebSnapshot, JsError> {
+        let key = layout.key(index)?;
+        let action = key.tap_action(self.key_state(layout));
+        let after = layout.shift.after_key(key);
+        let snapshot = self.perform(layout, action.clone());
+        layout.shift = match action {
+            Action::Shift => layout.shift.after_shift_tap(quick_repeat),
+            _ => after,
+        };
+        Ok(snapshot)
     }
 
     /// 長按 `layout` 第 `index` 個鍵、選了長按清單第 `choice` 個（0 是預設）。
@@ -233,7 +247,10 @@ impl WebSession {
             key.long_press.get(choice).cloned().ok_or_else(|| {
                 JsError::new(&format!("鍵 {} 的長按清單沒有第 {choice} 個", key.id))
             })?;
-        Ok(self.perform(layout, action))
+        let after = layout.shift.after_key(key);
+        let snapshot = self.perform(layout, action);
+        layout.shift = after;
+        Ok(snapshot)
     }
 
     /// 做一個佈局動作：文字經 `Session::text`（組字中先上屏組字）；切頁換 `layout` 的目前頁，
@@ -253,7 +270,8 @@ impl WebSession {
                         Key::Other
                     }
                     Action::ToggleAscii => Key::ToggleAscii,
-                    Action::NextKeyboard | Action::Text(_) => Key::Other,
+                    // Shift 的狀態在佈局（呼叫端改），核心收到的和切頁一樣：組字中吃下、組字留著。
+                    Action::NextKeyboard | Action::Shift | Action::Text(_) => Key::Other,
                 };
                 self.session.handle(&self.engine, &mut self.user, key)
             }
@@ -265,6 +283,14 @@ impl WebSession {
             _ => None,
         };
         snapshot
+    }
+
+    /// 觸控鍵盤選標籤與動作用的狀態：上一個鍵之後還在不在組字、`layout` 的 Shift。
+    fn key_state(&self, layout: &WebLayout) -> KeyState {
+        KeyState {
+            composing: self.composing,
+            shift: layout.shift,
+        }
     }
 
     fn handle(&mut self, key: Key) -> WebSnapshot {
@@ -451,6 +477,8 @@ pub struct WebLayout {
     /// 選到的佈局版本與目前頁在陣列的位置。
     variant: usize,
     page: usize,
+    /// Shift 鍵的狀態，由 [`WebSession::tap`] 與 [`WebSession::long_press`] 改。
+    shift: Shift,
 }
 
 #[wasm_bindgen(js_class = Layout)]
@@ -467,6 +495,7 @@ impl WebLayout {
             warnings: warnings.iter().map(ToString::to_string).collect(),
             variant: 0,
             page: 0,
+            shift: Shift::Off,
         };
         if let Some(warning) = web.select(device, orientation)? {
             web.warnings.push(warning);
@@ -496,6 +525,18 @@ impl WebLayout {
         Ok(warning.map(|w| w.to_string()))
     }
 
+    /// Shift 鍵的狀態：`off`、`once`（下一個字母大寫）、`locked`（鎖定大寫）；網頁依它畫 Shift 鍵、
+    /// 狀態變了就重畫標籤。
+    #[wasm_bindgen(getter)]
+    pub fn shift(&self) -> String {
+        match self.shift {
+            Shift::Off => "off",
+            Shift::Once => "once",
+            Shift::Locked => "locked",
+        }
+        .into()
+    }
+
     /// 目前頁的 id；切頁鍵按下後網頁比對它決定要不要重畫。
     #[wasm_bindgen(getter, js_name = pageId)]
     pub fn page_id(&self) -> String {
@@ -518,15 +559,16 @@ impl WebLayout {
         self.variant().canvas.height
     }
 
-    /// 目前頁的按鍵：標籤省略時用 `session` 方案的字根，組字中照 `composing`。
+    /// 目前頁的按鍵：標籤省略時用 `session` 方案的字根，組字中照 `composing`，Shift 開著時字母鍵
+    /// 顯示大寫字母。
     pub fn keys(&self, session: &WebSession) -> Vec<WebLayoutKey> {
         let radicals = &session.engine.scheme().radicals;
+        let state = session.key_state(self);
         self.page()
             .keys
             .iter()
             .map(|key| {
-                let label =
-                    key.display_label(session.composing, |c| radicals.get(&c).map(String::as_str));
+                let label = key.display_label(state, |c| radicals.get(&c).map(String::as_str));
                 let style = key.style.clone().unwrap_or_default();
                 let [label_offset_x, label_offset_y] = style.label_offset.unwrap_or([0.0, 0.0]);
                 WebLayoutKey {
@@ -540,7 +582,8 @@ impl WebLayout {
                     radius: key.shape.corner_radius(),
                     a11y_label: key.accessibility_label(&label),
                     label,
-                    hint: key.hint.clone(),
+                    hint: key.display_hint(state).map(str::to_owned),
+                    shift: key.tap == Action::Shift,
                     fill_light: style.fill.as_ref().map(|c| c.light.clone()),
                     fill_dark: style.fill.map(|c| c.dark),
                     label_color_light: style.label_color.as_ref().map(|c| c.light.clone()),
@@ -549,7 +592,7 @@ impl WebLayout {
                     label_size: style.label_size,
                     label_offset_x,
                     label_offset_y,
-                    preview: key.shows_preview(session.composing),
+                    preview: key.shows_preview(state),
                     long_press: key.long_press.iter().map(Action::spoken).collect(),
                 }
             })
@@ -611,8 +654,12 @@ pub struct WebLayoutKey {
     /// 主標籤，已照 [`qim_layout::Key::display_label`] 補上字根。
     #[wasm_bindgen(readonly)]
     pub label: String,
+    /// 角標（[`qim_layout::Key::display_hint`]），Shift 開著時字母鍵沒有。
     #[wasm_bindgen(readonly)]
     pub hint: Option<String>,
+    /// 是不是 Shift 鍵；網頁依 [`WebLayout::shift`] 畫它的狀態。
+    #[wasm_bindgen(readonly)]
+    pub shift: bool,
     #[wasm_bindgen(readonly, js_name = a11yLabel)]
     pub a11y_label: String,
     #[wasm_bindgen(readonly, js_name = fillLight)]

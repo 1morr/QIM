@@ -75,6 +75,7 @@ fn action_names_match_the_json_tags() {
         Action::SwitchPage("symbols".into()),
         Action::NextKeyboard,
         Action::ToggleAscii,
+        Action::Shift,
     ] {
         let json = serde_json::to_value(&action).unwrap();
         let tag = json

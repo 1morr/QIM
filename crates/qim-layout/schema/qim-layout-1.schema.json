@@ -218,7 +218,7 @@
     "action": {
       "description": "帶資料的動作寫成單一鍵的物件，不帶的寫成名字。",
       "oneOf": [
-        { "enum": ["backspace", "space", "enter", "nextKeyboard", "toggleAscii"] },
+        { "enum": ["backspace", "space", "enter", "nextKeyboard", "toggleAscii", "shift"] },
         {
           "type": "object",
           "additionalProperties": false,

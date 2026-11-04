@@ -7,8 +7,8 @@ mod model;
 mod validate;
 
 pub use model::{
-    Action, Composing, Device, FORMAT, Frame, Grid, Insets, Key, Layout, LayoutVariant,
-    Orientation, Page, Shape, Size, Style, Swipe, ThemeColor, When,
+    Action, Composing, Device, FORMAT, Frame, Grid, Insets, Key, KeyState, Layout, LayoutVariant,
+    Orientation, Page, Shape, Shift, Size, Style, Swipe, ThemeColor, When,
 };
 pub use validate::{
     LayoutError, Report, SCHEMA, StrictIssue, Target, Warning, check_builtin, validate,

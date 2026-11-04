@@ -218,18 +218,65 @@ fn is_zero(value: &f64) -> bool {
     *value == 0.0
 }
 
+/// Shift 鍵的狀態（brief §4.4，照 Gboard 速成）：殼記著，按鍵依它換標籤與動作。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Shift {
+    #[default]
+    Off,
+    /// 下一個字母鍵輸入大寫英文字母，打完回到 `Off`。
+    Once,
+    /// 字母鍵一直輸入大寫英文字母，再點一下 Shift 才解除。
+    Locked,
+}
+
+impl Shift {
+    /// 點了 Shift 鍵之後的狀態。`quick_repeat` 是這一下和上一下點 Shift 隔得夠近（快速點兩下），
+    /// 由殼量時間：關著時點一下開一次；開一次時快速再點鎖定、隔太久再點關掉；鎖定時點一下關掉。
+    pub fn after_shift_tap(self, quick_repeat: bool) -> Shift {
+        match (self, quick_repeat) {
+            (Shift::Off, _) => Shift::Once,
+            (Shift::Once, true) => Shift::Locked,
+            (Shift::Once, false) | (Shift::Locked, _) => Shift::Off,
+        }
+    }
+
+    /// 點或長按了 `key`（不是 Shift 鍵）之後的狀態：開一次的打完字母鍵就解除，鎖定與其他鍵不變。
+    pub fn after_key(self, key: &Key) -> Shift {
+        match (self, &key.tap) {
+            (Shift::Once, Action::Letter(_)) => Shift::Off,
+            _ => self,
+        }
+    }
+
+    fn is_on(self) -> bool {
+        self != Shift::Off
+    }
+}
+
+/// 殼決定按鍵標籤與動作要知道的狀態：是不是在組字、Shift 開著沒。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct KeyState {
+    pub composing: bool,
+    pub shift: Shift,
+}
+
 impl Key {
-    /// 鍵上顯示的主標籤：組字中且 `composing` 有寫 `label` 就用它；其次是 `label`；
-    /// 都沒寫時字母鍵用方案的字根（`radical`），方案沒有這個鍵的字根就用字母；其他鍵是空字串。
+    /// 鍵上顯示的主標籤：組字中且 `composing` 有寫 `label` 就用它；其次 Shift 開著時字母鍵顯示
+    /// 大寫字母；再其次是 `label`；都沒寫時字母鍵用方案的字根（`radical`），方案沒有這個鍵的字根
+    /// 就用字母；其他鍵是空字串。
     pub fn display_label<'r>(
         &self,
-        composing: bool,
+        state: KeyState,
         radical: impl FnOnce(char) -> Option<&'r str>,
     ) -> String {
-        let composing_label = self
-            .composing_override(composing)
-            .and_then(|c| c.label.as_ref());
-        match (composing_label.or(self.label.as_ref()), &self.tap) {
+        if let Some(label) = self
+            .composing_override(state.composing)
+            .and_then(|c| c.label.as_ref())
+        {
+            return label.clone();
+        }
+        match (&self.label, &self.tap) {
+            (_, Action::Letter(letter)) if state.shift.is_on() => letter.to_uppercase().collect(),
             (Some(label), _) => label.clone(),
             (None, Action::Letter(letter)) => {
                 radical(*letter).map_or_else(|| letter.to_string(), str::to_owned)
@@ -238,19 +285,34 @@ impl Key {
         }
     }
 
-    /// 點一下的動作：組字中且 `composing` 有寫 `tap` 就用它，否則是 `tap`。
-    pub fn tap_action(&self, composing: bool) -> &Action {
-        self.composing_override(composing)
+    /// 角標：Shift 開著時字母鍵不顯示（標籤已是字母，同 Gboard），其他時候是 `hint`。
+    pub fn display_hint(&self, state: KeyState) -> Option<&str> {
+        match self.tap {
+            Action::Letter(_) if state.shift.is_on() => None,
+            _ => self.hint.as_deref(),
+        }
+    }
+
+    /// 點一下的動作：組字中且 `composing` 有寫 `tap` 就用它；Shift 開著時字母鍵直接輸入大寫字母
+    /// （不經組字）；否則是 `tap`。
+    pub fn tap_action(&self, state: KeyState) -> Action {
+        if let Some(tap) = self
+            .composing_override(state.composing)
             .and_then(|c| c.tap.as_ref())
-            .unwrap_or(&self.tap)
+        {
+            return tap.clone();
+        }
+        match &self.tap {
+            Action::Letter(letter) if state.shift.is_on() => {
+                Action::Text(letter.to_uppercase().collect())
+            }
+            tap => tap.clone(),
+        }
     }
 
     /// 按住時要不要顯示放大預覽（brief §4.4）：點一下會輸入字的鍵（字母、文字）才要，功能鍵不要。
-    pub fn shows_preview(&self, composing: bool) -> bool {
-        matches!(
-            self.tap_action(composing),
-            Action::Letter(_) | Action::Text(_)
-        )
+    pub fn shows_preview(&self, state: KeyState) -> bool {
+        matches!(self.tap_action(state), Action::Letter(_) | Action::Text(_))
     }
 
     /// 組字中時的 `composing`；沒在組字或沒寫時是 `None`。
@@ -425,6 +487,8 @@ pub enum Action {
     NextKeyboard,
     /// 中英切換。
     ToggleAscii,
+    /// Shift：下一個字母鍵輸入大寫英文字母，快速點兩下鎖定（[`Shift`]）。
+    Shift,
 }
 
 impl Action {
@@ -439,6 +503,7 @@ impl Action {
             Action::SwitchPage(_) => "switchPage",
             Action::NextKeyboard => "nextKeyboard",
             Action::ToggleAscii => "toggleAscii",
+            Action::Shift => "shift",
         }
     }
 
@@ -453,6 +518,7 @@ impl Action {
             Action::SwitchPage(page) => format!("切到 {page}"),
             Action::NextKeyboard => "下一個鍵盤".into(),
             Action::ToggleAscii => "中英切換".into(),
+            Action::Shift => "大寫".into(),
         }
     }
 }

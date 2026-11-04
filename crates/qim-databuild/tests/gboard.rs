@@ -33,7 +33,7 @@ fn passes_the_strict_check_for_builtin_layouts_including_portrait_and_landscape(
 }
 
 #[test]
-fn has_phone_portrait_and_landscape_with_letters_symbols_and_phrases_pages() {
+fn has_phone_portrait_and_landscape_with_the_gboard_pages_and_phrases() {
     let layout = layout();
     let whens: Vec<_> = layout
         .variants
@@ -49,7 +49,16 @@ fn has_phone_portrait_and_landscape_with_letters_symbols_and_phrases_pages() {
     );
     for variant in &layout.variants {
         let ids: Vec<&str> = variant.pages.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, [gboard::LETTERS, gboard::SYMBOLS, gboard::PHRASES]);
+        assert_eq!(
+            ids,
+            [
+                gboard::LETTERS,
+                gboard::SYMBOLS,
+                gboard::MORE_SYMBOLS,
+                gboard::NUMBERS,
+                gboard::PHRASES
+            ]
+        );
         assert_eq!(variant.initial_page_index(), Some(0));
     }
 }
@@ -177,26 +186,131 @@ fn z_is_labelled_like_gboard() {
     }
 }
 
+/// 一頁的鍵 id 依位置由上到下、由左到右排好，每排一個字串，鍵 id 以空白分開。
+fn rows(page: &Page) -> Vec<String> {
+    let mut keys: Vec<&qim_layout::Key> = page.keys.iter().collect();
+    keys.sort_by(|a, b| {
+        (a.frame.y, a.frame.x)
+            .partial_cmp(&(b.frame.y, b.frame.x))
+            .unwrap()
+    });
+    let mut rows: Vec<(f64, Vec<&str>)> = Vec::new();
+    for key in keys {
+        match rows.last_mut() {
+            Some((y, ids)) if *y == key.frame.y => ids.push(&key.id),
+            _ => rows.push((key.frame.y, vec![&key.id])),
+        }
+    }
+    rows.into_iter().map(|(_, ids)| ids.join(" ")).collect()
+}
+
+/// 字母頁的鍵位照 Gboard 速成（M1 票 27 的實測）。
 #[test]
-fn symbols_page_types_text_and_switches_back_to_letters_with_abc_and_on_to_phrases() {
+fn letters_page_matches_gboard_quick() {
+    for variant in &layout().variants {
+        let letters = page(variant, gboard::LETTERS);
+        assert_eq!(
+            rows(letters),
+            [
+                "q w e r t y u i o p",
+                "a s d f g h j k l",
+                "shift z x c v b n m backspace",
+                "to-symbols ， space 。 enter",
+            ]
+        );
+        assert_eq!(key(letters, "shift").tap, Action::Shift);
+        assert_eq!(key(letters, "space").label.as_deref(), Some("速成"));
+        assert_eq!(key(letters, "space").a11y_label.as_deref(), Some("空白"));
+        // 逗號鍵長按進常用頁（代替 Gboard 的表情入口），句號鍵長按的預設是「……」。
+        assert_eq!(
+            key(letters, "，").long_press,
+            [Action::SwitchPage(gboard::PHRASES.into())]
+        );
+        let period = &key(letters, "。").long_press;
+        assert_eq!(period.len(), 16);
+        assert_eq!(period[0], Action::Text("……".into()));
+    }
+}
+
+#[test]
+fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
     for variant in &layout().variants {
         let symbols = page(variant, gboard::SYMBOLS);
         assert_eq!(
-            key(page(variant, gboard::LETTERS), "to-symbols").tap,
-            Action::SwitchPage(gboard::SYMBOLS.into())
+            rows(symbols),
+            [
+                "1 2 3 4 5 6 7 8 9 0",
+                "@ # $ _ & - + ( ) /",
+                "to-more-symbols 、 “ ” : ; ! ? backspace",
+                "to-letters , to-numbers space . enter",
+            ]
         );
-        let abc = key(symbols, "to-letters");
-        assert_eq!(abc.label.as_deref(), Some("ABC"));
-        assert_eq!(abc.tap, Action::SwitchPage(gboard::LETTERS.into()));
         assert_eq!(
-            key(symbols, "to-phrases").tap,
-            Action::SwitchPage(gboard::PHRASES.into())
+            rows(page(variant, gboard::MORE_SYMBOLS)),
+            [
+                "~ ` | • √ π ÷ × * §",
+                "£ ¢ € ¥ ^ ° = 「 」 \\",
+                "to-symbols % ‘ ’ ™ ✓ [ ] backspace",
+                "to-letters < to-numbers space > enter",
+            ]
         );
+        let numbers = page(variant, gboard::NUMBERS);
+        for id in ["+", "1", "5", "9", "%", "space", "backspace", "0", "="] {
+            key(numbers, id);
+        }
+        assert_eq!(
+            rows(numbers).last().map(String::as_str),
+            Some("to-letters , to-symbols 0 = . enter")
+        );
+        // 切頁：?123 → 符號，=\< → 更多符號，?123 回符號，12/34 → 數字鍵盤，!?# 回符號，返回回字母。
+        let to = |page_id: &str, key_id: &str| key(page(variant, page_id), key_id).tap.clone();
+        let switch = |id: &str| Action::SwitchPage(id.into());
+        assert_eq!(to(gboard::LETTERS, "to-symbols"), switch(gboard::SYMBOLS));
+        assert_eq!(
+            to(gboard::SYMBOLS, "to-more-symbols"),
+            switch(gboard::MORE_SYMBOLS)
+        );
+        assert_eq!(
+            to(gboard::MORE_SYMBOLS, "to-symbols"),
+            switch(gboard::SYMBOLS)
+        );
+        assert_eq!(to(gboard::SYMBOLS, "to-numbers"), switch(gboard::NUMBERS));
+        assert_eq!(to(gboard::NUMBERS, "to-symbols"), switch(gboard::SYMBOLS));
+        for id in [gboard::SYMBOLS, gboard::MORE_SYMBOLS, gboard::NUMBERS] {
+            let back = key(page(variant, id), "to-letters");
+            assert_eq!(back.label.as_deref(), Some("返回"));
+            assert_eq!(back.tap, switch(gboard::LETTERS));
+        }
         // 數字與符號鍵直接輸入文字：打完不切頁，留在符號頁（brief §4.4）。
-        for id in ["1", "0", "@", "？", "！"] {
+        for id in ["1", "0", "@", "?", "!"] {
             assert_eq!(key(symbols, id).tap, Action::Text(id.into()));
         }
     }
+}
+
+/// 配色照 Gboard 實測：字母、符號與空白是白鍵，Shift、刪除、切頁、Enter 與逗號句號是功能鍵。
+#[test]
+fn keys_use_gboard_light_and_dark_colours() {
+    let layout = layout();
+    let letters = page(&layout.variants[0], gboard::LETTERS);
+    let fill = |id: &str| {
+        let fill = key(letters, id).style.clone().unwrap().fill.unwrap();
+        (fill.light, fill.dark)
+    };
+    let plain = ("#ffffff".to_owned(), "#292c34".to_owned());
+    let function = ("#dce2f9".to_owned(), "#353b4d".to_owned());
+    for id in ["a", "z", "space"] {
+        assert_eq!(fill(id), plain, "{id}");
+    }
+    for id in ["shift", "backspace", "to-symbols", "，", "。", "enter"] {
+        assert_eq!(fill(id), function, "{id}");
+    }
+    // ?123 與 Enter 是膠囊形：圓角等於半高。
+    for id in ["to-symbols", "enter"] {
+        let key = key(letters, id);
+        assert_eq!(key.shape.corner_radius(), key.frame.h / 2.0, "{id}");
+    }
+    assert!(key(letters, "shift").shape.corner_radius() < key(letters, "shift").frame.h / 2.0);
 }
 
 #[test]

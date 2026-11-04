@@ -1,7 +1,17 @@
 //! 按鍵標籤與動作（plan §2.6）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母；
 //! 組字中改用 `composing` 寫的標籤與動作。
 
-use qim_layout::{Action, Layout};
+use qim_layout::{Action, KeyState, Layout};
+
+/// 沒在組字、Shift 關著。
+const IDLE: KeyState = KeyState {
+    composing: false,
+    shift: qim_layout::Shift::Off,
+};
+const COMPOSING: KeyState = KeyState {
+    composing: true,
+    shift: qim_layout::Shift::Off,
+};
 
 fn keys(keys: &str) -> Layout {
     Layout::from_json(&format!(
@@ -27,9 +37,9 @@ fn letter_key_without_label_shows_the_scheme_radical_or_the_letter() {
         ]"#,
     );
     let page = &layout.variants[0].pages[0];
-    assert_eq!(page.keys[0].display_label(false, radical), "日");
+    assert_eq!(page.keys[0].display_label(IDLE, radical), "日");
     assert_eq!(page.keys[0].hint.as_deref(), Some("a"));
-    assert_eq!(page.keys[1].display_label(false, radical), "z");
+    assert_eq!(page.keys[1].display_label(IDLE, radical), "z");
 }
 
 #[test]
@@ -42,10 +52,10 @@ fn written_label_wins_and_other_keys_default_to_blank() {
         ]"#,
     );
     let page = &layout.variants[0].pages[0];
-    assert_eq!(page.keys[0].display_label(false, radical), "A");
+    assert_eq!(page.keys[0].display_label(IDLE, radical), "A");
     assert_eq!(page.keys[0].hint, None);
-    assert_eq!(page.keys[1].display_label(false, radical), "");
-    assert_eq!(page.keys[2].display_label(false, radical), "⌫");
+    assert_eq!(page.keys[1].display_label(IDLE, radical), "");
+    assert_eq!(page.keys[2].display_label(IDLE, radical), "⌫");
 }
 
 #[test]
@@ -62,15 +72,15 @@ fn composing_overrides_label_and_tap_only_while_composing() {
     );
     let page = &layout.variants[0].pages[0];
     let (enter, space) = (&page.keys[1], &page.keys[2]);
-    assert_eq!(enter.display_label(false, radical), "↵");
-    assert_eq!(enter.display_label(true, radical), "確定");
-    assert_eq!(enter.tap_action(false), &Action::Enter);
-    assert_eq!(enter.tap_action(true), &Action::Space);
+    assert_eq!(enter.display_label(IDLE, radical), "↵");
+    assert_eq!(enter.display_label(COMPOSING, radical), "確定");
+    assert_eq!(enter.tap_action(IDLE), Action::Enter);
+    assert_eq!(enter.tap_action(COMPOSING), Action::Space);
     // 只寫標籤時動作不變。
-    assert_eq!(space.display_label(true, radical), "選字");
-    assert_eq!(space.tap_action(true), &Action::Space);
-    assert_eq!(page.keys[3].tap_action(true), &Action::Letter('x'));
-    assert_eq!(page.keys[0].display_label(true, radical), "日");
+    assert_eq!(space.display_label(COMPOSING, radical), "選字");
+    assert_eq!(space.tap_action(COMPOSING), Action::Space);
+    assert_eq!(page.keys[3].tap_action(COMPOSING), Action::Letter('x'));
+    assert_eq!(page.keys[0].display_label(COMPOSING, radical), "日");
 }
 
 #[test]
@@ -111,7 +121,7 @@ fn keys_that_type_show_a_magnified_preview_and_function_keys_do_not() {
         ]"#,
     );
     let page = &layout.variants[0].pages[0];
-    let previews: Vec<bool> = page.keys.iter().map(|k| k.shows_preview(false)).collect();
+    let previews: Vec<bool> = page.keys.iter().map(|k| k.shows_preview(IDLE)).collect();
     assert_eq!(previews, [true, true, false, true]);
-    assert!(!page.keys[3].shows_preview(true));
+    assert!(!page.keys[3].shows_preview(COMPOSING));
 }

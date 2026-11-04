@@ -59,6 +59,17 @@ async function tapKeys(page: Page, ids: string[]): Promise<void> {
 	}
 }
 
+/** 長按字母頁的逗號鍵進常用頁（代替 Gboard 逗號鍵的表情入口，M1 票 27）。 */
+async function openPhrases(page: Page): Promise<void> {
+	const hand = await finger(page);
+	await hand.down(...(await centre(page, "key-，")));
+	await expect(page.getByTestId("long-press").getByRole("option")).toHaveText([
+		"切到 常用",
+	]);
+	await hand.up();
+	await expect(page.getByTestId("key-唔該")).toBeVisible();
+}
+
 test("長按字母鍵彈出英文字母，放開上屏預設的那個", async ({
 	page,
 }, testInfo) => {
@@ -107,6 +118,71 @@ test("數字列預設關；打開後字母頁上方多一排數字，點「1」�
 	await expect(page.getByTestId("composition")).toHaveText("日");
 });
 
+// Shift（brief §4.4，照 Gboard 速成實測，M1 票 27）。
+test("點一下 Shift：字母鍵換成大寫，點「日」上屏 A，打完自動回到字根", async ({
+	page,
+}, testInfo) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const shift = page.getByTestId("key-shift");
+	await expect(shift).toHaveAttribute("data-shift", "off");
+	await tapKeys(page, ["shift"]);
+	await expect(shift).toHaveAttribute("data-shift", "once");
+	await expect(page.getByTestId("key-a")).toHaveText("A");
+	await expect(page.getByTestId("key-z")).toHaveText("Z");
+	await page.screenshot({ path: testInfo.outputPath("shift-once.png") });
+	await tapKeys(page, ["a"]);
+	await expect(text).toHaveValue("A");
+	await expect(page.getByTestId("composition")).toHaveText("");
+	await expect(shift).toHaveAttribute("data-shift", "off");
+	await expect(page.getByTestId("key-a")).toHaveText("日a");
+	await tapKeys(page, ["a"]);
+	await expect(page.getByTestId("composition")).toHaveText("日");
+});
+
+test("快速點兩下 Shift 鎖定大寫，再點一下解除；隔太久的第二下是關掉", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const shift = page.getByTestId("key-shift");
+	await tapKeys(page, ["shift", "shift"]);
+	await expect(shift).toHaveAttribute("data-shift", "locked");
+	await tapKeys(page, ["a", "s", "d"]);
+	await expect(text).toHaveValue("ASD");
+	await expect(shift).toHaveAttribute("data-shift", "locked");
+	await tapKeys(page, ["shift"]);
+	await expect(shift).toHaveAttribute("data-shift", "off");
+	await expect(page.getByTestId("key-a")).toHaveText("日a");
+	await tapKeys(page, ["shift"]);
+	await page.waitForTimeout(600);
+	await tapKeys(page, ["shift"]);
+	await expect(shift).toHaveAttribute("data-shift", "off");
+});
+
+test("組字中點 Shift 再點字母：先上屏組字再接大寫字母", async ({ page }) => {
+	await tapKeys(page, ["a", "n", "r", "shift"]);
+	await expect(page.getByTestId("composition")).toHaveText("日弓口");
+	await tapKeys(page, ["a"]);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
+		"門口A",
+	);
+	await expect(page.getByTestId("composition")).toHaveText("");
+});
+
+test("Shift 開著時長按字母鍵出小寫，之後 Shift 解除", async ({ page }) => {
+	await tapKeys(page, ["shift"]);
+	const hand = await finger(page);
+	await hand.down(...(await centre(page, "key-a")));
+	await expect(page.getByTestId("long-press").getByRole("option")).toHaveText([
+		"a",
+	]);
+	await hand.up();
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("a");
+	await expect(page.getByTestId("key-shift")).toHaveAttribute(
+		"data-shift",
+		"off",
+	);
+});
+
 test("組字中長按選字母：先上屏組字再接字母", async ({ page }) => {
 	await tapKeys(page, ["a", "n", "r"]);
 	const hand = await finger(page);
@@ -125,7 +201,7 @@ test("點一下不彈長按清單，照常組字", async ({ page }) => {
 	await expect(page.getByTestId("composition")).toHaveText("手");
 });
 
-test("符號頁：打兩個符號仍在符號頁，按「ABC」回字母頁", async ({
+test("符號頁：打兩個符號仍在符號頁，按「返回」回字母頁", async ({
 	page,
 }, testInfo) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
@@ -134,8 +210,8 @@ test("符號頁：打兩個符號仍在符號頁，按「ABC」回字母頁", as
 	await tapKeys(page, ["1", "@"]);
 	await expect(text).toHaveValue("1@");
 	// 打完不跳回（brief §4.4）。
-	await expect(page.getByTestId("key-to-letters")).toHaveText("ABC");
-	await expect(page.getByTestId("key-？")).toBeVisible();
+	await expect(page.getByTestId("key-to-letters")).toHaveText("返回");
+	await expect(page.getByTestId("key-?")).toBeVisible();
 	await page.screenshot({ path: testInfo.outputPath("symbols.png") });
 	await tapKeys(page, ["to-letters"]);
 	await expect(page.getByTestId("key-a")).toHaveText("日a");
@@ -145,17 +221,17 @@ test("符號頁：打兩個符號仍在符號頁，按「ABC」回字母頁", as
 test("組字中切到符號頁組字留著，按符號先上屏組字再接符號", async ({ page }) => {
 	await tapKeys(page, ["a", "n", "r", "to-symbols"]);
 	await expect(page.getByTestId("composition")).toHaveText("日弓口");
-	await tapKeys(page, ["？"]);
+	await tapKeys(page, ["?"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
-		"門口？",
+		"門口?",
 	);
 	await expect(page.getByTestId("composition")).toHaveText("");
 });
 
-test("自訂頁面：由符號頁切過去輸入常用語與表情，再回字母頁", async ({
+test("自訂頁面：長按逗號鍵切過去輸入常用語與表情，再回字母頁", async ({
 	page,
 }, testInfo) => {
-	await tapKeys(page, ["to-symbols", "to-phrases"]);
+	await openPhrases(page);
 	await tapKeys(page, ["唔該", "👍"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
 		"唔該👍",
@@ -187,20 +263,21 @@ test("按住按鍵顯示放大預覽，放開消失", async ({ page }, testInfo)
 	await expect(page.getByTestId("composition")).toHaveText("弓");
 });
 
+// 顏色照 Gboard 實測（M1 票 27）。
 test("系統深色時按鍵用佈局的深色版本", async ({ page }, testInfo) => {
 	const key = page.getByTestId("key-a");
 	await expect(key).toHaveCSS("background-color", "rgb(255, 255, 255)");
 	// Enter 的佈局顏色淺深都和 CSS 的預設底色不同，讀得出佈局的顏色真的套上了。
 	await expect(page.getByTestId("key-enter")).toHaveCSS(
 		"background-color",
-		"rgb(196, 199, 197)",
+		"rgb(220, 226, 249)",
 	);
 	await page.emulateMedia({ colorScheme: "dark" });
-	await expect(key).toHaveCSS("background-color", "rgb(60, 64, 67)");
-	await expect(key.locator(".label")).toHaveCSS("color", "rgb(227, 227, 227)");
+	await expect(key).toHaveCSS("background-color", "rgb(41, 44, 52)");
+	await expect(key.locator(".label")).toHaveCSS("color", "rgb(228, 229, 240)");
 	await expect(page.getByTestId("key-enter")).toHaveCSS(
 		"background-color",
-		"rgb(95, 99, 104)",
+		"rgb(53, 59, 77)",
 	);
 	await expect(page.getByRole("button", { name: "深色" })).toHaveAttribute(
 		"aria-pressed",
@@ -215,7 +292,7 @@ test("網頁的深色開關蓋過系統設定", async ({ page }) => {
 	await expect(toggle).toHaveAttribute("aria-pressed", "false");
 	await toggle.tap();
 	await expect(toggle).toHaveAttribute("aria-pressed", "true");
-	await expect(key).toHaveCSS("background-color", "rgb(60, 64, 67)");
+	await expect(key).toHaveCSS("background-color", "rgb(41, 44, 52)");
 	await toggle.tap();
 	await expect(key).toHaveCSS("background-color", "rgb(255, 255, 255)");
 	// 手動切成淺色後，系統改深色也不跟。
@@ -340,9 +417,9 @@ test("觸控的空白鍵選字上屏可以回報，組字中點符號上屏不�
 	await report.tap();
 	await expect(reports).toHaveValue("anr\t門口\t網頁回報（首選 門口）");
 
-	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "?"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
-		"門口門口？",
+		"門口門口?",
 	);
 	await expect(report).toBeDisabled();
 });
@@ -382,8 +459,8 @@ test("簡體模式下觸控打字：空白上屏簡體，組字中點符號先�
 	await page.getByLabel("簡體").tap();
 	await tapKeys(page, ["a", "n", "r", "space"]);
 	await expect(text).toHaveValue("门口");
-	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
-	await expect(text).toHaveValue("门口门口？");
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "?"]);
+	await expect(text).toHaveValue("门口门口?");
 });
 
 // 使用者 2026-11-04 決定（M1 票 23）：「常用」頁的文字鍵在簡體模式也轉簡體。
@@ -391,7 +468,8 @@ test("「常用」頁的「多謝」：簡體模式上屏「多谢」，繁體�
 	page,
 }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
-	await tapKeys(page, ["to-symbols", "to-phrases", "多謝"]);
+	await openPhrases(page);
+	await tapKeys(page, ["多謝"]);
 	await expect(text).toHaveValue("多謝");
 	await page.getByLabel("簡體").tap();
 	await tapKeys(page, ["多謝"]);
