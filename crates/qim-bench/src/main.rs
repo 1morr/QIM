@@ -1,11 +1,11 @@
-//! `cargo xtask bench [--check | --update-baseline]` 轉進來的 CLI，在 repo 根目錄執行。
+//! `cargo xtask bench [--check | --update-baseline | --learning]` 轉進來的 CLI，在 repo 根目錄執行。
 
 use std::path::Path;
 use std::process::ExitCode;
 
 use qim_bench::{Mode, node_wasm_timer, run};
 
-const USAGE: &str = "用法：qim-bench [--check | --update-baseline]";
+const USAGE: &str = "用法：qim-bench [--check | --update-baseline | --learning]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -18,6 +18,7 @@ fn main() -> ExitCode {
         [] => Mode::Report,
         ["--check"] => Mode::Check,
         ["--update-baseline"] => Mode::UpdateBaseline,
+        ["--learning"] => return learning(),
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
@@ -49,5 +50,21 @@ fn main() -> ExitCode {
     } else {
         eprintln!("bench 失敗");
         ExitCode::FAILURE
+    }
+}
+
+/// 學習模式（plan §5.2）：只報不擋。
+fn learning() -> ExitCode {
+    match qim_bench::run_learning(Path::new(".")) {
+        Ok(learning) => {
+            println!("首選字基準：學習模式\n");
+            print!("{}", learning.report());
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            eprintln!("bench 失敗");
+            ExitCode::FAILURE
+        }
     }
 }

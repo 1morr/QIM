@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use qim_core::{
     CangjieVersion, CodeTable, Engine, LanguageModelPack, Lexicon, LexiconPack, Pack,
-    RadicalHintPack, RadicalHints,
+    RadicalHintPack, RadicalHints, UserModel,
 };
 
 use crate::corpus::Counts;
@@ -355,7 +355,8 @@ fn pack_checks(
         .filter(|code| !(1..=2).contains(&code.chars().count()))
         .collect();
     let has = |code: &str, ch: char| pack.code_table.lookup(code).iter().any(|e| e.text == ch);
-    let top = |input: &str| engine.candidates(input).into_iter().next();
+    let user = UserModel::default();
+    let top = |input: &str| engine.candidates(&user, input).into_iter().next();
 
     report.continuous = continuous.len();
     report.extension = extension.len();

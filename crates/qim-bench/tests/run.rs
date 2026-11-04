@@ -937,3 +937,52 @@ fn a_wasm_timer_that_misses_keys_is_an_error() {
     .unwrap_err();
     assert!(error.contains("WebAssembly"), "{error}");
 }
+
+/// `a 曰` 打三次：學習關每次都要按 2 選「曰」（修正 3）；學習開時選過兩次後成首選（規則 2），
+/// 第三次按空白就好（修正 2）。
+#[test]
+fn learning_mode_compares_corrections_with_and_without_learning() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/again.tsv",
+        "a\t曰\na\t曰\na\t曰\n".as_bytes(),
+    );
+    let learning = qim_bench::run_learning(repo.path()).unwrap();
+    let sets: Vec<(&str, usize, usize, usize)> = learning
+        .sets
+        .iter()
+        .map(|s| {
+            (
+                s.name.as_str(),
+                s.total,
+                s.corrections_off,
+                s.corrections_on,
+            )
+        })
+        .collect();
+    // toy：`a 曰` 只有一次，學不到；`a b 日月` 卡住後逐字打，上屏的「日」本來就是首選。
+    assert_eq!(sets, [("toy", 3, 2, 2), ("again", 3, 3, 2)]);
+
+    let report = learning.report();
+    assert!(
+        report.contains("| again | 3 | 3 | 2 | 1.00 | 0.67 |"),
+        "{report}"
+    );
+}
+
+#[test]
+fn learning_mode_reports_personal_as_numbers_only() {
+    let repo = repo_with_personal();
+    let learning = qim_bench::run_learning(repo.path()).unwrap();
+    let personal = learning.sets.iter().find(|s| s.name == "personal").unwrap();
+    assert!(personal.private);
+    assert_eq!((personal.total, personal.corrections_off), (2, 1));
+    let report = learning.report();
+    for word in ["月", "曰"] {
+        assert!(
+            !report.contains(word),
+            "報告不能帶個人集的內容「{word}」：{report}"
+        );
+    }
+}

@@ -31,6 +31,7 @@ const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
+const incognito = element<HTMLInputElement>("#incognito");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const hintVersion = element<HTMLSelectElement>("#hint-version");
@@ -250,6 +251,11 @@ async function start(): Promise<void> {
 		candidates.addEventListener(type, cancelPress);
 	}
 	candidates.addEventListener("contextmenu", (event) => event.preventDefault());
+	session.setIncognito(incognito.checked);
+	incognito.addEventListener("change", () => {
+		session.setIncognito(incognito.checked);
+		text.focus();
+	});
 	const layout = new Layout(layoutJson, device(), orientation());
 	for (const warning of layout.warnings) {
 		console.warn(`佈局：${warning}`);

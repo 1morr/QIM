@@ -257,7 +257,11 @@ fn a_code_longer_than_max_code_length_is_not_a_character_code() {
     }
     let snapshot = ime.press(Key::Letter('a'));
     assert_eq!(snapshot.composition.input, "aaa");
-    assert!(!ime.engine.candidates("aaa").contains(&"品".to_string()));
+    assert!(
+        !ime.engine
+            .candidates(&UserModel::default(), "aaa")
+            .contains(&"品".to_string())
+    );
     assert_eq!(texts(&snapshot)[0], "日日日");
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("日日日"));
 }
