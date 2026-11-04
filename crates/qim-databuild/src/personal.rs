@@ -9,8 +9,11 @@ use crate::transcode::Transcoder;
 
 /// 使用者放的 Rime 學習資料，相對 repo 根目錄。
 pub const USERDB: &str = "bench/personal/rime-userdb.txt";
-/// 轉出的題目，`qim-bench` 讀它：一行「逐字速成碼（空格分隔）<TAB>詞<TAB>上屏次數」。
+/// 轉出的題目，`qim-bench` 讀它：第一行 [`SOURCE_HEADER`] 接 [`USERDB`] 的 sha256，
+/// 之後一行「逐字速成碼（空格分隔）<TAB>詞<TAB>上屏次數」。
+/// 路徑與檔頭在 `qim_bench` 有同樣的常數（plan §1.3 不讓 `qim-bench` 依賴本 crate），改時兩邊一起改。
 pub const ITEMS: &str = "bench/personal/rime-userdb.tsv";
+pub const SOURCE_HEADER: &str = "# rime-userdb.txt sha256 ";
 
 /// 轉換的統計，只有數字。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -19,7 +22,7 @@ pub struct Counts {
     pub words: usize,
     /// 上屏次數 `c` < 1（沒用過或已刪除）而略過的列。
     pub unused: usize,
-    /// 含連打字集以外的字、轉不了碼而略過的詞。
+    /// 含連打字集以外的字、轉不了碼而略過的列。
     pub untranscodable: usize,
     /// 同一個詞在不同輸入碼下出現多次，併進第一次出現那題的列數（上屏次數相加）。
     pub merged: usize,

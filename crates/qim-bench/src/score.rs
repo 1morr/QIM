@@ -23,7 +23,7 @@ pub struct ItemResult {
     /// 首選與期望的編輯距離（以字計，最多算到該題字數）。
     pub char_errors: usize,
     /// 模擬打出整題時選非首選、翻頁、清掉重打的次數。
-    pub corrections: usize,
+    pub correction_count: usize,
     /// 模擬打出整題的總按鍵數，含輸入碼。
     pub keys: usize,
     /// 逐鍵打字時，首選裡已打完的字被下一鍵改掉的次數。
@@ -36,6 +36,8 @@ pub struct ItemResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetResult {
     pub name: String,
+    /// 個人集：輸出只有數字與行號，baseline 在本機的另一個檔（plan §5.2）。
+    pub private: bool,
     pub items: Vec<ItemResult>,
     /// 答錯的題：題目與實際的首選。
     pub failures: Vec<Failure>,
@@ -69,7 +71,7 @@ pub struct Metrics {
     /// 字正確率：1 − 編輯距離總和 ÷ 總字數。
     pub char_accuracy: f64,
     /// 每句平均修正次數。
-    pub corrections: f64,
+    pub correction_count: f64,
     /// 每字按鍵數（KSPC）：總按鍵數 ÷ 總字數。
     pub kspc: f64,
     /// 每句平均首選跳動。
@@ -90,7 +92,7 @@ pub const LENGTH_GROUPS: [(usize, &str); 5] = [
 pub struct GroupStats {
     pub total: usize,
     pub sentence_accuracy: f64,
-    pub corrections: f64,
+    pub correction_count: f64,
 }
 
 impl SetResult {
@@ -108,8 +110,8 @@ impl SetResult {
     }
 
     /// 修正次數的總和；baseline 記它。
-    pub fn corrections(&self) -> usize {
-        self.items.iter().map(|i| i.corrections).sum()
+    pub fn correction_count(&self) -> usize {
+        self.items.iter().map(|i| i.correction_count).sum()
     }
 
     /// 模擬打不出整題的題數。
@@ -145,7 +147,7 @@ impl SetResult {
                 GroupStats {
                     total: group.len(),
                     sentence_accuracy: m.sentence_accuracy,
-                    corrections: m.corrections,
+                    correction_count: m.correction_count,
                 }
             })
         })
@@ -160,7 +162,7 @@ fn metrics<'a>(items: impl Iterator<Item = &'a ItemResult> + Clone, weighted: bo
     Metrics {
         sentence_accuracy: ratio(sum(&|i| f64::from(u8::from(i.correct))), count),
         char_accuracy: 1.0 - ratio(sum(&|i| i.char_errors as f64), chars),
-        corrections: ratio(sum(&|i| i.corrections as f64), count),
+        correction_count: ratio(sum(&|i| i.correction_count as f64), count),
         kspc: ratio(sum(&|i| i.keys as f64), chars),
         jitter: ratio(sum(&|i| i.jitter as f64), count),
     }
@@ -170,9 +172,10 @@ fn ratio(part: f64, whole: f64) -> f64 {
     if whole == 0.0 { 0.0 } else { part / whole }
 }
 
-pub fn score(engine: &Engine, name: &str, items: &[Item]) -> SetResult {
+pub fn score(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetResult {
     let mut result = SetResult {
         name: name.to_string(),
+        private,
         items: Vec::with_capacity(items.len()),
         failures: Vec::new(),
     };
@@ -188,7 +191,7 @@ pub fn score(engine: &Engine, name: &str, items: &[Item]) -> SetResult {
             chars,
             correct,
             char_errors: strsim::levenshtein(&top, &expected).min(chars),
-            corrections: typing.corrections,
+            correction_count: typing.correction_count,
             keys: typing.keys,
             jitter,
             finished: typing.finished,
@@ -237,7 +240,7 @@ fn type_through(engine: &Engine, units: &[Unit]) -> (String, usize) {
 #[derive(Debug, Default)]
 struct Typing {
     keys: usize,
-    corrections: usize,
+    correction_count: usize,
     finished: bool,
 }
 
@@ -294,13 +297,13 @@ fn simulate(engine: &Engine, units: &[Unit]) -> Typing {
         let key = if snapshot.page == 0 && snapshot.candidates.first().is_some_and(connects) {
             Key::Space
         } else if let Some(index) = longest_connecting(&snapshot.candidates, connects) {
-            typing.corrections += 1;
+            typing.correction_count += 1;
             Key::Digit(u8::try_from(index + 1).expect("每頁最多 9 個候選"))
         } else if snapshot.has_more {
-            typing.corrections += 1;
+            typing.correction_count += 1;
             Key::PageDown
         } else if !one_by_one && starts.iter().filter(|&&s| s >= done).count() > 1 {
-            typing.corrections += 1;
+            typing.correction_count += 1;
             one_by_one = true;
             Key::Escape
         } else {

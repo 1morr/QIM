@@ -14,7 +14,7 @@ pub struct Item {
     pub weight: u64,
 }
 
-/// 一段輸入碼與它該打出的文字。
+/// 基準模擬打字的單位：一段輸入碼與它該打出的文字。是題目檔的切法，和核心組字的〈分段〉（`Segment`）無關。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unit {
     pub code: String,
@@ -75,11 +75,11 @@ pub fn parse_corpus(text: &str) -> Result<Vec<Item>, String> {
     Ok(items)
 }
 
-/// 個人集：`<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 Rime 學習資料轉出。
-/// 錯誤訊息只指出行號，不帶內容（plan §5.2）。
+/// 個人集：`<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 Rime 學習資料轉出；
+/// `#` 開頭的行（記來源 sha256 的檔頭）略過。錯誤訊息只指出行號，不帶內容（plan §5.2）。
 pub fn parse_personal(text: &str) -> Result<Vec<Item>, String> {
     let mut items = Vec::new();
-    for (number, line) in numbered_lines(text) {
+    for (number, line) in numbered_lines(text).filter(|(_, line)| !line.starts_with('#')) {
         let fields: Vec<&str> = line.split('\t').collect();
         let [codes, word, count] = fields.as_slice() else {
             return Err(format!(

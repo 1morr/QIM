@@ -38,7 +38,7 @@ fn main() -> ExitCode {
             // 個人集只印數字（plan §5.2）。
             match outcome.personal {
                 Some(c) => println!(
-                    "個人集：{} 轉出 {} 題（略過 c < 1 的 {} 列、轉不了碼的 {} 詞，合併重複 {} 列）",
+                    "個人集：{} 轉出 {} 題（略過 c < 1 的 {} 列、轉不了碼的 {} 列，合併重複 {} 列）",
                     personal::ITEMS,
                     c.words,
                     c.unused,

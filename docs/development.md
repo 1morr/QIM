@@ -96,7 +96,7 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 ### 個人集
 
-有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，brief §12.2 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
+有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，brief §12.2 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
 
 `bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數。邏輯在 `crates/qim-databuild/src/personal.rs`。
 
@@ -127,8 +127,8 @@ cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.
 | --- | --- |
 | `bench/fixed.tsv` | 固定必過題，一行 `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。案例通過的那張票才加，不先加會紅的題 |
 | `bench/corpus/<名>.tsv`、`bench/colloquial/<名>.tsv` | 一個檔一個集合，集合名是檔名，兩個目錄間不能重名；先跑維基、再跑口語。格式見〈資料建置〉的〈語料〉 |
-| `bench/personal/rime-userdb.tsv` | 個人集的題目，一行 `<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 `bench/personal/rime-userdb.txt` 轉出（見〈資料建置〉的〈個人集〉）；集合名 `personal`，語料不能用這個名字 |
-| `bench/baseline.json` | `{"<集合名>": {"wrong": <答錯數>, "corrections": <修正次數總和>, "wrong_lines": "<答錯的行號，如 1-3,7>"}}`，固定題不記。只用 `--update-baseline` 改，同一個 commit 說明原因 |
+| `bench/personal/rime-userdb.tsv` | 個人集的題目：第一行 `# rime-userdb.txt sha256 <sha256>` 記轉自哪份資料，之後一行 `<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 `bench/personal/rime-userdb.txt` 轉出（見〈資料建置〉的〈個人集〉）；集合名 `personal`，語料不能用這個名字 |
+| `bench/baseline.json` | `{"<集合名>": {"wrong": <答錯數>, "correction_count": <修正次數總和>, "wrong_lines": "<答錯的行號，如 1-3,7>"}}`，固定題不記。只用 `--update-baseline` 改，同一個 commit 說明原因 |
 | `bench/personal/baseline.json` | 個人集的 baseline，格式同上，只在本機 |
 
 結果是一個集合一列的 Markdown 表，可以直接貼進票的 `## Comments` 或 commit body 做前後對照：
@@ -137,7 +137,7 @@ cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.
 - 字正確率：1 − Σ 編輯距離 ÷ Σ 期望字數；編輯距離以字計（Levenshtein），每題最多算到該題的字數。
 - 修正/句：每句平均修正次數。KSPC：模擬的總按鍵數（含輸入碼、空白、數字鍵、翻頁、Esc）÷ 總字數。
 - 跳動/句：逐鍵打字時，首選開頭屬於已打完的字的那段（首選比它短就取整個首選）被下一鍵改掉的次數，每句平均。只回報，不擋。
-- `baseline 答錯`、`baseline 修正/句`：跑之前 baseline 檔的值，沒有檔或沒有該集合時是 `—`。
+- 修正：修正次數的總和，`--check` 比的是它。`baseline 答錯`、`baseline 修正`：跑之前 baseline 檔的值，沒有檔或沒有該集合時是 `—`。
 - 個人集多一列「加權」：每題依上屏次數加權，題數欄是上屏次數總和。
 
 表下面依序是：
@@ -146,7 +146,7 @@ cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.
 - 翻盤清單：和 baseline 的 `wrong_lines` 比，列出由錯變對、由對變錯的題；每個方向最多列 20 題。公開集合附期望與首選，個人集只列行號。
 - 固定題通過數與沒過的題。
 
-個人集只印數字與行號（plan §5.2）；沒有 `bench/personal/rime-userdb.tsv` 就跳過並註明，`bench/personal/baseline.json` 也不比。
+個人集只印數字與行號（plan §5.2）。沒有 `bench/personal/rime-userdb.txt` 就跳過並註明，`bench/personal/baseline.json` 也不比；`rime-userdb.tsv` 檔頭的 sha256 和現在的 `rime-userdb.txt` 不同（還沒轉，或換了資料沒重跑 `cargo xtask data`）也跳過，提示先跑 `cargo xtask data`。個人集的行號依轉出的順序，換了 `rime-userdb.txt` 後行號會位移，先 `--update-baseline` 再比翻盤。
 
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 

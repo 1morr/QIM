@@ -13,8 +13,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use qim_bench::{Mode, Personal, run};
+use qim_bench::{Mode, PERSONAL_SOURCE_HEADER, Personal, run};
 use qim_core::{CodeEntry, CodeTable, Pack, Scheme};
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 fn entry(text: char) -> CodeEntry {
@@ -101,7 +102,8 @@ fn check(repo: &TempDir) -> Vec<String> {
 }
 
 /// toy 這次的結果原樣當 baseline：答錯 2、修正 2、答錯第 2、3 行。
-const TOY_BASELINE: &[u8] = br#"{"toy": {"wrong": 2, "corrections": 2, "wrong_lines": "2-3"}}"#;
+const TOY_BASELINE: &[u8] =
+    br#"{"toy": {"wrong": 2, "correction_count": 2, "wrong_lines": "2-3"}}"#;
 
 #[test]
 fn simulation_counts_corrections_keystrokes_and_jitter() {
@@ -111,16 +113,16 @@ fn simulation_counts_corrections_keystrokes_and_jitter() {
     let per_item: Vec<(usize, usize, usize, bool)> = toy
         .items
         .iter()
-        .map(|i| (i.corrections, i.keys, i.jitter, i.finished))
+        .map(|i| (i.correction_count, i.keys, i.jitter, i.finished))
         .collect();
     assert_eq!(
         per_item,
         [(0, 2, 0, true), (1, 2, 0, true), (1, 7, 1, true)]
     );
-    assert_eq!(toy.corrections(), 2);
+    assert_eq!(toy.correction_count(), 2);
     let m = toy.metrics(false);
     assert_eq!(m.kspc, 11.0 / 4.0);
-    assert_eq!(m.corrections, 2.0 / 3.0);
+    assert_eq!(m.correction_count, 2.0 / 3.0);
     assert_eq!(m.jitter, 1.0 / 3.0);
 }
 
@@ -131,7 +133,10 @@ fn simulation_turns_the_page_when_the_first_page_does_not_connect() {
     write(repo.path(), "bench/corpus/toy.tsv", "c\t十\n".as_bytes());
     let outcome = run(repo.path(), Mode::Report).unwrap();
     let item = &outcome.sets[0].items[0];
-    assert_eq!((item.corrections, item.keys, item.finished), (2, 3, true));
+    assert_eq!(
+        (item.correction_count, item.keys, item.finished),
+        (2, 3, true)
+    );
 }
 
 #[test]
@@ -142,7 +147,7 @@ fn an_item_that_cannot_be_typed_is_unfinished_and_fails_check() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 1, "corrections": 9, "wrong_lines": "1"}}"#,
+        br#"{"toy": {"wrong": 1, "correction_count": 9, "wrong_lines": "1"}}"#,
     );
     let outcome = run(repo.path(), Mode::Check).unwrap();
     assert_eq!(outcome.sets[0].unfinished(), 1);
@@ -161,12 +166,12 @@ fn length_groups_split_accuracy_and_corrections_by_target_length() {
     let groups = outcome.sets[0].length_groups();
     let one = groups[0].expect("有 1 字的題");
     assert_eq!(
-        (one.total, one.sentence_accuracy, one.corrections),
+        (one.total, one.sentence_accuracy, one.correction_count),
         (2, 0.5, 0.5)
     );
     let two = groups[1].expect("有 2 字的題");
     assert_eq!(
-        (two.total, two.sentence_accuracy, two.corrections),
+        (two.total, two.sentence_accuracy, two.correction_count),
         (1, 0.0, 1.0)
     );
     assert!(groups[2..].iter().all(Option::is_none));
@@ -196,7 +201,7 @@ fn check_fails_when_wrong_count_exceeds_baseline() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 1, "corrections": 2, "wrong_lines": "2-3"}}"#,
+        br#"{"toy": {"wrong": 1, "correction_count": 2, "wrong_lines": "2-3"}}"#,
     );
     let violations = check(&repo);
     assert_eq!(violations.len(), 1, "{violations:?}");
@@ -209,7 +214,7 @@ fn check_fails_when_corrections_exceed_baseline() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 2, "corrections": 1, "wrong_lines": "2-3"}}"#,
+        br#"{"toy": {"wrong": 2, "correction_count": 1, "wrong_lines": "2-3"}}"#,
     );
     let violations = check(&repo);
     assert_eq!(violations.len(), 1, "{violations:?}");
@@ -242,7 +247,7 @@ fn check_fails_when_a_pack_breaks_a_fixed_item() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 3, "corrections": 9, "wrong_lines": ""}}"#,
+        br#"{"toy": {"wrong": 3, "correction_count": 9, "wrong_lines": ""}}"#,
     );
     // 換一個 `a` 的字序相反的資料包：固定題 `a 日` 的首選變「曰」，語料仍在 baseline 內。
     write(
@@ -270,8 +275,8 @@ fn check_fails_when_a_baseline_set_was_not_run() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 2, "corrections": 2, "wrong_lines": "2-3"},
-             "gone": {"wrong": 0, "corrections": 0, "wrong_lines": ""}}"#,
+        br#"{"toy": {"wrong": 2, "correction_count": 2, "wrong_lines": "2-3"},
+             "gone": {"wrong": 0, "correction_count": 0, "wrong_lines": ""}}"#,
     );
     let violations = check(&repo);
     assert_eq!(violations.len(), 1, "{violations:?}");
@@ -284,7 +289,7 @@ fn check_ignores_layout_of_baseline_and_comments_in_fixed() {
     write(
         repo.path(),
         "bench/baseline.json",
-        b"{\n\n      \"toy\"   :{\"wrong_lines\": \"2,3\", \"corrections\" :2,\"wrong\":\n2 }\n}",
+        b"{\n\n      \"toy\"   :{\"wrong_lines\": \"2,3\", \"correction_count\" :2,\"wrong\":\n2 }\n}",
     );
     write(
         repo.path(),
@@ -300,7 +305,7 @@ fn a_malformed_wrong_lines_is_an_error() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 2, "corrections": 2, "wrong_lines": "3-2"}}"#,
+        br#"{"toy": {"wrong": 2, "correction_count": 2, "wrong_lines": "3-2"}}"#,
     );
     let error = run(repo.path(), Mode::Report).unwrap_err();
     assert!(error.contains("wrong_lines"), "{error}");
@@ -312,15 +317,15 @@ fn update_baseline_rewrites_the_file_with_current_counts() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 0, "corrections": 0, "wrong_lines": ""},
-             "gone": {"wrong": 0, "corrections": 0, "wrong_lines": ""}}"#,
+        br#"{"toy": {"wrong": 0, "correction_count": 0, "wrong_lines": ""},
+             "gone": {"wrong": 0, "correction_count": 0, "wrong_lines": ""}}"#,
     );
     let outcome = run(repo.path(), Mode::UpdateBaseline).unwrap();
     assert!(outcome.violations.is_empty());
     let written = fs::read_to_string(repo.path().join("bench/baseline.json")).unwrap();
     assert_eq!(
         written,
-        "{\n  \"toy\": {\n    \"wrong\": 2,\n    \"corrections\": 2,\n    \"wrong_lines\": \"2-3\"\n  }\n}\n"
+        "{\n  \"toy\": {\n    \"wrong\": 2,\n    \"correction_count\": 2,\n    \"wrong_lines\": \"2-3\"\n  }\n}\n"
     );
     assert_eq!(check(&repo), Vec::<String>::new());
 }
@@ -331,7 +336,7 @@ fn report_lists_each_set_with_its_baseline() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 5, "corrections": 6, "wrong_lines": "2-3"}}"#,
+        br#"{"toy": {"wrong": 5, "correction_count": 6, "wrong_lines": "2-3"}}"#,
     );
     let report = run(repo.path(), Mode::Report).unwrap().report();
     assert!(report.contains("固定題 1/1 通過"), "{report}");
@@ -339,9 +344,9 @@ fn report_lists_each_set_with_its_baseline() {
         .lines()
         .find(|line| line.starts_with("| toy |"))
         .unwrap_or_else(|| panic!("沒有 toy 那一列：{report}"));
-    // 題數、整句首選正確、字正確率、答錯、baseline 答錯、修正/句、baseline 修正/句、KSPC、跳動/句、打不出
+    // 題數、整句首選正確、字正確率、答錯、baseline 答錯、修正/句、修正、baseline 修正、KSPC、跳動/句、打不出
     assert!(
-        toy.contains("| 3 | 1（33.33%） | 25.00% | 2 | 5 | 0.67 | 2.00 | 2.75 | 0.33 | 0 |"),
+        toy.contains("| 3 | 1（33.33%） | 25.00% | 2 | 5 | 0.67 | 2 | 6 | 2.75 | 0.33 | 0 |"),
         "{toy}"
     );
 }
@@ -361,7 +366,7 @@ fn flips_list_an_item_that_went_from_right_to_wrong() {
     write(
         repo.path(),
         "bench/baseline.json",
-        br#"{"toy": {"wrong": 1, "corrections": 2, "wrong_lines": "3"}}"#,
+        br#"{"toy": {"wrong": 1, "correction_count": 2, "wrong_lines": "3"}}"#,
     );
     let outcome = run(repo.path(), Mode::Report).unwrap();
     let flips = outcome.flips("toy").unwrap();
@@ -408,8 +413,8 @@ fn check_ignores_the_order_of_sets_in_baseline() {
         "bench/corpus/another.tsv",
         "b\t月\n".as_bytes(),
     );
-    let toy = r#""toy": {"wrong": 2, "corrections": 2, "wrong_lines": "2-3"}"#;
-    let another = r#""another": {"wrong": 0, "corrections": 0, "wrong_lines": ""}"#;
+    let toy = r#""toy": {"wrong": 2, "correction_count": 2, "wrong_lines": "2-3"}"#;
+    let another = r#""another": {"wrong": 0, "correction_count": 0, "wrong_lines": ""}"#;
     write(
         repo.path(),
         "bench/baseline.json",
@@ -480,21 +485,36 @@ fn the_same_set_name_in_two_directories_is_an_error() {
 
 // 個人集：bench/personal/rime-userdb.tsv，一行「逐字碼<TAB>詞<TAB>上屏次數」。
 
-/// 個人集兩題：第 1 行「月」上屏 5 次（答對，0 修正），第 2 行「曰」上屏 1 次（答錯，修正 1）。
+/// 個人集兩題（題目檔第 2、3 行，第 1 行是記來源 sha256 的檔頭）：
+/// 第 2 行「月」上屏 5 次（答對，0 修正），第 3 行「曰」上屏 1 次（答錯，修正 1）。
 /// toy 的 baseline 照這次結果寫好，toy 沒有翻盤，報告裡不會因為 toy 印出「曰」。
 fn repo_with_personal() -> TempDir {
     let repo = repo();
     write(repo.path(), "bench/baseline.json", TOY_BASELINE);
-    write(
-        repo.path(),
-        "bench/personal/rime-userdb.tsv",
-        "b\t月\t5\na\t曰\t1\n".as_bytes(),
-    );
+    transcode_personal(&repo, "使用者的學習資料");
     repo
 }
 
+/// 照 `cargo xtask data` 的做法寫出個人集題目檔：檔頭記 `userdb` 的 sha256。
+fn transcode_personal(repo: &TempDir, userdb: &str) {
+    write(
+        repo.path(),
+        "bench/personal/rime-userdb.txt",
+        userdb.as_bytes(),
+    );
+    let sha256: String = Sha256::digest(userdb.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    write(
+        repo.path(),
+        "bench/personal/rime-userdb.tsv",
+        format!("{PERSONAL_SOURCE_HEADER}{sha256}\nb\t月\t5\na\t曰\t1\n").as_bytes(),
+    );
+}
+
 const PERSONAL_BASELINE: &[u8] =
-    br#"{"personal": {"wrong": 1, "corrections": 1, "wrong_lines": "2"}}"#;
+    br#"{"personal": {"wrong": 1, "correction_count": 1, "wrong_lines": "3"}}"#;
 
 #[test]
 fn personal_reports_unweighted_and_weighted_numbers() {
@@ -505,7 +525,7 @@ fn personal_reports_unweighted_and_weighted_numbers() {
     };
     assert_eq!(personal.metrics(false).sentence_accuracy, 0.5);
     assert_eq!(personal.metrics(true).sentence_accuracy, 5.0 / 6.0);
-    assert_eq!(personal.metrics(true).corrections, 1.0 / 6.0);
+    assert_eq!(personal.metrics(true).correction_count, 1.0 / 6.0);
 
     let report = outcome.report();
     assert!(
@@ -521,19 +541,19 @@ fn personal_reports_unweighted_and_weighted_numbers() {
 #[test]
 fn personal_output_has_numbers_and_line_numbers_only() {
     let repo = repo_with_personal();
-    // baseline 說第 1 行原本答錯、第 2 行原本答對：兩個方向都會列出。
+    // baseline 說第 2 行原本答錯、第 3 行原本答對：兩個方向都會列出。
     write(
         repo.path(),
         "bench/personal/baseline.json",
-        br#"{"personal": {"wrong": 1, "corrections": 1, "wrong_lines": "1"}}"#,
+        br#"{"personal": {"wrong": 1, "correction_count": 1, "wrong_lines": "2"}}"#,
     );
     let report = run(repo.path(), Mode::Report).unwrap().report();
     assert!(
-        report.contains("- personal 由錯變對 1 題：第 1 行"),
+        report.contains("- personal 由錯變對 1 題：第 2 行"),
         "{report}"
     );
     assert!(
-        report.contains("- personal 由對變錯 1 題：第 2 行"),
+        report.contains("- personal 由對變錯 1 題：第 3 行"),
         "{report}"
     );
     for word in ["月", "曰"] {
@@ -564,7 +584,7 @@ fn personal_is_checked_against_its_own_baseline_file() {
     write(
         repo.path(),
         "bench/personal/baseline.json",
-        br#"{"personal": {"wrong": 1, "corrections": 0, "wrong_lines": "2"}}"#,
+        br#"{"personal": {"wrong": 1, "correction_count": 0, "wrong_lines": "3"}}"#,
     );
     let violations = check(&repo);
     assert_eq!(violations.len(), 1, "{violations:?}");
@@ -641,4 +661,41 @@ fn update_baseline_replaces_a_baseline_in_an_old_format() {
     assert!(run(repo.path(), Mode::Report).is_err());
     run(repo.path(), Mode::UpdateBaseline).unwrap();
     assert_eq!(check(&repo), Vec::<String>::new());
+}
+
+#[test]
+fn a_userdb_changed_after_transcoding_is_skipped_instead_of_running_old_items() {
+    let repo = repo_with_personal();
+    write(
+        repo.path(),
+        "bench/personal/rime-userdb.txt",
+        "換過的學習資料".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert!(
+        matches!(outcome.personal, Personal::NotTranscoded),
+        "{:?}",
+        outcome.personal
+    );
+    assert!(outcome.report().contains("先跑 `cargo xtask data`"));
+
+    transcode_personal(&repo, "換過的學習資料");
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert!(
+        matches!(outcome.personal, Personal::Ran(_)),
+        "{:?}",
+        outcome.personal
+    );
+}
+
+#[test]
+fn items_left_behind_without_a_userdb_are_not_run() {
+    let repo = repo_with_personal();
+    fs::remove_file(repo.path().join("bench/personal/rime-userdb.txt")).unwrap();
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert!(
+        matches!(outcome.personal, Personal::Missing),
+        "{:?}",
+        outcome.personal
+    );
 }

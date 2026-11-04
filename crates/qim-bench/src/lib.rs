@@ -31,6 +31,8 @@ pub const PERSONAL_USERDB: &str = "bench/personal/rime-userdb.txt";
 pub const PERSONAL_BASELINE: &str = "bench/personal/baseline.json";
 /// 個人集在結果與 baseline 裡的集合名。
 pub const PERSONAL_SET: &str = "personal";
+/// [`PERSONAL`] 的第一行：這個前綴接 [`PERSONAL_USERDB`] 的 sha256（`qim_databuild::personal` 寫）。
+pub const PERSONAL_SOURCE_HEADER: &str = "# rime-userdb.txt sha256 ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -64,20 +66,20 @@ impl Outcome {
         report::render(self)
     }
 
-    /// 集合 `name` 跑之前的 baseline。
-    pub fn baseline_of(&self, name: &str) -> Option<&SetBaseline> {
-        let file = if name == PERSONAL_SET {
+    /// 集合 `set` 跑之前的 baseline。
+    pub fn baseline_of(&self, set: &SetResult) -> Option<&SetBaseline> {
+        let file = if set.private {
             &self.personal_baseline
         } else {
             &self.baseline
         };
-        file.as_ref()?.get(name)
+        file.as_ref()?.get(&set.name)
     }
 
     /// 集合 `name` 和 baseline 比的翻盤清單；沒有這個集合或沒有 baseline 時是 `None`。
     pub fn flips(&self, name: &str) -> Option<Flips> {
         let set = self.scored_sets().find(|s| s.name == name)?;
-        Some(baseline::flips(set, self.baseline_of(name)?))
+        Some(baseline::flips(set, self.baseline_of(set)?))
     }
 
     /// 語料集合，有個人集時接在最後。
@@ -93,9 +95,9 @@ impl Outcome {
 #[derive(Debug)]
 pub enum Personal {
     Ran(SetResult),
-    /// 沒有 [`PERSONAL`] 也沒有 [`PERSONAL_USERDB`]：跳過。
+    /// 沒有 [`PERSONAL_USERDB`]：跳過。
     Missing,
-    /// 有 [`PERSONAL_USERDB`] 但還沒轉出 [`PERSONAL`]：跳過，提示先跑 `cargo xtask data`。
+    /// 有 [`PERSONAL_USERDB`]，但 [`PERSONAL`] 不是由它轉出（還沒轉，或資料換過）：跳過，提示先跑 `cargo xtask data`。
     NotTranscoded,
 }
 
@@ -103,7 +105,7 @@ pub enum Personal {
 pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
     let (engine, pack_sha256) = load_engine(&root.join(PACK))?;
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
-    let fixed = score::score(&engine, "fixed", &fixed);
+    let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets: Vec<SetResult> = Vec::new();
     for dir in CORPUS_DIRS {
         for (name, path) in corpus_files(&root.join(dir))? {
@@ -121,25 +123,14 @@ pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
             }
             let items =
                 parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
-            sets.push(score::score(&engine, &name, &items));
+            sets.push(score::score(&engine, &name, &items, false));
         }
     }
-    let personal = if root.join(PERSONAL).exists() {
-        let items =
-            parse_personal(&read(&root.join(PERSONAL))?).map_err(|e| format!("{PERSONAL}：{e}"))?;
-        Personal::Ran(score::score(&engine, PERSONAL_SET, &items))
-    } else if root.join(PERSONAL_USERDB).exists() {
-        Personal::NotTranscoded
-    } else {
-        Personal::Missing
-    };
-    // 改寫 baseline 時舊檔讀不了（例如格式改了）不算錯，當作沒有。
-    let load = |path: &str| match (mode, load_baseline(&root.join(path))) {
-        (Mode::UpdateBaseline, Err(_)) => Ok(None),
-        (_, loaded) => loaded,
-    };
-    let baseline = load(BASELINE)?;
-    let personal_baseline = load(PERSONAL_BASELINE)?;
+    let personal = load_personal(root, &engine)?;
+    // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
+    let tolerate_bad_format = mode == Mode::UpdateBaseline;
+    let baseline = load_baseline(&root.join(BASELINE), tolerate_bad_format)?;
+    let personal_baseline = load_baseline(&root.join(PERSONAL_BASELINE), tolerate_bad_format)?;
     let sets_only: Vec<&SetResult> = sets.iter().collect();
     let violations = match mode {
         Mode::Report => Vec::new(),
@@ -184,13 +175,48 @@ fn write(path: &Path, contents: &str) -> Result<(), String> {
     fs::write(path, contents).map_err(|e| format!("寫不了 {}：{e}", path.display()))
 }
 
-fn load_baseline(path: &Path) -> Result<Option<Baseline>, String> {
+fn load_baseline(path: &Path, tolerate_bad_format: bool) -> Result<Option<Baseline>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    baseline::parse(&read(path)?)
-        .map(Some)
-        .map_err(|e| format!("{}：{e}", path.display()))
+    match baseline::parse(&read(path)?) {
+        Ok(baseline) => Ok(Some(baseline)),
+        Err(_) if tolerate_bad_format => Ok(None),
+        Err(e) => Err(format!("{}：{e}", path.display())),
+    }
+}
+
+/// 個人集：沒有 [`PERSONAL_USERDB`] 就跳過；題目檔第一行記的來源 sha256 要等於現在的
+/// [`PERSONAL_USERDB`]，否則是還沒轉出或換過資料沒重轉，也跳過，免得安靜地跑舊題目。
+fn load_personal(root: &Path, engine: &Engine) -> Result<Personal, String> {
+    let userdb = root.join(PERSONAL_USERDB);
+    if !userdb.exists() {
+        return Ok(Personal::Missing);
+    }
+    let items = root.join(PERSONAL);
+    if !items.exists() {
+        return Ok(Personal::NotTranscoded);
+    }
+    let source = fs::read(&userdb).map_err(|e| format!("讀不到 {}：{e}", userdb.display()))?;
+    let text = read(&items)?;
+    let header = format!("{PERSONAL_SOURCE_HEADER}{}", sha256_hex(&source));
+    if text.lines().next() != Some(header.as_str()) {
+        return Ok(Personal::NotTranscoded);
+    }
+    let items = parse_personal(&text).map_err(|e| format!("{PERSONAL}：{e}"))?;
+    Ok(Personal::Ran(score::score(
+        engine,
+        PERSONAL_SET,
+        &items,
+        true,
+    )))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// 資料包與它的 sha256。
@@ -202,11 +228,7 @@ fn load_engine(path: &Path) -> Result<(Engine, String), String> {
         )
     })?;
     let engine = Engine::from_pack_bytes(&bytes).map_err(|e| format!("{}：{e}", path.display()))?;
-    let sha256 = Sha256::digest(&bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    Ok((engine, sha256))
+    Ok((engine, sha256_hex(&bytes)))
 }
 
 fn read(path: &Path) -> Result<String, String> {

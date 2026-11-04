@@ -774,7 +774,10 @@ fn personal_userdb_is_transcoded_next_to_it_and_removed_with_it() {
     assert_eq!(outcome.personal.map(|c| (c.words, c.unused)), Some((1, 1)));
     assert_eq!(
         read(root.path(), "bench/personal/rime-userdb.tsv"),
-        "ar a\t問日\t2\n"
+        format!(
+            "# rime-userdb.txt sha256 {}\nar a\t問日\t2\n",
+            sha256_hex(&std::fs::read(root.path().join("bench/personal/rime-userdb.txt")).unwrap())
+        )
     );
 
     std::fs::remove_file(root.path().join("bench/personal/rime-userdb.txt")).unwrap();

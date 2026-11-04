@@ -1,8 +1,9 @@
 //! 印給人看、也直接貼進票做前後對照的結果：指標表、依長度分組表、翻盤清單。
 //! 個人集只印數字與題號（plan §5.2）。
 
+use crate::baseline::SetBaseline;
 use crate::score::{LENGTH_GROUPS, Metrics, SetResult};
-use crate::{Outcome, PERSONAL, PERSONAL_SET, PERSONAL_USERDB, Personal};
+use crate::{Outcome, PERSONAL, PERSONAL_USERDB, Personal};
 
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
@@ -15,18 +16,13 @@ pub fn render(outcome: &Outcome) -> String {
         &outcome.pack_sha256[..12]
     );
     out.push_str(
-        "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 | 修正/句 | baseline 修正/句 | KSPC | 跳動/句 | 打不出 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+        "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 | 修正/句 | 修正 | baseline 修正 | KSPC | 跳動/句 | 打不出 |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
     );
-    out.push_str(&row(&outcome.fixed, None, None));
+    out.push_str(&row(&outcome.fixed, None));
     for set in outcome.scored_sets() {
-        let baseline = outcome.baseline_of(&set.name);
-        out.push_str(&row(
-            set,
-            baseline.map(|b| b.wrong),
-            baseline.map(|b| b.corrections),
-        ));
-        if set.name == PERSONAL_SET {
+        out.push_str(&row(set, outcome.baseline_of(set)));
+        if set.private {
             out.push_str(&weighted_row(set));
         }
     }
@@ -36,7 +32,7 @@ pub fn render(outcome: &Outcome) -> String {
         )),
         Personal::Missing => out.push_str(&format!("\n個人集：沒有 {PERSONAL_USERDB}，跳過\n")),
         Personal::NotTranscoded => out.push_str(&format!(
-            "\n個人集：有 {PERSONAL_USERDB} 但還沒轉出 {PERSONAL}，跳過；先跑 `cargo xtask data`\n"
+            "\n個人集：{PERSONAL} 不是由現在的 {PERSONAL_USERDB} 轉出（還沒轉，或資料換過），跳過；先跑 `cargo xtask data`\n"
         )),
     }
 
@@ -54,7 +50,7 @@ pub fn render(outcome: &Outcome) -> String {
                 Some(g) => out.push_str(&format!(
                     " {} · {:.2}（{}） |",
                     percent(g.sentence_accuracy),
-                    g.corrections,
+                    g.correction_count,
                     g.total
                 )),
                 None => out.push_str(" — |"),
@@ -80,7 +76,7 @@ pub fn render(outcome: &Outcome) -> String {
             }
             out.push_str(&format!("- {} {direction} {} 題", set.name, lines.len()));
             // 個人集只列題號；其他集合附期望與首選，看得出是哪一句。
-            if set.name == PERSONAL_SET {
+            if set.private {
                 let shown: Vec<String> = lines
                     .iter()
                     .take(FLIPS_SHOWN)
@@ -127,23 +123,20 @@ fn describe(set: &SetResult, line: usize) -> String {
     }
 }
 
-fn row(
-    set: &SetResult,
-    baseline_wrong: Option<usize>,
-    baseline_corrections: Option<usize>,
-) -> String {
+fn row(set: &SetResult, baseline: Option<&SetBaseline>) -> String {
     let m = set.metrics(false);
     format!(
-        "| {} | {} | {}（{}） | {} | {} | {} | {:.2} | {} | {:.2} | {:.2} | {} |\n",
+        "| {} | {} | {}（{}） | {} | {} | {} | {:.2} | {} | {} | {:.2} | {:.2} | {} |\n",
         set.name,
         set.total(),
         set.correct(),
         percent(m.sentence_accuracy),
         percent(m.char_accuracy),
         set.wrong(),
-        dash(baseline_wrong.map(|w| w.to_string())),
-        m.corrections,
-        dash(baseline_corrections.map(|c| format!("{:.2}", per_item(c, set.total())))),
+        dash(baseline.map(|b| b.wrong)),
+        m.correction_count,
+        set.correction_count(),
+        dash(baseline.map(|b| b.correction_count)),
         m.kspc,
         m.jitter,
         set.unfinished(),
@@ -155,29 +148,21 @@ fn weighted_row(set: &SetResult) -> String {
     let Metrics {
         sentence_accuracy,
         char_accuracy,
-        corrections,
+        correction_count,
         kspc,
         jitter,
     } = set.metrics(true);
     let weight: u64 = set.items.iter().map(|i| i.weight).sum();
     format!(
-        "| {}（加權） | {weight} 次 | {} | {} | — | — | {corrections:.2} | — | {kspc:.2} | {jitter:.2} | — |\n",
+        "| {}（加權） | {weight} 次 | {} | {} | — | — | {correction_count:.2} | — | — | {kspc:.2} | {jitter:.2} | — |\n",
         set.name,
         percent(sentence_accuracy),
         percent(char_accuracy),
     )
 }
 
-fn per_item(total: usize, items: usize) -> f64 {
-    if items == 0 {
-        0.0
-    } else {
-        total as f64 / items as f64
-    }
-}
-
-fn dash(value: Option<String>) -> String {
-    value.unwrap_or_else(|| "—".into())
+fn dash(value: Option<usize>) -> String {
+    value.map_or_else(|| "—".into(), |v| v.to_string())
 }
 
 fn percent(ratio: f64) -> String {

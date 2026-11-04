@@ -271,7 +271,12 @@ fn build_personal(root: &Path, transcoder: &Transcoder) -> Result<Option<persona
     };
     let (tsv, counts) = personal::from_userdb(&text, transcoder)
         .map_err(|e| Error::invalid(personal::USERDB, e))?;
-    std::fs::write(&items, tsv).map_err(Error::io(&items))?;
+    let header = format!(
+        "{}{}\n",
+        personal::SOURCE_HEADER,
+        sha256_hex(text.as_bytes())
+    );
+    std::fs::write(&items, header + &tsv).map_err(Error::io(&items))?;
     Ok(Some(counts))
 }
 

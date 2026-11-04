@@ -15,7 +15,7 @@ pub type Baseline = BTreeMap<String, SetBaseline>;
 pub struct SetBaseline {
     pub wrong: usize,
     /// 修正次數的總和（每句平均乘題數）。
-    pub corrections: usize,
+    pub correction_count: usize,
     /// 答錯的題的行號，寫成 `1-3,7` 這樣的區段，翻盤清單用。
     pub wrong_lines: String,
 }
@@ -37,7 +37,7 @@ pub fn render(sets: &[&SetResult]) -> String {
                 set.name.clone(),
                 SetBaseline {
                     wrong: set.wrong(),
-                    corrections: set.corrections(),
+                    correction_count: set.correction_count(),
                     wrong_lines: render_lines(&set.wrong_lines()),
                 },
             )
@@ -97,11 +97,11 @@ pub fn check(sets: &[&SetResult], baseline: &Baseline, file: &str) -> Vec<String
                 limit.wrong
             ));
         }
-        if set.corrections() > limit.corrections {
+        if set.correction_count() > limit.correction_count {
             violations.push(format!(
                 "集合 {name} 修正 {} 次，高於 baseline 的 {} 次",
-                set.corrections(),
-                limit.corrections
+                set.correction_count(),
+                limit.correction_count
             ));
         }
         if set.unfinished() > 0 {
