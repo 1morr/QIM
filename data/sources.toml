@@ -136,3 +136,46 @@ sha256 = "3e8512ebaa6657e35961b1f5762060717c647e3bf471d5e3b86e783b4e934ffb"
 path = "LICENSE"
 url = "https://raw.githubusercontent.com/rime/rime-essay/054920de4f54c9e5994276a96a4fc2a35cb51aa3/LICENSE"
 sha256 = "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+
+# OpenCC（plan §4.4）：簡繁資料包 opencc-hk2s 的轉換表，照 OpenCC 的 data/config/hk2s.json（香港繁體 → 簡體）組成：
+# 正規化 CJK_Compatibility_Ideographs → 用 TSPhrases 分段 → HKVariantsRevPhrases、HKVariantsRev 一組 → TSPhrases、TSCharacters 一組。
+# HKVariantsRev 由 HKVariants 反轉產生（照 data/scripts/reverse.py，含 `# @reverse-prefer:` 的偏好）。
+# TSCharacters 裡 `# @tofu-risk:` 標記的罕用簡體字（TSCharactersExt）不用，保留原字：多數字型顯示不出，
+# 等同 OpenCC 不載入 tofu 風險字典的行為。每列只取第一個值。規則在 crates/qim-databuild/src/opencc.rs。
+# 不用 ferrous-opencc 內建的字典：它的版本不是這個 commit，公開 API 也不能從資料包的位元組載入字典（票 16 Comments）。
+# 字典與 LICENSE 同一個 repo、沒有另外的授權檔，整份 Apache-2.0 LICENSE 寫進資料包的 LICENSE。
+[source.opencc]
+repository = "https://github.com/BYVoid/OpenCC"
+version = "fae2a0a911c30764e669a7d8b0591cd8e852934a"
+license = "Apache-2.0"
+license_text = { upstream_file = "LICENSE" }
+
+[[source.opencc.files]]
+path = "data/dictionary/CJK_Compatibility_Ideographs.txt"
+url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/CJK_Compatibility_Ideographs.txt"
+sha256 = "e9623acec48d384f99d37d2760bd14a00b6d0cddad7707290dbb0b8c97a2904a"
+
+[[source.opencc.files]]
+path = "data/dictionary/TSPhrases.txt"
+url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/TSPhrases.txt"
+sha256 = "1b1e60a3d50492bc088bcd4372152570b5f0ccbe2ded0b66c90b6b8eeb5f849f"
+
+[[source.opencc.files]]
+path = "data/dictionary/TSCharacters.txt"
+url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/TSCharacters.txt"
+sha256 = "9ff46a7d30e5765375eb13d33f2b03a34d298913caf2b120380679f33ae1642d"
+
+[[source.opencc.files]]
+path = "data/dictionary/HKVariants.txt"
+url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/HKVariants.txt"
+sha256 = "e5cd4345303224587102f2c9e4d2b67d2b7e349c6ce9152e4a118f4656cf7302"
+
+[[source.opencc.files]]
+path = "data/dictionary/HKVariantsRevPhrases.txt"
+url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/HKVariantsRevPhrases.txt"
+sha256 = "35352aef4833c2631b2144bc85623cc44d5a09221dda9c32178ea024300d34d3"
+
+[[source.opencc.files]]
+path = "LICENSE"
+url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/LICENSE"
+sha256 = "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308"

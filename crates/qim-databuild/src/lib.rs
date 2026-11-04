@@ -11,6 +11,7 @@ pub mod hkcancor;
 pub mod lexicon;
 pub mod libcangjie;
 pub mod mediawiki;
+pub mod opencc;
 mod packing;
 pub mod personal;
 mod pipeline;

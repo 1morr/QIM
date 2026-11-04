@@ -1,13 +1,13 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, Key, Options, RadicalHintPack, RadicalHints, Scheme, Session, Snapshot,
-    UserModel,
+    CangjieVersion, Engine, Key, Options, RadicalHintPack, RadicalHints, Scheme, Session,
+    SimplifierPack, Snapshot, UserModel,
 };
 use qim_layout::{Action, Target, When};
 use wasm_bindgen::prelude::*;
 
-/// 網頁的一個輸入框：速成、詞庫與語言模型資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
+/// 網頁的一個輸入框：速成、詞庫、語言模型與簡繁資料包、一個個人模型、一個 `Session`。JS 端叫 `Session`。
 #[wasm_bindgen(js_name = Session)]
 pub struct WebSession {
     engine: Engine,
@@ -20,15 +20,22 @@ pub struct WebSession {
 
 #[wasm_bindgen(js_class = Session)]
 impl WebSession {
-    /// 由速成資料包與方案指名的詞庫、語言模型資料包的位元組建立；資料包由網頁 fetch。
+    /// 由速成資料包與方案指名的詞庫、語言模型資料包，加上簡繁資料包（沒有時簡體模式照原樣
+    /// 輸出）的位元組建立；資料包由網頁 fetch。
     #[wasm_bindgen(constructor)]
     pub fn new(
         pack: &[u8],
         lexicon: Option<Vec<u8>>,
         language_model: Option<Vec<u8>>,
+        simplifier: Option<Vec<u8>>,
     ) -> Result<WebSession, JsError> {
-        let engine = Engine::from_pack_bytes(pack, lexicon.as_deref(), language_model.as_deref())
-            .map_err(|e| JsError::new(&e.to_string()))?;
+        let error = |e: qim_core::PackError| JsError::new(&e.to_string());
+        let mut engine =
+            Engine::from_pack_bytes(pack, lexicon.as_deref(), language_model.as_deref())
+                .map_err(error)?;
+        if let Some(bytes) = simplifier {
+            engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(error)?);
+        }
         Ok(Self {
             engine,
             user: UserModel::default(),
@@ -43,6 +50,15 @@ impl WebSession {
     pub fn set_incognito(&mut self, on: bool) {
         self.options.incognito = on;
         self.session.set_options(self.options);
+    }
+
+    /// 簡體模式（M1 票 16）：候選、組字與上屏轉成簡體，學習仍記繁體。組字中切換也立刻
+    /// 重列候選，回傳新的狀態給網頁畫。
+    #[wasm_bindgen(js_name = setSimplified)]
+    pub fn set_simplified(&mut self, on: bool) -> WebSnapshot {
+        self.options.simplified = on;
+        self.session.set_options(self.options);
+        self.session.refresh(&self.engine, &self.user).into()
     }
 
     pub fn letter(&mut self, c: char) -> WebSnapshot {
@@ -163,14 +179,20 @@ pub struct WebSnapshot {
     /// 目前分段在 `segments` 的位置；等於 `segments.length` 時候選列整串（沒有目前分段）。
     #[wasm_bindgen(readonly)]
     pub focus: usize,
-    /// 目前頁的候選。
+    /// 目前頁的候選，經過後處理（簡體模式是簡體）。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<String>,
+    /// 目前頁的候選的繁體原文，和 `candidates` 一一對應；字根提示與「回報」用。
+    #[wasm_bindgen(readonly, js_name = candidatesOriginal)]
+    pub candidates_original: Vec<String>,
     /// 目前頁，從 0 起。
     #[wasm_bindgen(readonly)]
     pub page: usize,
     #[wasm_bindgen(readonly)]
     pub commit: Option<String>,
+    /// `commit` 的繁體原文；「回報」用。
+    #[wasm_bindgen(readonly, js_name = commitOriginal)]
+    pub commit_original: Option<String>,
 }
 
 impl From<Snapshot> for WebSnapshot {
@@ -191,9 +213,11 @@ impl From<Snapshot> for WebSnapshot {
                     selected: segment.selected,
                 })
                 .collect(),
+            candidates_original: s.candidates.iter().map(|c| c.original.clone()).collect(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
             page: s.page,
             commit: s.commit,
+            commit_original: s.commit_original,
         }
     }
 }

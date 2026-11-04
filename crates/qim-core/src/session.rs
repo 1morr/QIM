@@ -1,5 +1,7 @@
 //! 殼與核心之間的介面（plan §2.1）：殼把按鍵交給 [`Session`]，拿回一份完整的 [`Snapshot`]。
 
+use std::collections::HashSet;
+
 use crate::lattice::{self, CandidateSpan, Lattice};
 use crate::{Engine, UserModel, punctuation};
 
@@ -9,7 +11,8 @@ pub const PAGE_SIZE: usize = 9;
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Options {
-    /// 簡體輸出（M1 票 16）；還沒有作用。
+    /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體（plan §2.2 的後處理）；
+    /// 引擎要掛上簡繁資料包（[`Engine::with_simplifier`]）。
     pub simplified: bool,
     /// 無痕模式：不寫任何學習資料（plan §2.4）。
     pub incognito: bool,
@@ -87,14 +90,20 @@ pub struct Segment {
     pub code: String,
     /// `code` 的字根，如 `anr` 的「日弓口」（方案的 `[radicals]`）。
     pub radicals: String,
+    /// 顯示、上屏的字詞，經過後處理（簡體模式轉成簡體）。
     pub text: String,
+    /// 後處理前的原文（繁體），字根提示與回報用；簡體模式以外和 `text` 相同。
+    pub original: String,
     /// 使用者已選定，重算時不動。
     pub selected: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
+    /// 顯示、上屏的字詞，經過後處理（簡體模式轉成簡體）。
     pub text: String,
+    /// 後處理前的原文（繁體），字根提示與回報用；簡體模式以外和 `text` 相同。
+    pub original: String,
 }
 
 /// 一次事件後殼要畫的全部狀態。
@@ -109,9 +118,42 @@ pub struct Snapshot {
     pub has_more: bool,
     /// 這次事件要上屏的文字。
     pub commit: Option<String>,
+    /// `commit` 後處理前的原文（繁體），回報用；簡體模式以外和 `commit` 相同。
+    pub commit_original: Option<String>,
     pub ascii: bool,
     /// 每次候選變動加一，非同步重排用。
     pub generation: u64,
+}
+
+/// 後處理過的一個候選：排序時的候選（學習用）與轉換過的文字。
+#[derive(Debug, Clone)]
+struct ShownCandidate {
+    span: CandidateSpan,
+    /// 簡體模式轉換後的文字；不轉換時是 `None`，顯示原文。
+    converted: Option<String>,
+}
+
+impl ShownCandidate {
+    /// 顯示、上屏的文字。
+    fn text(&self) -> &str {
+        self.converted.as_deref().unwrap_or(&self.span.text)
+    }
+}
+
+/// 一次上屏：顯示的文字與後處理前的原文。
+struct Commit {
+    text: String,
+    original: String,
+}
+
+impl Commit {
+    /// 不經後處理的文字（標點、原樣上屏的輸入碼），兩者相同。
+    fn plain(text: String) -> Self {
+        Self {
+            original: text.clone(),
+            text,
+        }
+    }
 }
 
 /// 一個輸入框的組字狀態。
@@ -123,8 +165,10 @@ pub struct Session {
     lattice: Lattice,
     /// 目前分段在組字的分段的位置；`None` 是沒有目前分段，候選列剩下的整串輸入碼。
     focus: Option<usize>,
-    /// 目前的全部候選：有目前分段時是那一段的碼的，否則是剩下的輸入碼的。
-    candidates: Vec<CandidateSpan>,
+    /// 目前的全部候選，已經過後處理：有目前分段時是那一段的碼的，否則是剩下的輸入碼的。
+    candidates: Vec<ShownCandidate>,
+    /// `candidates` 是在簡體模式下列的；和選項不同時下一個鍵先重列。
+    candidates_simplified: bool,
     /// 目前頁，從 0 起。
     page: usize,
     generation: u64,
@@ -132,8 +176,19 @@ pub struct Session {
 }
 
 impl Session {
+    /// 換選項。組字中要畫面立刻跟著換，接著呼叫 [`Session::refresh`]；沒呼叫時下一個鍵
+    /// 先依新選項重列候選再處理。
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
+    }
+
+    /// 依目前的選項重列候選、回到第一頁，組字不變；殼換了選項後呼叫（librime 換選項後也
+    /// 重算組字）。不是按鍵，`handled` 恆為真。
+    pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot {
+        if self.composing() {
+            self.refresh_candidates(engine, user);
+        }
+        with_radicals(engine, self.snapshot(engine, true, None))
     }
 
     /// 選全部候選（不只目前頁）的第 `index` 個，和按那個候選的數字鍵相同。
@@ -141,7 +196,7 @@ impl Session {
         let snapshot = if self.composing() {
             self.select_at(engine, user, index)
         } else {
-            self.snapshot(false, None)
+            self.snapshot(engine, false, None)
         };
         with_radicals(engine, snapshot)
     }
@@ -155,15 +210,18 @@ impl Session {
         segment: usize,
     ) -> Snapshot {
         if !self.composing() {
-            return self.snapshot(false, None);
+            return self.snapshot(engine, false, None);
         }
         if segment <= self.segments().len() {
             self.move_focus(engine, user, segment);
         }
-        with_radicals(engine, self.snapshot(true, None))
+        with_radicals(engine, self.snapshot(engine, true, None))
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        if self.candidates_simplified != self.options.simplified && self.composing() {
+            self.refresh_candidates(engine, user);
+        }
         let snapshot = self.handle_key(engine, user, key);
         with_radicals(engine, snapshot)
     }
@@ -175,15 +233,15 @@ impl Session {
             self.focus = None;
             self.lattice.push(engine, user, c);
             self.refresh_candidates(engine, user);
-            return self.snapshot(true, None);
+            return self.snapshot(engine, true, None);
         }
         // 沒有組字時，有全形的標點上屏全形，其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
         if !self.composing() {
             return match key {
                 Key::Punct(c) if let Some(full) = punctuation::full_width(c) => {
-                    self.snapshot(true, Some(full.to_string()))
+                    self.snapshot(engine, true, Some(Commit::plain(full.to_string())))
                 }
-                _ => self.snapshot(false, None),
+                _ => self.snapshot(engine, false, None),
             };
         }
         // 組字中每個鍵都吃下：交還宿主的話宿主照打那個字元，組字卻還留著。
@@ -198,11 +256,11 @@ impl Session {
                     self.recompose(engine, user, &segment.code);
                 }
                 self.refresh_candidates(engine, user);
-                self.snapshot(true, None)
+                self.snapshot(engine, true, None)
             }
             Key::Escape => {
                 self.clear();
-                self.snapshot(true, None)
+                self.snapshot(engine, true, None)
             }
             // 空白一律選全部候選的第一個，與目前在第幾頁無關（brief §4.3）；
             // 有目前分段時上屏整個組字（照顯示的分段，剩下的逐次取首選）。
@@ -212,14 +270,16 @@ impl Session {
                 Some(index) if index < self.page_candidates().len() => {
                     self.select_at(engine, user, self.page * PAGE_SIZE + index)
                 }
-                _ => self.snapshot(true, None),
+                _ => self.snapshot(engine, true, None),
             },
-            Key::PageUp if self.page > 0 => self.turn_to(self.page - 1),
-            Key::PageDown if self.has_more() => self.turn_to(self.page + 1),
-            Key::PageUp | Key::PageDown => self.snapshot(true, None),
+            Key::PageUp if self.page > 0 => self.turn_to(engine, self.page - 1),
+            Key::PageDown if self.has_more() => self.turn_to(engine, self.page + 1),
+            Key::PageUp | Key::PageDown => self.snapshot(engine, true, None),
             Key::Enter => {
-                let commit = self.selected_text() + self.lattice.input();
-                self.commit(commit)
+                let mut commit = self.selected_commit(engine);
+                commit.text.push_str(self.lattice.input());
+                commit.original.push_str(self.lattice.input());
+                self.commit(engine, commit)
             }
             Key::Punct(c) => {
                 let punct = punctuation::full_width(c).map_or_else(|| c.to_string(), String::from);
@@ -233,18 +293,18 @@ impl Session {
                 if let Some(to) = self.focus_index().checked_sub(1) {
                     self.move_focus(engine, user, to);
                 }
-                self.snapshot(true, None)
+                self.snapshot(engine, true, None)
             }
             Key::Right => {
                 let to = self.focus_index() + 1;
                 if to <= self.segments().len() {
                     self.move_focus(engine, user, to);
                 }
-                self.snapshot(true, None)
+                self.snapshot(engine, true, None)
             }
             // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、切換中英（票 23）、其他鍵：
             // 先吃下不動作。
-            Key::Letter(_) | Key::ToggleAscii | Key::Other => self.snapshot(true, None),
+            Key::Letter(_) | Key::ToggleAscii | Key::Other => self.snapshot(engine, true, None),
         }
     }
 
@@ -303,27 +363,31 @@ impl Session {
         // 剩下的輸入碼的首選要用它自己的候選，不是目前分段的。
         self.clear_focus(engine, user);
         let mut segments = self.selected_segments();
+        let mut commit = self.selected_commit(engine);
         let mut rest = self.lattice.input().to_string();
-        let mut top = self.candidates.first().cloned();
+        let mut top = self.candidates.first().map(|c| c.span.clone());
         let mut raw = String::new();
         while !rest.is_empty() {
             let Some(choice) = top else {
                 raw = rest;
                 break;
             };
+            commit.text.push_str(&self.display(engine, &choice));
+            commit.original.push_str(&choice.text);
             segments.extend(owned_segments(&rest, &choice));
             rest.drain(..choice.len);
             top = lattice::candidates(engine, user, &Lattice::from_input(engine, user, &rest))
                 .into_iter()
                 .next();
         }
-        let mut commit: String = segments.iter().map(|(_, text)| text.as_str()).collect();
         if raw.is_empty() {
             self.learn(engine, user, &segments);
         }
-        commit.push_str(&raw);
-        commit.push_str(tail);
-        self.commit(commit)
+        for text in [&mut commit.text, &mut commit.original] {
+            text.push_str(&raw);
+            text.push_str(tail);
+        }
+        self.commit(engine, commit)
     }
 
     /// 選定的分段的（輸入碼, 字詞）。
@@ -346,15 +410,40 @@ impl Session {
         user.learn(&engine.scheme().id, &segments);
     }
 
-    /// 已選定的分段接起來的字詞。
-    fn selected_text(&self) -> String {
-        self.selected.iter().map(|s| s.text.as_str()).collect()
+    /// 已選定的分段接起來：顯示的字詞與原文。
+    fn selected_commit(&self, engine: &Engine) -> Commit {
+        Commit {
+            text: self
+                .selected
+                .iter()
+                .map(|s| self.output(engine, &s.text))
+                .collect(),
+            original: self.selected.iter().map(|s| s.text.as_str()).collect(),
+        }
     }
 
-    /// 上屏 `text`、清空組字。
-    fn commit(&mut self, text: String) -> Snapshot {
+    /// 字詞經過後處理（plan §2.2）要顯示、上屏的樣子：簡體模式轉成簡體。
+    fn output(&self, engine: &Engine, text: &str) -> String {
+        if self.options.simplified {
+            engine.simplify(text)
+        } else {
+            text.to_string()
+        }
+    }
+
+    /// 候選要顯示的文字：轉換的單位是一個分段，選了它之後組字與上屏也是各段分開轉換，
+    /// 所以看到的就是上屏的。
+    fn display(&self, engine: &Engine, span: &CandidateSpan) -> String {
+        span.segments
+            .iter()
+            .map(|s| self.output(engine, &s.text))
+            .collect()
+    }
+
+    /// 上屏 `commit`、清空組字。
+    fn commit(&mut self, engine: &Engine, commit: Commit) -> Snapshot {
         self.clear();
-        self.snapshot(true, Some(text))
+        self.snapshot(engine, true, Some(commit))
     }
 
     /// 選全部候選的第 `index` 個，沒有這個候選時不動作、鍵照樣吃下。
@@ -363,10 +452,11 @@ impl Session {
     /// 前面的分段照顯示的字固定，第 i 段換成選的字詞。選的只蓋住第 i 段的開頭時，那段剩下的碼
     /// 連同後面的分段一起重算，否則後面已選定的分段不動、沒選定的重算。都選定了就上屏。
     fn select_at(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
-        let Some(choice) = self.candidates.get(index).cloned() else {
-            return self.snapshot(true, None);
+        let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
+            return self.snapshot(engine, true, None);
         };
         let segments = self.segments();
+        // 分段在 `Session` 裡記原文（繁體），學習用；顯示與上屏時再轉換。
         // 候選列的是從第 `at` 段起的 `code`，`after` 是它後面的輸入碼。
         let (at, code, after) = match self.focus {
             Some(i) => (
@@ -407,11 +497,12 @@ impl Session {
         self.focus = None;
         if rest.is_empty() {
             self.learn(engine, user, &self.selected_segments());
-            return self.commit(self.selected_text());
+            let commit = self.selected_commit(engine);
+            return self.commit(engine, commit);
         }
         self.recompose(engine, user, &rest);
         self.refresh_candidates(engine, user);
-        self.snapshot(true, None)
+        self.snapshot(engine, true, None)
     }
 
     /// 剩下的輸入碼換成 `input`，lattice 從頭建。
@@ -419,21 +510,33 @@ impl Session {
         self.lattice = Lattice::from_input(engine, user, input);
     }
 
-    fn turn_to(&mut self, page: usize) -> Snapshot {
+    fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
         self.page = page;
         self.generation += 1;
-        self.snapshot(true, None)
+        self.snapshot(engine, true, None)
     }
 
-    /// 輸入碼或目前分段變了：重列候選、回到第一頁。目前分段的候選從頭建，和單打它的碼相同。
+    /// 輸入碼、目前分段或選項變了：重列候選、回到第一頁。目前分段的候選從頭建，和單打它的碼
+    /// 相同。後處理（plan §2.2）在排序之後：簡體模式轉成簡體，轉換後文字重複的只留第一個。
     fn refresh_candidates(&mut self, engine: &Engine, user: &UserModel) {
-        self.candidates = match self.focus {
+        let spans = match self.focus {
             Some(i) => {
                 let code = &self.segments()[i].code;
                 lattice::candidates(engine, user, &Lattice::from_input(engine, user, code))
             }
             None => lattice::candidates(engine, user, &self.lattice),
         };
+        // 排序時已去掉原文重複的，沒轉換的不必再比。
+        let mut seen = HashSet::new();
+        self.candidates = spans
+            .into_iter()
+            .map(|span| ShownCandidate {
+                converted: self.options.simplified.then(|| self.display(engine, &span)),
+                span,
+            })
+            .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
+            .collect();
+        self.candidates_simplified = self.options.simplified;
         self.page = 0;
         self.generation += 1;
     }
@@ -448,7 +551,7 @@ impl Session {
     }
 
     /// 目前頁的候選。
-    fn page_candidates(&self) -> &[CandidateSpan] {
+    fn page_candidates(&self) -> &[ShownCandidate] {
         let start = self.page * PAGE_SIZE;
         &self.candidates[start..self.candidates.len().min(start + PAGE_SIZE)]
     }
@@ -457,8 +560,17 @@ impl Session {
         self.candidates.len() > (self.page + 1) * PAGE_SIZE
     }
 
-    fn composition(&self) -> Composition {
-        let segments = self.segments();
+    /// 組字：各分段的字詞經過後處理，另留原文。
+    fn composition(&self, engine: &Engine) -> Composition {
+        let segments: Vec<Segment> = self
+            .segments()
+            .into_iter()
+            .map(|s| Segment {
+                text: self.output(engine, &s.text),
+                original: s.text.clone(),
+                ..s
+            })
+            .collect();
         Composition {
             input: segments.iter().map(|s| s.code.as_str()).collect(),
             focus: self.focus.unwrap_or(segments.len()),
@@ -466,20 +578,26 @@ impl Session {
         }
     }
 
-    fn snapshot(&self, handled: bool, commit: Option<String>) -> Snapshot {
+    fn snapshot(&self, engine: &Engine, handled: bool, commit: Option<Commit>) -> Snapshot {
+        let (commit, commit_original) = match commit {
+            Some(c) => (Some(c.text), Some(c.original)),
+            None => (None, None),
+        };
         Snapshot {
             handled,
-            composition: self.composition(),
+            composition: self.composition(engine),
             candidates: self
                 .page_candidates()
                 .iter()
                 .map(|c| Candidate {
-                    text: c.text.clone(),
+                    text: c.text().to_string(),
+                    original: c.span.text.clone(),
                 })
                 .collect(),
             page: self.page,
             has_more: self.has_more(),
             commit,
+            commit_original,
             ascii: false,
             generation: self.generation,
         }
