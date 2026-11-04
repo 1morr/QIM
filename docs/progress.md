@@ -31,6 +31,7 @@
 | 2026-11-04 | M1 04 | 基準加修正次數、KSPC、跳動、依長度分組、翻盤清單與個人集（`cargo xtask data` 轉碼，只報數字）；細節見票 04 | 新 session 下 `/implement .scratch/m1/issues/05-bench-latency.md` |
 | 2026-11-04 | M1 05 | `cargo xtask bench` 報原生與 WebAssembly（Node）每鍵 p50 / p95，含第 20 碼起一組，只報不擋；M0 核心 p95 < 2 µs；細節見票 05 | 新 session 下 `/implement .scratch/m1/issues/06-lexicon-and-char-frequency.md` |
 | 2026-11-04 | M1 06 | rime-essay 詞庫資料包（25 萬詞）與語料字頻，`Engine` 依字頻排字序、整串查詞庫；`anr` 首選「門口」進 `fixed.tsv`，各集合修正/句約減半；細節見票 06 | 新 session 下 `/implement .scratch/m1/issues/07-continuous.md` |
+| 2026-11-04 | M1 07 | lattice、Viterbi + beam、unigram（β 2、γ 0）、選開頭一段後其餘重算；`anr`、`mir` 首選都對，維基答錯少 1/4 以上，口語修正次數變多；細節見票 07 | 新 session 下 `/implement .scratch/m1/issues/08-blackbox-apple.md` |
 
 ## 偏差與決定
 
