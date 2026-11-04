@@ -3,6 +3,8 @@ import "./style.css";
 import init, { Session, type Snapshot } from "./wasm/qim_wasm.js";
 
 const PACK_URL = "/packs/quick/quick.pack";
+/** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
+const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
 
 function element<T extends HTMLElement>(selector: string): T {
 	const found = document.querySelector<T>(selector);
@@ -17,10 +19,10 @@ const composition = element<HTMLElement>("#composition");
 const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 
-async function loadPack(): Promise<Uint8Array> {
-	const response = await fetch(PACK_URL);
+async function loadPack(url: string): Promise<Uint8Array> {
+	const response = await fetch(url);
 	if (!response.ok) {
-		throw new Error(`${PACK_URL}：${response.status}，先跑 cargo xtask web`);
+		throw new Error(`${url}：${response.status}，先跑 cargo xtask web`);
 	}
 	return new Uint8Array(await response.arrayBuffer());
 }
@@ -65,8 +67,12 @@ function insert(commit: string): void {
 }
 
 async function start(): Promise<void> {
-	const [, pack] = await Promise.all([init(), loadPack()]);
-	const session = new Session(pack);
+	const [, pack, lexicon] = await Promise.all([
+		init(),
+		loadPack(PACK_URL),
+		loadPack(LEXICON_URL),
+	]);
+	const session = new Session(pack, lexicon);
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);

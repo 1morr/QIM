@@ -49,14 +49,15 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 - 來源列在 `data/sources.toml`：每個來源釘 `version`（git 來源填 commit，其他填上游版本號）與每個檔的 sha256。下載到 `<快取>/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網，下載是邊收邊寫檔，不整份讀進記憶體。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 version、url 與 sha256，快取路徑跟著換。
 - `<快取>` 在 repo 外，所有 worktree 共用，新 worktree 不必重下約 360 MB 的來源：環境變數 `QIM_CACHE_DIR` 有設就用它，否則是平台的使用者快取目錄下的 `qim/`（macOS `~/Library/Caches/qim`、Linux `$XDG_CACHE_HOME/qim` 或 `~/.cache/qim`、Windows `%LOCALAPPDATA%\qim`）。路徑含釘住的 sha256，不同 worktree 釘不同版本也不會互相蓋掉。下載中被中斷時會留下 `<檔名>.part<行程 id>`，可以直接刪。
-- 進資料包的來源要寫授權，二選一，都寫或都不寫時建置失敗：
-  - `license_file` 加 `license_statement`：照抄上游檔裡的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`（libcangjie）。
-  - `license_text`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 的 `kGradeLevel` 進速成資料包，用 `data/licenses/Unicode-3.0.txt`）。
+- 資料進資料包的來源要寫 `license_text`，三選一，沒寫時建置失敗：
+  - `statement`（`file`、`quote`）：照抄上游檔裡的授權聲明，建置時核對 `quote` 確實在 `file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`（libcangjie）。`file` 要是這個來源 `files` 之一。
+  - `upstream_file`：上游釘住 sha256 的授權檔（`files` 之一）整份寫進 `LICENSE`（rime-essay 的 `LICENSE`）。
+  - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
-- 產物：`build/packs/<方案 id>/` 下的 `<方案 id>.pack`、`LICENSE`、`NOTICE`。資料包格式定義在 `crates/qim-core/src/pack.rs`，改格式時加 `FORMAT_VERSION`。
+- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分相加的字頻（plan §4.2），在語料之後建。兩種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
 - 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`chars.tsv`（字頻，見〈語料〉），後三者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 35 秒，`--verify` 把語料再建一次比 sha256，約 75 秒（Apple M6，release）。
 
-`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、資料包 sha256、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`。
+`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、兩份資料包的 sha256、詞庫的詞數與被門檻和字集濾掉的數量、有字頻的字數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）與 `anr` 的「門口」經 `qim-core` 的 `Engine` 查，與網頁同一條路。
 
 ### 語料
 
@@ -68,7 +69,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 例如 `an r⇥門口`（`⇥` 是 tab）。輸入碼是把各字的碼接起來；分開寫是讓基準知道每個字用了幾個鍵。轉碼由 `qim_databuild::transcode::Transcoder` 做：每個字取第一個五代碼的速成碼，沒有五代碼才取三代碼，連打字集以外的字轉碼失敗。
 
-`build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻，給詞庫資料包排字序（plan §4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
+`build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻；各語料的次數直接相加後放進詞庫資料包，`Engine` 載入時用它排字序（plan §4.1、§4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
 
 `--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練）、建兩次基準檔、切分與字頻的 sha256 相同。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。
 
@@ -102,11 +103,11 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 ## 首選字基準
 
-改核心或資料包時必跑（plan §5.2），不在 `cargo xtask check` 裡。基準讀 `build/packs/quick/quick.pack`，沒有就失敗，但不會自己重建：
+改核心或資料包時必跑（plan §5.2），不在 `cargo xtask check` 裡。基準讀 `build/packs/quick/quick.pack` 與方案指名的 `build/packs/quick-lexicon/quick-lexicon.pack`，沒有就失敗，但不會自己重建：
 
 - 改了 `data/`、`crates/qim-databuild/` 或資料包格式（`crates/qim-core/src/pack.rs`）之後，跑 bench 前先跑 `cargo xtask data`，否則量到的是舊資料包，前後數字一樣、`--check` 也照過。
 - 只改核心程式碼不必重建：`cargo xtask bench` 每次都重編核心。
-- 結果表格上方印出資料包 sha256 的前 12 碼；做前後對照時兩次不同才表示資料包真的換了，也可以和 `cargo xtask data` 印出的完整 sha256 對開頭。
+- 結果表格上方印出每份資料包 sha256 的前 12 碼；做前後對照時兩次不同才表示資料包真的換了，也可以和 `cargo xtask data` 印出的完整 sha256 對開頭。
 
 ```sh
 cargo xtask bench                     # 印結果
@@ -162,7 +163,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。
-- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts`，它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `letter()` 加讀出網頁畫候選要的欄位（輸入碼、候選），每題之間按 Esc（不計時）。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
+- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包> [<詞庫資料包>]`，它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `letter()` 加讀出網頁畫候選要的欄位（輸入碼、候選），每題之間按 Esc（不計時）。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
 - 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`。
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
 
@@ -175,7 +176,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 `cargo xtask web` 做兩件事，邏輯在 `xtask/src/web.rs`：
 
 1. 用 release 編 `qim-wasm` 到 `wasm32-unknown-unknown`，`wasm-bindgen --target web` 產生到 `web/src/wasm/`，`web/src/main.ts` 直接 import。
-2. 把 `build/packs/` 整個複製到 `web/public/packs/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`。`build/packs/` 不存在時失敗，先跑 `cargo xtask data`。
+2. 把 `build/packs/` 整個複製到 `web/public/packs/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack` 與 `/packs/quick-lexicon/quick-lexicon.pack`。`build/packs/` 不存在時失敗，先跑 `cargo xtask data`。
 
 兩個目錄都不進 git。改了 `qim-core` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 

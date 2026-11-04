@@ -10,11 +10,12 @@ const FLIPS_SHOWN: usize = 20;
 
 pub fn render(outcome: &Outcome) -> String {
     // 前 12 碼足以分辨；`cargo xtask data` 印的是完整 sha256，開頭對得上就是同一份。
-    let mut out = format!(
-        "資料包 {}（sha256 {}）\n\n",
-        crate::PACK,
-        &outcome.pack_sha256[..12]
-    );
+    let packs: Vec<String> = outcome
+        .packs
+        .iter()
+        .map(|p| format!("{}（sha256 {}）", p.path, &p.sha256[..12]))
+        .collect();
+    let mut out = format!("資料包 {}\n\n", packs.join("、"));
     out.push_str(
         "| 集合 | 題數 | 整句首選正確 | 字正確率 | 答錯 | baseline 答錯 | 修正/句 | 修正 | baseline 修正 | KSPC | 跳動/句 | 打不出 |\n\
          | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",

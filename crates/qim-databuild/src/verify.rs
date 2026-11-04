@@ -1,21 +1,22 @@
 //! `cargo xtask data --verify` 的檢查（plan §4.5）。Unihan 交叉比對不是檢查、不影響通過與否，
 //! 由 `pipeline` 算好放進 [`Report::unihan`]，比對本身在 `unihan` 模組。
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use qim_core::Pack;
+use qim_core::{CodeTable, Engine, Lexicon, LexiconPack, Pack};
 
 use crate::corpus::Counts;
+use crate::lexicon;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
 use crate::transcode::Transcoder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
-    /// `qim-core` 解得開建出的資料包。
+    /// `qim-core` 解得開建出的速成與詞庫資料包，詞庫是方案指名的那份。
     Decodes,
     /// 連打字集與擴展區的字數都等於來源中有倉頡碼的漢字數。
     NoMissingCharacters,
@@ -27,9 +28,13 @@ pub enum CheckId {
     WenHasAr,
     /// 「丟」同時有三代的 `hi` 與五代的 `mi`。
     DiuHasHiAndMi,
-    /// `a` 的首選是「日」（字序依 Unihan `kGradeLevel`，plan §4.1）。
+    /// `a` 的首選是「日」（字序依字頻、Unihan `kGradeLevel`，plan §4.1）。
     RiIsTopForA,
-    /// 同樣的來源建兩次，sha256 相同。
+    /// 詞庫的每個碼都由詞裡每個字的一個速成碼接成（plan §4.5）。
+    WordCodesFromCharacters,
+    /// `anr` 的候選有「門口」。
+    MenKouForAnr,
+    /// 同樣的來源建兩次，兩份資料包的 sha256 都相同。
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
@@ -49,6 +54,8 @@ impl fmt::Display for CheckId {
             Self::WenHasAr => "抽查：「問」的速成碼含 ar",
             Self::DiuHasHiAndMi => "抽查：「丟」同時有 hi 與 mi",
             Self::RiIsTopForA => "抽查：a 的首選是「日」",
+            Self::WordCodesFromCharacters => "詞的碼由字的速成碼組成",
+            Self::MenKouForAnr => "抽查：anr 的候選有「門口」",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
@@ -72,7 +79,11 @@ pub struct Report {
     pub extension: usize,
     /// 資料包裡的速成碼個數。
     pub codes: usize,
+    /// 速成資料包的 sha256。
     pub sha256: String,
+    pub lexicon_sha256: String,
+    /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
+    pub lexicon: Option<LexiconSummary>,
     pub checks: Vec<Check>,
     /// Unihan 交叉比對的摘要；[`run`] 不算，由呼叫端填。
     pub unihan: Option<UnihanSummary>,
@@ -109,6 +120,38 @@ impl fmt::Display for CorpusSummary {
     }
 }
 
+/// 詞庫資料包的建置統計。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LexiconSummary {
+    pub counts: lexicon::Counts,
+    /// 有字頻的字數。
+    pub characters: usize,
+}
+
+impl fmt::Display for LexiconSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let c = &self.counts;
+        write!(
+            f,
+            "詞庫：rime-essay {} 列，單字 {} 列不收；詞頻 < {} 濾掉 {} 詞、含連打字集以外的字濾掉 {} 詞；\
+             收 {} 詞，碼 {} 個、詞條 {} 個（{} 詞的碼組合超過 {} 個，只收前 {} 個）\n\
+             字頻：{} 字（各語料 train 切分相加）",
+            c.entries,
+            c.single_characters,
+            lexicon::MIN_FREQUENCY,
+            c.below_threshold,
+            c.outside_continuous,
+            c.words,
+            c.codes,
+            c.indexed,
+            c.capped,
+            lexicon::MAX_COMBINATIONS,
+            lexicon::MAX_COMBINATIONS,
+            self.characters,
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnihanSummary {
     /// 兩邊都有碼的字數。
@@ -133,6 +176,10 @@ impl fmt::Display for Report {
         writeln!(f, "擴展區：{} 字", self.extension)?;
         writeln!(f, "速成碼：{} 個", self.codes)?;
         writeln!(f, "sha256：{}", self.sha256)?;
+        writeln!(f, "詞庫 sha256：{}", self.lexicon_sha256)?;
+        if let Some(lexicon) = &self.lexicon {
+            writeln!(f, "{lexicon}")?;
+        }
         if let Some(u) = &self.unihan {
             writeln!(
                 f,
@@ -154,37 +201,53 @@ impl fmt::Display for Report {
     }
 }
 
-/// `first` 是寫出的資料包，`second` 是由同樣的來源再建一次的結果。
-pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
-    let sha256 = sha256_hex(first);
-    let second_sha256 = sha256_hex(second);
-    let deterministic = Check {
-        id: CheckId::Deterministic,
-        passed: sha256 == second_sha256,
-        detail: format!("第二次 {second_sha256}"),
-    };
-    let pack = match Pack::from_bytes(first) {
-        Ok(pack) => pack,
-        Err(e) => {
-            return Report {
-                continuous: 0,
-                extension: 0,
-                codes: 0,
-                sha256,
-                checks: vec![
-                    Check {
-                        id: CheckId::Decodes,
-                        passed: false,
-                        detail: e.to_string(),
-                    },
-                    deterministic,
-                ],
-                unihan: None,
-                corpora: Vec::new(),
-            };
-        }
-    };
+/// 一次建置寫出的兩份資料包的位元組。
+#[derive(Debug, Clone, Copy)]
+pub struct PackBytes<'a> {
+    pub quick: &'a [u8],
+    pub lexicon: &'a [u8],
+}
 
+/// `first` 是寫出的資料包，`second` 是由同樣的來源再建一次的結果。
+pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
+    let sha256 = |p: PackBytes| (sha256_hex(p.quick), sha256_hex(p.lexicon));
+    let (first_sha256, second_sha256) = (sha256(first), sha256(second));
+    let mut report = Report {
+        continuous: 0,
+        extension: 0,
+        codes: 0,
+        sha256: first_sha256.0.clone(),
+        lexicon_sha256: first_sha256.1.clone(),
+        lexicon: None,
+        checks: Vec::new(),
+        unihan: None,
+        corpora: Vec::new(),
+    };
+    match decode(first) {
+        Ok((pack, lexicon, engine)) => pack_checks(&mut report, rows, &pack, &lexicon, &engine),
+        Err(e) => report.checks.push(Check {
+            id: CheckId::Decodes,
+            passed: false,
+            detail: e.to_string(),
+        }),
+    }
+    report.checks.push(Check {
+        id: CheckId::Deterministic,
+        passed: first_sha256 == second_sha256,
+        detail: format!("第二次速成 {}、詞庫 {}", second_sha256.0, second_sha256.1),
+    });
+    report
+}
+
+fn decode(bytes: PackBytes) -> Result<(Pack, Lexicon, Engine), qim_core::PackError> {
+    let pack = Pack::from_bytes(bytes.quick)?;
+    let lexicon = LexiconPack::from_bytes(bytes.lexicon)?;
+    let engine = Engine::new(pack.clone(), Some(lexicon.clone()))?;
+    Ok((pack, lexicon.lexicon, engine))
+}
+
+/// 解得開之後的各項檢查，依 plan §4.5 的順序加進 `report`。
+fn pack_checks(report: &mut Report, rows: &[Row], pack: &Pack, lexicon: &Lexicon, engine: &Engine) {
     let mut continuous = BTreeSet::new();
     let mut extension = BTreeSet::new();
     for (_, entries) in pack.code_table.iter() {
@@ -217,12 +280,16 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
         .filter(|code| !(1..=2).contains(&code.chars().count()))
         .collect();
     let has = |code: &str, ch: char| pack.code_table.lookup(code).iter().any(|e| e.text == ch);
+    let top = |input: &str| engine.candidates(input).into_iter().next();
 
-    let checks = vec![
+    report.continuous = continuous.len();
+    report.extension = extension.len();
+    report.codes = pack.code_table.iter().count();
+    report.checks.extend([
         Check {
             id: CheckId::Decodes,
             passed: true,
-            detail: format!("格式版本 {}", qim_core::FORMAT_VERSION),
+            detail: format!("格式版本 {}，速成與詞庫", qim_core::FORMAT_VERSION),
         },
         Check {
             id: CheckId::NoMissingCharacters,
@@ -247,20 +314,64 @@ pub fn run(rows: &[Row], first: &[u8], second: &[u8]) -> Report {
         spot(CheckId::NoCangjieCodeForWen, !has("anr", '問')),
         spot(CheckId::WenHasAr, has("ar", '問')),
         spot(CheckId::DiuHasHiAndMi, has("hi", '丟') && has("mi", '丟')),
+        spot(CheckId::RiIsTopForA, top("a").as_deref() == Some("日")),
+        word_codes(&pack.code_table, lexicon),
         spot(
-            CheckId::RiIsTopForA,
-            pack.code_table.lookup("a").first().map(|e| e.text) == Some('日'),
+            CheckId::MenKouForAnr,
+            engine.candidates("anr").iter().any(|c| c == "門口"),
         ),
-        deterministic,
-    ];
-    Report {
-        continuous: continuous.len(),
-        extension: extension.len(),
-        codes: pack.code_table.iter().count(),
-        sha256,
-        checks,
-        unihan: None,
-        corpora: Vec::new(),
+    ]);
+}
+
+/// 詞庫的每個（碼, 詞）：碼要能切成詞裡每個字在碼表（連打字集）裡的一個速成碼。
+/// 只用碼表反查，不經建詞庫的程式。
+fn word_codes(code_table: &CodeTable, lexicon: &Lexicon) -> Check {
+    let mut codes_of: BTreeMap<char, Vec<&str>> = BTreeMap::new();
+    for (code, entries) in code_table.iter() {
+        for e in entries.iter().filter(|e| !e.extension) {
+            codes_of.entry(e.text).or_default().push(code);
+        }
+    }
+    // 讀到第 i 個字時，碼已對上的長度有哪些可能。
+    let composes = |code: &str, text: &str| {
+        let mut ends = BTreeSet::from([0]);
+        for ch in text.chars() {
+            let quick = codes_of.get(&ch).map_or(&[][..], Vec::as_slice);
+            ends = ends
+                .iter()
+                .flat_map(|&end| {
+                    quick
+                        .iter()
+                        .filter(move |q| code[end..].starts_with(**q))
+                        .map(move |q| end + q.len())
+                })
+                .collect();
+        }
+        ends.contains(&code.len())
+    };
+    let mut total = 0;
+    let mut wrong = Vec::new();
+    for (code, words) in lexicon.iter() {
+        for word in words {
+            total += 1;
+            if !composes(code, &word.text) {
+                wrong.push(format!("{code} {}", word.text));
+            }
+        }
+    }
+    const SHOWN: usize = 10;
+    Check {
+        id: CheckId::WordCodesFromCharacters,
+        passed: wrong.is_empty(),
+        detail: if wrong.is_empty() {
+            format!("詞條 {total} 個都符合")
+        } else {
+            format!(
+                "詞條 {total} 個，不合 {} 個：{}",
+                wrong.len(),
+                wrong[..wrong.len().min(SHOWN)].join("、")
+            )
+        },
     }
 }
 

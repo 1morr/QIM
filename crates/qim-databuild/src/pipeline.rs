@@ -4,68 +4,55 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use qim_core::{LexiconPack, Pack};
+
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
-use crate::sources::{self, Fetch, Hashed, SOURCES, Source, sha256_hex};
+use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
 use crate::transcode::Transcoder;
-use crate::verify::{self, CorpusDigests, CorpusSummary, Report, UnihanSummary};
-use crate::{Error, build_pack, libcangjie, personal, scheme, unihan};
+use crate::verify::{
+    self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
+};
+use crate::{Error, build_pack, lexicon, libcangjie, packing, personal, scheme, unihan};
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 const PACKS: &str = "build/packs";
-const LIBCANGJIE: &str = "libcangjie";
+pub(crate) const LIBCANGJIE: &str = "libcangjie";
 const TABLE: &str = "data/table.txt";
-const UNIHAN: &str = "unihan";
+pub(crate) const UNIHAN: &str = "unihan";
 const UNIHAN_ZIP: &str = "Unihan.zip";
+pub(crate) const RIME_ESSAY: &str = "rime_essay";
+const ESSAY: &str = "essay.txt";
 /// Unihan 交叉比對的差異報表，相對 repo 根目錄；格式見 `unihan::CrossCheck::to_tsv`。
 const UNIHAN_REPORT: &str = "build/reports/unihan-kcangjie.tsv";
 
-/// 進資料包的來源：名字、`sources.toml` 的 id、取用的檔、取用的內容（寫進 NOTICE）。
-/// libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序（plan §4.1）。
-const PACKED: [(&str, &str, &str, &str); 2] = [
-    (
-        "libcangjie",
-        LIBCANGJIE,
-        TABLE,
-        "Cangjie 3 and Cangjie 5 codes, Big5 and HKSCS flags, Big5 order",
-    ),
-    (
-        "Unihan",
-        UNIHAN,
-        UNIHAN_ZIP,
-        "field kGradeLevel of Unihan_DictionaryLikeData.txt",
-    ),
-];
+/// 速成資料包 NOTICE 最後一段：怎麼用來源。
+const QUICK_ABOUT: &str = "\
+Quick codes are derived from the Cangjie 3 and Cangjie 5 codes in the libcangjie
+file: the first and last letter of each code, or the code itself when it has one
+or two letters. Han characters flagged as Big5 or HKSCS form the continuous set;
+other Han characters are marked as extension. Within each code, the continuous set
+comes before extension; within each set, characters with a Unihan kGradeLevel
+come first by grade, then libcangjie's Big5 order. At run time QIM puts characters
+with a higher frequency in the lexicon pack first.
+";
 
-/// 一個進資料包的來源，授權已核對過。
-struct Packed<'a> {
-    name: &'a str,
-    source: &'a Source,
-    file: &'a sources::SourceFile,
-    used: &'a str,
-    license: License,
-}
-
-/// 要寫進資料包 `LICENSE` 的一段授權。
-struct License {
-    /// 這段授權從哪裡來，寫在原文前一行。
-    origin: String,
-    text: String,
-}
-
-/// 建一次的結果；`--verify` 會再建一次比 `bytes`。
-struct Build {
+/// 建一次速成資料包的結果；`--verify` 會再建一次比 `bytes`。
+struct QuickBuild {
     rows: Vec<libcangjie::Row>,
     /// `Unihan_DictionaryLikeData.txt` 的內容。
     dictionary_like: String,
+    pack: Pack,
     bytes: Vec<u8>,
-    scheme_id: String,
 }
 
 #[derive(Debug)]
 pub struct Outcome {
     pub pack_path: PathBuf,
     pub sha256: String,
+    pub lexicon_path: PathBuf,
+    pub lexicon_sha256: String,
+    pub lexicon: LexiconSummary,
     /// 各語料的句數。
     pub corpora: Vec<CorpusSummary>,
     /// 個人集轉出的統計；沒有 [`personal::USERDB`] 時是 `None`。
@@ -74,8 +61,9 @@ pub struct Outcome {
     pub report: Option<Report>,
 }
 
-/// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`，旁邊放 `LICENSE` 與 `NOTICE`，
-/// 再建各語料。來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
+/// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`、建各語料，再用語料的字頻
+/// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`；每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
+/// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     let read = |rel: &str| {
         let path = root.join(rel);
@@ -94,56 +82,45 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let load_text = |id: &str, path: &str| -> Result<String, Error> {
         String::from_utf8(load(id, path)?).map_err(|e| Error::invalid(path, e.to_string()))
     };
-    let mut packed = Vec::new();
-    for (name, id, path, used) in PACKED {
-        let source = source_of(id)?;
-        let license = license_of(source, |file| load_text(id, file), |path| read(path))?;
-        packed.push(Packed {
-            name,
-            source,
-            file: source.file(path)?,
-            used,
-            license,
-        });
-    }
+    let lexicon_sources = packing::lexicon_sources();
+    let quick_packed = packing::resolve(&packing::QUICK, &all, load_text, read)?;
+    let lexicon_packed = packing::resolve(&lexicon_sources, &all, load_text, read)?;
 
     // 每次都從快取與方案檔重讀，`--verify` 的第二次建置才是真的重建。
-    let build = || -> Result<Build, Error> {
+    let build_quick = || -> Result<QuickBuild, Error> {
         let rows = libcangjie::parse(&load_text(LIBCANGJIE, TABLE)?)?;
         let dictionary_like = unihan::read_archive(&load(UNIHAN, UNIHAN_ZIP)?)?;
         let grades = unihan::grade_levels(&dictionary_like)?;
-        let scheme = scheme::parse(&read(QUICK_SCHEME)?)?;
-        let scheme_id = scheme.id.clone();
-        let bytes = build_pack(&rows, &grades, scheme)
+        let pack = build_pack(&rows, &grades, scheme::parse(&read(QUICK_SCHEME)?)?);
+        let bytes = pack
             .to_bytes()
             .map_err(|e| Error::invalid("資料包", e.to_string()))?;
-        Ok(Build {
+        Ok(QuickBuild {
             rows,
             dictionary_like,
+            pack,
             bytes,
-            scheme_id,
         })
     };
-    let Build {
-        rows,
-        dictionary_like,
-        bytes,
-        scheme_id: id,
-    } = build()?;
-
+    let quick = build_quick()?;
+    let id = quick.pack.scheme.id.clone();
+    let lexicon_id =
+        quick.pack.scheme.packs.lexicon.clone().ok_or_else(|| {
+            Error::invalid(QUICK_SCHEME, "要在 [packs] 寫 lexicon：詞庫資料包的 id")
+        })?;
     let dir = root.join(PACKS).join(&id);
-    std::fs::create_dir_all(&dir).map_err(Error::io(&dir))?;
+    packing::write(&dir, &id, &quick.bytes, &quick_packed, QUICK_ABOUT)?;
     let pack_path = dir.join(format!("{id}.pack"));
     let write =
         |path: PathBuf, contents: &[u8]| std::fs::write(&path, contents).map_err(Error::io(path));
-    write(pack_path.clone(), &bytes)?;
-    write(dir.join("LICENSE"), license(&packed).as_bytes())?;
-    write(dir.join("NOTICE"), notice(&id, &packed).as_bytes())?;
 
-    let transcoder = Transcoder::new(&rows);
+    let transcoder = Transcoder::new(&quick.rows);
     let mut corpora = Vec::new();
     let mut corpus_checks = Vec::new();
     let mut attributions: Vec<(Group, String)> = Vec::new();
+    // 各語料兩次建置的字頻，給詞庫資料包。
+    let mut chars: Vec<String> = Vec::new();
+    let mut second_chars: Vec<String> = Vec::new();
     // 驗證用：各語料的基準檔內容與 train 檔，洩漏要拿每個基準集比對所有 train。
     let mut benches: Vec<(&str, String)> = Vec::new();
     let mut trains = Vec::new();
@@ -198,8 +175,12 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 )
                 .map_err(Error::io(&dir))?,
             );
-            benches.push((corpus.name, first.bench));
+            second_chars.push(second.chars);
             trains.push(train_path);
+        }
+        chars.push(first.chars);
+        if verify {
+            benches.push((corpus.name, first.bench));
         }
     }
     for group in Group::ALL {
@@ -213,6 +194,38 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             corpora::attribution_file(group, &sections).as_bytes(),
         )?;
     }
+
+    // 詞庫的碼由這次建出的速成碼表展開，字頻由各語料的 train 相加；每次從快取重讀 essay.txt。
+    let build_lexicon =
+        |quick: &QuickBuild, chars: &[String]| -> Result<(Vec<u8>, LexiconSummary), Error> {
+            let tables: Vec<&str> = chars.iter().map(String::as_str).collect();
+            let frequency = lexicon::char_frequency(&tables)?;
+            let characters = frequency.len();
+            let (lexicon, counts) = lexicon::build(
+                &load_text(RIME_ESSAY, ESSAY)?,
+                &quick.pack.code_table,
+                &Transcoder::new(&quick.rows),
+                frequency,
+            )?;
+            let bytes = LexiconPack {
+                id: lexicon_id.clone(),
+                lexicon,
+            }
+            .to_bytes()
+            .map_err(|e| Error::invalid("詞庫資料包", e.to_string()))?;
+            Ok((bytes, LexiconSummary { counts, characters }))
+        };
+    let (lexicon_bytes, lexicon_summary) = build_lexicon(&quick, &chars)?;
+    let lexicon_dir = root.join(PACKS).join(&lexicon_id);
+    packing::write(
+        &lexicon_dir,
+        &lexicon_id,
+        &lexicon_bytes,
+        &lexicon_packed,
+        &lexicon_about(&lexicon_id, &id),
+    )?;
+    let lexicon_path = lexicon_dir.join(format!("{lexicon_id}.pack"));
+
     let personal = build_personal(root, &transcoder)?;
     if verify {
         let benches: Vec<(&str, &str)> = benches.iter().map(|(n, b)| (*n, b.as_str())).collect();
@@ -226,10 +239,22 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     }
 
     let report = if verify {
-        let second = build()?.bytes;
-        let mut report = verify::run(&rows, &bytes, &second);
+        // 第二次從來源重建速成碼表，詞庫也由它重建，整條鏈都比到。
+        let second_quick = build_quick()?;
+        let (second_lexicon, _) = build_lexicon(&second_quick, &second_chars)?;
+        let mut report = verify::run(
+            &quick.rows,
+            PackBytes {
+                quick: &quick.bytes,
+                lexicon: &lexicon_bytes,
+            },
+            PackBytes {
+                quick: &second_quick.bytes,
+                lexicon: &second_lexicon,
+            },
+        );
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
-        let check = unihan::compare(&rows, &unihan::cangjie_codes(&dictionary_like)?);
+        let check = unihan::compare(&quick.rows, &unihan::cangjie_codes(&quick.dictionary_like)?);
         let path = root.join(UNIHAN_REPORT);
         let reports = path.parent().expect("報表路徑有上層目錄");
         std::fs::create_dir_all(reports).map_err(Error::io(reports))?;
@@ -240,6 +265,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             matching_cangjie5: check.matching_cangjie5(),
             report: UNIHAN_REPORT.into(),
         });
+        report.lexicon = Some(lexicon_summary);
         report.corpora = corpora.clone();
         report.checks.extend(corpus_checks);
         Some(report)
@@ -248,11 +274,32 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     };
     Ok(Outcome {
         pack_path,
-        sha256: sha256_hex(&bytes),
+        sha256: sha256_hex(&quick.bytes),
+        lexicon_path,
+        lexicon_sha256: sha256_hex(&lexicon_bytes),
+        lexicon: lexicon_summary,
         corpora,
         personal,
         report,
     })
+}
+
+/// 詞庫資料包 NOTICE 最後一段：怎麼用來源。
+fn lexicon_about(id: &str, scheme: &str) -> String {
+    format!(
+        "{id} is the lexicon of the QIM input scheme \"{scheme}\". QIM changed the rime-essay\n\
+         data as follows: single characters, words with a frequency below {min}, and words\n\
+         containing characters outside the continuous set of the scheme were dropped; a word\n\
+         listed more than once keeps its highest frequency. Each word is indexed by the\n\
+         Quick codes of its characters joined, at most {max} combinations per word.\n\
+         \n\
+         Character frequencies are the counts of each character in the training split of\n\
+         each corpus, added together. Each corpus is extracted, converted with OpenCC s2hk\n\
+         and split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
+         bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
+        min = lexicon::MIN_FREQUENCY,
+        max = lexicon::MAX_COMBINATIONS,
+    )
 }
 
 /// 有 [`personal::USERDB`] 就轉出 [`personal::ITEMS`]；沒有就刪掉上次轉出的，基準才不會跑舊題目。
@@ -332,114 +379,4 @@ impl Built {
             chars: sha256_hex(self.chars.as_bytes()),
         }
     }
-}
-
-/// 進資料包的來源二選一：照抄上游檔裡的聲明（`license_file` 加 `license_statement`），
-/// 或 repo 裡存一份授權全文（`license_text`）。`upstream` 讀來源檔，`repo` 讀 repo 裡的檔。
-fn license_of(
-    source: &Source,
-    upstream: impl Fn(&str) -> Result<String, Error>,
-    repo: impl Fn(&str) -> Result<String, Error>,
-) -> Result<License, Error> {
-    match (
-        &source.license_file,
-        &source.license_statement,
-        &source.license_text,
-    ) {
-        (Some(file), Some(statement), None) => {
-            check_license_statement(source, file, statement, &upstream(file)?)?;
-            Ok(License {
-                origin: format!("Statement in {file}"),
-                text: statement.clone(),
-            })
-        }
-        (None, None, Some(path)) => Ok(License {
-            origin: format!("Full text, kept in the QIM repository as {path}"),
-            text: repo(path)?,
-        }),
-        _ => Err(Error::invalid(
-            SOURCES,
-            format!(
-                "{} 的資料進資料包，要寫 license_file 加 license_statement，或只寫 license_text",
-                source.repository
-            ),
-        )),
-    }
-}
-
-/// sources.toml 照抄的聲明原文要真的出現在上游檔裡（換行與空白不計）。
-fn check_license_statement(
-    source: &Source,
-    file: &str,
-    statement: &str,
-    upstream: &str,
-) -> Result<(), Error> {
-    let squash = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if squash(upstream).contains(&squash(statement)) {
-        Ok(())
-    } else {
-        Err(Error::invalid(
-            SOURCES,
-            format!("license_statement 不在 {} 的 {file} 裡", source.repository),
-        ))
-    }
-}
-
-/// 每個進資料包的來源一段：來源、授權、照抄的聲明。
-fn license(packed: &[Packed]) -> String {
-    packed
-        .iter()
-        .map(|p| {
-            format!(
-                "Source: {name}, {repo} ({version})\n\
-                 License: {license}\n\
-                 \n\
-                 {origin}:\n\
-                 \n\
-                 {text}\n",
-                name = p.name,
-                repo = p.source.repository,
-                version = p.source.version,
-                license = p.source.license,
-                origin = p.license.origin,
-                text = p.license.text.trim_end(),
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn notice(id: &str, packed: &[Packed]) -> String {
-    let sources: String = packed
-        .iter()
-        .map(|p| {
-            format!(
-                "Source: {name}\n\
-                 Repository: {repo}\n\
-                 Version: {version}\n\
-                 File: {path} (sha256 {sha256})\n\
-                 Used: {used}\n\
-                 License: {license} (see LICENSE)\n\
-                 \n",
-                name = p.name,
-                repo = p.source.repository,
-                version = p.source.version,
-                path = p.file.path,
-                sha256 = p.file.sha256,
-                used = p.used,
-                license = p.source.license,
-            )
-        })
-        .collect();
-    format!(
-        "{id}.pack: QIM input scheme pack \"{id}\".\n\
-         \n\
-         {sources}\
-         Quick codes are derived from the Cangjie 3 and Cangjie 5 codes in the libcangjie\n\
-         file: the first and last letter of each code, or the code itself when it has one\n\
-         or two letters. Han characters flagged as Big5 or HKSCS form the continuous set;\n\
-         other Han characters are marked as extension. Within each code, the continuous set\n\
-         comes before extension; within each set, characters with a Unihan kGradeLevel\n\
-         come first by grade, then libcangjie's Big5 order.\n"
-    )
 }

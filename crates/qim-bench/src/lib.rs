@@ -9,9 +9,9 @@ mod report;
 mod score;
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use qim_core::Engine;
+use qim_core::{Engine, LexiconPack, Pack};
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
@@ -22,8 +22,9 @@ pub use latency::{
 };
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, Metrics, SetResult};
 
-/// 基準用的資料包，由 `cargo xtask data` 產生。
+/// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const PACK: &str = "build/packs/quick/quick.pack";
+pub const PACKS: &str = "build/packs";
 pub const FIXED: &str = "bench/fixed.tsv";
 /// 語料目錄，依序跑：每個 `<名>.tsv` 是一個集合，集合名在所有目錄間不能重複。
 /// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
@@ -51,8 +52,8 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct Outcome {
-    /// 資料包 sha256 的十六進位；同一份資料包前後對照時一樣，沒重建就看得出來。
-    pub pack_sha256: String,
+    /// 讀進來的資料包：速成，有詞庫時接著詞庫。前後對照時 sha256 一樣就是沒重建。
+    pub packs: Vec<LoadedPack>,
     pub fixed: SetResult,
     /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
     pub sets: Vec<SetResult>,
@@ -98,6 +99,15 @@ impl Outcome {
     }
 }
 
+/// 一份讀進來的資料包。
+#[derive(Debug, Clone)]
+pub struct LoadedPack {
+    /// 相對 repo 根目錄。
+    pub path: String,
+    /// 十六進位。
+    pub sha256: String,
+}
+
 /// 個人集這次的狀況。
 #[derive(Debug)]
 pub enum Personal {
@@ -110,7 +120,7 @@ pub enum Personal {
 
 /// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
 pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> {
-    let (engine, pack_sha256) = load_engine(&root.join(PACK))?;
+    let (engine, packs) = load_engine(root)?;
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let mut latency_inputs: Vec<String> = fixed.iter().map(Item::input).collect();
     let fixed = score::score(&engine, "fixed", &fixed, false);
@@ -136,7 +146,8 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
         }
     }
     let personal = load_personal(root, &engine)?;
-    let latency = latency::measure(&engine, &root.join(PACK), &latency_inputs, wasm)?;
+    let pack_paths: Vec<PathBuf> = packs.iter().map(|p| root.join(&p.path)).collect();
+    let latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
     let tolerate_bad_format = mode == Mode::UpdateBaseline;
     let baseline = load_baseline(&root.join(BASELINE), tolerate_bad_format)?;
@@ -171,7 +182,7 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
         }
     };
     Ok(Outcome {
-        pack_sha256,
+        packs,
         fixed,
         sets,
         personal,
@@ -230,16 +241,34 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 資料包與它的 sha256。
-fn load_engine(path: &Path) -> Result<(Engine, String), String> {
-    let bytes = fs::read(path).map_err(|e| {
-        format!(
-            "讀不到資料包 {}：{e}；先跑 `cargo xtask data`",
-            path.display()
-        )
-    })?;
-    let engine = Engine::from_pack_bytes(&bytes).map_err(|e| format!("{}：{e}", path.display()))?;
-    Ok((engine, sha256_hex(&bytes)))
+/// 讀 [`PACK`] 與方案指名的詞庫資料包，建 `Engine`。
+fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
+    let load = |rel: String| -> Result<(Vec<u8>, LoadedPack), String> {
+        let path = root.join(&rel);
+        let bytes = fs::read(&path).map_err(|e| {
+            format!(
+                "讀不到資料包 {}：{e}；先跑 `cargo xtask data`",
+                path.display()
+            )
+        })?;
+        let sha256 = sha256_hex(&bytes);
+        Ok((bytes, LoadedPack { path: rel, sha256 }))
+    };
+    let (bytes, loaded) = load(PACK.into())?;
+    let pack = Pack::from_bytes(&bytes).map_err(|e| format!("{PACK}：{e}"))?;
+    let mut packs = vec![loaded];
+    let lexicon = match &pack.scheme.packs.lexicon {
+        Some(id) => {
+            let (bytes, loaded) = load(format!("{PACKS}/{id}/{id}.pack"))?;
+            let lexicon =
+                LexiconPack::from_bytes(&bytes).map_err(|e| format!("{}：{e}", loaded.path))?;
+            packs.push(loaded);
+            Some(lexicon)
+        }
+        None => None,
+    };
+    let engine = Engine::new(pack, lexicon).map_err(|e| format!("{PACK}：{e}"))?;
+    Ok((engine, packs))
 }
 
 fn read(path: &Path) -> Result<String, String> {

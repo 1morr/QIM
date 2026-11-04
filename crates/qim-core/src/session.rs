@@ -1,24 +1,9 @@
 //! 殼與核心之間的介面（plan §2.1）：殼把按鍵交給 [`Session`]，拿回一份完整的 [`Snapshot`]。
 
-use crate::{CodeTable, Pack, PackError, Scheme};
+use crate::Engine;
 
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
-
-/// 不可變的方案與資料包，多個 [`Session`] 共用。
-#[derive(Debug, Clone)]
-pub struct Engine {
-    scheme: Scheme,
-    code_table: CodeTable,
-}
-
-impl Engine {
-    /// 由資料包的位元組建立；讀檔是呼叫端的事（plan §1.3）。
-    pub fn from_pack_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        let Pack { scheme, code_table } = Pack::from_bytes(bytes)?;
-        Ok(Self { scheme, code_table })
-    }
-}
 
 /// 使用者詞與學習計數；內容在 M1 做，現在只讓簽章成立。
 #[derive(Debug, Clone, Default)]
@@ -106,7 +91,7 @@ pub struct Session {
 impl Session {
     pub fn handle(&mut self, engine: &Engine, _user: &mut UserModel, key: Key) -> Snapshot {
         if let Key::Letter(c) = key
-            && engine.scheme.alphabet.contains(c)
+            && engine.scheme().alphabet.contains(c)
         {
             self.input.push(c);
             self.refresh_candidates(engine);
@@ -153,19 +138,9 @@ impl Session {
         self.snapshot(true, None)
     }
 
-    /// 輸入碼變了：整串查碼表、回到第一頁；超過方案的最長碼時沒有候選（連打是 M1）。
+    /// 輸入碼變了：整串查候選、回到第一頁。
     fn refresh_candidates(&mut self, engine: &Engine) {
-        self.candidates = if self.input.chars().count() > usize::from(engine.scheme.max_code_length)
-        {
-            Vec::new()
-        } else {
-            engine
-                .code_table
-                .lookup(&self.input)
-                .iter()
-                .map(|e| e.text.to_string())
-                .collect()
-        };
+        self.candidates = engine.candidates(&self.input);
         self.page = 0;
         self.generation += 1;
     }

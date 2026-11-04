@@ -30,11 +30,14 @@ fn main() -> ExitCode {
     };
     match qim_databuild::run(&root, &cache, &Http, verify) {
         Ok(outcome) => {
-            let shown = outcome
-                .pack_path
-                .strip_prefix(&root)
-                .unwrap_or(&outcome.pack_path);
-            println!("資料包：{}", shown.display());
+            let shown = |path: &std::path::Path| {
+                path.strip_prefix(&root)
+                    .unwrap_or(path)
+                    .display()
+                    .to_string()
+            };
+            println!("資料包：{}", shown(&outcome.pack_path));
+            println!("詞庫資料包：{}", shown(&outcome.lexicon_path));
             // 個人集只印數字（plan §5.2）。
             match outcome.personal {
                 Some(c) => println!(
@@ -58,6 +61,8 @@ fn main() -> ExitCode {
                 }
                 None => {
                     println!("sha256：{}", outcome.sha256);
+                    println!("詞庫 sha256：{}", outcome.lexicon_sha256);
+                    println!("{}", outcome.lexicon);
                     for corpus in &outcome.corpora {
                         println!("{corpus}");
                     }

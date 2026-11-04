@@ -64,7 +64,7 @@ pub struct Corpus {
     pub group: Group,
     format: Format,
     /// 署名：來源名稱、網址、作者與引用、授權網址、QIM 怎麼抽出文字。
-    title: &'static str,
+    pub(crate) title: &'static str,
     site: &'static str,
     credit: &'static str,
     license_url: &'static str,

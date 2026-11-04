@@ -13,10 +13,10 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
-use qim_core::{CodeEntry, CodeTable, Pack, Scheme};
+use qim_core::{CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Packs, Scheme, Word};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
@@ -29,6 +29,11 @@ fn entry(text: char) -> CodeEntry {
 
 /// `a` → 日曰、`b` → 月、`ab` → 明、`c` → 一到十（兩頁）；`table` 可以換掉整張碼表造退步。
 fn pack_bytes(table: &[(&str, &str)]) -> Vec<u8> {
+    pack_bytes_with(table, None)
+}
+
+/// `lexicon` 是方案指名的詞庫資料包 id。
+fn pack_bytes_with(table: &[(&str, &str)], lexicon: Option<&str>) -> Vec<u8> {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
@@ -36,6 +41,9 @@ fn pack_bytes(table: &[(&str, &str)]) -> Vec<u8> {
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
         radicals: BTreeMap::new(),
+        packs: Packs {
+            lexicon: lexicon.map(Into::into),
+        },
     };
     let code_table = CodeTable::from_entries(
         table
@@ -78,7 +86,7 @@ fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
 }
 
 /// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒，遠超每鍵 50 ms 的預算。
-fn slow_wasm(_pack: &Path, inputs: &[String]) -> Result<Timing, String> {
+fn slow_wasm(_packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
     Ok(Timing {
         runtime: "假".into(),
         per_key_ms: inputs
@@ -473,6 +481,56 @@ fn report_names_the_pack_by_its_sha256_so_a_stale_pack_shows() {
     assert_ne!(before, pack_line(&repo), "換了資料包，指紋要跟著變");
 }
 
+/// 詞庫資料包 `quick-lexicon`：`words` 是（碼, 詞）。
+fn lexicon_bytes(words: &[(&str, &str)]) -> Vec<u8> {
+    let lexicon = Lexicon::new(
+        words.iter().map(|(code, text)| {
+            let word = Word {
+                text: text.to_string(),
+                frequency: 100,
+            };
+            (code.to_string(), vec![word])
+        }),
+        [],
+    );
+    LexiconPack {
+        id: "quick-lexicon".into(),
+        lexicon,
+    }
+    .to_bytes()
+    .unwrap()
+}
+
+#[test]
+fn lexicon_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprinted() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &pack_bytes_with(TABLE, Some("quick-lexicon")),
+    );
+    let err = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(
+        err.contains("build/packs/quick-lexicon/quick-lexicon.pack"),
+        "{err}"
+    );
+
+    const LEXICON: &str = "build/packs/quick-lexicon/quick-lexicon.pack";
+    write(repo.path(), LEXICON, &lexicon_bytes(&[("ac", "日一")]));
+    write(
+        repo.path(),
+        "bench/fixed.tsv",
+        "a\t日\t測試\nac\t日一\t測試\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert_eq!(outcome.fixed.failures.len(), 0, "{}", outcome.report());
+
+    let before = pack_line(&repo);
+    assert!(before.contains("quick-lexicon.pack"), "{before}");
+    write(repo.path(), LEXICON, &lexicon_bytes(&[("ac", "日二")]));
+    assert_ne!(before, pack_line(&repo), "換了詞庫，指紋要跟著變");
+}
+
 #[test]
 fn colloquial_sets_run_after_the_wiki_sets_and_need_a_baseline() {
     let repo = repo();
@@ -795,7 +853,7 @@ fn check_and_update_baseline_ignore_latency() {
 #[test]
 fn a_wasm_timer_that_misses_keys_is_an_error() {
     let repo = repo();
-    let error = qim_bench::run(repo.path(), Mode::Report, &|_: &Path, _: &[String]| {
+    let error = qim_bench::run(repo.path(), Mode::Report, &|_: &[PathBuf], _: &[String]| {
         Ok(Timing {
             runtime: "假".into(),
             per_key_ms: vec![vec![1.0]],

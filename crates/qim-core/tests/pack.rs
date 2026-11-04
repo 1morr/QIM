@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use qim_core::{CodeEntry, CodeTable, FORMAT_VERSION, Pack, PackError, Scheme};
+use qim_core::{CodeEntry, CodeTable, FORMAT_VERSION, Pack, PackError, Packs, Scheme};
 
 fn sample() -> Pack {
     let scheme = Scheme {
@@ -10,6 +10,7 @@ fn sample() -> Pack {
         alphabet: "ab".into(),
         max_code_length: 2,
         radicals: BTreeMap::from([('a', "日".into()), ('b', "月".into())]),
+        packs: Packs::default(),
     };
     let code_table = CodeTable::from_entries([
         (
@@ -54,13 +55,13 @@ fn lookup_returns_entries_in_stored_order_and_empty_for_unknown_code() {
 #[test]
 fn other_format_version_is_an_error() {
     let mut bytes = sample().to_bytes().unwrap();
-    // 魔數 4 個位元組之後是 postcard varint 的版本號；版本 1 只佔 1 個位元組。
-    assert_eq!(bytes[4], 1);
-    bytes[4] = 2;
+    // 魔數 4 個位元組之後是 postcard varint 的版本號；版本 2 只佔 1 個位元組。
+    assert_eq!(bytes[4], 2);
+    bytes[4] = 3;
     assert_eq!(
         Pack::from_bytes(&bytes),
         Err(PackError::UnsupportedVersion {
-            found: 2,
+            found: 3,
             supported: FORMAT_VERSION,
         })
     );

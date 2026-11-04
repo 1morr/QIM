@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
-use qim_core::Pack;
+use qim_core::{Engine, LexiconPack, Pack};
 use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
 
@@ -11,6 +11,8 @@ const TABLE: &str = "\
 曰 曰 1 1 0 0 1 0 0 0 0 a,ax a,xa NA 23060
 問 问 1 1 0 0 1 0 0 0 0 anr anr NA 20001
 丟 丢 1 1 0 0 1 0 0 0 0 hgi mgi,xxmgi NA 22813
+門 门 1 1 0 0 1 0 0 0 0 an an NA 20000
+口 口 1 1 0 0 1 0 0 0 0 r r NA 20100
 𠀀 𠀀 1 0 0 0 0 0 0 0 0 a NA NA 0
 ";
 
@@ -44,6 +46,28 @@ Copyright © 1991-2026 Unicode, Inc.
 ";
 
 const UNICODE_LICENSE_PATH: &str = "data/licenses/Unicode-3.0.txt";
+
+/// repo 裡存的 Creative Commons 全文（這裡只取開頭），語料的字頻進詞庫資料包時用。
+const CC_LICENSES: [(&str, &str); 3] = [
+    (
+        "data/licenses/CC-BY-SA-4.0.txt",
+        "Attribution-ShareAlike 4.0 International",
+    ),
+    (
+        "data/licenses/CC-BY-4.0.txt",
+        "Attribution 4.0 International",
+    ),
+    ("data/licenses/CC0-1.0.txt", "CC0 1.0 Universal"),
+];
+
+/// rime-essay 的 `essay.txt`：門口、問日、日日收進詞庫；單字、低於門檻、含擴展區的字的不收。
+const ESSAY: &str = "日\t71052\n門口\t9435\n問日\t300\n日日\t100\n丟丟\t99\n日𠀀\t500\n";
+
+/// rime-essay 的 `LICENSE`（這裡只取開頭）。
+const LGPL: &str = "\
+                   GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+";
 
 const DUMP_FILE: &str = "zh_yuewiki-20261101-pages-articles.xml.bz2";
 const ZH_DUMP_FILE: &str = "zhwiki-20220501-pages-articles1.xml-p1p187712.bz2";
@@ -234,6 +258,8 @@ fn upstream(readme: &str) -> Files {
             "https://example.invalid/cv-zh-HK.txt".into(),
             common_voice().1.into(),
         ),
+        ("https://example.invalid/essay.txt".into(), ESSAY.into()),
+        ("https://example.invalid/essay-LICENSE".into(), LGPL.into()),
     ]))
 }
 
@@ -241,6 +267,9 @@ fn upstream(readme: &str) -> Files {
 fn repo(root: &Path, statement: &str) {
     std::fs::create_dir_all(root.join("data/licenses")).unwrap();
     std::fs::write(root.join(UNICODE_LICENSE_PATH), UNICODE_LICENSE).unwrap();
+    for (path, text) in CC_LICENSES {
+        std::fs::write(root.join(path), text).unwrap();
+    }
     std::fs::create_dir_all(root.join("data/schemes")).unwrap();
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/schemes/quick.toml"),
@@ -253,8 +282,10 @@ fn repo(root: &Path, statement: &str) {
 repository = "https://example.invalid/libcangjie"
 version = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
 license = "Public Domain"
-license_file = "data/README.table.md"
-license_statement = "{statement}"
+
+[source.libcangjie.license_text.statement]
+file = "data/README.table.md"
+quote = "{statement}"
 
 [[source.libcangjie.files]]
 path = "data/table.txt"
@@ -270,7 +301,7 @@ sha256 = "{readme}"
 repository = "https://example.invalid/ucd/"
 version = "18.0.0"
 license = "Unicode-3.0"
-license_text = "{UNICODE_LICENSE_PATH}"
+license_text = {{ repo_file = "{UNICODE_LICENSE_PATH}" }}
 
 [[source.unihan.files]]
 path = "Unihan.zip"
@@ -281,6 +312,7 @@ sha256 = "{unihan}"
 repository = "https://dumps.example.invalid/zh_yuewiki/"
 version = "20261101"
 license = "CC-BY-SA-4.0"
+license_text = {{ repo_file = "data/licenses/CC-BY-SA-4.0.txt" }}
 
 [[source.yue_wiki.files]]
 path = "{DUMP_FILE}"
@@ -291,6 +323,7 @@ sha256 = "{dump}"
 repository = "https://archive.example.invalid/zhwiki-20220501"
 version = "20220501"
 license = "CC-BY-SA-4.0"
+license_text = {{ repo_file = "data/licenses/CC-BY-SA-4.0.txt" }}
 
 [[source.zh_wiki.files]]
 path = "{ZH_DUMP_FILE}"
@@ -301,6 +334,7 @@ sha256 = "{zh_dump}"
 repository = "https://example.invalid/hkcancor"
 version = "39aeadf920e0b5ca93d0ad7792c59e740e7bdd65"
 license = "CC-BY-4.0"
+license_text = {{ repo_file = "data/licenses/CC-BY-4.0.txt" }}
 
 [[source.hkcancor.files]]
 path = "{HKCANCOR_FILE}"
@@ -311,6 +345,7 @@ sha256 = "{hkcancor}"
 repository = "https://example.invalid/common-voice"
 version = "ec845c798ead7144f2acc95fd8955e9d3995c7d0"
 license = "CC0-1.0"
+license_text = {{ repo_file = "data/licenses/CC0-1.0.txt" }}
 
 [[source.common_voice.files]]
 path = "{CV_YUE_FILE}"
@@ -321,6 +356,22 @@ sha256 = "{cv_yue}"
 path = "{CV_ZH_HK_FILE}"
 url = "https://example.invalid/cv-zh-HK.txt"
 sha256 = "{cv_zh_hk}"
+
+[source.rime_essay]
+repository = "https://example.invalid/rime-essay"
+version = "054920de4f54c9e5994276a96a4fc2a35cb51aa3"
+license = "LGPL-3.0"
+license_text = {{ upstream_file = "LICENSE" }}
+
+[[source.rime_essay.files]]
+path = "essay.txt"
+url = "https://example.invalid/essay.txt"
+sha256 = "{essay}"
+
+[[source.rime_essay.files]]
+path = "LICENSE"
+url = "https://example.invalid/essay-LICENSE"
+sha256 = "{lgpl}"
 "#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
@@ -330,6 +381,8 @@ sha256 = "{cv_zh_hk}"
         hkcancor = sha256_hex(&hkcancor_zip()),
         cv_yue = sha256_hex(common_voice().0.as_bytes()),
         cv_zh_hk = sha256_hex(common_voice().1.as_bytes()),
+        essay = sha256_hex(ESSAY.as_bytes()),
+        lgpl = sha256_hex(LGPL.as_bytes()),
     );
     std::fs::write(root.join("data/sources.toml"), sources).unwrap();
 }
@@ -361,7 +414,61 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (4, 1));
+    assert_eq!((report.continuous, report.extension), (6, 1));
+}
+
+#[test]
+fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/quick-lexicon");
+    assert_eq!(outcome.lexicon_path, dir.join("quick-lexicon.pack"));
+    let bytes = std::fs::read(&outcome.lexicon_path).unwrap();
+    let lexicon = LexiconPack::from_bytes(&bytes).unwrap();
+    assert_eq!(lexicon.id, "quick-lexicon");
+    let words = |code: &str| -> Vec<String> {
+        lexicon
+            .lexicon
+            .lookup(code)
+            .iter()
+            .map(|w| w.text.clone())
+            .collect()
+    };
+    assert_eq!(words("ara"), ["問日"]);
+    assert_eq!(words("aa"), ["日日"]);
+    assert!(lexicon.lexicon.char_frequency('日') > 0);
+    let c = outcome.lexicon.counts;
+    assert_eq!(
+        (
+            c.entries,
+            c.single_characters,
+            c.below_threshold,
+            c.outside_continuous,
+            c.words
+        ),
+        (6, 1, 1, 1, 3)
+    );
+    // 速成資料包指名它，兩份合起來建得出 Engine。
+    let quick = std::fs::read(&outcome.pack_path).unwrap();
+    assert!(Engine::from_pack_bytes(&quick, Some(&bytes)).is_ok());
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains("LGPL-3.0"), "{license}");
+    assert!(license.contains(LGPL.trim_end()), "{license}");
+    for (_, text) in CC_LICENSES {
+        assert!(license.contains(text), "{license}");
+    }
+    // 速成資料包的授權不混進來。
+    assert!(!license.contains(STATEMENT), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
+    assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
+    assert!(notice.contains("Common Voice"), "{notice}");
+    let quick_license =
+        std::fs::read_to_string(root.path().join("build/packs/quick/LICENSE")).unwrap();
+    assert!(!quick_license.contains("LGPL"), "{quick_license}");
 }
 
 #[test]
@@ -418,8 +525,10 @@ fn second_build_uses_the_cache_and_gives_the_same_bytes() {
     repo(root.path(), STATEMENT);
     let first = run(root.path(), &upstream(README), false).unwrap();
     let first_bytes = std::fs::read(&first.pack_path).unwrap();
+    let first_lexicon = std::fs::read(&first.lexicon_path).unwrap();
     let second = run(root.path(), &Offline, false).unwrap();
     assert_eq!(std::fs::read(&second.pack_path).unwrap(), first_bytes);
+    assert_eq!(std::fs::read(&second.lexicon_path).unwrap(), first_lexicon);
     assert_eq!(first.sha256, second.sha256);
     assert!(second.report.is_none());
 }
@@ -460,19 +569,17 @@ fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
 }
 
 #[test]
-fn packed_source_without_license_statement_fails_the_build() {
+fn license_statement_without_its_quote_fails_the_build() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
-    let path = root.path().join("data/sources.toml");
-    let sources = std::fs::read_to_string(&path).unwrap();
-    let without: String = sources
-        .lines()
-        .filter(|l| !l.starts_with("license_statement"))
-        .map(|l| format!("{l}\n"))
-        .collect();
-    std::fs::write(&path, without).unwrap();
+    edit_sources(root.path(), |s| {
+        s.lines()
+            .filter(|l| !l.starts_with("quote"))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    });
     let err = run(root.path(), &upstream(README), false).unwrap_err();
-    assert!(err.to_string().contains("license_statement"), "{err}");
+    assert!(err.to_string().contains("quote"), "{err}");
 }
 
 /// 改 sources.toml 的某些行。
@@ -507,19 +614,29 @@ fn packed_source_without_any_license_fails_the_build() {
 }
 
 #[test]
-fn packed_source_with_both_license_forms_fails_the_build() {
+fn packed_source_with_two_license_forms_fails_the_build() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     edit_sources(root.path(), |s| {
         s.replace(
-            "license_file = \"data/README.table.md\"",
-            &format!(
-                "license_file = \"data/README.table.md\"\nlicense_text = \"{UNICODE_LICENSE_PATH}\""
-            ),
+            "license_text = { upstream_file = \"LICENSE\" }",
+            &format!("license_text = {{ upstream_file = \"LICENSE\", repo_file = \"{UNICODE_LICENSE_PATH}\" }}"),
         )
     });
     let err = run(root.path(), &upstream(README), false).unwrap_err();
+    assert!(matches!(err, Error::Invalid { .. }), "{err}");
     assert!(err.to_string().contains("license_text"), "{err}");
+}
+
+#[test]
+fn upstream_license_file_not_pinned_in_files_fails_the_build() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    edit_sources(root.path(), |s| {
+        s.replace("upstream_file = \"LICENSE\"", "upstream_file = \"COPYING\"")
+    });
+    let err = run(root.path(), &upstream(README), false).unwrap_err();
+    assert!(err.to_string().contains("COPYING"), "{err}");
 }
 
 fn read(root: &Path, rel: &str) -> String {
