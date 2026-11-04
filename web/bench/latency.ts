@@ -36,8 +36,10 @@ for (const input of inputs) {
 	for (const c of input) {
 		const start = performance.now();
 		const snapshot = session.letter(c);
-		void snapshot.selected;
-		void snapshot.unselected;
+		for (const segment of snapshot.segments) {
+			segment.free();
+		}
+		void snapshot.focus;
 		void snapshot.candidates;
 		times.push(String(performance.now() - start));
 		snapshot.free();

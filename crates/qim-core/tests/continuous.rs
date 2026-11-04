@@ -94,6 +94,11 @@ impl Ime {
         self.press(Key::Digit(u8::try_from(at + 1).unwrap()))
     }
 
+    fn focus_segment(&mut self, segment: usize) -> Snapshot {
+        self.session
+            .focus_segment(&self.engine, &mut self.user, segment)
+    }
+
     fn type_code(&mut self, code: &str) -> Snapshot {
         let mut snapshot = Snapshot::default();
         for c in code.chars() {
@@ -180,7 +185,7 @@ fn selecting_a_beginning_fixes_that_segment_and_composes_the_rest_again() {
         .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
         .collect();
     assert_eq!(segments, [("an", "門", true), ("r", "口", false)]);
-    assert_eq!(selected.composition.focus, 1);
+    assert_eq!(selected.composition.focus, 2);
     assert_eq!(texts(&selected), ["口"]);
 
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
@@ -270,7 +275,7 @@ fn input_no_path_can_cover_is_one_unselected_segment_without_text() {
         .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
         .collect();
     assert_eq!(segments, [("ad", "", false)]);
-    assert_eq!(snapshot.composition.focus, 0);
+    assert_eq!(snapshot.composition.focus, 1);
     assert_eq!(top(&snapshot), "日");
 
     // 空白選了開頭的「日」：固定下來，`d` 自己成一段。
@@ -283,7 +288,7 @@ fn input_no_path_can_cover_is_one_unselected_segment_without_text() {
         .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
         .collect();
     assert_eq!(segments, [("a", "日", true), ("d", "", false)]);
-    assert_eq!(selected.composition.focus, 1);
+    assert_eq!(selected.composition.focus, 2);
     assert!(selected.candidates.is_empty());
 }
 
@@ -310,14 +315,8 @@ fn enter_after_selecting_a_beginning_commits_its_text_and_the_rest_as_typed() {
 }
 
 #[test]
-fn z_arrows_toggle_ascii_and_other_keys_are_swallowed_and_change_nothing() {
-    for key in [
-        Key::Letter('z'),
-        Key::Left,
-        Key::Right,
-        Key::ToggleAscii,
-        Key::Other,
-    ] {
+fn z_toggle_ascii_and_other_keys_are_swallowed_and_change_nothing() {
+    for key in [Key::Letter('z'), Key::ToggleAscii, Key::Other] {
         let mut ime = Ime::new(&men_kou());
         let typed = ime.type_code("anr");
         let pressed = ime.press(key);
@@ -397,4 +396,194 @@ fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_
         assert!(!pressed.handled, "{key:?}");
         assert_eq!(pressed.commit, None, "{key:?}");
     }
+}
+
+// 組字中修改（plan §2.1、brief §4.3 的 ← / →、§4.4 點組字的某一段）。
+
+/// `abcd`：「日朋水」勝過「日月林」；單打 `cd` 時「林」勝過「木水」。
+fn peng() -> Data<'static> {
+    Data {
+        table: vec![
+            ("a", "日"),
+            ("b", "月"),
+            ("c", "木"),
+            ("d", "水"),
+            ("bc", "朋"),
+            ("cd", "林"),
+        ],
+        words: vec![],
+        chars: vec![
+            ('日', 100),
+            ('月', 10),
+            ('木', 10),
+            ('水', 50),
+            ('朋', 1000),
+            ('林', 50),
+        ],
+        ranking: Ranking::default(),
+    }
+}
+
+fn segments(snapshot: &Snapshot) -> Vec<(&str, &str, bool)> {
+    snapshot
+        .composition
+        .segments
+        .iter()
+        .map(|s| (s.code.as_str(), s.text.as_str(), s.selected))
+        .collect()
+}
+
+#[test]
+fn left_and_right_move_between_segments_and_list_the_words_of_the_focused_one() {
+    let mut ime = Ime::new(&peng());
+    let typed = ime.type_code("abcd");
+    assert_eq!(
+        segments(&typed),
+        [("a", "日", false), ("bc", "朋", false), ("d", "水", false)]
+    );
+    // 沒移過時目前分段在最後一段之後：候選列整串。
+    assert_eq!(typed.composition.focus, 3);
+    assert_eq!(top(&typed), "日朋水");
+
+    let last = ime.press(Key::Left);
+    assert!(last.handled);
+    assert_eq!(last.commit, None);
+    assert_eq!(last.composition.focus, 2);
+    assert_eq!(texts(&last), ["水"]);
+
+    let middle = ime.press(Key::Left);
+    assert_eq!(middle.composition.focus, 1);
+    assert_eq!(texts(&middle), ["朋", "月木", "月"]);
+    assert_eq!(segments(&middle), segments(&typed));
+
+    ime.press(Key::Left);
+    let first = ime.press(Key::Left);
+    assert_eq!(first.composition.focus, 0, "最前面再按 ← 不動");
+    assert_eq!(texts(&first), ["日"]);
+
+    for _ in 0..3 {
+        ime.press(Key::Right);
+    }
+    let back = ime.press(Key::Right);
+    assert_eq!(back.composition.focus, 3, "最後面再按 → 不動");
+    assert_eq!(texts(&back), texts(&typed));
+}
+
+#[test]
+fn choosing_in_a_middle_segment_fixes_it_and_those_before_and_composes_the_rest_again() {
+    let mut ime = Ime::new(&peng());
+    ime.type_code("abcd");
+    ime.press(Key::Left);
+    let middle = ime.press(Key::Left);
+    // 「朋」（bc）改成只蓋住 `b` 的「月」：`c` 和後面的 `d` 一起重算，單打 `cd` 是「林」。
+    let chosen = ime.select(&middle, "月");
+    assert_eq!(chosen.commit, None);
+    assert_eq!(
+        segments(&chosen),
+        [("a", "日", true), ("b", "月", true), ("cd", "林", false)]
+    );
+    assert_eq!(chosen.composition.focus, 3);
+    assert_eq!(texts(&chosen), texts(&Ime::new(&peng()).type_code("cd")));
+
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("日月林"));
+}
+
+#[test]
+fn choosing_the_last_segment_when_the_rest_is_fixed_commits_everything() {
+    let mut ime = Ime::new(&peng());
+    ime.type_code("abcd");
+    let last = ime.press(Key::Left);
+    assert_eq!(ime.select(&last, "水").commit.as_deref(), Some("日朋水"));
+}
+
+#[test]
+fn space_on_a_focused_segment_commits_the_whole_composition() {
+    let mut ime = Ime::new(&peng());
+    ime.type_code("abcd");
+    ime.press(Key::Left);
+    ime.press(Key::Left);
+    let pressed = ime.press(Key::Space);
+    assert_eq!(pressed.commit.as_deref(), Some("日朋水"));
+    assert_eq!(pressed.composition.input, "");
+}
+
+#[test]
+fn rechoosing_a_selected_segment_keeps_the_selected_ones_after_it() {
+    let mut ime = Ime::new(&peng());
+    let typed = ime.type_code("abcd");
+    // 依序選「日」「朋」，`d` 還沒選。
+    let first = ime.select(&typed, "日");
+    let second = ime.select(&first, "朋");
+    assert_eq!(
+        segments(&second),
+        [("a", "日", true), ("bc", "朋", true), ("d", "水", false)]
+    );
+    let focused = ime.focus_segment(0);
+    assert_eq!(focused.composition.focus, 0);
+    assert_eq!(texts(&focused), ["日"]);
+    let back = ime.focus_segment(1);
+    let rechosen = ime.select(&back, "月木");
+    assert_eq!(
+        segments(&rechosen),
+        [
+            ("a", "日", true),
+            ("b", "月", true),
+            ("c", "木", true),
+            ("d", "水", false)
+        ]
+    );
+}
+
+#[test]
+fn rechoosing_the_beginning_of_a_selected_segment_composes_everything_after_it_again() {
+    let mut ime = Ime::new(&peng());
+    let typed = ime.type_code("abcd");
+    let first = ime.select(&typed, "日");
+    ime.select(&first, "朋");
+    let focused = ime.focus_segment(1);
+    let chosen = ime.select(&focused, "月");
+    assert_eq!(
+        segments(&chosen),
+        [("a", "日", true), ("b", "月", true), ("cd", "林", false)]
+    );
+}
+
+#[test]
+fn focus_segment_jumps_directly_and_ignores_segments_out_of_range() {
+    let mut ime = Ime::new(&peng());
+    let typed = ime.type_code("abcd");
+    let jumped = ime.focus_segment(1);
+    assert!(jumped.handled);
+    assert_eq!(jumped.composition.focus, 1);
+    assert_eq!(texts(&jumped), ["朋", "月木", "月"]);
+    assert_eq!(ime.focus_segment(9).composition.focus, 1);
+    let whole = ime.focus_segment(3);
+    assert_eq!(whole.composition.focus, 3);
+    assert_eq!(texts(&whole), texts(&typed));
+}
+
+#[test]
+fn typing_or_deleting_on_a_focused_segment_returns_to_the_whole_input() {
+    let mut ime = Ime::new(&peng());
+    ime.type_code("abc");
+    ime.focus_segment(0);
+    let typed = ime.type_code("d");
+    assert_eq!(typed.composition.focus, 3);
+    assert_eq!(top(&typed), "日朋水");
+
+    ime.focus_segment(0);
+    let deleted = ime.press(Key::Backspace);
+    assert_eq!(deleted.composition.input, "abc");
+    assert_eq!(
+        deleted.composition.focus,
+        deleted.composition.segments.len()
+    );
+    assert_eq!(texts(&deleted), texts(&Ime::new(&peng()).type_code("abc")));
+}
+
+#[test]
+fn without_composition_focus_segment_and_select_do_nothing() {
+    let mut ime = Ime::new(&peng());
+    assert!(!ime.focus_segment(0).handled);
+    assert!(!ime.session.select(&ime.engine, &mut ime.user, 0).handled);
 }

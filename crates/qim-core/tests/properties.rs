@@ -47,6 +47,39 @@ fn key() -> impl Strategy<Value = Key> {
     ]
 }
 
+/// 殼對 `Session` 做的事：按鍵、點組字的某一段、點某個候選（全部候選的位置）。
+#[derive(Debug, Clone, Copy)]
+enum Action {
+    Key(Key),
+    Focus(usize),
+    Select(usize),
+}
+
+fn action() -> impl Strategy<Value = Action> {
+    prop_oneof![
+        8 => key().prop_map(Action::Key),
+        1 => (0usize..5).prop_map(Action::Focus),
+        1 => (0usize..12).prop_map(Action::Select),
+    ]
+}
+
+fn act(session: &mut Session, engine: &Engine, user: &mut UserModel, action: Action) -> Snapshot {
+    match action {
+        Action::Key(key) => session.handle(engine, user, key),
+        Action::Focus(segment) => session.focus_segment(engine, user, segment),
+        Action::Select(index) => session.select(engine, user, index),
+    }
+}
+
+/// 候選列的是哪一串輸入碼：目前分段的碼，沒有目前分段時是剩下沒選定的整串。
+fn listed_input(snapshot: &Snapshot) -> &str {
+    let composition = &snapshot.composition;
+    composition
+        .segments
+        .get(composition.focus)
+        .map_or(composition.unselected_input(), |s| s.code.as_str())
+}
+
 fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<String>>) -> Engine {
     engine_for("quick", table, words)
 }
@@ -149,25 +182,25 @@ proptest! {
     fn a_key_left_to_the_host_leaves_no_composition_behind(
         table in random_table(),
         words in random_words(),
-        keys in prop::collection::vec(key(), 0..40),
+        actions in prop::collection::vec(action(), 0..40),
     ) {
         let engine = engine(&table, &words);
         let mut user = UserModel::default();
         let mut session = Session::default();
-        for key in keys {
-            let snapshot = session.handle(&engine, &mut user, key);
+        for action in actions {
+            let snapshot = act(&mut session, &engine, &mut user, action);
             if !snapshot.handled {
-                prop_assert_eq!(&snapshot.composition.input, "", "{:?} 交還宿主，組字還在", key);
-                prop_assert_eq!(snapshot.commit, None, "{:?} 交還宿主，卻有要上屏的字", key);
+                prop_assert_eq!(&snapshot.composition.input, "", "{:?} 交還宿主，組字還在", action);
+                prop_assert_eq!(snapshot.commit, None, "{:?} 交還宿主，卻有要上屏的字", action);
             }
         }
     }
 
     #[test]
-    fn every_candidate_can_be_typed_with_the_beginning_of_the_unselected_input(
+    fn every_candidate_can_be_typed_with_the_beginning_of_the_listed_input(
         table in random_table(),
         words in random_words(),
-        keys in prop::collection::vec(key(), 0..40),
+        actions in prop::collection::vec(action(), 0..40),
     ) {
         // 字詞與它的碼，直接由生成的碼表與詞庫建，不經核心；碼超過方案最長碼的字打不出。
         let mut pieces: Vec<(String, String)> = Vec::new();
@@ -182,13 +215,13 @@ proptest! {
         let engine = engine(&table, &words);
         let mut user = UserModel::default();
         let mut session = Session::default();
-        for key in keys {
-            let snapshot = session.handle(&engine, &mut user, key);
-            let input = snapshot.composition.unselected_input();
+        for action in actions {
+            let snapshot = act(&mut session, &engine, &mut user, action);
+            let input = listed_input(&snapshot);
             for candidate in &snapshot.candidates {
                 prop_assert!(
                     composes(&candidate.text, input, &pieces),
-                    "{key:?} 後候選 {} 打不出 {input:?} 的開頭",
+                    "{action:?} 後候選 {} 打不出 {input:?} 的開頭",
                     candidate.text
                 );
             }
@@ -199,21 +232,50 @@ proptest! {
     fn candidates_computed_key_by_key_equal_those_computed_from_scratch(
         table in random_table(),
         words in random_words(),
-        keys in prop::collection::vec(key(), 0..40),
+        actions in prop::collection::vec(action(), 0..40),
     ) {
         let engine = engine(&table, &words);
         let mut user = UserModel::default();
         let mut session = Session::default();
-        for key in keys {
-            let snapshot = session.handle(&engine, &mut user, key);
-            let from_scratch = engine.candidates(&user, snapshot.composition.unselected_input());
+        for action in actions {
+            let snapshot = act(&mut session, &engine, &mut user, action);
+            let from_scratch = engine.candidates(&user, listed_input(&snapshot));
             let page: Vec<String> = from_scratch
                 .into_iter()
                 .skip(snapshot.page * PAGE_SIZE)
                 .take(PAGE_SIZE)
                 .collect();
             let texts: Vec<String> = snapshot.candidates.iter().map(|c| c.text.clone()).collect();
-            prop_assert_eq!(texts, page, "{:?} 後", key);
+            prop_assert_eq!(texts, page, "{:?} 後", action);
+        }
+    }
+
+    /// 改選某一段後，沒選定的分段等於把剩下的輸入碼從頭打一次的分段（plan §2.1 的重算）；
+    /// 各分段的碼接起來是整串輸入碼，選定的都在沒選定的前面。
+    #[test]
+    fn unselected_segments_equal_those_of_typing_the_unselected_input_afresh(
+        table in random_table(),
+        words in random_words(),
+        actions in prop::collection::vec(action(), 0..40),
+    ) {
+        let engine = engine(&table, &words);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for action in actions {
+            let snapshot = act(&mut session, &engine, &mut user, action);
+            let composition = &snapshot.composition;
+            let codes: String = composition.segments.iter().map(|s| s.code.as_str()).collect();
+            prop_assert_eq!(&codes, &composition.input, "{:?} 後", action);
+            let selected = composition.segments.iter().take_while(|s| s.selected).count();
+            prop_assert!(composition.segments[selected..].iter().all(|s| !s.selected), "{:?} 後", action);
+
+            let mut fresh = Session::default();
+            let mut fresh_user = user.clone();
+            let mut typed = Snapshot::default();
+            for c in composition.unselected_input().chars() {
+                typed = fresh.handle(&engine, &mut fresh_user, Key::Letter(c));
+            }
+            prop_assert_eq!(&composition.segments[selected..], &typed.composition.segments[..], "{:?} 後", action);
         }
     }
 
@@ -222,20 +284,20 @@ proptest! {
     fn incognito_leaves_the_user_model_unchanged(
         table in random_table(),
         words in random_words(),
-        learning in prop::collection::vec(key(), 0..40),
-        keys in prop::collection::vec(key(), 0..40),
+        learning in prop::collection::vec(action(), 0..40),
+        actions in prop::collection::vec(action(), 0..40),
     ) {
         let engine = engine(&table, &words);
         let mut user = UserModel::default();
         let mut session = Session::default();
-        for key in learning {
-            session.handle(&engine, &mut user, key);
+        for action in learning {
+            act(&mut session, &engine, &mut user, action);
         }
         let before = user.clone();
         session.set_options(Options { incognito: true, ..Options::default() });
-        for key in keys {
-            session.handle(&engine, &mut user, key);
-            prop_assert_eq!(&user, &before, "{:?} 後", key);
+        for action in actions {
+            act(&mut session, &engine, &mut user, action);
+            prop_assert_eq!(&user, &before, "{:?} 後", action);
         }
     }
 
@@ -245,7 +307,7 @@ proptest! {
     fn two_schemes_sharing_a_user_model_do_not_affect_each_other(
         table in random_table(),
         words in random_words(),
-        keys in prop::collection::vec((any::<bool>(), key()), 0..100),
+        actions in prop::collection::vec((any::<bool>(), action()), 0..100),
     ) {
         let (other_table, other_words) = other_scheme(&table, &words);
         let engines = [
@@ -256,11 +318,11 @@ proptest! {
         let mut alone = [UserModel::default(), UserModel::default()];
         let mut sessions = [Session::default(), Session::default()];
         let mut alone_sessions = [Session::default(), Session::default()];
-        for (second, key) in keys {
+        for (second, action) in actions {
             let i = usize::from(second);
-            let together: Snapshot = sessions[i].handle(&engines[i], &mut shared, key);
-            let by_itself = alone_sessions[i].handle(&engines[i], &mut alone[i], key);
-            prop_assert_eq!(together, by_itself, "方案 {} 按 {:?} 後", engines[i].scheme().id, key);
+            let together: Snapshot = act(&mut sessions[i], &engines[i], &mut shared, action);
+            let by_itself = act(&mut alone_sessions[i], &engines[i], &mut alone[i], action);
+            prop_assert_eq!(together, by_itself, "方案 {} 做 {:?} 後", engines[i].scheme().id, action);
         }
     }
 }

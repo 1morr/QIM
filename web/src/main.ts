@@ -4,6 +4,7 @@ import { type Keyboard, mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
 	type LayoutKey,
+	pageSize,
 	Session,
 	type Snapshot,
 } from "./wasm/qim_wasm.js";
@@ -76,11 +77,35 @@ function press(session: Session, key: Key): Snapshot {
 	}
 }
 
+/** 候選列目前頁，點候選時換算成全部候選的位置。 */
+let page = 0;
+
+/**
+ * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示輸入碼；目前分段標 `aria-current`。
+ * 點一段就移到那段（brief §4.4），由 `start` 掛的事件處理。
+ */
 function render(snapshot: Snapshot): void {
-	composition.textContent = snapshot.selected + snapshot.unselected;
+	const segments = snapshot.segments;
+	composition.replaceChildren(
+		...segments.map((segment, i) => {
+			const span = document.createElement("span");
+			span.className = "segment";
+			span.dataset.index = String(i);
+			span.textContent = segment.selected ? segment.text : segment.code;
+			if (i === snapshot.focus) {
+				span.setAttribute("aria-current", "true");
+			}
+			return span;
+		}),
+	);
+	for (const segment of segments) {
+		segment.free();
+	}
+	page = snapshot.page;
 	candidates.replaceChildren(
 		...snapshot.candidates.map((candidate, i) => {
 			const item = document.createElement("li");
+			item.dataset.index = String(i);
 			const index = document.createElement("span");
 			index.className = "index";
 			index.textContent = String(i + 1);
@@ -180,6 +205,31 @@ async function start(): Promise<void> {
 	touchToggle.addEventListener("click", () => {
 		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
 	});
+
+	// 點組字的一段、點候選：用 pointerdown 並取消預設動作，輸入框不失去焦點（同觸控鍵盤）。
+	const onPointer = (
+		list: HTMLElement,
+		selector: string,
+		act: (index: number) => Snapshot,
+	) => {
+		list.addEventListener("pointerdown", (event) => {
+			const target = (event.target as Element).closest<HTMLElement>(selector);
+			if (!target || !list.contains(target)) {
+				return;
+			}
+			event.preventDefault();
+			const snapshot = act(Number(target.dataset.index));
+			try {
+				if (snapshot.handled) {
+					apply(snapshot);
+				}
+			} finally {
+				snapshot.free();
+			}
+		});
+	};
+	onPointer(composition, ".segment", (i) => session.focusSegment(i));
+	onPointer(candidates, "li", (i) => session.select(page * pageSize() + i));
 
 	text.addEventListener("keydown", (event) => {
 		const key = toKey(event);
