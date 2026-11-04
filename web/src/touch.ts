@@ -1,8 +1,5 @@
 import type { Layout, LayoutKey, Session, Snapshot } from "./wasm/qim_wasm.js";
 
-/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
-export const LAYOUT_URL = "/layouts/gboard-quick.json";
-
 /**
  * 觸控鍵盤：照 `qim-layout` 給的按鍵畫在 `container` 裡，點擊位置換算成設計尺寸的座標交給
  * `Layout.hit` 判定，網頁自己不判定按到哪個鍵（plan §3.1）。

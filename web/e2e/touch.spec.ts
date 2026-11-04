@@ -6,14 +6,20 @@ import { devices, expect, test } from "@playwright/test";
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 test.use(pixel);
 
+test.beforeEach(async ({ page }) => {
+	await page.goto("/");
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
+		"data-ready",
+		"true",
+	);
+});
+
 test("依序點 a、n、r，首選「門口」；點空白上屏「門口」", async ({
 	page,
 }, testInfo) => {
-	await page.goto("/");
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
 	const keyboard = page.getByTestId("keyboard");
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await expect(keyboard).toBeVisible();
 	// 字母鍵的主標籤是方案的字根，角標是字母。
 	await expect(page.getByTestId("key-a")).toHaveText("日a");
@@ -32,9 +38,6 @@ test("依序點 a、n、r，首選「門口」；點空白上屏「門口」", a
 });
 
 test("點在兩鍵之間的縫，由 qim-layout 取最近的鍵", async ({ page }) => {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	const a = await page.getByTestId("key-a").boundingBox();
 	const s = await page.getByTestId("key-s").boundingBox();
 	if (!a || !s) {
@@ -49,9 +52,7 @@ test("點在兩鍵之間的縫，由 qim-layout 取最近的鍵", async ({ page 
 test("核心沒吃下的鍵照宿主的預設動作：空白插入空格、刪除刪字、Enter 換行", async ({
 	page,
 }) => {
-	await page.goto("/");
 	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	for (const id of ["a", "space", "space", "enter", "backspace", "backspace"]) {
 		await page.getByTestId(`key-${id}`).tap();
 	}
@@ -63,7 +64,6 @@ test("核心沒吃下的鍵照宿主的預設動作：空白插入空格、刪�
 });
 
 test("觸控模式可以關掉，關掉後不顯示鍵盤", async ({ page }) => {
-	await page.goto("/");
 	const toggle = page.getByRole("button", { name: "觸控鍵盤" });
 	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 	await toggle.tap();
@@ -74,11 +74,6 @@ test("觸控模式可以關掉，關掉後不顯示鍵盤", async ({ page }) => 
 });
 
 test("組字與候選出現、上屏後，鍵盤的位置不動", async ({ page }) => {
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
 	const keyboard = page.getByTestId("keyboard");
 	const before = await keyboard.boundingBox();
 	for (const id of ["a", "n", "r"]) {
@@ -94,11 +89,6 @@ test("組字與候選出現、上屏後，鍵盤的位置不動", async ({ page 
 test("手機寬度下候選列是單列：「門口」橫排不折行（brief §4.4）", async ({
 	page,
 }) => {
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
 	for (const id of ["a", "n", "r"]) {
 		await page.getByTestId(`key-${id}`).tap();
 	}

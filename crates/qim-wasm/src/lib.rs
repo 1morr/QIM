@@ -137,12 +137,12 @@ impl WebLayout {
     }
 
     /// 目前頁的按鍵，標籤省略時用 `session` 方案的字根。
-    pub fn keys(&self, session: &WebSession) -> Vec<WebKey> {
+    pub fn keys(&self, session: &WebSession) -> Vec<WebLayoutKey> {
         let radicals = &session.engine.scheme().radicals;
         self.page()
             .keys
             .iter()
-            .map(|key| WebKey {
+            .map(|key| WebLayoutKey {
                 id: key.id.clone(),
                 x: key.frame.x,
                 y: key.frame.y,
@@ -151,13 +151,7 @@ impl WebLayout {
                 z: key.z,
                 label: key.display_label(|c| radicals.get(&c).map(String::as_str)),
                 hint: key.hint.clone(),
-                tap: match key.tap {
-                    Action::Letter(_) => "letter",
-                    Action::Space => "space",
-                    Action::Backspace => "backspace",
-                    Action::Enter => "enter",
-                }
-                .into(),
+                tap: key.tap.name().into(),
                 letter: match key.tap {
                     Action::Letter(c) => Some(c.to_string()),
                     _ => None,
@@ -168,9 +162,7 @@ impl WebLayout {
 
     /// 點在畫布座標 `(x, y)` 時按到的鍵在 [`WebLayout::keys`] 的位置。
     pub fn hit(&self, x: f64, y: f64) -> Option<usize> {
-        let page = self.page();
-        let key = page.hit(x, y)?;
-        page.keys.iter().position(|k| std::ptr::eq(k, key))
+        self.page().hit(x, y)
     }
 }
 
@@ -187,7 +179,7 @@ impl WebLayout {
 
 /// 佈局的一個鍵給 JS 畫的樣子，座標是設計尺寸。JS 端叫 `LayoutKey`。
 #[wasm_bindgen(js_name = LayoutKey, getter_with_clone)]
-pub struct WebKey {
+pub struct WebLayoutKey {
     #[wasm_bindgen(readonly)]
     pub id: String,
     #[wasm_bindgen(readonly)]

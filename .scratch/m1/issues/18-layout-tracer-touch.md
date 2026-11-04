@@ -1,6 +1,6 @@
 # 18: 佈局 tracer：觸控點出「門口」
 
-Status: ready-for-agent
+Status: done
 Blocked by: 07
 讀: plan §1.2、§1.3、§2.6、§3.1、§5.3；brief §4.4、§4.6；ADR 0004；spec〈共同規則〉；`.scratch/m0/issues/09-m0-close.md` 的 Comments（「M1 票 7」那條）
 
@@ -20,10 +20,10 @@ Blocked by: 07
 
 ## 驗收
 
-- [ ] Playwright（行動裝置 viewport，`tap`）：依序點 `a`、`n`、`r` 的位置，讀回首選「門口」，點空白讀回輸入框「門口」；截圖。
-- [ ] `qim-layout` 單元測試：上層優先、點在空白處取最近的鍵。
-- [ ] `deps` 對 `qim-layout` 綠燈；plan §1.3 表與 `RULES` 的「可以」「不可以」兩欄都有同步測試。
-- [ ] 〈M0 留下的〉已處理。
+- [x] Playwright（行動裝置 viewport，`tap`）：依序點 `a`、`n`、`r` 的位置，讀回首選「門口」，點空白讀回輸入框「門口」；截圖。
+- [x] `qim-layout` 單元測試：上層優先、點在空白處取最近的鍵。
+- [x] `deps` 對 `qim-layout` 綠燈；plan §1.3 表與 `RULES` 的「可以」「不可以」兩欄都有同步測試。
+- [x] 〈M0 留下的〉已處理。
 
 ## Comments
 
@@ -32,6 +32,14 @@ Blocked by: 07
 - 2026-11-04 格式子集：`format`、`variants[].when`、`canvas`、`pages[].id`、`keys[]` 的 `id`、`frame`、`z`（預設 0）、`label`、`hint`、`tap`；動作 `{ "letter": "a" }` 與 `"space"`、`"backspace"`、`"enter"`（serde 的外部標記）。`deny_unknown_fields`，票 19 加欄位時一起放寬或補。識別符照 plan §0 用 `LayoutVariant`。
 - 2026-11-04 點擊判定的細節（plan §2.6 沒寫的）：矩形左上邊算在內、右下邊不算；同一個 `z` 時陣列裡後面的在上（後畫的蓋住先畫的）；最近的鍵一樣近時取上層的。
 - 2026-11-04 Gboard 直向：畫布 390 × 216，一排 10 鍵寬、高 54，每鍵四周留 3 / 5 的縫（縫上由點擊判定取最近的鍵）；第三排左邊 1.5 鍵寬留給之後的分隔鍵，第四排空白 8.5 加 Enter 1.5。`z` 鍵照 Gboard 放著，方案沒有它的字根所以標籤是字母。寫到 `build/layouts/gboard-quick.json`，`cargo xtask web` 複製到 `web/public/layouts/`。
-- 2026-11-04 綁定：`Layout.hit(x, y)` 回按鍵位置，`Session.tap(layout, index)` 在 `qim-wasm` 把佈局動作轉成 `qim_core::Key`，所以沒加逐鍵的 `enter()`（票 10 也在改 Enter）。核心沒吃下的鍵網頁照輸入框的預設動作處理（插字母、空格、換行，刪游標前一字）。佈局版本的選法留給票 19，綁定先取第一個版本的第一頁。
+- 2026-11-04 綁定：`Layout.hit(x, y)` 回按鍵位置（`qim_layout::Page::hit` 本身就回 `keys` 的位置），`Session.tap(layout, index)` 在 `qim-wasm` 把佈局動作轉成 `qim_core::Key`，所以沒加逐鍵的 `enter()`（票 10 也在改 Enter）。核心沒吃下的鍵網頁照輸入框的預設動作處理（插字母、空格、換行，刪游標前一字）。佈局版本的選法留給票 19，綁定先取第一個版本的第一頁。
 - 2026-11-04 網頁：`(pointer: coarse)` 時預設開觸控鍵盤，「觸控鍵盤」按鈕切換；開著時輸入框 `inputmode="none"`。亂按（Pixel 7 viewport，兩個種子各 400 步：隨機點鍵與縫、夾實體鍵、切換模式，加 20 次並發連點）找到兩個問題，各先寫成會紅的 Playwright 測試再修：候選出現時鍵盤往下跳 62 px，改成固定在畫面底部；手機寬度下候選被擠成直排，改單列可左右滑（brief §4.4）。修好後亂按沒有 console 錯誤。
 - 2026-11-04 bench 前後對照：沒改核心與資料包，`cargo xtask data` 前後兩份資料包的 sha256 相同（quick `b515cedf128b`、quick-lexicon `4403437674d5`），各集合答錯與修正次數與 baseline 相同、沒有翻盤，固定題 11/11。
+- 2026-11-04 驗收輸出：`cargo xtask check` 印 `==> fmt` … `==> e2e`、`16 passed (3.1s)`、`check 通過`；`cargo xtask bench --check` exit 0。截圖：`.scratch/m1/evidence/18-touch-keyboard.png`、`18-touch-anr.png`（首選「門口」）、`18-touch-commit.png`（輸入框「門口」）、`18-touch-monkey.png`（亂按後）。
+- 2026-11-04 code-review（`873097f` 起）已處理：「不可以」欄的子句改成整句比對（`同上的 I/O` 要完全相同、`被 … 依賴` 要有 `qim-*`、`任何 workspace crate` 後只能接括號說明），補三個舊寫法會漏的變異；`Page::hit` 直接回位置，綁定不再反查；`Action::name()` 給 Gboard 的 id 與綁定共用；網頁 fetch 去重、佈局網址搬到 `main.ts`；`xtask web` 改名 `serve_data_outputs`；綁定的鍵型別改名 `WebLayoutKey`；`touch.spec.ts` 的載入收進 `beforeEach`。
+- 2026-11-04 code-review 沒處理：
+  - `style.css` 的 `padding-bottom` 照畫布比例 390 × 216 寫死，改畫布要跟著改；票 20 做橫向時一起改成由佈局算。
+  - 畫布高 216 不同於 plan §2.6 例子的 260：例子只是示意，票 19 定稿時決定是否改例子。
+  - `qim-layout` 三個測試檔各自組 JSON 外殼、綁定用 `session.engine.scheme().radicals` 取字根：小，等票 19 加欄位時再看要不要抽。
+  - 錯誤訊息與 log 用中文：跟著 repo 既有慣例。
+  - 超出票寫的部分保留：宿主預設動作（沒有它觸控鍵盤的刪除、空白在沒組字時沒反應）、候選單列與鍵盤固定底部（亂按找到的問題）、`from_json` 擋 `format` 錯與沒有版本或頁面（綁定靠它保證有第一頁）。

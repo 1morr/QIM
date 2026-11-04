@@ -116,6 +116,18 @@ pub enum Action {
     Enter,
 }
 
+impl Action {
+    /// 動作在佈局檔裡的名字，同 `serde` 的標記：`letter`、`space`、`backspace`、`enter`。
+    pub fn name(&self) -> &'static str {
+        match self {
+            Action::Letter(_) => "letter",
+            Action::Space => "space",
+            Action::Backspace => "backspace",
+            Action::Enter => "enter",
+        }
+    }
+}
+
 /// 讀不了的佈局檔。
 #[derive(Debug)]
 pub struct Error(String);
@@ -171,26 +183,25 @@ impl Frame {
 }
 
 impl Page {
-    /// 點在畫布座標 `(x, y)` 時按到的鍵：由上層往下，落在矩形內的第一個；
+    /// 點在畫布座標 `(x, y)` 時按到的鍵在 `keys` 的位置：由上層往下，落在矩形內的第一個；
     /// 都沒有時取距離最近的鍵，一樣近時取上層的。沒有按鍵時是 `None`。
-    pub fn hit(&self, x: f64, y: f64) -> Option<&Key> {
+    pub fn hit(&self, x: f64, y: f64) -> Option<usize> {
         self.top_down()
-            .find(|key| key.frame.contains(x, y))
+            .find(|&index| self.keys[index].frame.contains(x, y))
             .or_else(|| {
                 // `min_by` 一樣小時取先出現的，也就是上層的。
-                self.top_down().min_by(|a, b| {
-                    a.frame
-                        .distance_squared(x, y)
-                        .total_cmp(&b.frame.distance_squared(x, y))
+                self.top_down().min_by(|&a, &b| {
+                    let distance = |index: usize| self.keys[index].frame.distance_squared(x, y);
+                    distance(a).total_cmp(&distance(b))
                 })
             })
     }
 
-    /// 由上層往下層：`z` 大的先，同一層時陣列裡後面的先。
-    fn top_down(&self) -> impl Iterator<Item = &Key> {
-        let mut keys: Vec<&Key> = self.keys.iter().rev().collect();
+    /// 由上層往下層的按鍵位置：`z` 大的先，同一層時陣列裡後面的先。
+    fn top_down(&self) -> impl Iterator<Item = usize> {
+        let mut order: Vec<usize> = (0..self.keys.len()).rev().collect();
         // 穩定排序，同一層保留反轉後的順序。
-        keys.sort_by_key(|key| std::cmp::Reverse(key.z));
-        keys.into_iter()
+        order.sort_by_key(|&index| std::cmp::Reverse(self.keys[index].z));
+        order.into_iter()
     }
 }

@@ -28,7 +28,7 @@ fn every_letter_and_the_edit_keys_hit_themselves_at_their_centre() {
             key.frame.x + key.frame.w / 2.0,
             key.frame.y + key.frame.h / 2.0,
         );
-        assert_eq!(page.hit(x, y).map(|k| &k.id), Some(&key.id));
+        assert_eq!(page.hit(x, y).map(|i| &page.keys[i].id), Some(&key.id));
         taps.push(key.tap.clone());
     }
     let mut letters: Vec<char> = taps
@@ -120,6 +120,6 @@ fn tapping_the_gap_between_two_keys_hits_one_of_them() {
     assert!(a.x + a.w < s.x, "a、s 之間要有縫");
     let hit = page
         .hit(gap_x - 0.1, a.y + a.h / 2.0)
-        .map(|k| k.id.as_str());
+        .map(|i| page.keys[i].id.as_str());
     assert_eq!(hit, Some("a"));
 }

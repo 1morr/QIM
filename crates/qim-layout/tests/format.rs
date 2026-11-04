@@ -61,3 +61,21 @@ fn space_backspace_and_enter_are_bare_action_names() {
         .collect();
     assert_eq!(taps, [Action::Space, Action::Backspace, Action::Enter]);
 }
+
+#[test]
+fn action_names_match_the_json_tags() {
+    for action in [
+        Action::Letter('a'),
+        Action::Space,
+        Action::Backspace,
+        Action::Enter,
+    ] {
+        let json = serde_json::to_value(&action).unwrap();
+        let tag = json
+            .as_str()
+            .map(str::to_owned)
+            .or_else(|| json.as_object().and_then(|o| o.keys().next().cloned()))
+            .unwrap();
+        assert_eq!(action.name(), tag);
+    }
+}

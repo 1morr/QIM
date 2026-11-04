@@ -79,12 +79,11 @@ fn rows() -> Vec<Row> {
     ]
 }
 
+/// 字母鍵的 id 是字母，其他鍵是動作名。
 fn id(tap: &Action) -> String {
     match tap {
         Action::Letter(c) => c.to_string(),
-        Action::Space => "space".into(),
-        Action::Backspace => "backspace".into(),
-        Action::Enter => "enter".into(),
+        other => other.name().into(),
     }
 }
 

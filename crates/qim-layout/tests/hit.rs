@@ -18,9 +18,8 @@ fn layout(keys: &str) -> Layout {
 }
 
 fn hit(layout: &Layout, x: f64, y: f64) -> Option<String> {
-    layout.variants[0].pages[0]
-        .hit(x, y)
-        .map(|key| key.id.clone())
+    let page = &layout.variants[0].pages[0];
+    page.hit(x, y).map(|index| page.keys[index].id.clone())
 }
 
 #[test]

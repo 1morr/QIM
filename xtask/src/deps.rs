@@ -733,9 +733,9 @@ pub const BYTES: &[u8] = b"std::net";
 
     /// 「不可以」欄以「；」分成子句，每句要是下列之一，否則回 `Err`：新寫的規則要先能檢查。
     /// - `同上`：和上一列的整欄相同；`同上的 I/O`：上一列的禁用路徑。
-    /// - `被 ... 依賴`：裡面反引號包住的 crate 不可以依賴這列的 crate。
-    /// - 含 `任何 workspace crate`：不可以依賴任何 workspace crate。
-    /// - 其他子句裡反引號包住的名字：`std::` 開頭的是禁用路徑，`qim-` 開頭的是不可以依賴的 crate。
+    /// - `被 ... 依賴`，中間至少一個反引號包住的 `qim-*`：它們不可以依賴這列的 crate。
+    /// - `任何 workspace crate`，後面只能接全形括號說明：不可以依賴任何 workspace crate。
+    /// - 只有反引號包住的名字與說明：`std::` 開頭的是禁用路徑，`qim-` 開頭的是不可以依賴的 crate。
     fn documented_forbidden(plan: &str) -> Result<Vec<(String, Forbidden)>, String> {
         let mut previous = Forbidden::default();
         let mut rows = Vec::new();
@@ -744,13 +744,21 @@ pub const BYTES: &[u8] = b"std::net";
             let mut forbidden = Forbidden::default();
             for clause in cell.split('；').map(str::trim) {
                 let names = backticked(clause);
+                let all_crates =
+                    !names.is_empty() && names.iter().all(|name| name.starts_with("qim-"));
+                let explained = |rest: &str| {
+                    rest.is_empty()
+                        || (rest.starts_with('（') && rest.ends_with('）') && !rest.contains('`'))
+                };
                 if clause == "同上" {
                     forbidden = previous.clone();
-                } else if clause.starts_with("同上的 I/O") {
+                } else if clause == "同上的 I/O" {
                     forbidden.io = previous.io.clone();
-                } else if clause.starts_with('被') && clause.ends_with("依賴") {
+                } else if clause.starts_with('被') && clause.ends_with("依賴") && all_crates {
                     forbidden.dependents = names;
-                } else if clause.contains("任何 workspace crate") {
+                } else if let Some(rest) = clause.strip_prefix("任何 workspace crate")
+                    && explained(rest)
+                {
                     forbidden.any_workspace = true;
                 } else if !names.is_empty()
                     && names
@@ -852,10 +860,22 @@ pub const BYTES: &[u8] = b"std::net";
                 "綁定工具 `wasm-bindgen` | 被",
                 "綁定工具 `wasm-bindgen` | 任何 workspace crate；被",
             ),
-            // 寫了檢查不了的新規則。
+            // 寫了檢查不了的新規則，或看起來像可檢查的寫法但多了東西。
             (
                 "| `qim-core`；同上的 I/O |",
                 "| `qim-core`；同上的 I/O；不可以太大 |",
+            ),
+            (
+                "| `qim-core`；同上的 I/O |",
+                "| `qim-core`；同上的 I/O 與網路 |",
+            ),
+            (
+                "| `qim-core`；同上的 I/O |",
+                "| `qim-core`；同上的 I/O；被平台殼依賴 |",
+            ),
+            (
+                "任何 workspace crate（含綁定與平台 crate）",
+                "任何 workspace crate 以外的 crate",
             ),
         ];
         for (from, to) in cases {

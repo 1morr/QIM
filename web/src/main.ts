@@ -1,6 +1,6 @@
 import { type Key, toKey } from "./keys.ts";
 import "./style.css";
-import { LAYOUT_URL, mountKeyboard } from "./touch.ts";
+import { mountKeyboard } from "./touch.ts";
 import init, {
 	Layout,
 	type LayoutKey,
@@ -11,6 +11,8 @@ import init, {
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
 const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
+/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
+const LAYOUT_URL = "/layouts/gboard-quick.json";
 
 function element<T extends HTMLElement>(selector: string): T {
 	const found = document.querySelector<T>(selector);
@@ -27,20 +29,17 @@ const status = element<HTMLElement>("#status");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 
-async function loadLayout(url: string): Promise<string> {
+/** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
+async function load(url: string): Promise<Response> {
 	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error(`${url}：${response.status}，先跑 cargo xtask web`);
 	}
-	return response.text();
+	return response;
 }
 
 async function loadPack(url: string): Promise<Uint8Array> {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`${url}：${response.status}，先跑 cargo xtask web`);
-	}
-	return new Uint8Array(await response.arrayBuffer());
+	return new Uint8Array(await (await load(url)).arrayBuffer());
 }
 
 function press(session: Session, key: Key): Snapshot {
@@ -130,7 +129,7 @@ async function start(): Promise<void> {
 		init(),
 		loadPack(PACK_URL),
 		loadPack(LEXICON_URL),
-		loadLayout(LAYOUT_URL),
+		load(LAYOUT_URL).then((response) => response.text()),
 	]);
 	const session = new Session(pack, lexicon);
 	const layout = new Layout(layoutJson);
