@@ -240,8 +240,8 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             rows(symbols),
             [
                 "1 2 3 4 5 6 7 8 9 0",
-                "@ # $ _ & - + ( ) /",
-                "to-more-symbols 、 “ ” : ; ! ? backspace",
+                "@ # $ _ & - + （ ） /",
+                "to-more-symbols 、 “ ” ： ； ！ ？ backspace",
                 "to-letters , to-numbers space . enter",
             ]
         );
@@ -250,7 +250,7 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             [
                 "~ ` | • √ π ÷ × * §",
                 "£ ¢ € ¥ ^ ° = 「 」 \\",
-                "to-symbols % ‘ ’ ™ ✓ [ ] backspace",
+                "to-symbols % ‘ ’ ™ ✓ ［ ］ backspace",
                 "to-letters < to-numbers space > enter",
             ]
         );
@@ -282,7 +282,7 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             assert_eq!(back.tap, switch(gboard::LETTERS));
         }
         // 數字與符號鍵直接輸入文字：打完不切頁，留在符號頁（brief §4.4）。
-        for id in ["1", "0", "@", "?", "!"] {
+        for id in ["1", "0", "@", "？", "！"] {
             assert_eq!(key(symbols, id).tap, Action::Text(id.into()));
         }
     }

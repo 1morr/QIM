@@ -82,9 +82,13 @@ enum Tone {
     Function,
 }
 
-/// 字級，畫布座標（Gboard 字根約 16 sp、空白鍵與切頁鍵約 12 sp，縮成 390 寬）。
-const LABEL_SIZE: f64 = 16.0;
+/// 字級，畫布座標（照 Gboard 實測縮成 390 寬）：字根約 15 sp，空白鍵與切頁鍵約 12 sp，
+/// 符號頁的符號與數字約 20 sp，數字鍵盤的數字約 24 sp，⇧ ⌫ ↵ 圖示約 24 dp。
+const LABEL_SIZE: f64 = 15.0;
 const SMALL_LABEL_SIZE: f64 = 12.5;
+const SYMBOL_LABEL_SIZE: f64 = 20.0;
+const NUMPAD_LABEL_SIZE: f64 = 24.0;
+const ICON_LABEL_SIZE: f64 = 24.0;
 
 fn style(tone: Tone, label_size: f64) -> Style {
     let (fill, label) = match tone {
@@ -148,8 +152,12 @@ impl Cell {
         self
     }
 
-    fn small(mut self) -> Self {
-        self.label_size = SMALL_LABEL_SIZE;
+    fn small(self) -> Self {
+        self.size(SMALL_LABEL_SIZE)
+    }
+
+    fn size(mut self, label_size: f64) -> Self {
+        self.label_size = label_size;
         self
     }
 
@@ -183,6 +191,13 @@ fn texts(row: &str) -> Vec<Cell> {
     row.split(' ').map(text).collect()
 }
 
+/// 符號頁的符號與數字：字比字根大（同 Gboard）。
+fn symbols(row: &str) -> Vec<Cell> {
+    row.split(' ')
+        .map(|t| text(t).size(SYMBOL_LABEL_SIZE))
+        .collect()
+}
+
 fn texts_of(list: &str) -> Vec<Action> {
     list.split(' ').map(|t| Action::Text(t.into())).collect()
 }
@@ -201,6 +216,7 @@ fn switch(page: &str, label: &str) -> Cell {
 fn backspace() -> Cell {
     Cell::new("backspace", Action::Backspace, Some("⌫"))
         .spoken()
+        .size(ICON_LABEL_SIZE)
         .function()
         .units(1.5)
 }
@@ -208,6 +224,7 @@ fn backspace() -> Cell {
 fn shift() -> Cell {
     Cell::new("shift", Action::Shift, Some("⇧"))
         .spoken()
+        .size(ICON_LABEL_SIZE)
         .function()
         .units(1.5)
 }
@@ -215,6 +232,7 @@ fn shift() -> Cell {
 fn enter() -> Cell {
     Cell::new("enter", Action::Enter, Some("↵"))
         .spoken()
+        .size(ICON_LABEL_SIZE)
         .function()
         .units(1.5)
         .pill()
@@ -256,8 +274,9 @@ fn row(indent: f64, cells: Vec<Cell>) -> Row {
     }
 }
 
-/// 句號鍵長按（Gboard 實測的 2 × 8，預設「……」排第一個，其餘照 Gboard 由左上到右下）。
-const PERIOD_LONG_PRESS: &str = "…… ^_^ :) :( :D :P & $ ^ % _ ; : 、 ! ?";
+/// 句號鍵長按（Gboard 實測的 2 × 8，預設「……」排第一個，其餘照 Gboard 由左上到右下）；
+/// 打出的字元照 Gboard 實測：`；：！？` 全形，表情與其他符號半形。
+const PERIOD_LONG_PRESS: &str = "…… ^_^ :) :( :D :P & $ ^ % _ ； ： 、 ！ ？";
 
 /// 字母頁照 Gboard：QWERTY 三排，第二排錯開半鍵；第三排左 Shift、右刪除；
 /// 底排 ?123、逗號（長按進常用頁，代替 Gboard 的表情入口）、空白、句號、Enter。
@@ -299,7 +318,9 @@ fn number_row() -> Row {
             if digit == '1' {
                 long_press.extend(texts_of("½ ⅓ ¼ ⅕ ⅙ ⅐ ⅛ ⅑ ⅒"));
             }
-            text(&digit.to_string()).long_press(long_press)
+            text(&digit.to_string())
+                .size(SYMBOL_LABEL_SIZE)
+                .long_press(long_press)
         })
         .collect();
     Row {
@@ -310,13 +331,14 @@ fn number_row() -> Row {
 }
 
 /// 符號頁（?123）：照 Gboard；打完留在符號頁（brief §4.4），「返回」回字母頁。
+/// 打出的字元照 Gboard 實測：括號與 `：；！？` 全形，底排逗號句號與其他符號半形。
 fn symbols_page() -> Vec<Row> {
     let mut third = vec![switch(MORE_SYMBOLS, "=\\<").units(1.5)];
-    third.extend(texts("、 “ ” : ; ! ?"));
+    third.extend(symbols("、 “ ” ： ； ！ ？"));
     third.push(backspace());
     vec![
-        row(0.0, texts("1 2 3 4 5 6 7 8 9 0")),
-        row(0.0, texts("@ # $ _ & - + ( ) /")),
+        row(0.0, symbols("1 2 3 4 5 6 7 8 9 0")),
+        row(0.0, symbols("@ # $ _ & - + （ ） /")),
         row(0.0, third),
         row(
             0.0,
@@ -335,11 +357,11 @@ fn symbols_page() -> Vec<Row> {
 /// 更多符號頁（=\<）：照 Gboard；左邊「?123」回符號頁。
 fn more_symbols_page() -> Vec<Row> {
     let mut third = vec![switch(SYMBOLS, "?123").units(1.5)];
-    third.extend(texts("% ‘ ’ ™ ✓ [ ]"));
+    third.extend(symbols("% ‘ ’ ™ ✓ ［ ］"));
     third.push(backspace());
     vec![
-        row(0.0, texts("~ ` | • √ π ÷ × * §")),
-        row(0.0, texts("£ ¢ € ¥ ^ ° = 「 」 \\")),
+        row(0.0, symbols("~ ` | • √ π ÷ × * §")),
+        row(0.0, symbols("£ ¢ € ¥ ^ ° = 「 」 \\")),
         row(0.0, third),
         row(
             0.0,
@@ -371,7 +393,7 @@ fn numbers_page() -> Vec<Placed> {
     }
     for (i, d) in "123456789".chars().enumerate() {
         placed.push(Placed::new(
-            text(&d.to_string()),
+            text(&d.to_string()).size(NUMPAD_LABEL_SIZE),
             1.5 + (i % 3) as f64 * digit,
             (i / 3) as f64,
             digit,
@@ -381,9 +403,13 @@ fn numbers_page() -> Vec<Placed> {
     let mut space = space(1.5).function();
     space.label = Some("␣".into());
     space.label_size = LABEL_SIZE;
-    for (i, cell) in [text("%").function(), space, backspace()]
-        .into_iter()
-        .enumerate()
+    for (i, cell) in [
+        text("%").function().size(SYMBOL_LABEL_SIZE),
+        space,
+        backspace(),
+    ]
+    .into_iter()
+    .enumerate()
     {
         placed.push(Placed::new(cell, 8.5, i as f64, 1.5, 1.0));
     }
@@ -391,8 +417,8 @@ fn numbers_page() -> Vec<Placed> {
         (back(), 1.5),
         (text(",").function(), 1.0),
         (switch(SYMBOLS, "!?#"), digit - 1.0),
-        (text("0"), digit),
-        (text("="), digit - 1.0),
+        (text("0").size(NUMPAD_LABEL_SIZE), digit),
+        (text("=").size(SYMBOL_LABEL_SIZE), digit - 1.0),
         (text(".").function(), 1.0),
         (enter(), 1.5),
     ];

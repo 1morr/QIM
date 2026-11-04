@@ -211,7 +211,7 @@ test("符號頁：打兩個符號仍在符號頁，按「返回」回字母頁",
 	await expect(text).toHaveValue("1@");
 	// 打完不跳回（brief §4.4）。
 	await expect(page.getByTestId("key-to-letters")).toHaveText("返回");
-	await expect(page.getByTestId("key-?")).toBeVisible();
+	await expect(page.getByTestId("key-？")).toBeVisible();
 	await page.screenshot({ path: testInfo.outputPath("symbols.png") });
 	await tapKeys(page, ["to-letters"]);
 	await expect(page.getByTestId("key-a")).toHaveText("日a");
@@ -221,9 +221,9 @@ test("符號頁：打兩個符號仍在符號頁，按「返回」回字母頁",
 test("組字中切到符號頁組字留著，按符號先上屏組字再接符號", async ({ page }) => {
 	await tapKeys(page, ["a", "n", "r", "to-symbols"]);
 	await expect(page.getByTestId("composition")).toHaveText("日弓口");
-	await tapKeys(page, ["?"]);
+	await tapKeys(page, ["？"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
-		"門口?",
+		"門口？",
 	);
 	await expect(page.getByTestId("composition")).toHaveText("");
 });
@@ -417,9 +417,9 @@ test("觸控的空白鍵選字上屏可以回報，組字中點符號上屏不�
 	await report.tap();
 	await expect(reports).toHaveValue("anr\t門口\t網頁回報（首選 門口）");
 
-	await tapKeys(page, ["a", "n", "r", "to-symbols", "?"]);
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
-		"門口門口?",
+		"門口門口？",
 	);
 	await expect(report).toBeDisabled();
 });
@@ -459,8 +459,8 @@ test("簡體模式下觸控打字：空白上屏簡體，組字中點符號先�
 	await page.getByLabel("簡體").tap();
 	await tapKeys(page, ["a", "n", "r", "space"]);
 	await expect(text).toHaveValue("门口");
-	await tapKeys(page, ["a", "n", "r", "to-symbols", "?"]);
-	await expect(text).toHaveValue("门口门口?");
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
+	await expect(text).toHaveValue("门口门口？");
 });
 
 // 使用者 2026-11-04 決定（M1 票 23）：「常用」頁的文字鍵在簡體模式也轉簡體。

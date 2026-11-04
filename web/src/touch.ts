@@ -186,9 +186,13 @@ export function mountKeyboard(
 		element.style.fontSize = scaled(key.h * 0.6);
 	}
 
+	/** 放大預覽照 Gboard：鍵上方的圓形氣泡，直徑約 1.2 個鍵高。 */
 	function showPreview(key: LayoutKey): void {
 		preview.textContent = key.label;
 		placeAbove(preview, key, 1.2);
+		preview.style.minWidth = "";
+		preview.style.aspectRatio = "1";
+		preview.style.borderRadius = "50%";
 		preview.hidden = false;
 	}
 

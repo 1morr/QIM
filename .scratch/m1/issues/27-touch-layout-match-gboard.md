@@ -1,6 +1,6 @@
 # 27: 觸控佈局對齊 Gboard 速成
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: None (can start immediately)
 讀: brief §4.4、§1.3（Gboard 那列）；plan §2.6、§3.1、§5.3；`docs/research/blackbox-baseline.md`（Gboard 截圖 `.scratch/m1/evidence/09-*.png`）；票 18、19、20 的 Comments；spec〈共同規則〉
 
@@ -25,3 +25,7 @@ Blocked by: None (can start immediately)
 - [ ] 自己建的 AVD 已刪除；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-05 進度（session 因額度中斷）：已做並 commit——長按只出字母、數字列開關（另一份佈局檔）、`z` 標「重」、Shift（格式加 `"shift"`，一次性大寫、快速兩下鎖定，規則在 `qim-layout`）、符號頁 ?123 / =\< / 12/34 照 Gboard（全半形照實測碼位）、配色與膠囊鍵、空白鍵「速成」、逗號長按進常用頁（代替表情入口）、句號長按 16 個、圓形預覽。並排截圖 `.scratch/m1/evidence/27-*.png`；自建 AVD 已刪。亂按 4 種子 × 150 步無錯誤；e2e 全過（104）。
+- 刻意不同（Comments 待整理）：組字中 ⇧ 不變「'詞」（QIM 沒有分隔）；Shift 時不顯示數字角標；逗號的 ☺ 角標在右上不在正上；數字鍵盤左欄拆成四鍵；?123 不記上次子頁；空白長按不換鍵盤；數字列只有 1 有分數、其他只有上標；橫向沒對 Gboard 實測。
+- 還沒做：`/code-review ab27a1c`、`cargo xtask check` 全套與 `bench --check`（沒動核心，預期不變）、progress〈偏差與決定〉一行、勾驗收、Status 改 done。
