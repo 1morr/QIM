@@ -158,7 +158,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 ### 每鍵延遲
 
-每次 `cargo xtask bench`（不論哪個模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「20 碼以上」（輸入碼 ≥ 20 鍵的輸入）兩組。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+每次 `cargo xtask bench`（不論哪個模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。

@@ -81,6 +81,7 @@ const { initSync, Session } = await import(new URL("web/src/wasm/qim_wasm.js", r
 initSync({ module: readFileSync(new URL("web/src/wasm/qim_wasm_bg.wasm", root)) });
 const session = new Session(readFileSync(new URL("build/packs/quick/quick.pack", root)));
 const begin = performance.now();
+// 只為了和瀏覽器一樣付出逐鍵計時的成本，結果不用。
 const nodeTimes = [];
 for (const input of all) {
 	for (const c of input) {
@@ -101,11 +102,12 @@ console.log(
 	`平均每鍵（含 Esc 與計時本身）：Chromium ${((result.total / keys) * 1000).toFixed(2)} µs、Node ${process.version} ${((nodeTotal / keys) * 1000).toFixed(2)} µs`,
 );
 console.log("| 輸入 | 輸入數 | 鍵數 | p50 µs | p95 µs |");
-for (const [label, keep] of [
-	["全部", () => true],
-	["20 碼以上", (input) => input.length >= 20],
+// 與 qim-bench 同口徑：「第 20 碼起」只算每個輸入的第 20 鍵起。
+for (const [label, skip] of [
+	["全部", 0],
+	["第 20 碼起", 19],
 ]) {
-	const picked = result.perKey.filter((_, i) => keep(all[i]));
+	const picked = result.perKey.map((times) => times.slice(skip)).filter((t) => t.length > 0);
 	const values = picked.flat();
 	const us = (p) => (percentile(values, p) * 1000).toFixed(2);
 	console.log(`| ${label} | ${picked.length} | ${values.length} | ${us(50)} | ${us(95)} |`);

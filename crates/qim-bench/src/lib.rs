@@ -17,8 +17,8 @@ use sha2::{Digest, Sha256};
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
 pub use items::{Item, Unit, parse_corpus, parse_fixed, parse_personal};
 pub use latency::{
-    LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WASM_SCRIPT, WasmTimer,
-    node as node_wasm_timer, percentile,
+    LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, node_wasm_timer,
+    percentile,
 };
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, Metrics, SetResult};
 
@@ -136,7 +136,7 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
         }
     }
     let personal = load_personal(root, &engine)?;
-    let latency = latency::measure(&engine, &root.join(PACK), latency_inputs, wasm)?;
+    let latency = latency::measure(&engine, &root.join(PACK), &latency_inputs, wasm)?;
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
     let tolerate_bad_format = mode == Mode::UpdateBaseline;
     let baseline = load_baseline(&root.join(BASELINE), tolerate_bad_format)?;

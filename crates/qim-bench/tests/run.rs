@@ -721,14 +721,14 @@ fn items_left_behind_without_a_userdb_are_not_run() {
     );
 }
 
-/// `long` 一句 20 碼（`ab` 交替，一個字一個碼）：和固定題 `a`、toy 三句一起量延遲。
+/// `long` 一句 21 碼（`ab` 交替，一個字一個碼）：和固定題 `a`、toy 三句一起量延遲。
 fn repo_with_long_input() -> TempDir {
     let repo = repo();
-    let codes = ["a b"; 10].join(" ");
+    let codes = ["a b"; 10].join(" ") + " a";
     write(
         repo.path(),
         "bench/corpus/long.tsv",
-        format!("{codes}\t{}\n", "日月".repeat(10)).as_bytes(),
+        format!("{codes}\t{}日\n", "日月".repeat(10)).as_bytes(),
     );
     repo
 }
@@ -740,26 +740,32 @@ fn latency_reports_native_and_wasm_percentiles_with_a_long_input_group() {
     let report = outcome.report();
     let rows: Vec<&str> = report
         .lines()
-        .filter(|line| line.contains("20 碼以上") || line.contains("| 全部 |"))
+        .filter(|line| line.contains("| 第 20 碼起 |") || line.contains("| 全部 |"))
         .collect();
-    // 全部：固定題 `a`（1 鍵）、toy `a`、`a`、`ab`（4 鍵）、long（20 鍵），共 5 個輸入 25 鍵。
-    // 假計時器的 25 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、20），p50 第 13 個是 8、p95 第 24 個是 19。
+    // 全部：固定題 `a`（1 鍵）、toy `a`、`a`、`ab`（4 鍵）、long（21 鍵），共 5 個輸入 26 鍵。
+    // 假計時器的 26 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、21），p50 第 13 個是 8、p95 第 25 個是 20。
+    // 第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
     assert_eq!(rows.len(), 4, "{report}");
+    let native = if cfg!(debug_assertions) {
+        "原生（debug）"
+    } else {
+        "原生（release）"
+    };
     assert!(
-        rows[0].starts_with("| 原生（debug） | 全部 | 5 | 25 | "),
+        rows[0].starts_with(&format!("| {native} | 全部 | 5 | 26 | ")),
         "{report}"
     );
     assert!(
-        rows[1].starts_with("| 原生（debug） | 20 碼以上 | 1 | 20 | "),
+        rows[1].starts_with(&format!("| {native} | 第 20 碼起 | 1 | 2 | ")),
         "{report}"
     );
     assert_eq!(
         rows[2],
-        "| WebAssembly（假） | 全部 | 5 | 25 | 800000.00 | 1900000.00 |"
+        "| WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 |"
     );
     assert_eq!(
         rows[3],
-        "| WebAssembly（假） | 20 碼以上 | 1 | 20 | 1000000.00 | 1900000.00 |"
+        "| WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 |"
     );
     assert!(report.contains("只報不擋"), "{report}");
 }

@@ -108,7 +108,7 @@ pub fn render(outcome: &Outcome) -> String {
     out
 }
 
-/// 每鍵延遲：原生與 WebAssembly 各兩組（全部、20 碼以上），微秒：現在的核心每鍵不到 1 µs，用毫秒看不出前後差別。
+/// 每鍵延遲：原生與 WebAssembly 各兩組（全部、第 20 碼起），微秒：現在的核心每鍵不到 1 µs，用毫秒看不出前後差別。
 fn latency(latency: &Latency) -> String {
     let mut out = format!(
         "\n每鍵延遲（µs；只報不擋：`--check` 不比、baseline 不記）\n\n\
@@ -119,7 +119,7 @@ fn latency(latency: &Latency) -> String {
         latency.machine
     );
     for (environment, timing) in [("原生", &latency.native), ("WebAssembly", &latency.wasm)] {
-        for (group, summary) in latency.groups(timing) {
+        for (group, summary) in timing.groups() {
             let label = format!("{environment}（{}）", timing.runtime);
             out.push_str(&match summary {
                 Some(s) => format!(

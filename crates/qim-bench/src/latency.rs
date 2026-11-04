@@ -11,7 +11,8 @@ use std::time::Instant;
 
 use qim_core::{Engine, Key, Session, UserModel};
 
-/// 輸入碼至少這麼多鍵的輸入另成一組：連打變長時延遲會不會跟著長（票 12 的延遲預算要看它）。
+/// 組字已有這麼多碼時的按鍵另成一組：連打變長時延遲會不會跟著長（票 12 的延遲預算要看它）。
+/// 只算每個輸入的第 20 鍵起：前 19 鍵的組字和短輸入一樣短，算進來會稀釋。
 pub const LONG_INPUT_KEYS: usize = 20;
 
 /// WebAssembly 的計時腳本，用 Node 跑；它讀 [`WASM_BINDINGS`]，與網頁是同一份綁定。
@@ -29,15 +30,13 @@ pub struct Timing {
 }
 
 /// 在 WebAssembly 上量時間的方式：給資料包路徑與輸入碼，逐鍵打每個輸入。
-/// 實際用 [`node`]；測試可以換成假的。
+/// 實際用 [`node_wasm_timer`]；測試可以換成假的。
 pub type WasmTimer<'a> = &'a dyn Fn(&Path, &[String]) -> Result<Timing, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Latency {
     /// CPU、作業系統與架構，報告註明在哪台機器量的。
     pub machine: String,
-    /// 量了哪些輸入碼：固定題與各語料集合的每一題（個人集不量，各機器才比得起來）。
-    pub inputs: Vec<String>,
     pub native: Timing,
     pub wasm: Timing,
 }
@@ -51,44 +50,44 @@ pub struct Summary {
     pub p95: f64,
 }
 
-impl Latency {
-    /// 「全部」與「20 碼以上」兩組；組裡沒有輸入時是 `None`。
-    pub fn groups(&self, timing: &Timing) -> [(&'static str, Option<Summary>); 2] {
-        let all = |_: &String| true;
-        let long = |input: &String| input.chars().count() >= LONG_INPUT_KEYS;
+impl Timing {
+    /// 「全部」與「第 [`LONG_INPUT_KEYS`] 碼起」兩組；組裡沒有按鍵時是 `None`。
+    pub fn groups(&self) -> [(String, Option<Summary>); 2] {
         [
-            ("全部", self.summary(timing, &all)),
-            ("20 碼以上", self.summary(timing, &long)),
+            ("全部".into(), summary(self, 0)),
+            (
+                format!("第 {LONG_INPUT_KEYS} 碼起"),
+                summary(self, LONG_INPUT_KEYS - 1),
+            ),
         ]
-    }
-
-    fn summary(&self, timing: &Timing, keep: &dyn Fn(&String) -> bool) -> Option<Summary> {
-        let picked: Vec<&Vec<f64>> = self
-            .inputs
-            .iter()
-            .zip(&timing.per_key_ms)
-            .filter(|(input, _)| keep(input))
-            .map(|(_, ms)| ms)
-            .collect();
-        let values: Vec<f64> = picked.iter().copied().flatten().copied().collect();
-        Some(Summary {
-            inputs: picked.len(),
-            keys: values.len(),
-            p50: percentile(&values, 50)?,
-            p95: percentile(&values, 95)?,
-        })
     }
 }
 
-/// 原生與 WebAssembly 各量一次 `inputs`。
+/// 每個輸入跳過前 `skip` 鍵；輸入數只算還剩下按鍵的輸入。
+fn summary(timing: &Timing, skip: usize) -> Option<Summary> {
+    let picked: Vec<&[f64]> = timing
+        .per_key_ms
+        .iter()
+        .filter_map(|ms| ms.get(skip..).filter(|rest| !rest.is_empty()))
+        .collect();
+    let values: Vec<f64> = picked.concat();
+    Some(Summary {
+        inputs: picked.len(),
+        keys: values.len(),
+        p50: percentile(&values, 50)?,
+        p95: percentile(&values, 95)?,
+    })
+}
+
+/// 原生與 WebAssembly 各量一次 `inputs`：固定題與各語料集合的每一題（個人集不量，各機器才比得起來）。
 pub fn measure(
     engine: &Engine,
     pack: &Path,
-    inputs: Vec<String>,
+    inputs: &[String],
     wasm: WasmTimer,
 ) -> Result<Latency, String> {
-    let native = native(engine, &inputs);
-    let wasm = wasm(pack, &inputs)?;
+    let native = native(engine, inputs);
+    let wasm = wasm(pack, inputs)?;
     let shape = |timing: &Timing| timing.per_key_ms.iter().map(Vec::len).collect::<Vec<_>>();
     let keys: Vec<usize> = inputs.iter().map(|input| input.chars().count()).collect();
     if shape(&wasm) != keys {
@@ -102,7 +101,6 @@ pub fn measure(
     }
     Ok(Latency {
         machine: machine(),
-        inputs,
         native,
         wasm,
     })
@@ -148,7 +146,7 @@ fn native(engine: &Engine, inputs: &[String]) -> Timing {
 
 /// 用 Node 跑 [`WASM_SCRIPT`]：輸入碼一行一個從 stdin 送進去；stdout 第一行是 runtime，
 /// 之後每個輸入一行、各鍵的毫秒數以空白分隔。`root` 是 repo 根目錄。
-pub fn node(root: &Path) -> impl Fn(&Path, &[String]) -> Result<Timing, String> + '_ {
+pub fn node_wasm_timer(root: &Path) -> impl Fn(&Path, &[String]) -> Result<Timing, String> + '_ {
     move |pack, inputs| {
         if !root.join(WASM_BINDINGS).exists() {
             return Err(format!(
