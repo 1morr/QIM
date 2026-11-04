@@ -3,7 +3,8 @@
 //! 入口是 `cargo xtask data [--verify]`，用法見 `docs/development.md`。
 
 pub mod bigram;
-mod corpora;
+pub mod common_forms;
+pub mod corpora;
 pub mod corpus;
 mod error;
 pub mod gboard;

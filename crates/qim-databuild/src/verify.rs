@@ -11,6 +11,7 @@ use qim_core::{
     RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
+use crate::common_forms::CommonForms;
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
@@ -54,6 +55,10 @@ pub enum CheckId {
     CorpusNoLeak,
     /// 同樣的來源建兩次，基準句、訓練切分與字頻的 sha256 相同。
     CorpusDeterministic,
+    /// 前處理保留的粵語用字（`corpora::CANTONESE_KEPT`）在 train 的字頻都大於 0（M1 票 17b）。
+    KeptCharacters,
+    /// 字形對照表（`common_forms`）換掉的香港寫法在 train 的字頻都是 0（M1 票 17b，brief §4.1）。
+    CommonForms,
 }
 
 impl fmt::Display for CheckId {
@@ -76,6 +81,8 @@ impl fmt::Display for CheckId {
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
             Self::CorpusDeterministic => "語料決定性",
+            Self::KeptCharacters => "前處理保留粵語用字",
+            Self::CommonForms => "字形用常見寫法",
         })
     }
 }
@@ -634,6 +641,52 @@ pub fn leaks(
             detail: format!("{name} test 句原樣出現在 train {} 句", leaked.len()),
         })
         .collect())
+}
+
+/// `kept` 的每個字在 `frequency`（各語料 train 乘上權重相加的字頻）都大於 0；
+/// 沒保留住時字頻是 0，例如 `s2hk` 把「晒」換成「曬」。
+pub fn kept_characters(frequency: &BTreeMap<char, u64>, kept: &[char]) -> Check {
+    let counts: Vec<(char, u64)> = kept
+        .iter()
+        .map(|&ch| (ch, frequency.get(&ch).copied().unwrap_or(0)))
+        .collect();
+    Check {
+        id: CheckId::KeptCharacters,
+        passed: counts.iter().all(|&(_, n)| n > 0),
+        detail: counts
+            .iter()
+            .map(|(ch, n)| format!("{ch} {n}"))
+            .collect::<Vec<_>>()
+            .join("、"),
+    }
+}
+
+/// `forms` 換掉的字在 `frequency`（各語料 train 乘上權重相加的字頻）都不出現：前處理確實接上了
+/// 對照表。
+pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Check {
+    let pairs: Vec<String> = forms
+        .pairs()
+        .map(|(from, to)| format!("{from}→{to}"))
+        .collect();
+    let pairs = format!("{} 組（{}）", pairs.len(), pairs.join("、"));
+    let left: Vec<String> = forms
+        .pairs()
+        .filter_map(|(from, _)| {
+            frequency
+                .get(&from)
+                .filter(|&&n| n > 0)
+                .map(|n| format!("{from} {n}"))
+        })
+        .collect();
+    Check {
+        id: CheckId::CommonForms,
+        passed: left.is_empty(),
+        detail: if left.is_empty() {
+            format!("對照表 {pairs}，換掉的寫法在 train 都沒有")
+        } else {
+            format!("對照表 {pairs}，換掉的寫法還在 train：{}", left.join("、"))
+        },
+    }
 }
 
 fn spot(id: CheckId, passed: bool) -> Check {

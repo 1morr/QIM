@@ -63,8 +63,8 @@ test("Enter：輸入碼原樣上屏；已選定的分段上屏字詞", async ({ 
 	await page.keyboard.type("anr");
 	await page.keyboard.press("Enter");
 	await expect(text).toHaveValue("anr");
-	// `anrkboa` 選開頭一段「門口」後按 Enter：門口＋其餘輸入碼。
-	await page.keyboard.type("anrkboa");
+	// `anrkbof`（首選「門口｜有｜無」）選開頭一段「門口」後按 Enter：門口＋其餘輸入碼。
+	await page.keyboard.type("anrkbof");
 	await page.keyboard.press("ArrowLeft");
 	await page.keyboard.press("ArrowLeft");
 	await page.keyboard.press("ArrowLeft");
@@ -72,7 +72,7 @@ test("Enter：輸入碼原樣上屏；已選定的分段上屏字詞", async ({ 
 	await page.keyboard.press("1");
 	await expect(segments.nth(0)).toHaveText("門口");
 	await page.keyboard.press("Enter");
-	await expect(text).toHaveValue("anr門口kboa");
+	await expect(text).toHaveValue("anr門口kbof");
 });
 
 test("Esc：清除輸入碼", async ({ page }) => {
@@ -86,7 +86,7 @@ test("Esc：清除輸入碼", async ({ page }) => {
 
 test("← / →：移到前一段或後一段，→ 走過最後一段回到整串", async ({ page }) => {
 	const { segments, items } = ui(page);
-	await page.keyboard.type("anrkboa");
+	await page.keyboard.type("anrkbof");
 	await expect(segments).toHaveCount(3);
 	await page.keyboard.press("ArrowLeft");
 	await expect(segments.nth(2)).toHaveAttribute("aria-current", "true");
@@ -95,7 +95,7 @@ test("← / →：移到前一段或後一段，→ 走過最後一段回到整�
 	await page.keyboard.press("ArrowRight");
 	await page.keyboard.press("ArrowRight");
 	await expect(segments.locator("[aria-current]")).toHaveCount(0);
-	await expect(items.first()).toHaveText("1門口有智");
+	await expect(items.first()).toHaveText("1門口有無");
 });
 
 test("Tab：組字中列出或收起字根提示；沒有組字時交還瀏覽器", async ({

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use qim_core::{LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SimplifierPack};
 
+use crate::common_forms::CommonForms;
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
@@ -200,6 +201,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         |path: PathBuf, contents: &[u8]| std::fs::write(&path, contents).map_err(Error::io(path));
 
     let transcoder = Transcoder::new(&quick.rows);
+    // 語料轉成香港繁體後換回常見寫法（brief §4.1、plan §4.3）。
+    let forms = CommonForms::from_opencc(&quick.pack.code_table)?;
     let mut corpora = Vec::new();
     let mut corpus_checks = Vec::new();
     let mut attributions: Vec<(Group, String)> = Vec::new();
@@ -228,6 +231,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let first = build_corpus(
             corpus,
             &paths,
+            &forms,
             &transcoder,
             create(&train_path)?,
             create(&dev_path)?,
@@ -249,7 +253,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         if verify {
             // 第二次從快取重讀來源，只算 sha256、不寫檔。
             let sink = || Hashed::new(io::sink());
-            let second = build_corpus(corpus, &paths, &transcoder, sink(), sink(), &dir)?;
+            let second = build_corpus(corpus, &paths, &forms, &transcoder, sink(), sink(), &dir)?;
             corpus_checks.extend(
                 verify::corpus(
                     corpus.name,
@@ -381,6 +385,13 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         corpus_checks.extend(
             verify::leaks(&benches, readers).map_err(Error::io(root.join("build/corpus")))?,
         );
+        let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
+        let frequency = lexicon::char_frequency(&tables)?;
+        corpus_checks.push(verify::kept_characters(
+            &frequency,
+            &corpora::CANTONESE_KEPT,
+        ));
+        corpus_checks.push(verify::common_forms(&frequency, &forms));
     }
 
     let report = if verify {
@@ -458,9 +469,10 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
-         each corpus, added together. Each corpus is extracted, converted with OpenCC s2hk\n\
-         and split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
-         bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
+         each corpus, added together. Each corpus is extracted, converted to Hong Kong\n\
+         Traditional Chinese with OpenCC and split into clauses as described in\n\
+         bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
+         repository.\n",
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
     )
@@ -473,9 +485,10 @@ fn language_model_about(id: &str) -> String {
         "{id} is a character bigram language model trained by QIM with interpolated\n\
          Kneser-Ney smoothing. It was trained on the training split of each corpus listed\n\
          above, counting adjacent characters within each clause, and pruned to the pairs\n\
-         seen at least {min} times. Each corpus is extracted, converted with OpenCC s2hk and\n\
-         split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
-         bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
+         seen at least {min} times. Each corpus is extracted, converted to Hong Kong\n\
+         Traditional Chinese with OpenCC and split into clauses as described in\n\
+         bench/corpus/ATTRIBUTION.md and bench/colloquial/ATTRIBUTION.md of the QIM\n\
+         repository.\n",
         min = bigram::MIN_COUNT,
     )
 }
@@ -509,13 +522,16 @@ fn build_personal(root: &Path, transcoder: &Transcoder) -> Result<Option<persona
 fn build_corpus<W: Write>(
     corpus: &Corpus,
     paths: &[PathBuf],
+    forms: &CommonForms,
     transcoder: &Transcoder,
     train: Hashed<W>,
     dev: Hashed<W>,
     dir: &Path,
 ) -> Result<Built, Error> {
     let mut builder = Builder::new(transcoder, train, dev);
-    corpus.texts(paths, |text| builder.add(text).map_err(Error::io(dir)))?;
+    corpus.texts(paths, forms, |text| {
+        builder.add(text).map_err(Error::io(dir))
+    })?;
     let Finished {
         counts,
         bench,

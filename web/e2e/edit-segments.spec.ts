@@ -2,13 +2,15 @@ import { devices, expect, type Page, test } from "@playwright/test";
 
 // 組字中修改（M1 票 21）：移到中間的分段改選，其餘沒選定的分段重算（plan §2.1）。
 // 組字裡選定的分段顯示字詞，沒選定的顯示字根。
-// `anrkboa` 的首選路徑是「門口｜有｜智」三段，中間一段 `kb` 有別的字可選。
-const INPUT = "anrkboa";
+// `anrkbof` 的首選路徑是「門口｜有｜無」三段，中間一段 `kb` 有別的字可選；
+// 改選中間一段後，最後一段 `of` 重算成單打的首選（M1 票 17b 換掉 `anrkboa`：資料包改了之後
+// 它的首選路徑變成「門｜口布｜會」）。
+const INPUT = "anrkbof";
 /** 組字裡沒選定的分段顯示字根（`data/schemes/quick.toml` 的 `[radicals]`）。 */
 const RADICALS: Record<string, string> = {
 	anr: "日弓口",
 	kb: "大月",
-	oa: "人日",
+	of: "人火",
 };
 
 function ui(page: Page) {
@@ -48,11 +50,11 @@ test.describe("實體鍵盤", () => {
 	}, testInfo) => {
 		const { text, composition, segments, items } = ui(page);
 		const kb = await candidatesOf(page, "kb");
-		const [oa] = await candidatesOf(page, "oa");
+		const [last] = await candidatesOf(page, "of");
 
 		await page.keyboard.type(INPUT);
-		await expect(segments).toHaveText(["日弓口", "大月", "人日"]);
-		await expect(items.first()).toHaveText("1門口有智");
+		await expect(segments).toHaveText(["日弓口", "大月", "人火"]);
+		await expect(items.first()).toHaveText("1門口有無");
 
 		await page.keyboard.press("ArrowLeft");
 		await expect(segments.nth(2)).toHaveAttribute("aria-current", "true");
@@ -64,13 +66,13 @@ test.describe("實體鍵盤", () => {
 
 		const other = kb[1];
 		await page.keyboard.type("2");
-		// 前面的「門口」照顯示的字固定，改選的段固定，`oa` 重算。
-		await expect(segments).toHaveText(["門口", other, "人日"]);
+		// 前面的「門口」照顯示的字固定，改選的段固定，`of` 重算。
+		await expect(segments).toHaveText(["門口", other, "人火"]);
 		await expect(text).toHaveValue("");
 		await page.screenshot({ path: testInfo.outputPath("rechosen.png") });
 
 		await page.keyboard.type(" ");
-		await expect(text).toHaveValue(`門口${other}${oa}`);
+		await expect(text).toHaveValue(`門口${other}${last}`);
 		await expect(composition).toHaveText("");
 	});
 
@@ -81,20 +83,20 @@ test.describe("實體鍵盤", () => {
 		const report = page.getByRole("button", { name: "回報", exact: true });
 		const reports = page.getByRole("textbox", { name: /回報的固定題/ });
 		const kb = await candidatesOf(page, "kb");
-		const [oa] = await candidatesOf(page, "oa");
+		const [last] = await candidatesOf(page, "of");
 
 		await page.keyboard.type(INPUT);
 		await segments.nth(1).click();
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
 		await items.nth(1).click();
-		await expect(segments).toHaveText(["門口", kb[1], "人日"]);
+		await expect(segments).toHaveText(["門口", kb[1], "人火"]);
 		await items.first().click();
-		const wanted = `門口${kb[1]}${oa}`;
+		const wanted = `門口${kb[1]}${last}`;
 		await expect(text).toHaveValue(wanted);
 
 		await report.click();
 		await expect(reports).toHaveValue(
-			`${INPUT}\t${wanted}\t網頁回報（首選 門口有智）`,
+			`${INPUT}\t${wanted}\t網頁回報（首選 門口有無）`,
 		);
 	});
 
@@ -142,10 +144,10 @@ test.describe("觸控", () => {
 			return texts;
 		};
 		const kb = await tappedCandidates("kb");
-		const [oa] = await tappedCandidates("oa");
+		const [last] = await tappedCandidates("of");
 
 		await tapKeys(INPUT);
-		await expect(segments).toHaveText(["日弓口", "大月", "人日"]);
+		await expect(segments).toHaveText(["日弓口", "大月", "人火"]);
 		await segments.nth(1).tap();
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
 		expect(await candidateTexts(page)).toEqual(kb);
@@ -153,11 +155,11 @@ test.describe("觸控", () => {
 
 		const other = kb[1];
 		await items.nth(1).tap();
-		await expect(segments).toHaveText(["門口", other, "人日"]);
-		await expect(items.first()).toHaveText(`1${oa}`);
+		await expect(segments).toHaveText(["門口", other, "人火"]);
+		await expect(items.first()).toHaveText(`1${last}`);
 
 		await page.getByTestId("key-space").tap();
-		await expect(text).toHaveValue(`門口${other}${oa}`);
+		await expect(text).toHaveValue(`門口${other}${last}`);
 		await expect(composition).toHaveText("");
 		await page.screenshot({ path: testInfo.outputPath("touch-commit.png") });
 	});
