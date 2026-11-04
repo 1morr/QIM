@@ -51,6 +51,7 @@ fn pack_bytes_with(
         packs: Packs {
             lexicon: lexicon.map(Into::into),
             language_model: language_model.map(Into::into),
+            ..Packs::default()
         },
         ranking: Ranking::default(),
     };

@@ -45,7 +45,7 @@ pub enum Key {
 pub struct Composition {
     /// 已打的輸入碼。
     pub input: String,
-    /// 已打的字根，如「日弓口」（M1）。
+    /// 還沒選定的輸入碼的字根，如 `anr` 的「日弓口」；殼在選定的字詞後面顯示它（brief §4.3）。
     pub radicals: String,
     /// 連打的各分段：選定的在前，接著剩下的輸入碼的首選路徑。
     pub segments: Vec<Segment>,
@@ -121,7 +121,15 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn handle(&mut self, engine: &Engine, _user: &mut UserModel, key: Key) -> Snapshot {
+    pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        let mut snapshot = self.handle_key(engine, user, key);
+        snapshot.composition.radicals = engine
+            .scheme()
+            .radicals_of(snapshot.composition.unselected_input());
+        snapshot
+    }
+
+    fn handle_key(&mut self, engine: &Engine, _user: &mut UserModel, key: Key) -> Snapshot {
         if let Key::Letter(c) = key
             && engine.scheme().alphabet.contains(c)
         {

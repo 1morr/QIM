@@ -58,6 +58,7 @@ fn engine(table: &BTreeMap<String, Vec<char>>, words: &BTreeMap<String, Vec<Stri
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: None,
+            ..Packs::default()
         },
         ranking: Ranking::default(),
     };

@@ -56,13 +56,14 @@ fn lookup_returns_entries_in_stored_order_and_empty_for_unknown_code() {
 #[test]
 fn other_format_version_is_an_error() {
     let mut bytes = sample().to_bytes().unwrap();
-    // 魔數 4 個位元組之後是 postcard varint 的版本號；版本 4 只佔 1 個位元組。
-    assert_eq!(bytes[4], 4);
-    bytes[4] = 5;
+    // 魔數 4 個位元組之後是 postcard varint 的版本號；小於 128 的版本只佔 1 個位元組。
+    let current = u8::try_from(FORMAT_VERSION).unwrap();
+    assert_eq!(bytes[4], current);
+    bytes[4] = current + 1;
     assert_eq!(
         Pack::from_bytes(&bytes),
         Err(PackError::UnsupportedVersion {
-            found: 5,
+            found: FORMAT_VERSION + 1,
             supported: FORMAT_VERSION,
         })
     );

@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 test("打 ar 翻頁找到「問」，用數字鍵上屏", async ({ page }, testInfo) => {
 	const { text, composition, items } = ui(page);
 	await page.keyboard.type("ar");
-	await expect(composition).toHaveText("ar");
+	await expect(composition).toHaveText("日口");
 
 	for (
 		let turned = 0;
@@ -92,7 +92,7 @@ test("Backspace 刪一碼、Esc 清空組字，沒有組字時交給輸入框", 
 	const { text, composition, items } = ui(page);
 	await page.keyboard.type("ar");
 	await page.keyboard.press("Backspace");
-	await expect(composition).toHaveText("a");
+	await expect(composition).toHaveText("日");
 	await expect(items.first()).toHaveText("1日");
 	await page.screenshot({ path: testInfo.outputPath("backspace.png") });
 
