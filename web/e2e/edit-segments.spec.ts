@@ -74,6 +74,30 @@ test.describe("實體鍵盤", () => {
 		await expect(composition).toHaveText("");
 	});
 
+	test("點候選改選中間分段後上屏，「回報」記下整串輸入碼與上屏的字", async ({
+		page,
+	}) => {
+		const { text, segments, items } = ui(page);
+		const report = page.getByRole("button", { name: "回報", exact: true });
+		const reports = page.getByRole("textbox", { name: /回報的固定題/ });
+		const kb = await candidatesOf(page, "kb");
+		const [oa] = await candidatesOf(page, "oa");
+
+		await page.keyboard.type(INPUT);
+		await segments.nth(1).click();
+		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
+		await items.nth(1).click();
+		await expect(segments).toHaveText(["門口", kb[1], "人日"]);
+		await items.first().click();
+		const wanted = `門口${kb[1]}${oa}`;
+		await expect(text).toHaveValue(wanted);
+
+		await report.click();
+		await expect(reports).toHaveValue(
+			`${INPUT}\t${wanted}\t網頁回報（首選 門口有智）`,
+		);
+	});
+
 	test("→ 走過最後一段回到整串，候選回到整串的", async ({ page }) => {
 		const { segments, items } = ui(page);
 		await page.keyboard.type(INPUT);

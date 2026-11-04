@@ -151,6 +151,12 @@ pub struct WebSnapshot {
     /// 為假時網頁不攔截這個鍵，交給瀏覽器。
     #[wasm_bindgen(readonly)]
     pub handled: bool,
+    /// 組字的整串輸入碼，含已選定的分段的碼；「回報」用。
+    #[wasm_bindgen(readonly)]
+    pub input: String,
+    /// 已選定的分段接起來的字詞；「回報」用。
+    #[wasm_bindgen(readonly)]
+    pub selected: String,
     /// 組字的各分段，依輸入碼的順序。
     #[wasm_bindgen(readonly)]
     pub segments: Vec<WebSegment>,
@@ -171,6 +177,8 @@ impl From<Snapshot> for WebSnapshot {
     fn from(s: Snapshot) -> Self {
         Self {
             handled: s.handled,
+            input: s.composition.input.clone(),
+            selected: s.composition.selected_text(),
             focus: s.composition.focus,
             segments: s
                 .composition

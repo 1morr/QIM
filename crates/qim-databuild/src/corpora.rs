@@ -62,7 +62,9 @@ pub struct Corpus {
     /// `sources.toml` 的 `[source.<id>]`。
     pub source_id: &'static str,
     pub group: Group,
-    /// 訓練 bigram 時次數乘上的權重；口語語料量小，權重由 M1 票 12 用口語集的 dev 切分調。
+    /// bigram 與詞庫字頻的次數乘上的權重（plan §4.3）。口語語料只有維基的約 1/127 句，
+    /// M1 票 12 在 dev 切分上掃 1–256 定為 64：口語集修正次數少約三成，維基集答錯多約 2%；
+    /// 再往上口語只再好一點、維基退得更多（票 12 Comments）。
     pub weight: u64,
     format: Format,
     /// 署名：來源名稱、網址、作者與引用、授權網址、QIM 怎麼抽出文字。
@@ -106,7 +108,7 @@ pub const CORPORA: [Corpus; 4] = [
         name: "hkcancor",
         source_id: "hkcancor",
         group: Group::Colloquial,
-        weight: 1,
+        weight: 64,
         format: Format::HkCanCor,
         title: "Hong Kong Cantonese Corpus (HKCanCor), transcriptions",
         site: "https://github.com/fcbond/hkcancor",
@@ -118,7 +120,7 @@ pub const CORPORA: [Corpus; 4] = [
         name: "common-voice-yue",
         source_id: "common_voice",
         group: Group::Colloquial,
-        weight: 1,
+        weight: 64,
         format: Format::Lines,
         title: "Mozilla Common Voice sentence collection, Cantonese (yue and zh-HK)",
         site: "https://github.com/common-voice/common-voice",

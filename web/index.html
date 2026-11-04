@@ -22,6 +22,12 @@
 				</label>
 			</div>
 			<div id="keyboard" data-testid="keyboard" hidden></div>
+			<section id="report-panel" aria-label="回報">
+				<button id="report" type="button" disabled>回報</button>
+				<label for="reports">回報的固定題（<code>bench/fixed.tsv</code> 的行；期望的字不對可以直接改）</label>
+				<textarea id="reports" rows="3" spellcheck="false"></textarea>
+				<button id="copy-reports" type="button">複製全部</button>
+			</section>
 		</main>
 		<script type="module" src="/src/main.ts"></script>
 	</body>

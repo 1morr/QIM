@@ -34,3 +34,4 @@ Blocked by: 10, 18
 - merge main（票 13、22）：字根改放在每個分段（`Segment.radicals`），`handle`、`select`、`focus_segment` 回傳前都經 `with_radicals` 補上；`Composition.radicals` 改成 `unselected_radicals()`，不留兩份。網頁沒選定的分段顯示字根，本票 e2e 改讀字根。
 - 點候選和票 22 的長按候選衝突（都在 `pointerdown`）：改成放開時才選字、長按到門檻切換提示不選字、按住滑動兩者都不做（Gboard 的做法），brief §4.4 補上；票 22 的兩個 e2e 原本「點一下不叫出提示」，現在點一下會選字上屏，改成先驗選字再重打。
 - merge 後重跑：`data --verify` 通過（格式 5），`bench --check` 通過、各集合答錯與修正次數和 baseline 相同，`cargo xtask check` 全套通過（e2e 41 項）。
+- 第二次 merge main（票 12）：`WebSnapshot` 加回 `input`、`selected` 給「回報」用；點候選算選字（`chosen`），點分段不算；新增 e2e「點候選改選中間分段後上屏，回報記下整串輸入碼與上屏的字」。merge 後 `data --verify`、`bench --check`（公開集合與票 12 的 baseline 相同）、`cargo xtask check`（e2e 44 項）都通過。

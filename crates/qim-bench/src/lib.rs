@@ -11,7 +11,7 @@ mod score;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use qim_core::{Engine, LanguageModelPack, LexiconPack, Pack};
+use qim_core::{Engine, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking};
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
@@ -30,6 +30,16 @@ pub const FIXED: &str = "bench/fixed.tsv";
 /// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
 pub const CORPUS_DIRS: [&str; 2] = ["bench/corpus", "bench/colloquial"];
 pub const BASELINE: &str = "bench/baseline.json";
+/// dev 模式的題目：[`CORPUS_DIRS`] 每個集合 `name` 的 dev 切分，相對 repo 根目錄；
+/// `cargo xtask data` 寫的，不進 git。
+pub fn dev_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev.tsv")
+}
+/// dev 模式裡由集合 `<名>` 的句子取出的短輸入，集合名是 `<名>` 接這些字尾：
+/// 每個字（單字），與句子裡出現的詞庫的詞（2 到 [`SHORT_WORD_CHARS`] 字）。
+pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];
+/// [`SHORT_INPUTS`] 的詞最長幾個字：個人集幾乎都在 4 字以內。
+pub const SHORT_WORD_CHARS: usize = 4;
 /// 個人集的題目，由 `cargo xtask data` 從 [`PERSONAL_USERDB`] 轉出；只在本機（plan §5.2）。
 pub const PERSONAL: &str = "bench/personal/rime-userdb.tsv";
 /// 使用者放的 Rime 學習資料；基準不直接讀它，只在題目還沒轉出時提示。
@@ -130,7 +140,7 @@ impl<T> Personal<T> {
 
 /// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
 pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> {
-    let (engine, packs) = load_engine(root)?;
+    let (engine, packs, _) = load_engine(root, &[])?;
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let mut latency_inputs: Vec<String> = fixed.iter().map(Item::input).collect();
     let fixed = score::score(&engine, "fixed", &fixed, false);
@@ -186,6 +196,103 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
         latency,
         violations,
     })
+}
+
+/// dev 模式的結果：調參用（plan §2.3、§5.2），只報、不比 baseline，不跑個人集與每鍵延遲。
+#[derive(Debug)]
+pub struct DevOutcome {
+    pub packs: Vec<LoadedPack>,
+    /// 這次用的打分參數：方案檔的值套上覆寫之後。
+    pub ranking: Ranking,
+    pub fixed: SetResult,
+    /// 各語料集合的 dev 切分，順序同 [`Outcome::sets`]；每個集合後面接它的短輸入
+    /// （[`SHORT_INPUTS`]、[`items::substrings`]）：dev 都是長句，幾乎沒有 1、2 字的題，
+    /// 看不出參數讓兩碼的字被兩個一碼字壓過、或單打一個詞時選錯（票 07、12；個人集七成是兩字詞）。
+    pub sets: Vec<SetResult>,
+}
+
+impl DevOutcome {
+    pub fn report(&self) -> String {
+        report::render_dev(self)
+    }
+}
+
+/// dev 模式：照 [`run`] 的方式打各集合的 dev 切分（[`dev_items`]）與固定題。`overrides` 是
+/// `<鍵>=<值>`，暫時蓋掉方案檔 `[ranking]` 的同名欄位，資料包不變。
+pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> {
+    let overrides = overrides
+        .iter()
+        .map(|o| {
+            o.split_once('=')
+                .ok_or_else(|| format!("覆寫要寫成 key=value：{o}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let (engine, packs, lexicon) = load_engine(root, &overrides)?;
+    let lexicon = lexicon.unwrap_or_default();
+    let is_word = |item: &Item| {
+        let text = item.expected();
+        lexicon.lookup(&item.input()).iter().any(|w| w.text == text)
+    };
+    let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
+    let fixed = score::score(&engine, "fixed", &fixed, false);
+    let mut sets = Vec::new();
+    for (name, _) in load_corpora(root)? {
+        let rel = dev_items(&name);
+        let path = root.join(&rel);
+        let text = fs::read_to_string(&path)
+            .map_err(|e| format!("讀不到 {rel}：{e}；先跑 `cargo xtask data`"))?;
+        let items = parse_corpus(&text).map_err(|e| format!("{rel}：{e}"))?;
+        sets.push(score::score(&engine, &name, &items, false));
+        let [chars, words] = SHORT_INPUTS;
+        let short = items::substrings(&items, 1);
+        sets.push(score::score(
+            &engine,
+            &format!("{name}{chars}"),
+            &short,
+            false,
+        ));
+        let short: Vec<Item> = (2..=SHORT_WORD_CHARS)
+            .flat_map(|len| items::substrings(&items, len))
+            .filter(|item| is_word(item))
+            .collect();
+        sets.push(score::score(
+            &engine,
+            &format!("{name}{words}"),
+            &short,
+            false,
+        ));
+    }
+    Ok(DevOutcome {
+        packs,
+        ranking: engine.scheme().ranking,
+        fixed,
+        sets,
+    })
+}
+
+/// `--set` 能蓋的鍵：方案檔 `[ranking]` 的欄位名。
+const RANKING_KEYS: [&str; 4] = ["word_bonus", "segment_penalty", "beam", "sentences"];
+
+/// 把 `key=value` 套到 `ranking`；鍵見 [`RANKING_KEYS`]。
+fn override_ranking(ranking: &mut Ranking, key: &str, value: &str) -> Result<(), String> {
+    fn parse<T: std::str::FromStr>(key: &str, value: &str) -> Result<T, String> {
+        value
+            .parse()
+            .map_err(|_| format!("{key} 的值不對：{value}"))
+    }
+    match key {
+        "word_bonus" => ranking.word_bonus = parse(key, value)?,
+        "segment_penalty" => ranking.segment_penalty = parse(key, value)?,
+        "beam" => ranking.beam = parse(key, value)?,
+        "sentences" => ranking.sentences = parse(key, value)?,
+        _ => {
+            return Err(format!(
+                "沒有這個打分參數：{key}（可用 {}）",
+                RANKING_KEYS.join("、")
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn write(path: &Path, contents: &str) -> Result<(), String> {
@@ -268,7 +375,7 @@ impl Learning {
 /// `UserModel`）與學習開（整個集合共用一個 `UserModel`，打完一題學一題）的修正次數。
 /// 只報不擋，不讀也不寫 baseline。
 pub fn run_learning(root: &Path) -> Result<Learning, String> {
-    let (engine, packs) = load_engine(root)?;
+    let (engine, packs, _) = load_engine(root, &[])?;
     let mut sets: Vec<LearningSet> = load_corpora(root)?
         .into_iter()
         .map(|(name, items)| score::learning(&engine, &name, &items, false))
@@ -286,8 +393,12 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 讀 [`PACK`] 與方案指名的詞庫、語言模型資料包，建 `Engine`。
-fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
+/// 讀 [`PACK`] 與方案指名的詞庫、語言模型資料包，建 `Engine`；`overrides` 蓋掉方案的打分參數。
+/// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
+fn load_engine(
+    root: &Path,
+    overrides: &[(&str, &str)],
+) -> Result<(Engine, Vec<LoadedPack>, Option<Lexicon>), String> {
     let load = |rel: String| -> Result<(Vec<u8>, LoadedPack), String> {
         let path = root.join(&rel);
         let bytes = fs::read(&path).map_err(|e| {
@@ -300,7 +411,10 @@ fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
         Ok((bytes, LoadedPack { path: rel, sha256 }))
     };
     let (bytes, loaded) = load(PACK.into())?;
-    let pack = Pack::from_bytes(&bytes).map_err(|e| format!("{PACK}：{e}"))?;
+    let mut pack = Pack::from_bytes(&bytes).map_err(|e| format!("{PACK}：{e}"))?;
+    for (key, value) in overrides {
+        override_ranking(&mut pack.scheme.ranking, key, value)?;
+    }
     let mut packs = vec![loaded];
     // 方案指名的另一份資料包：`build/packs/<id>/<id>.pack`，解不開時報它的路徑。
     let mut named = |id: &Option<String>| -> Result<Option<(Vec<u8>, String)>, String> {
@@ -318,8 +432,9 @@ fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
             LanguageModelPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}"))
         })
         .transpose()?;
+    let copy = lexicon.as_ref().map(|l| l.lexicon.clone());
     let engine = Engine::new(pack, lexicon, language_model).map_err(|e| format!("{PACK}：{e}"))?;
-    Ok((engine, packs))
+    Ok((engine, packs, copy))
 }
 
 fn read(path: &Path) -> Result<String, String> {
