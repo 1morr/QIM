@@ -55,11 +55,11 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `upstream_file`：上游釘住 sha256 的授權檔（`files` 之一）整份寫進 `LICENSE`（rime-essay 的 `LICENSE`）。
   - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包、bigram 進語言模型資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
-- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分相加的字頻（plan §4.2），在語料之後建；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建。三種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
+- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。速成資料包的 `<id>` 是方案 id（`quick`）；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 的詞與詞頻，加上各語料 train 切分相加的字頻（plan §4.2），在語料之後建；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建；字根提示資料包的 `<id>` 是 `[packs]` 的 `radical_hint`（`cangjie-hint`），是 libcangjie 每個漢字的倉頡三代 / 五代碼（plan §4.1 步驟 5，`crates/qim-databuild/src/radical_hint.rs`），授權只有 libcangjie，`Engine` 不載入它，由殼另外載入顯示（ADR 0003）。四種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。
 - 預設佈局：`build/layouts/gboard-quick.json`，Gboard 速成的手機直向與橫向，各有字母、符號、常用（自訂頁面的示範）三頁，由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式 `qim-layout/1` 的型別與 JSON Schema 在 `crates/qim-layout`（`schema/qim-layout-1.schema.json`）。不讀來源、沒有授權檔。內建佈局的嚴格檢查（plan §5.3）是 `crates/qim-databuild/tests/gboard.rs` 的測試，跟著 `cargo xtask check` 的 `test` 跑；網頁載入佈局時把驗證的警告印在瀏覽器 console。
 - 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`chars.tsv`（字頻，見〈語料〉），後三者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 45 秒，`--verify` 把語料再建一次、bigram 再訓練一次比 sha256，約 80 秒（Apple M6，release）。
 
-`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、三份資料包的 sha256、詞庫的詞數與被門檻和字集濾掉的數量、有字頻的字數、bigram 的字數與剪枝前後的相鄰字對數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）與 `anr` 的「門口」經 `qim-core` 的 `Engine` 查，與網頁同一條路。
+`--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、四份資料包的 sha256、詞庫的詞數與被門檻和字集濾掉的數量、有字頻的字數、bigram 的字數與剪枝前後的相鄰字對數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）與 `anr` 的「門口」經 `qim-core` 的 `Engine` 查，與網頁同一條路。
 
 ### 語料
 
@@ -183,7 +183,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 `cargo xtask web` 做兩件事，邏輯在 `xtask/src/web.rs`：
 
 1. 用 release 編 `qim-wasm` 到 `wasm32-unknown-unknown`，`wasm-bindgen --target web` 產生到 `web/src/wasm/`，`web/src/main.ts` 直接 import。
-2. 把 `build/packs/`、`build/layouts/` 整個複製到 `web/public/packs/`、`web/public/layouts/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`、`/packs/quick-lexicon/quick-lexicon.pack`、`/packs/zh-hant-bigram/zh-hant-bigram.pack` 與觸控鍵盤的 `/layouts/gboard-quick.json`。有一個不存在就失敗，先跑 `cargo xtask data`。
+2. 把 `build/packs/`、`build/layouts/` 整個複製到 `web/public/packs/`、`web/public/layouts/`（先清掉舊的），網頁 fetch `/packs/quick/quick.pack`、`/packs/quick-lexicon/quick-lexicon.pack`、`/packs/zh-hant-bigram/zh-hant-bigram.pack`、`/packs/cangjie-hint/cangjie-hint.pack` 與觸控鍵盤的 `/layouts/gboard-quick.json`。有一個不存在就失敗，先跑 `cargo xtask data`。
 
 這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 

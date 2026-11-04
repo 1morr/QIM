@@ -26,10 +26,11 @@ fn engine(data: &Data) -> Engine {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
-        radicals: BTreeMap::new(),
+        radicals: BTreeMap::from([('a', "日".into()), ('n', "弓".into()), ('r', "口".into())]),
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: Some("unigram".into()),
+            ..Packs::default()
         },
         ranking: data.ranking,
     };
@@ -184,6 +185,16 @@ fn selecting_a_beginning_fixes_that_segment_and_composes_the_rest_again() {
     assert_eq!(texts(&selected), ["口"]);
 
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
+}
+
+#[test]
+fn composition_shows_the_radicals_of_the_input_not_yet_selected() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    assert_eq!(typed.composition.radicals, "日弓口");
+    let selected = ime.select(&typed, "門");
+    assert_eq!(selected.composition.radicals, "口");
+    assert_eq!(ime.press(Key::Escape).composition.radicals, "");
 }
 
 #[test]

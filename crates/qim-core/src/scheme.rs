@@ -18,6 +18,19 @@ pub struct Scheme {
     pub ranking: Ranking,
 }
 
+impl Scheme {
+    /// 輸入碼的字根，如 `anr` →「日弓口」；方案沒有字根的鍵顯示原字母。
+    pub fn radicals_of(&self, code: &str) -> String {
+        code.chars()
+            .map(|c| {
+                self.radicals
+                    .get(&c)
+                    .map_or_else(|| c.to_string(), Clone::clone)
+            })
+            .collect()
+    }
+}
+
 /// 方案要搭配的其他資料包的 id（方案檔的 `[packs]`）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Packs {
@@ -25,6 +38,8 @@ pub struct Packs {
     pub lexicon: Option<String>,
     /// 語言模型資料包（[`crate::LanguageModelPack`]）；沒指名時打分只剩 β、γ。
     pub language_model: Option<String>,
+    /// 字根提示資料包（[`crate::RadicalHintPack`]），只給殼顯示，[`crate::Engine`] 不載入。
+    pub radical_hint: Option<String>,
 }
 
 /// 連打的打分參數（方案檔的 `[ranking]`，plan §2.3）。

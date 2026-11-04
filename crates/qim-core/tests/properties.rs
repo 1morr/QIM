@@ -67,6 +67,7 @@ fn engine_for(
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: None,
+            ..Packs::default()
         },
         ranking: Ranking::default(),
     };

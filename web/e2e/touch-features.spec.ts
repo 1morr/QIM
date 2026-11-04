@@ -103,7 +103,7 @@ test("組字中長按選字母：先上屏組字再接字母", async ({ page }) 
 test("點一下不彈長按清單，照常組字", async ({ page }) => {
 	await tapKeys(page, ["q"]);
 	await expect(page.getByTestId("long-press")).toBeHidden();
-	await expect(page.getByTestId("composition")).toHaveText("q");
+	await expect(page.getByTestId("composition")).toHaveText("手");
 });
 
 test("符號頁：打兩個符號仍在符號頁，按「ABC」回字母頁", async ({
@@ -125,7 +125,7 @@ test("符號頁：打兩個符號仍在符號頁，按「ABC」回字母頁", as
 
 test("組字中切到符號頁組字留著，按符號先上屏組字再接符號", async ({ page }) => {
 	await tapKeys(page, ["a", "n", "r", "to-symbols"]);
-	await expect(page.getByTestId("composition")).toHaveText("anr");
+	await expect(page.getByTestId("composition")).toHaveText("日弓口");
 	await tapKeys(page, ["？"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
 		"門口？",
@@ -165,7 +165,7 @@ test("按住按鍵顯示放大預覽，放開消失", async ({ page }, testInfo)
 	await page.screenshot({ path: testInfo.outputPath("preview.png") });
 	await hand.up();
 	await expect(preview).toBeHidden();
-	await expect(page.getByTestId("composition")).toHaveText("n");
+	await expect(page.getByTestId("composition")).toHaveText("弓");
 });
 
 test("系統深色時按鍵用佈局的深色版本", async ({ page }, testInfo) => {
@@ -267,7 +267,7 @@ test("快打時前一指還沒放開就按下一鍵，兩個鍵都打得出、�
 	await send("touchStart", [n, r]);
 	await send("touchEnd", [n]);
 	await send("touchEnd", [r]);
-	await expect(page.getByTestId("composition")).toHaveText("anr");
+	await expect(page.getByTestId("composition")).toHaveText("日弓口");
 	await expect(page.getByTestId("key-preview")).toBeHidden();
 });
 

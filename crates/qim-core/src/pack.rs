@@ -3,10 +3,10 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{CodeTable, LanguageModel, Lexicon, Scheme};
+use crate::{CodeTable, LanguageModel, Lexicon, RadicalHints, Scheme};
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 /// 輸入方案資料包檔頭的魔數。
 const SCHEME_MAGIC: &[u8; 4] = b"QIMP";
@@ -14,6 +14,8 @@ const SCHEME_MAGIC: &[u8; 4] = b"QIMP";
 const LEXICON_MAGIC: &[u8; 4] = b"QIML";
 /// 語言模型資料包檔頭的魔數。
 const LANGUAGE_MODEL_MAGIC: &[u8; 4] = b"QIMB";
+/// 字根提示資料包檔頭的魔數。
+const RADICAL_HINT_MAGIC: &[u8; 4] = b"QIMH";
 
 /// 一個輸入方案的資料包：方案與它的碼表。
 ///
@@ -42,6 +44,16 @@ pub struct LanguageModelPack {
     pub model: LanguageModel,
 }
 
+/// 字根提示資料包：字 → 倉頡三代 / 五代碼（plan §4.1 步驟 5）。方案用
+/// [`crate::Packs::radical_hint`] 指名它的 `id`，殼用 [`RadicalHints::for_scheme`] 取出。
+///
+/// 位元組格式：魔數 `QIMH`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RadicalHintPack {
+    pub id: String,
+    pub hints: RadicalHints,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackError {
     /// 檔頭不是這種資料包的魔數。
@@ -59,6 +71,11 @@ pub enum PackError {
     },
     /// 給的語言模型資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
     LanguageModelMismatch {
+        expected: Option<String>,
+        found: Option<String>,
+    },
+    /// 給的字根提示資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
+    RadicalHintMismatch {
         expected: Option<String>,
         found: Option<String>,
     },
@@ -82,6 +99,12 @@ impl fmt::Display for PackError {
             Self::LanguageModelMismatch { expected, found } => write!(
                 f,
                 "方案指名的語言模型是 {}，給的是 {}",
+                name(expected),
+                name(found)
+            ),
+            Self::RadicalHintMismatch { expected, found } => write!(
+                f,
+                "方案指名的字根提示是 {}，給的是 {}",
                 name(expected),
                 name(found)
             ),
@@ -148,5 +171,15 @@ impl LanguageModelPack {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
         decode(LANGUAGE_MODEL_MAGIC, bytes)
+    }
+}
+
+impl RadicalHintPack {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
+        encode(RADICAL_HINT_MAGIC, self)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
+        decode(RADICAL_HINT_MAGIC, bytes)
     }
 }

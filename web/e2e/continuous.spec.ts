@@ -30,7 +30,7 @@ test("連打一串、按數字選開頭一段、再按空白，上屏兩段合�
 	await text.focus();
 	// 門口有人：門 an、口 r、有 kb、人 o。
 	await page.keyboard.type("anrkbo");
-	await expect(composition).toHaveText("anrkbo");
+	await expect(composition).toHaveText("日弓口大月人");
 	const texts = (await items.allTextContents()).map((t) =>
 		t.replace(/^\d/, ""),
 	);
@@ -39,7 +39,7 @@ test("連打一串、按數字選開頭一段、再按空白，上屏兩段合�
 	await page.screenshot({ path: testInfo.outputPath("type-anrkbo.png") });
 
 	await page.keyboard.type(String(first + 1));
-	await expect(composition).toHaveText("門口kbo");
+	await expect(composition).toHaveText("門口大月人");
 	await expect(text).toHaveValue("");
 	const rest = (await items.first().textContent())?.replace(/^1/, "") ?? "";
 	expect(rest).not.toBe("");

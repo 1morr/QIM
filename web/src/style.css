@@ -17,7 +17,7 @@ body {
 	margin: 2rem;
 }
 
-.toggles {
+.settings {
 	display: flex;
 	gap: 0.5rem;
 }
@@ -52,6 +52,12 @@ textarea {
 #candidates li {
 	flex-shrink: 0;
 	white-space: nowrap;
+}
+
+#candidates .radical-hint {
+	margin-left: 0.25rem;
+	color: gray;
+	font-size: 0.875rem;
 }
 
 #candidates .index {

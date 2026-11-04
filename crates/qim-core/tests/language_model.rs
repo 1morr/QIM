@@ -19,6 +19,7 @@ fn scheme(language_model: Option<&str>) -> Scheme {
         packs: Packs {
             lexicon: Some("lexicon".into()),
             language_model: language_model.map(Into::into),
+            ..Packs::default()
         },
         ranking: Ranking::default(),
     }
