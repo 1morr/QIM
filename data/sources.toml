@@ -184,3 +184,30 @@ sha256 = "35352aef4833c2631b2144bc85623cc44d5a09221dda9c32178ea024300d34d3"
 path = "LICENSE"
 url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/LICENSE"
 sha256 = "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308"
+
+# ESDB（English Speller Database，舊名 SCOWL，plan §4.4）：英文資料包 scowl-en-us 的詞表，中文狀態的英文候選用。
+# 取 en-wl/wordlist release rel-2026.02.25 的 hunspell-en_US zip：官方的 size 60、美式、預設變體詞表
+# （zip 裡 README_en_US.txt 的「Wordlist Command: mk-list --accents=strip en_US 60」，由 commit 7e99eda 建出）。
+# 不從 repo 的 data/ 自己組：要跑 ESDB 自己的 Python + SQLite 工具（combine.py 合併十幾份來源檔），
+# 建置就多一種語言的依賴；release 的檔是同一份資料、釘得住 sha256。
+# 取用：en_US.dic 的詞幹照 en_US.aff 的字首、字尾規則展開成全部詞形；標 NOSUGGEST（!）的禁忌詞整個不收；
+# 只留轉成小寫後全是 a–y 的詞（z 不在速成字母表，撇號、連字號、數字也打不出）；同一個小寫拼法有幾種
+# 大小寫時取全小寫的，沒有就取字典序最前的（English、NASA）。規則在 crates/qim-databuild/src/english.rs。
+# size 只有 ≤ 60 這一級，沒有逐詞的 size：英文候選只看整串是不是完整單字，用不到常見度。
+# 授權：Copyright 檔寫官方拼字字典（非澳式）只需要 === 前那段聲明；整份照抄進資料包的 LICENSE。
+# .aff 是 Geoff Kuenning 的 BSD 授權，QIM 只用它展開詞形、不散布它，資料包的 NOTICE 註明展開方式。
+[source.scowl]
+repository = "https://github.com/en-wl/wordlist"
+version = "rel-2026.02.25"
+license = "LicenseRef-SCOWL"
+license_text = { upstream_file = "Copyright" }
+
+[[source.scowl.files]]
+path = "hunspell-en_US-2026.02.25.zip"
+url = "https://github.com/en-wl/wordlist/releases/download/rel-2026.02.25/hunspell-en_US-2026.02.25.zip"
+sha256 = "ac8e73310e951d88c52c2cf2ba54ceaca34f8486a81630ac8a75dc5f931179f9"
+
+[[source.scowl.files]]
+path = "Copyright"
+url = "https://raw.githubusercontent.com/en-wl/wordlist/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/Copyright"
+sha256 = "090575a131b4260926c7a6b30a90aca0f5db5fbb5c46778e0c5855227bf6ebc3"

@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use crate::lattice::{self, Lattice};
 use crate::user::personal_bonus;
 use crate::{
-    CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, PackError,
-    Scheme, Simplifier, SimplifierPack, UserModel, Word,
+    CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel, LanguageModelPack, Lexicon,
+    LexiconPack, Pack, PackError, Scheme, Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -24,6 +24,8 @@ pub struct Engine {
     word_log_total: f64,
     /// 簡體模式的轉換；沒掛上簡繁資料包時是 `None`，簡體模式照原樣輸出。
     simplifier: Option<Simplifier>,
+    /// 英文候選的詞表；沒掛上英文資料包時是空的，沒有英文候選。
+    english: EnglishWords,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -83,6 +85,7 @@ impl Engine {
             longest_word_code,
             lexicon,
             simplifier: None,
+            english: EnglishWords::default(),
         })
     }
 
@@ -90,6 +93,21 @@ impl Engine {
     pub fn with_simplifier(mut self, pack: SimplifierPack) -> Self {
         self.simplifier = Some(pack.simplifier);
         self
+    }
+
+    /// 掛上英文資料包，英文候選（[`crate::Options::english_candidates`]）才有作用。
+    pub fn with_english(mut self, pack: EnglishPack) -> Self {
+        self.english = pack.words;
+        self
+    }
+
+    /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan §2.4）：剛好是詞表裡的完整單字、又長過
+    /// 方案一個字的最長碼時才有。不容錯、不補全；1–2 碼的英文字（`an`、`it`）和單字的碼撞得太常，
+    /// macOS 速成也是第 3 碼起才出英文（黑箱 T7）。
+    pub(crate) fn english_candidate(&self, input: &str) -> Option<&str> {
+        (input.len() > usize::from(self.scheme.max_code_length))
+            .then(|| self.english.lookup(input))
+            .flatten()
     }
 
     /// 簡體模式下輸出的文字；沒掛上簡繁資料包時照原樣。
@@ -118,9 +136,10 @@ impl Engine {
     }
 
     /// 整串輸入碼在 `user` 之下的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
+    /// 不含英文候選：它是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
-        lattice::candidates(self, user, &Lattice::from_input(self, user, input))
+        lattice::candidates(self, user, &Lattice::from_input(self, user, input), false)
             .into_iter()
             .map(|c| c.text)
             .collect()

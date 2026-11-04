@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{
-    CharModel, CodeEntry, CodeTable, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack,
-    Packs, Ranking, Scheme, Word,
+    CharModel, CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel, LanguageModelPack,
+    Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Word,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -70,6 +70,16 @@ const TABLE: &[(&str, &str)] = &[
     ("c", "一二三四五六七八九十"),
 ];
 
+/// 英文資料包：基準照網頁掛上（預設開英文候選）。`aba` 是英文字，但沒有題目打它。
+fn english_bytes() -> Vec<u8> {
+    EnglishPack {
+        id: "scowl-en-us".into(),
+        words: EnglishWords::new(["aba"]),
+    }
+    .to_bytes()
+    .unwrap()
+}
+
 /// 固定題 `a 日`；語料 `toy` 三句，見檔頭。
 fn repo() -> TempDir {
     let dir = TempDir::new().unwrap();
@@ -78,6 +88,7 @@ fn repo() -> TempDir {
         "build/packs/quick/quick.pack",
         &pack_bytes(TABLE),
     );
+    write(dir.path(), qim_bench::ENGLISH_PACK, &english_bytes());
     write(
         dir.path(),
         "bench/fixed.tsv",
@@ -495,6 +506,14 @@ fn pack_line(repo: &TempDir) -> String {
         .find(|line| line.contains("資料包"))
         .unwrap_or_else(|| panic!("報告沒有指出資料包：{report}"))
         .to_string()
+}
+
+#[test]
+fn a_missing_english_pack_fails_with_its_path() {
+    let repo = repo();
+    fs::remove_file(repo.path().join(qim_bench::ENGLISH_PACK)).unwrap();
+    let error = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(error.contains(qim_bench::ENGLISH_PACK), "{error}");
 }
 
 #[test]

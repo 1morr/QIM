@@ -1,18 +1,31 @@
 // WebAssembly 的每鍵延遲（plan §5.2）：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈首選字基準〉。
 //
-// 用法：node bench/latency.ts <資料包路徑> [<詞庫資料包路徑> [<語言模型資料包路徑>]]，stdin 一行一個輸入碼。
+// 用法：node bench/latency.ts <資料包路徑>…，stdin 一行一個輸入碼。資料包依檔頭的魔數分辨
+// （`crates/qim-core/src/pack.rs`），順序不拘：速成方案一份必給，詞庫、語言模型、英文各至多一份。
 // stdout 第一行是 runtime，之後每個輸入一行、各鍵的毫秒數以空白分隔。
 // 用網頁同一份綁定（`web/src/wasm/`）；每鍵計時含網頁畫組字與候選要讀的欄位。
 
 import { readFileSync } from "node:fs";
 import { initSync, Session } from "../src/wasm/qim_wasm.js";
 
-const [packPath, lexiconPath, languageModelPath, ...extra] =
-	process.argv.slice(2);
-if (packPath === undefined || extra.length > 0) {
-	console.error(
-		"用法：node bench/latency.ts <資料包路徑> [<詞庫資料包路徑> [<語言模型資料包路徑>]]，stdin 一行一個輸入碼",
-	);
+const USAGE =
+	"用法：node bench/latency.ts <資料包路徑>…（速成方案必給，詞庫、語言模型、英文選給），stdin 一行一個輸入碼";
+/** 檔頭魔數 → 資料包種類。 */
+const KINDS: Record<string, "pack" | "lexicon" | "languageModel" | "english"> =
+	{ QIMP: "pack", QIML: "lexicon", QIMB: "languageModel", QIME: "english" };
+
+const packs: Partial<Record<(typeof KINDS)[string], Uint8Array>> = {};
+for (const path of process.argv.slice(2)) {
+	const bytes = readFileSync(path);
+	const kind = KINDS[bytes.subarray(0, 4).toString("latin1")];
+	if (kind === undefined || packs[kind] !== undefined) {
+		console.error(`${path}：不認得的資料包或同種給了兩份。${USAGE}`);
+		process.exit(2);
+	}
+	packs[kind] = bytes;
+}
+if (packs.pack === undefined) {
+	console.error(USAGE);
 	process.exit(2);
 }
 
@@ -22,9 +35,11 @@ initSync({
 	),
 });
 const session = new Session(
-	readFileSync(packPath),
-	lexiconPath === undefined ? undefined : readFileSync(lexiconPath),
-	languageModelPath === undefined ? undefined : readFileSync(languageModelPath),
+	packs.pack,
+	packs.lexicon,
+	packs.languageModel,
+	undefined,
+	packs.english,
 );
 const inputs = readFileSync(0, "utf8")
 	.split("\n")

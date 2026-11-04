@@ -29,6 +29,8 @@ pub(crate) struct CandidateSpan {
     pub len: usize,
     /// 組成它的各段，依輸入碼的順序、接起來是 `text`；上屏時學習用（plan §2.4）。
     pub segments: Vec<PathSegment>,
+    /// 英文候選（排位規則 4）：選了它和 Enter 一樣不學。
+    pub english_candidate: bool,
 }
 
 impl CandidateSpan {
@@ -42,6 +44,7 @@ impl CandidateSpan {
             }],
             text,
             len,
+            english_candidate: false,
         }
     }
 }
@@ -152,11 +155,13 @@ impl Lattice {
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
 /// 3. 只蓋住開頭一段的字詞，蓋得長的在前，同長依分數排。
 ///
-/// 文字重複的只留第一個。接著依序套用排位規則（[`RULES`]）。
+/// 文字重複的只留第一個。`english_candidates` 為真、整串輸入碼是英文單字（[`Engine::english_candidate`]）、
+/// 又有其他候選時，最後加上那個英文字。接著依序套用排位規則（[`RULES`]）。
 pub(crate) fn candidates(
     engine: &Engine,
     user: &UserModel,
     lattice: &Lattice,
+    english_candidates: bool,
 ) -> Vec<CandidateSpan> {
     let input = lattice.input();
     let n = input.len();
@@ -179,6 +184,7 @@ pub(crate) fn candidates(
                     text: node.text.clone(),
                     len: n,
                     segments: lattice.path(n, k),
+                    english_candidate: false,
                 };
                 (node.score, span)
             }),
@@ -201,12 +207,24 @@ pub(crate) fn candidates(
             .map(move |(_, text)| CandidateSpan::single(text, len))
     });
     let mut seen = HashSet::new();
-    let list: Vec<CandidateSpan> = full
+    let mut list: Vec<CandidateSpan> = full
         .chain(triggered)
         .chain(extension)
         .chain(prefixes)
         .filter(|c| seen.insert(c.text.clone()))
         .collect();
+    // 沒有中文候選時不出英文：它不搶首選（brief §4.3）。
+    if let Some(word) = english_candidates
+        .then(|| engine.english_candidate(input))
+        .flatten()
+        && !list.is_empty()
+        && seen.insert(word.to_string())
+    {
+        list.push(CandidateSpan {
+            english_candidate: true,
+            ..CandidateSpan::single(word.to_string(), n)
+        });
+    }
     let mut ranked = Ranked {
         engine,
         user,
@@ -221,8 +239,12 @@ pub(crate) fn candidates(
 }
 
 /// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
-/// 規則 4 在 M1 票 15。
-const RULES: [fn(&mut Ranked); 3] = [triggered_first, chosen_twice_first, used_word_second];
+const RULES: [fn(&mut Ranked); 4] = [
+    triggered_first,
+    chosen_twice_first,
+    used_word_second,
+    english_second,
+];
 
 /// 套用排位規則中的候選列：排定的候選釘在它的位置，其餘的依原本的順序填進空著的位置。
 struct Ranked<'a> {
@@ -274,6 +296,21 @@ impl Ranked<'_> {
                 .find(open)
                 .or_else(|| (position + 1..total).find(open))
                 .expect("free 不是空的，總有空位")
+        };
+        let candidate = self.free.remove(from);
+        self.pinned.insert(target, candidate);
+    }
+
+    /// 把 `free` 的第 `from` 個排定在第 `position` 位；那裡已排定時移到它後面最前的空位，不往前移。
+    fn pin_at_or_after(&mut self, from: usize, position: usize) {
+        let current = self.position_of_free(from);
+        // 它現在的位置是空位，所以 `position` 起找得到、不會超過它；排得比 `position` 前時留在原位。
+        let target = if current < position {
+            current
+        } else {
+            (position..=current)
+                .find(|p| !self.pinned.contains_key(p))
+                .expect("它自己的位置是空位")
         };
         let candidate = self.free.remove(from);
         self.pinned.insert(target, candidate);
@@ -353,5 +390,12 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
 fn used_word_second(ranked: &mut Ranked) {
     if let Some(i) = ranked.most_recent(UserModel::last_tick_if_used_word) {
         ranked.pin_at_most(i, 1);
+    }
+}
+
+/// 規則 4：英文候選排第 2 位（brief §4.3）；第 2 位已由前面的規則排定時排在它後面最前的空位。
+fn english_second(ranked: &mut Ranked) {
+    if let Some(i) = ranked.free.iter().position(|c| c.english_candidate) {
+        ranked.pin_at_or_after(i, 1);
     }
 }
