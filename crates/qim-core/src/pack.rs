@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{CodeTable, LanguageModel, Lexicon, Scheme};
 
-/// 資料包格式的版本，兩種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
+/// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
 pub const FORMAT_VERSION: u32 = 4;
 
 /// 輸入方案資料包檔頭的魔數。

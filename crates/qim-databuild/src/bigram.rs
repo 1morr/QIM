@@ -55,6 +55,8 @@ pub struct Summary {
     pub characters: usize,
     /// 不重複的 bigram 數。
     pub bigrams: usize,
+    /// 剪枝門檻：留下次數 ≥ 它的 bigram。
+    pub min_count: u64,
     /// 剪枝後留下的 bigram 數。
     pub kept: usize,
     /// Kneser-Ney 的折扣 `D`。
@@ -66,7 +68,7 @@ impl fmt::Display for Summary {
         write!(
             f,
             "bigram：{} 字、不重複的相鄰字 {} 對，留下次數 ≥ {} 的 {} 對（D = {:.3}）",
-            self.characters, self.bigrams, MIN_COUNT, self.kept, self.discount
+            self.characters, self.bigrams, self.min_count, self.kept, self.discount
         )
     }
 }
@@ -132,6 +134,7 @@ pub fn train(counter: &Counter, vocabulary: usize, min_count: u64) -> (LanguageM
     let summary = Summary {
         characters: unigrams.len(),
         bigrams: bigrams.len(),
+        min_count,
         kept: kept.len(),
         discount,
     };

@@ -1,5 +1,6 @@
 //! `cargo xtask data` 的整條流程：讀來源、建資料包、寫產物，選擇性驗證。
 
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -256,7 +257,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             .code_table
             .iter()
             .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
-            .collect::<std::collections::BTreeSet<char>>()
+            .collect::<BTreeSet<char>>()
             .len();
         let (model, summary) = bigram::train(&counter, vocabulary, bigram::MIN_COUNT);
         let bytes = LanguageModelPack {
@@ -370,8 +371,7 @@ fn language_model_about(id: &str) -> String {
          above, counting adjacent characters within each clause, and pruned to the pairs\n\
          seen at least {min} times. Each corpus is extracted, converted with OpenCC s2hk and\n\
          split into clauses as described in bench/corpus/ATTRIBUTION.md and\n\
-         bench/colloquial/ATTRIBUTION.md of the QIM repository. The pack holds statistics\n\
-         only, no text of the corpora.\n",
+         bench/colloquial/ATTRIBUTION.md of the QIM repository.\n",
         min = bigram::MIN_COUNT,
     )
 }

@@ -257,26 +257,22 @@ fn load_engine(root: &Path) -> Result<(Engine, Vec<LoadedPack>), String> {
     let (bytes, loaded) = load(PACK.into())?;
     let pack = Pack::from_bytes(&bytes).map_err(|e| format!("{PACK}：{e}"))?;
     let mut packs = vec![loaded];
-    let lexicon = match &pack.scheme.packs.lexicon {
-        Some(id) => {
-            let (bytes, loaded) = load(format!("{PACKS}/{id}/{id}.pack"))?;
-            let lexicon =
-                LexiconPack::from_bytes(&bytes).map_err(|e| format!("{}：{e}", loaded.path))?;
-            packs.push(loaded);
-            Some(lexicon)
-        }
-        None => None,
+    // 方案指名的另一份資料包：`build/packs/<id>/<id>.pack`，解不開時報它的路徑。
+    let mut named = |id: &Option<String>| -> Result<Option<(Vec<u8>, String)>, String> {
+        let Some(id) = id else { return Ok(None) };
+        let (bytes, loaded) = load(format!("{PACKS}/{id}/{id}.pack"))?;
+        let path = loaded.path.clone();
+        packs.push(loaded);
+        Ok(Some((bytes, path)))
     };
-    let language_model = match &pack.scheme.packs.language_model {
-        Some(id) => {
-            let (bytes, loaded) = load(format!("{PACKS}/{id}/{id}.pack"))?;
-            let model = LanguageModelPack::from_bytes(&bytes)
-                .map_err(|e| format!("{}：{e}", loaded.path))?;
-            packs.push(loaded);
-            Some(model)
-        }
-        None => None,
-    };
+    let lexicon = named(&pack.scheme.packs.lexicon)?
+        .map(|(bytes, path)| LexiconPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}")))
+        .transpose()?;
+    let language_model = named(&pack.scheme.packs.language_model)?
+        .map(|(bytes, path)| {
+            LanguageModelPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}"))
+        })
+        .transpose()?;
     let engine = Engine::new(pack, lexicon, language_model).map_err(|e| format!("{PACK}：{e}"))?;
     Ok((engine, packs))
 }

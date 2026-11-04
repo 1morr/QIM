@@ -37,6 +37,7 @@ fn interpolated_kneser_ney_without_pruning() {
         Summary {
             characters: 3,
             bigrams: 3,
+            min_count: 1,
             kept: 3,
             discount: 0.5,
         }
