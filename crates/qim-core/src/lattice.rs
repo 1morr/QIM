@@ -209,7 +209,6 @@ pub(crate) fn candidates(
         .collect();
     let mut ranked = Ranked {
         engine,
-        scheme: &engine.scheme().id,
         user,
         input,
         free: list,
@@ -223,12 +222,11 @@ pub(crate) fn candidates(
 
 /// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
 /// 規則 4 在 M1 票 15。
-const RULES: [fn(&mut Ranked); 3] = [triggered_first, recent_twice_first, used_word_second];
+const RULES: [fn(&mut Ranked); 3] = [triggered_first, chosen_twice_first, used_word_second];
 
 /// 套用排位規則中的候選列：排定的候選釘在它的位置，其餘的依原本的順序填進空著的位置。
 struct Ranked<'a> {
     engine: &'a Engine,
-    scheme: &'a str,
     user: &'a UserModel,
     /// 這列候選的輸入碼；規則比對的是它（plan §2.4）。
     input: &'a str,
@@ -239,6 +237,10 @@ struct Ranked<'a> {
 }
 
 impl Ranked<'_> {
+    fn scheme(&self) -> &str {
+        &self.engine.scheme().id
+    }
+
     /// 還沒排定、蓋滿整串的候選與它在 `free` 的位置。
     fn free_full(&self) -> impl Iterator<Item = (usize, &CandidateSpan)> {
         let n = self.input.len();
@@ -248,6 +250,16 @@ impl Ranked<'_> {
             .filter(move |(_, c)| c.len == n)
     }
 
+    /// 還沒排定、蓋滿整串的候選裡，`tick` 有值且最大（最近）的一個在 `free` 的位置。
+    fn most_recent(
+        &self,
+        tick: impl Fn(&UserModel, &str, &str, &str) -> Option<u64>,
+    ) -> Option<usize> {
+        self.free_full()
+            .filter_map(|(i, c)| Some((tick(self.user, self.scheme(), self.input, &c.text)?, i)))
+            .max()
+            .map(|(_, i)| i)
+    }
     /// 把 `free` 的第 `from` 個排定在第 `position` 位或更前面：本來就在那裡就釘在原位，
     /// 否則移到不超過 `position` 的空位裡最後面的一個；那些位置都排定了，就移到最前面的空位。
     fn pin_at_most(&mut self, from: usize, position: usize) {
@@ -295,7 +307,7 @@ impl Ranked<'_> {
 fn triggered_first(ranked: &mut Ranked) {
     let first = ranked
         .user
-        .triggered(ranked.scheme, ranked.input)
+        .triggered(ranked.scheme(), ranked.input)
         .into_iter()
         .next();
     let at = first.and_then(|text| ranked.free_full().find(|(_, c)| c.text == text));
@@ -304,16 +316,21 @@ fn triggered_first(ranked: &mut Ranked) {
     }
 }
 
-/// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。
-/// 沒有這樣的候選時，整串上屏剛好 1 次的不靠學到的分數成首選（「選兩次才成首選」，brief
-/// §4.5）：學過一次的個人分常勝過靜態機率很低的詞與句子，排第一的是它、而不學習時的首選
-/// 不是它，就改回不學習時的首選。
-fn recent_twice_first(ranked: &mut Ranked) {
-    twice_chosen_first(ranked);
-    if ranked.pinned.contains_key(&0) {
-        return;
+/// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。沒有這樣的
+/// 候選時，整串上屏剛好 1 次的不靠學到的分數成首選（[`once_chosen_keeps_the_unlearned_top`]）。
+fn chosen_twice_first(ranked: &mut Ranked) {
+    if let Some(i) = ranked.most_recent(UserModel::last_tick_if_chosen_twice) {
+        ranked.pin_at_most(i, 0);
+    } else {
+        once_chosen_keeps_the_unlearned_top(ranked);
     }
-    let (user, scheme, input) = (ranked.user, ranked.scheme, ranked.input);
+}
+
+/// 「選兩次才成首選」（brief §4.5）：學過一次的個人分常勝過靜態機率很低的詞與句子；排第一的
+/// 是整串上屏剛好 1 次的候選、而不學習時的首選不是它，就改回不學習時的首選。不學習時的首選
+/// 不是蓋滿整串的候選時不動。
+fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
+    let (user, scheme, input) = (ranked.user, ranked.scheme(), ranked.input);
     let top_once = ranked
         .free
         .first()
@@ -332,34 +349,9 @@ fn recent_twice_first(ranked: &mut Ranked) {
     }
 }
 
-fn twice_chosen_first(ranked: &mut Ranked) {
-    let most_recent = ranked
-        .free_full()
-        .filter_map(|(i, c)| {
-            let tick =
-                ranked
-                    .user
-                    .last_tick_if_chosen_twice(ranked.scheme, ranked.input, &c.text)?;
-            Some((tick, i))
-        })
-        .max();
-    if let Some((_, i)) = most_recent {
-        ranked.pin_at_most(i, 0);
-    }
-}
-
 /// 規則 3：碼是整串、上屏過的使用者詞（含自動造詞）至少排第 2 位；多個取最近上屏的。
 fn used_word_second(ranked: &mut Ranked) {
-    let most_recent = ranked
-        .free_full()
-        .filter_map(|(i, c)| {
-            let tick = ranked
-                .user
-                .last_tick_if_used_word(ranked.scheme, ranked.input, &c.text)?;
-            Some((tick, i))
-        })
-        .max();
-    if let Some((_, i)) = most_recent {
+    if let Some(i) = ranked.most_recent(UserModel::last_tick_if_used_word) {
         ranked.pin_at_most(i, 1);
     }
 }

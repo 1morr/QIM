@@ -1,6 +1,7 @@
 import { type Key, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
 import "./style.css";
+import { element } from "./dom.ts";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
 import { mountUserDict, type UserDict } from "./user-dict.ts";
 import init, {
@@ -20,14 +21,6 @@ const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
 const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
-
-function element<T extends HTMLElement>(selector: string): T {
-	const found = document.querySelector<T>(selector);
-	if (!found) {
-		throw new Error(`index.html 少了 ${selector}`);
-	}
-	return found;
-}
 
 const text = element<HTMLTextAreaElement>("#text");
 const composition = element<HTMLElement>("#composition");

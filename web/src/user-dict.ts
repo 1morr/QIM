@@ -1,21 +1,14 @@
 // 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v1`。
 
+import { element } from "./dom.ts";
 import type { Session } from "./wasm/qim_wasm.js";
 
 /** 學習資料在 `localStorage` 的鍵；值是 `Session.exportUserDict()` 的 TSV。 */
-export const USER_DICT_KEY = "qim.userdict";
+const USER_DICT_KEY = "qim.userdict";
 /** 載入時匯入失敗的資料搬到這裡，免得下次上屏被空白資料蓋掉。 */
 const BROKEN_KEY = "qim.userdict.broken";
 /** 匯出檔名；副檔名照內容是 TSV。 */
 const EXPORT_NAME = "qim-userdict.tsv";
-
-function element<T extends HTMLElement>(selector: string): T {
-	const found = document.querySelector<T>(selector);
-	if (!found) {
-		throw new Error(`index.html 少了 ${selector}`);
-	}
-	return found;
-}
 
 /** `JsError` 與其他例外的訊息。 */
 function message(error: unknown): string {

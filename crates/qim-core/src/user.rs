@@ -47,7 +47,21 @@ enum WordSource {
     /// 使用者手動加的。
     Manual,
     /// 自動造詞：分段選字上屏學到的。
-    Auto,
+    AutoPhrase,
+}
+
+/// 匯出檔「來源」欄的值：只有學習計數的是 `learned`，使用者詞照它的來源。
+const SOURCE_NAMES: [(Option<WordSource>, &str); 3] = [
+    (None, "learned"),
+    (Some(WordSource::Manual), "manual"),
+    (Some(WordSource::AutoPhrase), "auto"),
+];
+
+impl SchemeModel {
+    /// 碼 `code` 的使用者詞，沒有就建一個空的。
+    fn words_at(&mut self, code: &str) -> &mut BTreeMap<String, UserWord> {
+        self.words.entry(code.to_string()).or_default()
+    }
 }
 
 /// 一個（輸入方案, 輸入碼, 候選文字）的計數。兩種上屏分開記（plan §2.4）：
@@ -73,7 +87,7 @@ impl UserModel {
         if segments.is_empty() {
             return;
         }
-        let model = self.schemes.entry(scheme.to_string()).or_default();
+        let model = self.scheme_mut(scheme);
         model.tick += 1;
         let tick = model.tick;
         let whole: (String, String) = (
@@ -128,19 +142,13 @@ impl UserModel {
             .code_of(text)
             .or_else(|| trigger.map(String::from))
             .ok_or(UserWordError::NoCode)?;
-        self.schemes
-            .entry(scheme.id.clone())
-            .or_default()
-            .words
-            .entry(code)
-            .or_default()
-            .insert(
-                text.to_string(),
-                UserWord {
-                    source: WordSource::Manual,
-                    trigger: trigger.map(String::from),
-                },
-            );
+        self.scheme_mut(&scheme.id).words_at(&code).insert(
+            text.to_string(),
+            UserWord {
+                source: WordSource::Manual,
+                trigger: trigger.map(String::from),
+            },
+        );
         Ok(())
     }
 
@@ -169,17 +177,17 @@ impl UserModel {
     /// 自動造詞（plan §2.4）：把（`code`, `text`）記成使用者詞；已經是使用者詞的不動。
     /// 上屏次數由同一次上屏的 [`UserModel::learn`] 記。
     pub(crate) fn add_auto_phrase(&mut self, scheme: &str, code: &str, text: &str) {
-        self.schemes
-            .entry(scheme.to_string())
-            .or_default()
-            .words
-            .entry(code.to_string())
-            .or_default()
+        self.scheme_mut(scheme)
+            .words_at(code)
             .entry(text.to_string())
             .or_insert(UserWord {
-                source: WordSource::Auto,
+                source: WordSource::AutoPhrase,
                 trigger: None,
             });
+    }
+
+    fn scheme_mut(&mut self, scheme: &str) -> &mut SchemeModel {
+        self.schemes.entry(scheme.to_string()).or_default()
     }
 
     /// 碼剛好是 `code` 的使用者詞。
@@ -287,11 +295,11 @@ impl UserModel {
                     .copied()
                     .unwrap_or_default();
                 let word = model.words.get(code).and_then(|w| w.get(text));
-                let source = match word.map(|w| w.source) {
-                    None => "learned",
-                    Some(WordSource::Manual) => "manual",
-                    Some(WordSource::Auto) => "auto",
-                };
+                let source = word.map(|w| w.source);
+                let (_, source) = SOURCE_NAMES
+                    .into_iter()
+                    .find(|&(s, _)| s == source)
+                    .expect("每種來源都有名字");
                 let trigger = word.and_then(|w| w.trigger.as_deref()).unwrap_or("");
                 out.push_str(&format!(
                     "{scheme}\t{text}\t{code}\t{}\t{}\t{}\t{}\t{source}\t{trigger}\n",
@@ -336,7 +344,7 @@ impl UserModel {
             if !seen.insert((row.scheme, row.code, row.text)) {
                 return Err(error("同方案、同輸入碼、同詞的列重複"));
             }
-            let model = user.schemes.entry(row.scheme.to_string()).or_default();
+            let model = user.scheme_mut(row.scheme);
             // 手動加了還沒用過的詞沒有計數，匯出時寫 0；這裡也不建計數。
             if row.count != Count::default() {
                 model
@@ -346,11 +354,7 @@ impl UserModel {
                     .insert(row.text.to_string(), row.count);
             }
             if let Some(word) = row.word {
-                model
-                    .words
-                    .entry(row.code.to_string())
-                    .or_default()
-                    .insert(row.text.to_string(), word);
+                model.words_at(row.code).insert(row.text.to_string(), word);
             }
             // 沒有 tick 行時，方案的 tick 取最大的最後 tick。
             model.tick = model.tick.max(row.count.last_tick);
@@ -405,22 +409,18 @@ impl<'a> Row<'a> {
             last_tick: integer(last_tick)?,
         };
         let trigger = (!trigger.is_empty()).then(|| trigger.to_string());
+        let (source, _) = SOURCE_NAMES
+            .into_iter()
+            .find(|&(_, name)| name == source)
+            .ok_or("來源要是 manual、learned 或 auto")?;
         let word = match source {
-            "learned" if trigger.is_some() => {
-                return Err("學到的（learned）不是使用者詞，沒有觸發詞");
+            None if trigger.is_some() => return Err("學到的（learned）不是使用者詞，沒有觸發詞"),
+            None if count.decayed == 0.0 => return Err("學到的（learned）要有衰減值"),
+            Some(WordSource::AutoPhrase) if trigger.is_some() => {
+                return Err("自動造詞沒有觸發詞");
             }
-            "learned" if count.decayed == 0.0 => return Err("學到的（learned）要有衰減值"),
-            "learned" => None,
-            "manual" => Some(UserWord {
-                source: WordSource::Manual,
-                trigger,
-            }),
-            "auto" if trigger.is_some() => return Err("自動造詞沒有觸發詞"),
-            "auto" => Some(UserWord {
-                source: WordSource::Auto,
-                trigger: None,
-            }),
-            _ => return Err("來源要是 manual、learned 或 auto"),
+            None => None,
+            Some(source) => Some(UserWord { source, trigger }),
         };
         Ok(Self {
             scheme,
