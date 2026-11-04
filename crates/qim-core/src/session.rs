@@ -2,6 +2,7 @@
 
 use crate::Engine;
 use crate::lattice::{self, CandidateSpan, Lattice};
+use crate::punctuation;
 
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
@@ -21,7 +22,10 @@ pub struct Options {
 /// 殼轉過來的按鍵。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
+    /// 字母，含大寫；方案的字母表以外的也是，由核心決定怎麼處理。
     Letter(char),
+    /// 數字、字母、空白以外的可見 ASCII 字元（`,`、`.`、`@`…）；`-` / `=` 殼轉成翻頁。
+    Punct(char),
     Space,
     Enter,
     Backspace,
@@ -32,6 +36,8 @@ pub enum Key {
     Left,
     Right,
     ToggleAscii,
+    /// 殼不轉成上面各種的鍵（Tab、Delete、↑ ↓、Home、End…）：組字中吃下，免得宿主拿它改輸入框。
+    Other,
 }
 
 /// 組字狀態。
@@ -123,10 +129,16 @@ impl Session {
             self.refresh_candidates(engine);
             return self.snapshot(true, None);
         }
-        // 沒有組字時其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
+        // 沒有組字時，有全形的標點上屏全形，其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
         if self.lattice.input().is_empty() {
-            return self.snapshot(false, None);
+            return match key {
+                Key::Punct(c) if let Some(full) = punctuation::full_width(c) => {
+                    self.snapshot(true, Some(full.to_string()))
+                }
+                _ => self.snapshot(false, None),
+            };
         }
+        // 組字中每個鍵都吃下：交還宿主的話宿主照打那個字元，組字卻還留著。
         match key {
             Key::Backspace => {
                 self.lattice.pop();
@@ -154,8 +166,55 @@ impl Session {
             Key::PageUp if self.page > 0 => self.turn_to(self.page - 1),
             Key::PageDown if self.has_more() => self.turn_to(self.page + 1),
             Key::PageUp | Key::PageDown => self.snapshot(true, None),
-            _ => self.snapshot(false, None),
+            Key::Enter => {
+                let commit = self.selected_text() + self.lattice.input();
+                self.commit(commit)
+            }
+            Key::Punct(c) => {
+                let punct = punctuation::full_width(c).map_or_else(|| c.to_string(), String::from);
+                self.commit_all_then(engine, &punct)
+            }
+            Key::Letter(c) if !c.is_ascii_lowercase() => {
+                self.commit_all_then(engine, &c.to_string())
+            }
+            // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、← / →（組字中修改，票 21）、
+            // 切換中英（票 23）、其他鍵：先吃下不動作。
+            Key::Letter(_) | Key::Left | Key::Right | Key::ToggleAscii | Key::Other => {
+                self.snapshot(true, None)
+            }
         }
+    }
+
+    /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
+    /// 剩下沒有字的碼原樣上屏。
+    fn commit_all_then(&mut self, engine: &Engine, tail: &str) -> Snapshot {
+        let mut commit = self.selected_text();
+        let mut rest = self.lattice.input().to_string();
+        let mut top = self.candidates.first().cloned();
+        while !rest.is_empty() {
+            let Some(choice) = top else {
+                commit.push_str(&rest);
+                break;
+            };
+            commit.push_str(&choice.text);
+            rest.drain(..choice.len);
+            top = lattice::candidates(engine, &Lattice::from_input(engine, &rest))
+                .into_iter()
+                .next();
+        }
+        commit.push_str(tail);
+        self.commit(commit)
+    }
+
+    /// 已選定的分段接起來的字詞。
+    fn selected_text(&self) -> String {
+        self.selected.iter().map(|s| s.text.as_str()).collect()
+    }
+
+    /// 上屏 `text`、清空組字。
+    fn commit(&mut self, text: String) -> Snapshot {
+        self.clear();
+        self.snapshot(true, Some(text))
     }
 
     /// 選全部候選的第 `index` 個：蓋滿剩下的輸入碼就連同選定的分段一起上屏、清空組字；
@@ -166,14 +225,7 @@ impl Session {
         };
         let input = self.lattice.input().to_string();
         if choice.len == input.len() {
-            let commit: String = self
-                .selected
-                .iter()
-                .map(|s| s.text.as_str())
-                .chain([choice.text.as_str()])
-                .collect();
-            self.clear();
-            return self.snapshot(true, Some(commit));
+            return self.commit(self.selected_text() + &choice.text);
         }
         let (code, rest) = input.split_at(choice.len);
         self.selected.push(Segment {

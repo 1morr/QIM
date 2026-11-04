@@ -286,3 +286,115 @@ fn input_no_path_can_cover_is_one_unselected_segment_without_text() {
     assert_eq!(selected.composition.focus, 1);
     assert!(selected.candidates.is_empty());
 }
+
+// 組字中的其他鍵（brief §4.3）：都吃下，組字不留給宿主。
+
+#[test]
+fn enter_commits_the_input_code_as_typed() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    let entered = ime.press(Key::Enter);
+    assert!(entered.handled);
+    assert_eq!(entered.commit.as_deref(), Some("anr"));
+    assert_eq!(entered.composition.input, "");
+    assert!(entered.candidates.is_empty());
+}
+
+#[test]
+fn enter_after_selecting_a_beginning_commits_its_text_and_the_rest_as_typed() {
+    // librime express_editor 的 Return（`Editor::CommitRawInput`）：已選定的段上屏字，其餘上屏原碼。
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    ime.select(&typed, "門");
+    assert_eq!(ime.press(Key::Enter).commit.as_deref(), Some("門r"));
+}
+
+#[test]
+fn z_arrows_toggle_ascii_and_other_keys_are_swallowed_and_change_nothing() {
+    for key in [
+        Key::Letter('z'),
+        Key::Left,
+        Key::Right,
+        Key::ToggleAscii,
+        Key::Other,
+    ] {
+        let mut ime = Ime::new(&men_kou());
+        let typed = ime.type_code("anr");
+        let pressed = ime.press(key);
+        assert!(pressed.handled, "{key:?}");
+        assert_eq!(pressed.commit, None, "{key:?}");
+        assert_eq!(pressed.composition, typed.composition, "{key:?}");
+        assert_eq!(texts(&pressed), texts(&typed), "{key:?}");
+    }
+}
+
+#[test]
+fn punctuation_commits_the_composition_then_its_full_width_form() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    let pressed = ime.press(Key::Punct(','));
+    assert!(pressed.handled);
+    assert_eq!(pressed.commit.as_deref(), Some("門口，"));
+    assert_eq!(pressed.composition.input, "");
+    assert!(pressed.candidates.is_empty());
+}
+
+#[test]
+fn punctuation_commits_selected_segments_and_the_top_of_the_rest() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anra");
+    ime.select(&typed, "門");
+    assert_eq!(
+        ime.press(Key::Punct('.')).commit.as_deref(),
+        Some("門口日。")
+    );
+}
+
+#[test]
+fn punctuation_commits_the_top_beginnings_in_turn_and_code_with_no_character_as_typed() {
+    // 和一直按空白相同：`ad` 的首選只蓋住 `a`，選了「日」之後 `d` 沒有字，原樣上屏。
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("ad");
+    assert_eq!(ime.press(Key::Punct('?')).commit.as_deref(), Some("日d？"));
+}
+
+#[test]
+fn punctuation_without_a_full_width_form_follows_the_composition_as_typed() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    assert_eq!(ime.press(Key::Punct('@')).commit.as_deref(), Some("門口@"));
+}
+
+#[test]
+fn an_uppercase_letter_commits_the_composition_then_itself() {
+    // librime express_editor 的 `DirectCommit`：不是方案的字元先上屏組字，再照打那個字元。
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    let pressed = ime.press(Key::Letter('A'));
+    assert!(pressed.handled);
+    assert_eq!(pressed.commit.as_deref(), Some("門口A"));
+    assert_eq!(pressed.composition.input, "");
+}
+
+#[test]
+fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_the_host() {
+    let mut ime = Ime::new(&men_kou());
+    let comma = ime.press(Key::Punct(','));
+    assert!(comma.handled);
+    assert_eq!(comma.commit.as_deref(), Some("，"));
+
+    for key in [
+        Key::Punct('@'),
+        Key::Letter('A'),
+        Key::Letter('z'),
+        Key::Enter,
+        Key::Left,
+        Key::Right,
+        Key::ToggleAscii,
+        Key::Other,
+    ] {
+        let pressed = ime.press(key);
+        assert!(!pressed.handled, "{key:?}");
+        assert_eq!(pressed.commit, None, "{key:?}");
+    }
+}
