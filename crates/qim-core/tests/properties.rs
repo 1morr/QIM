@@ -264,4 +264,34 @@ proptest! {
             prop_assert_eq!(together, by_itself, "方案 {} 按 {:?} 後", engines[i].scheme().id, key);
         }
     }
+
+    /// 匯出後匯入等價（plan §5.1）：學過的計數、自動造詞、手動加的詞與觸發詞都還在。
+    #[test]
+    fn exporting_then_importing_gives_an_equal_user_model(
+        table in random_table(),
+        words in random_words(),
+        keys in prop::collection::vec((any::<bool>(), key()), 0..100),
+        added in prop::collection::vec(("[一-十]{1,3}", prop::option::of("[abc]{1,3}")), 0..5),
+    ) {
+        let (other_table, other_words) = other_scheme(&table, &words);
+        let engines = [
+            engine_for("quick", &table, &words),
+            engine_for("cangjie", &other_table, &other_words),
+        ];
+        let mut user = UserModel::default();
+        let mut sessions = [Session::default(), Session::default()];
+        for (second, key) in keys {
+            let i = usize::from(second);
+            sessions[i].handle(&engines[i], &mut user, key);
+        }
+        for (text, trigger) in &added {
+            // 字沒有碼又沒給觸發詞時加不進去，那就不加。
+            let _ = user.add_word(&engines[0], text, trigger.as_deref());
+        }
+
+        let exported = user.export();
+        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v1"));
+        let imported = UserModel::import(&exported);
+        prop_assert_eq!(imported, Ok(user));
+    }
 }

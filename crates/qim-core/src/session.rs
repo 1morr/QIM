@@ -243,6 +243,24 @@ impl Session {
         user.learn(&engine.scheme().id, &segments);
     }
 
+    /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
+    /// 詞，`docs/research/libime-user-model.md` §5）。無痕模式不記。
+    fn add_auto_phrase(
+        &self,
+        engine: &Engine,
+        user: &mut UserModel,
+        segments: &[(String, String)],
+    ) {
+        if self.options.incognito {
+            return;
+        }
+        let code: String = segments.iter().map(|(code, _)| code.as_str()).collect();
+        let text: String = segments.iter().map(|(_, text)| text.as_str()).collect();
+        if !engine.has_entry(&code, &text) {
+            user.add_auto_phrase(&engine.scheme().id, &code, &text);
+        }
+    }
+
     /// 已選定的分段接起來的字詞。
     fn selected_text(&self) -> String {
         self.selected.iter().map(|s| s.text.as_str()).collect()
@@ -262,9 +280,14 @@ impl Session {
         };
         let input = self.lattice.input().to_string();
         if choice.len == input.len() {
+            // 這次之前已選定開頭的分段：整個組字是分兩次以上選定的，自動造詞（plan §2.4）。
+            let auto_phrase = !self.selected.is_empty();
             let mut segments = self.selected_segments();
             segments.extend(owned_segments(&input, &choice));
             self.learn(engine, user, &segments);
+            if auto_phrase {
+                self.add_auto_phrase(engine, user, &segments);
+            }
             return self.commit(self.selected_text() + &choice.text);
         }
         let (code, rest) = input.split_at(choice.len);

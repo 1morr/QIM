@@ -2,6 +2,7 @@ import { type Key, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
 import "./style.css";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
+import { mountUserDict, type UserDict } from "./user-dict.ts";
 import init, {
 	Layout,
 	type LayoutKey,
@@ -47,6 +48,8 @@ const hintVersion = element<HTMLSelectElement>("#hint-version");
 const LONG_PRESS_MS = 500;
 /** 觸控鍵盤；載入完成前是 `undefined`。 */
 let touchKeyboard: Keyboard | undefined;
+/** 學習資料；載入完成前是 `undefined`。 */
+let userDict: UserDict | undefined;
 
 /** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
 async function load(url: string): Promise<Response> {
@@ -175,6 +178,8 @@ function apply(snapshot: Snapshot, chosen: boolean): void {
 	}
 	if (snapshot.commit !== undefined) {
 		insert(snapshot.commit);
+		// 上屏時核心可能學到東西；每次都存，重新整理網頁後還在。
+		userDict?.save();
 	}
 	render(snapshot);
 	touchKeyboard?.refresh();
@@ -265,6 +270,7 @@ async function start(): Promise<void> {
 			load(LAYOUT_URL).then((response) => response.text()),
 		]);
 	const session = new Session(pack, lexicon, languageModel);
+	userDict = mountUserDict(session, () => text.focus());
 	radicalHints = new RadicalHints(radicalHint, session);
 	hintVersion.addEventListener("change", renderCandidates);
 	// 觸控：長按候選叫出字根提示（brief §4.4）。
