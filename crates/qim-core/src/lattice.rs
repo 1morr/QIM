@@ -201,7 +201,7 @@ pub(crate) fn candidates(
         .filter(|c| seen.insert(c.text.clone()))
         .collect();
     let mut ranked = Ranked {
-        engine,
+        scheme: &engine.scheme().id,
         user,
         input,
         list: &mut list,
@@ -219,7 +219,7 @@ const RULES: [fn(&mut Ranked); 1] = [recent_twice_first];
 
 /// 套用排位規則中的候選列。
 struct Ranked<'a> {
-    engine: &'a Engine,
+    scheme: &'a str,
     user: &'a UserModel,
     /// 這列候選的輸入碼；規則比對的是它（plan §2.4）。
     input: &'a str,
@@ -242,14 +242,20 @@ impl Ranked<'_> {
 
 /// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。
 fn recent_twice_first(ranked: &mut Ranked) {
-    let scheme = &ranked.engine.scheme().id;
     let most_recent = ranked
         .list
         .iter()
         .enumerate()
         .skip(ranked.fixed)
         .filter(|(_, c)| c.len == ranked.input.len())
-        .filter_map(|(i, c)| Some((ranked.user.recent_twice(scheme, ranked.input, &c.text)?, i)))
+        .filter_map(|(i, c)| {
+            Some((
+                ranked
+                    .user
+                    .last_tick_if_chosen_twice(ranked.scheme, ranked.input, &c.text)?,
+                i,
+            ))
+        })
         .max();
     if let Some((_, i)) = most_recent {
         ranked.place_next(i);

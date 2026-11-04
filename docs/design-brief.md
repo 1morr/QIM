@@ -309,6 +309,7 @@ QIM（暫名）。
 - Apple 端上基礎模型約 3B 參數；iPhone 15 Pro 每個 prompt token 約 0.6 ms、生成 30 token/s。[Apple ML Research](https://machinelearning.apple.com/research/introducing-apple-foundation-models)。
 - llama.cpp 在 iPhone 15 Pro 的 Q4_0 實測：TinyLlama 1.1B prompt 646 token/s、生成 57 token/s。[llama.cpp #4508](https://github.com/ggml-org/llama.cpp/discussions/4508)。
 - libime：KenLM trie，beam 20；每按一鍵增量更新 lattice 的只有拼音引擎（重用舊的位置、只算改過的），碼表引擎每鍵整個重算；拼音選定開頭一段後清掉 lattice、其餘從頭建。`53df6a2`，[`docs/research/libime-lattice.md`](research/libime-lattice.md)，2026-11-04 查。使用者歷史 bigram 以三個 LRU 池（128 / 8192 / 65536 句）固定權重混入。`fcitx/libime` `src/libime/core/decoder.h`、`historybigram.cpp`。
+- libime 的使用者分數：`max(靜態, log10((1−w)·10^靜態 + w·10^歷史))`，`w = 0.2`，歷史只加分不扣分；歷史機率 = 0.2 × unigram + 0.8 × bigram，unigram 除以滿載歷史的總質量（三池權重合計 1.0），不是已學的句數；計數綁輸入碼的變體（`WordWithCode`）給碼表引擎用。授權 LGPL-2.1-or-later。`53df6a2` `src/libime/core/userlanguagemodel.cpp:122-140`、`historybigram.cpp:578-590,660-688`，[`docs/research/libime-user-model.md`](research/libime-user-model.md)，2026-11-04 查。
 - afm-ime 用 Apple Foundation Models 做異步重排，結果只放第 2 位。`Bemly/afm-ime` `Sources/IMECore/FMReranker.swift`（`a8543a1`）。
 - 可重用的滑動輸入實作：FlorisBoard v0.5.2 `StatisticalGlideTypingClassifier.kt`、AnySoftKeyboard `GestureTypingDetector.java`，皆 Apache-2.0；HeliBoard / OpenBoard 的滑動依賴閉源函式庫。`docs/research/open-source-imes.md` §1。
 - Delta skin 的 `info.json`：每個方向一個 `mappingSize`（設計尺寸）與 `items`，每項有 `frame`（x、y、width、height）與 `extendedEdges`（擴大觸控範圍），依裝置與方向分版本。[Delta skin 文件](https://noah978.gitbook.io/delta-docs/skins)，2026-10-31 查。

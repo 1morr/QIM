@@ -117,7 +117,7 @@ cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.
 cargo xtask bench --learning          # 學習模式：比學習開關的修正次數，見〈學習模式〉
 ```
 
-`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`：
+`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、開無痕（題內也不學）、只經 `Session::handle`：
 
 1. 逐鍵打完輸入碼、不選字，取當下的第一個候選當首選；沒有候選時首選是空字串。途中的首選拿來算跳動。
 2. 模擬使用者選字打出整題，算修正次數與按鍵數：
@@ -173,7 +173,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 ### 學習模式
 
-`cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開（plan §5.2）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關每題用空白的 `UserModel`（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
+`cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開（plan §5.2）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關同一般模式，每題用空白的 `UserModel`、開無痕（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
 
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 

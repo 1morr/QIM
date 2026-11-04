@@ -101,18 +101,17 @@ impl Engine {
         (frequency.max(1) as f64).ln() - self.word_log_total
     }
 
-    /// 碼 `code` 的一段 `text` 的分數（plan §2.3）：ln 機率、詞加 β、扣 γ，加上 `personal`。
+    /// 碼 `code` 的一段 `text` 的分數（plan §2.3）：ln 機率 `log_prob`、加 `bonus`（詞是 β，
+    /// 字是 0）、扣 γ，再加 `personal`。
     fn segment_score(
         &self,
         user: &UserModel,
         code: &str,
         text: &str,
         log_prob: f64,
-        word: bool,
+        bonus: f64,
     ) -> f64 {
-        let ranking = &self.scheme.ranking;
-        let bonus = if word { ranking.word_bonus } else { 0.0 };
-        log_prob + bonus - ranking.segment_penalty
+        log_prob + bonus - self.scheme.ranking.segment_penalty
             + user.personal(&self.scheme.id, code, text, log_prob)
     }
 
@@ -129,8 +128,9 @@ impl Engine {
         }
     }
 
-    /// 剛好是碼 `code` 的連打字集的字與詞。字依分數由高到低、最多 `limit` 個（字序在
-    /// [`Engine::new`] 依字頻排過）；詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
+    /// 剛好是碼 `code` 的連打字集的字與詞。字取字頻最高的 `limit` 個（字序在 [`Engine::new`]
+    /// 依字頻排過），另加 `user` 學過的：它們有 `personal`，靜態排名在後也可能進 beam。
+    /// 詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
     fn exact<'a>(
         &'a self,
         user: &'a UserModel,
@@ -142,11 +142,15 @@ impl Engine {
             .char_entries(code)
             .iter()
             .filter(|e| !e.extension)
-            .take(limit)
+            .enumerate()
+            .filter(move |&(i, e)| {
+                i < limit
+                    || user.has_learned(&self.scheme.id, code, e.text.encode_utf8(&mut [0; 4]))
+            })
+            .map(|(_, e)| e)
             .map(move |e| {
                 let text = e.text.to_string();
-                let score =
-                    self.segment_score(user, code, &text, self.char_log_prob(e.text), false);
+                let score = self.segment_score(user, code, &text, self.char_log_prob(e.text), 0.0);
                 Edge { start, text, score }
             });
         let words = self.lexicon.lookup(code).iter().map(move |w| {
@@ -154,14 +158,20 @@ impl Engine {
             Edge {
                 start,
                 text: w.text.clone(),
-                score: self.segment_score(user, code, &w.text, log_prob, true),
+                score: self.segment_score(
+                    user,
+                    code,
+                    &w.text,
+                    log_prob,
+                    self.scheme.ranking.word_bonus,
+                ),
             }
         });
         chars.chain(words)
     }
 
-    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取分數最高的 beam 個（再多也進不了
-    /// beam），加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
+    /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個（沒學過的再多也
+    /// 進不了 beam）與學過的，加上詞庫的詞。擴展區的字不進 lattice（plan §2.3）。
     pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let end = input.len();
         let longest = self

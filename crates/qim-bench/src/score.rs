@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use qim_core::{Candidate, Engine, Key, Session, Snapshot, UserModel};
+use qim_core::{Candidate, Engine, Key, Options, Session, Snapshot, UserModel};
 
 use crate::items::{Item, Unit};
 
@@ -184,7 +184,7 @@ pub fn score(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetR
         let expected = item.expected();
         let chars = expected.chars().count();
         let (top, jitter) = type_through(engine, &item.units);
-        let typing = simulate(engine, &mut UserModel::default(), &item.units);
+        let typing = simulate(engine, None, &item.units);
         let correct = top == expected;
         result.items.push(ItemResult {
             line: item.line,
@@ -214,7 +214,7 @@ pub struct LearningSet {
     /// 個人集：輸出只有數字（plan §5.2）。
     pub private: bool,
     pub total: usize,
-    /// 每題用空白的 `UserModel`。
+    /// 每題用空白的 `UserModel`，不學。
     pub corrections_off: usize,
     /// 照順序打，整個集合共用一個 `UserModel`。
     pub corrections_on: usize,
@@ -225,8 +225,8 @@ pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> L
     let mut learned = UserModel::default();
     let (mut off, mut on) = (0, 0);
     for item in items {
-        off += simulate(engine, &mut UserModel::default(), &item.units).correction_count;
-        on += simulate(engine, &mut learned, &item.units).correction_count;
+        off += simulate(engine, None, &item.units).correction_count;
+        on += simulate(engine, Some(&mut learned), &item.units).correction_count;
     }
     LearningSet {
         name: name.to_string(),
@@ -285,9 +285,20 @@ struct Typing {
 /// 翻完所有頁都接不上（卡住）時：還剩兩個以上單位就按 Esc 清掉（算一次修正），
 /// 之後一個單位一個單位打；只剩一個單位，或已經一個一個打了還卡住，就是打不出這題。
 ///
-/// 上屏的字詞照常學進 `user`。
-fn simulate(engine: &Engine, user: &mut UserModel, units: &[Unit]) -> Typing {
+/// 有 `learning` 時上屏的字詞照常學進它；沒有時用空白的 `UserModel` 並開無痕，題內也不學。
+fn simulate(engine: &Engine, learning: Option<&mut UserModel>, units: &[Unit]) -> Typing {
     let mut session = Session::default();
+    let mut blank = UserModel::default();
+    let user = match learning {
+        Some(user) => user,
+        None => {
+            session.set_options(Options {
+                incognito: true,
+                ..Options::default()
+            });
+            &mut blank
+        }
+    };
     let mut typing = Typing::default();
     let mut press = |key: Key, typing: &mut Typing| {
         typing.keys += 1;

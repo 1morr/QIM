@@ -35,6 +35,7 @@
 | 2026-11-04 | M1 08 | macOS、iOS 內建速成 T1–T18 寫進 `docs/research/blackbox-baseline.md`；brief §1.3 更新，5 題進 `fixed.tsv`；細節見票 08 | 新 session 下 `/implement .scratch/m1/issues/09-blackbox-gboard.md` |
 | 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
 | 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
+| 2026-11-04 | M1 13 | 學習計數、規則 2、`personal`、無痕與 `set_options`、`bench --learning`（學習開修正較少）；細節見票 13 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md`（11、18 另在並行） |
 
 ## 偏差與決定
 
@@ -72,3 +73,7 @@
 - 2026-11-04 M1 10：`Key` 加 `Punct`、`Other`；亂按找到組字中 Tab、Delete、方向鍵改到輸入框，網頁沒對應的鍵都轉成 `Other`，組字中吃下（plan §2.1）。
 - 2026-11-04 M1 10：網頁加 `node:test` 單元測試與 `check` 的 `unit` 步驟，不加測試框架依賴（`docs/development.md`、plan §1.4）。
 - 2026-11-04 M1 10（協調者要求）：e2e 埠由寫死 5179 改成依 `web/` 路徑算出、`QIM_E2E_PORT` 可蓋，並行 worktree 不互搶，仍不接手別人的伺服器（`docs/development.md`）。
+- 2026-11-04 M1 13：tick 改成每個方案各自累加、只算學到東西的上屏（無痕、Enter 原樣上屏不算），規則 2 的 10,000 次照這個算（plan §2.4；librime 也是每個詞典各自計）。
+- 2026-11-04 M1 13：個人機率 = 衰減值 ÷ 上限 200.5，照 libime 用常數分母；改用實際上屏段數的衰減總和時 `bench --learning` 較差（plan §2.3、票 13 Comments）。
+- 2026-11-04 M1 13：排位規則只移動候選列已有的候選，前面的規則排定的位置後面不動；規則 3、4 的「第 2 位」由票 14、15 擴充（plan §2.4）。
+- 2026-11-04 M1 13：一般模式的基準模擬時開無痕，題內也不學；`--learning` 只報不擋、不寫 baseline（plan §5.2、`docs/development.md`）。

@@ -108,14 +108,24 @@ pub struct LoadedPack {
     pub sha256: String,
 }
 
-/// 個人集這次的狀況。
+/// 個人集這次的狀況；`Ran` 平常是結果，讀檔時是題目。
 #[derive(Debug)]
-pub enum Personal {
-    Ran(SetResult),
+pub enum Personal<T = SetResult> {
+    Ran(T),
     /// 沒有 [`PERSONAL_USERDB`]：跳過。
     Missing,
     /// 有 [`PERSONAL_USERDB`]，但 [`PERSONAL`] 不是由它轉出（還沒轉，或資料換過）：跳過，提示先跑 `cargo xtask data`。
     NotTranscoded,
+}
+
+impl<T> Personal<T> {
+    fn map<U>(self, f: impl FnOnce(T) -> U) -> Personal<U> {
+        match self {
+            Personal::Ran(t) => Personal::Ran(f(t)),
+            Personal::Missing => Personal::Missing,
+            Personal::NotTranscoded => Personal::NotTranscoded,
+        }
+    }
 }
 
 /// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
@@ -129,13 +139,8 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
         latency_inputs.extend(items.iter().map(Item::input));
         sets.push(score::score(&engine, &name, &items, false));
     }
-    let personal = match load_personal(root)? {
-        PersonalItems::Ran(items) => {
-            Personal::Ran(score::score(&engine, PERSONAL_SET, &items, true))
-        }
-        PersonalItems::Missing => Personal::Missing,
-        PersonalItems::NotTranscoded => Personal::NotTranscoded,
-    };
+    let personal =
+        load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
     let pack_paths: Vec<PathBuf> = packs.iter().map(|p| root.join(&p.path)).collect();
     let latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
@@ -198,32 +203,25 @@ fn load_baseline(path: &Path, tolerate_bad_format: bool) -> Result<Option<Baseli
     }
 }
 
-/// 個人集的題目，或跳過的原因（同 [`Personal`]）。
-enum PersonalItems {
-    Ran(Vec<Item>),
-    Missing,
-    NotTranscoded,
-}
-
 /// 個人集：沒有 [`PERSONAL_USERDB`] 就跳過；題目檔第一行記的來源 sha256 要等於現在的
 /// [`PERSONAL_USERDB`]，否則是還沒轉出或換過資料沒重轉，也跳過，免得安靜地跑舊題目。
-fn load_personal(root: &Path) -> Result<PersonalItems, String> {
+fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
     let userdb = root.join(PERSONAL_USERDB);
     if !userdb.exists() {
-        return Ok(PersonalItems::Missing);
+        return Ok(Personal::Missing);
     }
     let items = root.join(PERSONAL);
     if !items.exists() {
-        return Ok(PersonalItems::NotTranscoded);
+        return Ok(Personal::NotTranscoded);
     }
     let source = fs::read(&userdb).map_err(|e| format!("讀不到 {}：{e}", userdb.display()))?;
     let text = read(&items)?;
     let header = format!("{PERSONAL_SOURCE_HEADER}{}", sha256_hex(&source));
     if text.lines().next() != Some(header.as_str()) {
-        return Ok(PersonalItems::NotTranscoded);
+        return Ok(Personal::NotTranscoded);
     }
     let items = parse_personal(&text).map_err(|e| format!("{PERSONAL}：{e}"))?;
-    Ok(PersonalItems::Ran(items))
+    Ok(Personal::Ran(items))
 }
 
 /// 各語料集合的名稱與題目，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
@@ -275,7 +273,7 @@ pub fn run_learning(root: &Path) -> Result<Learning, String> {
         .into_iter()
         .map(|(name, items)| score::learning(&engine, &name, &items, false))
         .collect();
-    if let PersonalItems::Ran(items) = load_personal(root)? {
+    if let Personal::Ran(items) = load_personal(root)? {
         sets.push(score::learning(&engine, PERSONAL_SET, &items, true));
     }
     Ok(Learning { packs, sets })

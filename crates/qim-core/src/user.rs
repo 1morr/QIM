@@ -23,12 +23,12 @@ struct SchemeModel {
     /// 這個方案學習過的上屏次數；學習計數的時間（plan §2.4），不讀系統時間。
     tick: u64,
     /// 輸入碼 → 候選文字 → 計數。
-    entries: BTreeMap<String, BTreeMap<String, Learned>>,
+    entries: BTreeMap<String, BTreeMap<String, Count>>,
 }
 
 /// 一個（輸入方案, 輸入碼, 候選文字）的計數。
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Learned {
+struct Count {
     /// 上屏次數，不衰減，排位規則的門檻用。
     commits: u64,
     /// 衰減值：每次上屏加一，舊的隨上屏次數指數衰減（librime `formula_d`）；記的是
@@ -59,42 +59,52 @@ impl UserModel {
             }
         }
         for (code, text) in keys {
-            let learned = model
+            let count = model
                 .entries
                 .entry(code.to_string())
                 .or_default()
                 .entry(text.to_string())
-                .or_insert(Learned {
+                .or_insert(Count {
                     commits: 0,
                     decayed: 0.0,
                     last_tick: tick,
                 });
-            learned.decayed = 1.0 + learned.decayed * decay(tick - learned.last_tick);
-            learned.commits += 1;
-            learned.last_tick = tick;
+            count.decayed = 1.0 + count.decayed * decay(tick - count.last_tick);
+            count.commits += 1;
+            count.last_tick = tick;
         }
     }
 
+    /// 這組（方案, 碼, 字詞）學過沒有。
+    pub(crate) fn has_learned(&self, scheme: &str, code: &str, text: &str) -> bool {
+        self.get(scheme, code, text).is_some()
+    }
+
     /// 排位規則 2（plan §2.4）：上屏次數 ≥ 2 且距最後上屏不超過 [`RECENT_COMMITS`] 次時，
-    /// 回傳最後上屏的 tick，越大越近。
-    pub(crate) fn recent_twice(&self, scheme: &str, code: &str, text: &str) -> Option<u64> {
-        let (model, learned) = self.get(scheme, code, text)?;
-        (learned.commits >= 2 && model.tick - learned.last_tick <= RECENT_COMMITS)
-            .then_some(learned.last_tick)
+    /// 回傳最後上屏的 tick，越大越近；否則是 `None`。
+    pub(crate) fn last_tick_if_chosen_twice(
+        &self,
+        scheme: &str,
+        code: &str,
+        text: &str,
+    ) -> Option<u64> {
+        let (model, count) = self.get(scheme, code, text)?;
+        (count.commits >= 2 && model.tick - count.last_tick <= RECENT_COMMITS)
+            .then_some(count.last_tick)
     }
 
     /// `personal`（plan §2.3）：學過的（輸入碼, 字詞）在任何長度的連打裡加的分，只加不減。
     /// `log_static` 是這一段原本的 ln 機率；沒學過時是 0。
     pub(crate) fn personal(&self, scheme: &str, code: &str, text: &str, log_static: f64) -> f64 {
-        let Some((model, learned)) = self.get(scheme, code, text) else {
+        let Some((model, count)) = self.get(scheme, code, text) else {
             return 0.0;
         };
-        let p = learned.decayed * decay(model.tick - learned.last_tick) / max_decayed();
+        let p = count.decayed * decay(model.tick - count.last_tick) / max_decayed();
         let mixed = ((1.0 - PERSONAL_WEIGHT) * log_static.exp() + PERSONAL_WEIGHT * p).ln();
         (mixed - log_static).max(0.0)
     }
 
-    fn get(&self, scheme: &str, code: &str, text: &str) -> Option<(&SchemeModel, &Learned)> {
+    fn get(&self, scheme: &str, code: &str, text: &str) -> Option<(&SchemeModel, &Count)> {
         let model = self.schemes.get(scheme)?;
         Some((model, model.entries.get(code)?.get(text)?))
     }

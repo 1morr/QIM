@@ -89,6 +89,18 @@ impl Ime {
         self.press(user, Key::Digit(u8::try_from(at + 1).unwrap()))
     }
 
+    /// 打 `code`，翻頁找到文字是 `text` 的候選，按數字鍵選它。
+    fn choose_on_any_page(&mut self, user: &mut UserModel, code: &str, text: &str) -> Snapshot {
+        let mut shown = self.type_code(user, code);
+        loop {
+            if let Some(at) = shown.candidates.iter().position(|c| c.text == text) {
+                return self.press(user, Key::Digit(u8::try_from(at + 1).unwrap()));
+            }
+            assert!(shown.has_more, "`{code}` 翻完都沒有「{text}」");
+            shown = self.press(user, Key::PageDown);
+        }
+    }
+
     /// 打 `code` 的首選，回傳後清掉組字。
     fn top_of(&mut self, user: &mut UserModel, code: &str) -> String {
         let shown = self.type_code(user, code);
@@ -239,4 +251,27 @@ fn choosing_twice_in_incognito_mode_learns_nothing() {
     ime.session.set_options(Options::default());
     ime.choose(&mut user, "ab", "丙");
     assert_eq!(ime.top_of(&mut user, "ab"), "甲", "關掉無痕後只選了一次");
+}
+
+/// 字頻排在第 21 名以後的字（beam 20 之外），學過一次後在連打裡也加分。
+#[test]
+fn a_learned_character_beyond_the_beam_also_scores_in_longer_input() {
+    // 「倀」起連續 25 個字，字頻都一樣，依碼表的順序排。
+    let many: String = (0x5000..0x5019).filter_map(char::from_u32).collect();
+    let last = many.chars().last().unwrap();
+    let mut chars: Vec<(char, u64)> = many.chars().map(|c| (c, 1000)).collect();
+    chars.push(('某', 100_000_000));
+    let data = Data {
+        scheme: "quick",
+        table: vec![("ab", &many), ("c", "丁"), ("y", "某")],
+        words: vec![],
+        chars,
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    assert_eq!(ime.top_of(&mut user, "abc"), "倀丁");
+
+    let chosen = ime.choose_on_any_page(&mut user, "ab", &last.to_string());
+    assert_eq!(chosen.commit, Some(last.to_string()));
+    assert_eq!(ime.top_of(&mut user, "abc"), format!("{last}丁"));
 }
