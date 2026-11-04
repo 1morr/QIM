@@ -103,3 +103,4 @@ Blocked by: 04, 05, 08, 09, 11
 
   - w 0.05 在 test 上（學習關 → 開）：yue-wiki 4497 → 4416、zh-wiki 4688 → 4698、common-voice-yue 4228 → 4149、hkcancor 2912 → 2490、personal 1492 → 1489；口語與個人集學習開較少，zh-wiki 持平。學習關的數字與 `--check` 不受 w 影響。
   - 合併後第一次 `bench --check` 的每鍵 p95 原生 86 µs、WebAssembly 51 µs（同時在跑其他編譯，比前面那次高），仍遠低於預算。
+- 第二次合併 main（`391a30a`，含票 22 字根與 `cangjie-hint`，資料包格式 5）：衝突只在 `docs/development.md`（資料包段落，取 main 的四種資料包、補上字頻乘語料權重）與 `web/src/main.ts`（宣告並存）。`cargo xtask data --verify` 全部 `[通過]`；`cargo xtask bench --check` 通過、各集合數字與 baseline 相同、沒有翻盤，固定題 15/15；`cargo xtask check` 通過（e2e 39 個，含 `report.spec.ts`）。
