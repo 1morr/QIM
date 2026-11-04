@@ -150,6 +150,9 @@ pub struct WebSnapshot {
     /// 為假時網頁不攔截這個鍵，交給瀏覽器。
     #[wasm_bindgen(readonly)]
     pub handled: bool,
+    /// 組字的整串輸入碼，含已選定的分段的碼；「回報」用。
+    #[wasm_bindgen(readonly)]
+    pub input: String,
     /// 已選定的分段接起來的字詞，組字顯示在剩下的輸入碼前面。
     #[wasm_bindgen(readonly)]
     pub selected: String,
@@ -170,6 +173,7 @@ impl From<Snapshot> for WebSnapshot {
     fn from(s: Snapshot) -> Self {
         Self {
             handled: s.handled,
+            input: s.composition.input.clone(),
             selected: s.composition.selected_text(),
             unselected: s.composition.unselected_input().to_string(),
             radicals: s.composition.radicals,

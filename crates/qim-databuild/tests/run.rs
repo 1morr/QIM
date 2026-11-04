@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::Path;
 
@@ -893,6 +893,28 @@ fn wiki_dump_becomes_bench_sentences_and_training_splits() {
         "[通過] 語料決定性：yue-wiki 建兩次 sha256 相同".into(),
     ] {
         assert!(shown.contains(&expected), "缺 {expected}：\n{shown}");
+    }
+}
+
+#[test]
+fn dev_split_becomes_tuning_items_in_the_bench_format() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    run(root.path(), &upstream(README), false).unwrap();
+
+    for name in ["yue-wiki", "hkcancor"] {
+        let dev = read(root.path(), &format!("build/corpus/{name}/dev.txt"));
+        let items = read(root.path(), &format!("build/corpus/{name}/dev.tsv"));
+        // 不重複的 dev 句（樣本小於上限，全收），格式和基準檔相同。
+        let expected: BTreeSet<&str> = dev.lines().collect();
+        let mut sentences = BTreeSet::new();
+        for line in items.lines() {
+            let (codes, sentence) = line.split_once('\t').unwrap();
+            assert_eq!(codes.split(' ').count(), sentence.chars().count(), "{line}");
+            assert!(sentences.insert(sentence), "重複：{sentence}");
+        }
+        assert!(!sentences.is_empty(), "{name} 沒有 dev 句");
+        assert_eq!(sentences, expected, "{name}");
     }
 }
 

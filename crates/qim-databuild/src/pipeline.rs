@@ -202,9 +202,9 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let mut corpora = Vec::new();
     let mut corpus_checks = Vec::new();
     let mut attributions: Vec<(Group, String)> = Vec::new();
-    // 各語料兩次建置的字頻，給詞庫資料包。
-    let mut chars: Vec<String> = Vec::new();
-    let mut second_chars: Vec<String> = Vec::new();
+    // 各語料兩次建置的字頻與權重，給詞庫資料包。
+    let mut chars: Vec<(String, u64)> = Vec::new();
+    let mut second_chars: Vec<(String, u64)> = Vec::new();
     // 驗證用：各語料的基準檔內容與 train 檔，洩漏要拿每個基準集比對所有 train。
     let mut benches: Vec<(&str, String)> = Vec::new();
     // 各語料的 train 切分與權重，bigram 用；洩漏檢查也比對它們。
@@ -237,6 +237,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let bench_rel = format!("{}/{}.tsv", corpus.group.dir(), corpus.name);
         write(root.join(&bench_rel), first.bench.as_bytes())?;
         write(dir.join("chars.tsv"), first.chars.as_bytes())?;
+        write(dir.join("dev.tsv"), first.dev_items.as_bytes())?;
         corpora.push(CorpusSummary {
             name: corpus.name.into(),
             counts: first.counts,
@@ -260,10 +261,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 )
                 .map_err(Error::io(&dir))?,
             );
-            second_chars.push(second.chars);
+            second_chars.push((second.chars, corpus.weight));
         }
         trains.push((train_path, corpus.weight));
-        chars.push(first.chars);
+        chars.push((first.chars, corpus.weight));
         if verify {
             benches.push((corpus.name, first.bench));
         }
@@ -280,10 +281,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         )?;
     }
 
-    // 詞庫的碼由這次建出的速成碼表展開，字頻由各語料的 train 相加；每次從快取重讀 essay.txt。
+    // 詞庫的碼由這次建出的速成碼表展開，字頻由各語料的 train 乘上權重相加；每次從快取重讀 essay.txt。
     let build_lexicon =
-        |quick: &QuickBuild, chars: &[String]| -> Result<(Vec<u8>, LexiconSummary), Error> {
-            let tables: Vec<&str> = chars.iter().map(String::as_str).collect();
+        |quick: &QuickBuild, chars: &[(String, u64)]| -> Result<(Vec<u8>, LexiconSummary), Error> {
+            let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
             let frequency = lexicon::char_frequency(&tables)?;
             let characters = frequency.len();
             let (lexicon, counts) = lexicon::build(
@@ -514,6 +515,7 @@ fn build_corpus<W: Write>(
     let Finished {
         counts,
         bench,
+        dev_items,
         chars,
         train,
         dev,
@@ -521,6 +523,7 @@ fn build_corpus<W: Write>(
     Ok(Built {
         counts,
         bench,
+        dev_items,
         chars,
         train: train.sha256(),
         dev: dev.sha256(),
@@ -537,6 +540,8 @@ fn open(path: &Path) -> Result<BufReader<File>, Error> {
 struct Built {
     counts: crate::corpus::Counts,
     bench: String,
+    /// dev 的調參題；由 dev 切分決定，`dev` 的 sha256 相同它就相同，不另比。
+    dev_items: String,
     chars: String,
     train: String,
     dev: String,

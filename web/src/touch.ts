@@ -9,13 +9,13 @@ export interface Keyboard {
  * 觸控鍵盤：照 `qim-layout` 給的按鍵畫在 `container` 裡，點擊位置換算成設計尺寸的座標交給
  * `Layout.hit` 判定，網頁自己不判定按到哪個鍵（plan §3.1）。
  *
- * `onSnapshot` 收到核心吃下的結果；沒吃下時 `onUnhandled` 收到按鍵，照宿主的預設動作處理。
+ * `onSnapshot` 收到核心吃下的結果與按的鍵；沒吃下時 `onUnhandled` 收到按鍵，照宿主的預設動作處理。
  */
 export function mountKeyboard(
 	container: HTMLElement,
 	layout: Layout,
 	session: Session,
-	onSnapshot: (snapshot: Snapshot) => void,
+	onSnapshot: (snapshot: Snapshot, key: LayoutKey) => void,
 	onUnhandled: (key: LayoutKey) => void,
 ): Keyboard {
 	let keys = layout.keys(session);
@@ -87,7 +87,7 @@ export function mountKeyboard(
 		const snapshot = session.tap(layout, index);
 		try {
 			if (snapshot.handled) {
-				onSnapshot(snapshot);
+				onSnapshot(snapshot, key);
 			} else {
 				onUnhandled(key);
 			}

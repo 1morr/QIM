@@ -82,3 +82,8 @@ Blocked by: 13
   - e2e 對組字的期待改成字根（「日弓口」「门口大月人」）。
   - 未處理，交協調者：簡體模式下 Tab 叫出的字根提示查的是顯示的簡體字，「门口」顯示 `lis r`（「门」的倉頡碼），不是打出它的 `an r`（「門」）。要改得讓快照帶原文給提示用，牽涉票 22 的介面。
   - merge 後 `data --verify`、`bench --check`（各集合與 baseline 相同、沒有翻盤、固定題 11/11）、`check`（e2e 40 個）都通過。
+- merge main（票 12，β 1、γ 1、w 0.05、口語權重 64）：
+  - 只有 `docs/development.md` 文字衝突。票 12 讓網頁 `apply` 多了「是不是選字」參數，簡體開關改呼叫 `apply(snapshot, false)`：切換不是選字。
+  - 未處理，交協調者：簡體模式下按「回報」，期望首選記的是上屏的簡體字（例如「门口」），`fixed.tsv` 要繁體，這行會讓 `bench --check` 紅。要改得讓快照帶繁體原文，或簡體模式下停用回報。
+  - 新參數下簡體 `anr` 首選仍是「门口」，`simplified.spec.ts` 照過。
+  - merge 後 `data --verify`、`bench --check`（固定題 15/15，公開集合與 baseline 相同、沒有翻盤）、`check`（e2e 42 個）都通過。
