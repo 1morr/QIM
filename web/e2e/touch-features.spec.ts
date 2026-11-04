@@ -311,3 +311,19 @@ test("核心沒吃下長按選的動作時，網頁照那個動作做，不是�
 	await hand.up();
 	await expect(text).toHaveValue("！");
 });
+
+test("觸控的空白鍵選字上屏可以回報，組字中點符號上屏不算", async ({ page }) => {
+	// 「回報」（票 12）看綁定回報的實際動作：空白才是選字。
+	const report = page.getByRole("button", { name: "回報", exact: true });
+	const reports = page.getByRole("textbox", { name: /回報的固定題/ });
+	await tapKeys(page, ["a", "n", "r", "space"]);
+	await expect(report).toBeEnabled();
+	await report.tap();
+	await expect(reports).toHaveValue("anr\t門口\t網頁回報（首選 門口）");
+
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
+		"門口門口？",
+	);
+	await expect(report).toBeDisabled();
+});
