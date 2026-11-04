@@ -30,6 +30,7 @@ const candidates = element<HTMLOListElement>("#candidates");
 const status = element<HTMLElement>("#status");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
+const darkToggle = element<HTMLButtonElement>("#dark-toggle");
 /** 觸控鍵盤；載入完成前是 `undefined`。 */
 let touchKeyboard: Keyboard | undefined;
 
@@ -110,9 +111,6 @@ function hostDefault(key: LayoutKey): void {
 		case "letter":
 			insert(key.letter ?? "");
 			return;
-		case "text":
-			insert(key.text ?? "");
-			return;
 		case "space":
 			insert(" ");
 			return;
@@ -148,6 +146,21 @@ function orientation(): "portrait" | "landscape" {
 		: "portrait";
 }
 
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+/** 網頁的深色開關按過就照它，否則跟系統（`prefers-color-scheme`）。 */
+let chosenDark: boolean | undefined;
+
+/** 套用深色或淺色：按鍵顏色由 CSS `light-dark()` 依 `color-scheme` 選（touch.ts）。 */
+function applyTheme(): void {
+	const dark = chosenDark ?? systemDark.matches;
+	if (chosenDark === undefined) {
+		delete document.documentElement.dataset.theme;
+	} else {
+		document.documentElement.dataset.theme = dark ? "dark" : "light";
+	}
+	darkToggle.setAttribute("aria-pressed", String(dark));
+}
+
 /** 觸控鍵盤開或關；開著時輸入框不叫出系統鍵盤。 */
 function setTouch(on: boolean): void {
 	keyboard.hidden = !on;
@@ -169,10 +182,34 @@ async function start(): Promise<void> {
 		console.warn(`佈局：${warning}`);
 	}
 	touchKeyboard = mountKeyboard(keyboard, layout, session, apply, hostDefault);
+	const mounted = touchKeyboard;
+	// 轉向時重選佈局版本（plan §2.6），留在同一頁。
+	window
+		.matchMedia("(orientation: landscape)")
+		.addEventListener("change", () => {
+			const warning = layout.select(device(), orientation());
+			if (warning !== undefined) {
+				console.warn(`佈局：${warning}`);
+			}
+			mounted.relayout();
+		});
+	// 頁面底部留出鍵盤實際的高度，鍵盤才不會蓋住輸入框；高度隨佈局版本的畫布比例與寬度變。
+	new ResizeObserver(([entry]) => {
+		document.body.style.setProperty(
+			"--keyboard-height",
+			`${entry.borderBoxSize[0].blockSize}px`,
+		);
+	}).observe(keyboard);
 	// 行動裝置（主要指標是手指）預設開觸控鍵盤。
 	setTouch(window.matchMedia("(pointer: coarse)").matches);
 	touchToggle.addEventListener("click", () => {
 		setTouch(touchToggle.getAttribute("aria-pressed") !== "true");
+	});
+	applyTheme();
+	systemDark.addEventListener("change", applyTheme);
+	darkToggle.addEventListener("click", () => {
+		chosenDark = darkToggle.getAttribute("aria-pressed") !== "true";
+		applyTheme();
 	});
 
 	text.addEventListener("keydown", (event) => {
