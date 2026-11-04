@@ -5,8 +5,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Session,
-    Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Pack, Packs, Ranking, Scheme,
+    Session, ShiftKey, ShiftSwitch, Snapshot, UserModel, Word,
 };
 
 /// 碼表的一列：碼、字（依建置時的字序），`+` 之後的字是擴展區。
@@ -98,6 +98,13 @@ impl Ime {
     fn focus_segment(&mut self, segment: usize) -> Snapshot {
         self.session
             .focus_segment(&self.engine, &mut self.user, segment)
+    }
+
+    fn shift_switch(&mut self, shift_switch: ShiftSwitch) {
+        self.session.set_options(Options {
+            shift_switch,
+            ..Options::default()
+        });
     }
 
     fn type_code(&mut self, code: &str) -> Snapshot {
@@ -638,4 +645,238 @@ fn without_composition_focus_segment_and_select_do_nothing() {
     let mut ime = Ime::new(&peng());
     assert!(!ime.focus_segment(0).handled);
     assert!(!ime.session.select(&ime.engine, &mut ime.user, 0).handled);
+}
+
+// 組字中單按 Shift（brief §4.3）：預設照 Rime，左 Shift 留碼接英文（`inline_ascii`）、
+// 右 Shift 先上屏組字（`commit_text`）。
+
+#[test]
+fn left_shift_keeps_the_input_as_english_and_letters_follow_it() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    let shifted = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert!(shifted.handled);
+    assert!(shifted.ascii);
+    assert_eq!(shifted.commit, None);
+    assert_eq!(shifted.composition.input, "anr");
+    assert!(shifted.candidates.is_empty(), "{:?}", texts(&shifted));
+    let typed = ime.press(Key::Letter('x'));
+    assert!(typed.handled);
+    assert_eq!(typed.composition.input, "anrx");
+    let entered = ime.press(Key::Enter);
+    assert_eq!(entered.commit.as_deref(), Some("anrx"));
+    assert_eq!(entered.composition.input, "");
+    // 上屏後回中文，同 librime 臨時西文結束時復位。
+    assert!(!entered.ascii);
+    assert_eq!(top(&ime.type_code("anr")), "門口");
+}
+
+#[test]
+fn right_shift_commits_the_composition_then_switches_to_english() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    let shifted = ime.press(Key::ToggleAscii(ShiftKey::Right));
+    assert!(shifted.handled);
+    assert_eq!(shifted.commit.as_deref(), Some("門口"));
+    assert!(shifted.ascii);
+    assert_eq!(shifted.composition.input, "");
+    // 英文直通：鍵交還宿主。
+    assert!(!ime.press(Key::Letter('x')).handled);
+}
+
+#[test]
+fn commit_text_setting_commits_on_either_shift() {
+    for shift in [ShiftKey::Left, ShiftKey::Right] {
+        let mut ime = Ime::new(&men_kou());
+        ime.shift_switch(ShiftSwitch::CommitText);
+        ime.type_code("anr");
+        let shifted = ime.press(Key::ToggleAscii(shift));
+        assert_eq!(shifted.commit.as_deref(), Some("門口"), "{shift:?}");
+        assert!(shifted.ascii, "{shift:?}");
+    }
+}
+
+#[test]
+fn inline_ascii_setting_keeps_the_input_on_either_shift() {
+    for shift in [ShiftKey::Left, ShiftKey::Right] {
+        let mut ime = Ime::new(&men_kou());
+        ime.shift_switch(ShiftSwitch::InlineAscii);
+        ime.type_code("anr");
+        let shifted = ime.press(Key::ToggleAscii(shift));
+        assert_eq!(shifted.commit, None, "{shift:?}");
+        assert_eq!(shifted.composition.input, "anr", "{shift:?}");
+        assert!(shifted.ascii, "{shift:?}");
+    }
+}
+
+#[test]
+fn without_composition_either_shift_only_toggles() {
+    for switch in [
+        ShiftSwitch::Rime,
+        ShiftSwitch::CommitText,
+        ShiftSwitch::InlineAscii,
+    ] {
+        for shift in [ShiftKey::Left, ShiftKey::Right] {
+            let mut ime = Ime::new(&men_kou());
+            ime.shift_switch(switch);
+            let on = ime.press(Key::ToggleAscii(shift));
+            assert!(on.ascii && on.commit.is_none(), "{switch:?} {shift:?}");
+            assert_eq!(on.composition.input, "", "{switch:?} {shift:?}");
+            assert!(
+                !ime.press(Key::ToggleAscii(shift)).ascii,
+                "{switch:?} {shift:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn inline_english_is_one_raw_segment_without_radicals_or_candidates() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    let shifted = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let segment = &shifted.composition.segments[..];
+    assert_eq!(segment.len(), 1);
+    assert!(segment[0].raw);
+    assert_eq!(segment[0].text, "anr");
+    assert_eq!(segment[0].radicals, "");
+    assert_eq!(ime.session.all_candidates(), []);
+    assert_eq!(ime.session.rerank_request(), None);
+}
+
+#[test]
+fn shift_again_restores_the_chinese_composition_when_the_english_is_unchanged() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    // 方向鍵、翻頁鍵不改英文。
+    ime.press(Key::Left);
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert!(!back.ascii);
+    assert_eq!(back.commit, None);
+    assert_eq!(back.composition, typed.composition);
+    assert_eq!(texts(&back), texts(&typed));
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
+}
+
+#[test]
+fn shift_again_commits_the_english_after_a_backspace_even_back_to_the_same_letters() {
+    // librime 退格時丟掉進臨時西文前的輸入，之後切回只能上屏。
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    ime.press(Key::Letter('x'));
+    ime.press(Key::Backspace);
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert_eq!(back.commit.as_deref(), Some("anr"));
+    assert!(!back.ascii);
+}
+
+#[test]
+fn shift_again_commits_the_english_once_it_changed() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    ime.press(Key::Letter('x'));
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert_eq!(back.commit.as_deref(), Some("anrx"));
+    assert!(!back.ascii);
+    assert_eq!(back.composition.input, "");
+}
+
+#[test]
+fn the_commit_text_shift_in_inline_english_commits_it_and_goes_back_to_chinese() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Right));
+    assert_eq!(back.commit.as_deref(), Some("anr"));
+    assert!(!back.ascii);
+}
+
+#[test]
+fn space_in_inline_english_commits_it_with_a_space() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let spaced = ime.press(Key::Space);
+    assert_eq!(spaced.commit.as_deref(), Some("anr "));
+    assert!(!spaced.ascii);
+    assert_eq!(spaced.composition.input, "");
+}
+
+#[test]
+fn digits_punctuation_and_capitals_join_the_inline_english_as_typed() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    for key in [
+        Key::Punct('.'),
+        Key::Letter('C'),
+        Key::Letter('z'),
+        Key::Digit(2),
+        Key::Punct('-'),
+    ] {
+        assert!(ime.press(key).handled, "{key:?}");
+    }
+    // 方向鍵、翻頁鍵吃下不動作。
+    for key in [Key::Left, Key::PageDown, Key::Other] {
+        assert_eq!(ime.press(key).composition.input, "anr.Cz2-", "{key:?}");
+    }
+    assert_eq!(ime.press(Key::Enter).commit.as_deref(), Some("anr.Cz2-"));
+}
+
+#[test]
+fn backspacing_the_inline_english_away_or_escape_goes_back_to_chinese() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("a");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let erased = ime.press(Key::Backspace);
+    assert!(erased.handled);
+    assert!(!erased.ascii);
+    assert_eq!(erased.composition.input, "");
+    assert_eq!(top(&ime.type_code("a")), "日");
+
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let escaped = ime.press(Key::Escape);
+    assert!(!escaped.ascii);
+    assert_eq!(escaped.composition.input, "");
+    assert_eq!(escaped.commit, None);
+}
+
+#[test]
+fn selected_segments_stay_before_the_inline_english() {
+    // 和 Enter 相同：選定的分段上屏字，其餘當英文（librime 把整串換成按鍵，QIM 留著選了的字）。
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
+    ime.select(&typed, "門");
+    let shifted = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let shown: Vec<_> = shifted
+        .composition
+        .segments
+        .iter()
+        .map(|s| (s.text.as_str(), s.selected, s.raw))
+        .collect();
+    assert_eq!(shown, [("門", true, false), ("r", false, true)]);
+    ime.press(Key::Letter('x'));
+    assert_eq!(ime.press(Key::Enter).commit.as_deref(), Some("門rx"));
+
+    // 退格刪光英文：最後選定的分段放回來重選，同中文的退格。
+    let typed = ime.type_code("anr");
+    ime.select(&typed, "門");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let erased = ime.press(Key::Backspace);
+    assert!(!erased.ascii);
+    assert_eq!(erased.composition.input, "an");
+    assert_eq!(top(&erased), "門");
+}
+
+#[test]
+fn touch_text_in_inline_english_commits_it_then_the_text() {
+    let mut ime = Ime::new(&men_kou());
+    ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    let typed = ime.session.text(&ime.engine, &mut ime.user, "多謝");
+    assert_eq!(typed.commit.as_deref(), Some("anr多謝"));
+    assert!(!typed.ascii);
 }

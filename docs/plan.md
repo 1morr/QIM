@@ -24,6 +24,7 @@
 | 重排 | `Rerank` | 譯詞 | `Gloss` |
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
 | 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
+| 英文直通 / 臨時英文 | `ascii` / `InlineAscii` | | |
 
 ## 1. 架構總覽
 
@@ -134,9 +135,11 @@ pub struct Engine;      // 不可變：方案 + 資料包，多個 Session 共�
 pub struct UserModel;   // 可變：使用者詞、學習計數；export() / import() 給殼存檔
 pub struct Session;     // 一個輸入框的組字狀態
 
-pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp, PageDown, Left, Right, ToggleAscii, Other }
+pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp, PageDown, Left, Right, ToggleAscii(ShiftKey), Other }
+pub enum ShiftKey { Left, Right }
+pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub shift_switch: ShiftSwitch }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
@@ -146,7 +149,7 @@ pub struct Snapshot {
     pub has_more: bool,
     pub commit: Option<String>,     // 這次事件要上屏的文字
     pub commit_original: Option<String>, // `commit` 的原文
-    pub ascii: bool,                // 英文直通（`ToggleAscii`）；開著時沒有組字，鍵都交還宿主
+    pub ascii: bool,                // 英文：沒有組字時是英文直通，鍵都交還宿主；組字中是臨時英文
     pub generation: u64,            // 每次候選變動 +1（翻頁不算），非同步重排用
 }
 
@@ -165,7 +168,7 @@ impl Session {
 
 - `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；全形對照與組字中各鍵的行為在核心（brief §4.3）。只改殼的畫面、不動組字的鍵由殼攔下、不轉給核心：組字中 Tab 開關字根提示、↓ / ↑ 開關展開面板（§3.1）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
 - `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它；組字中和標點相同，先上屏整個組字再接它，文字不轉全形（M1 票 20）；簡體模式下文字也轉簡體，原文留繁體（使用者決定，M1 票 23）。
-- `ToggleAscii`（單按 Shift，brief §4.3）：切英文直通，`Snapshot.ascii` 跟著變；英文狀態下每個鍵都 `handled` 為假，沒有組字。組字中按下先上屏整個組字再切，同 Rime `ascii_composer` 的 `commit_text`，要上屏輸入碼有 Enter。單按的判定（按下到放開 500 ms 內、中間沒有別的鍵，librime 同值）在殼（M1 票 23）。
+- `ToggleAscii`（單按 Shift，brief §4.3）：沒有組字時切英文直通，`Snapshot.ascii` 跟著變；英文直通下每個鍵都 `handled` 為假，沒有組字。組字中照 `Options.shift_switch`：`commit_text` 先上屏整個組字再切；`inline_ascii` 進臨時英文，`ascii` 為真而組字還在，最後一段是 `Segment.raw` 的分段（Rime 的 `raw` 標記），各鍵的行為見 brief §4.3。預設 `Rime` 是左 Shift `inline_ascii`、右 Shift `commit_text`（M1 票 25，推翻票 23 的左右相同）。單按的判定（按下到放開 500 ms 內、中間沒有別的鍵，librime 同值）與分辨左右在殼；網頁用 `KeyboardEvent.code`，觸控鍵盤的中英鍵先當右 Shift（觸控的 Shift 在 M1 票 27）。臨時英文中 `-` / `=` 是字元，殼不轉成翻頁。
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
@@ -382,7 +385,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 觸控模擬：行動裝置尺寸的觸控鍵盤，照 brief §4.4。按鍵幾何由 `qim-layout` 算，網頁只畫。
 - 候選列、展開面板、無痕開關、簡繁開關；按鍵放大預覽、深色模式、直向與橫向的佈局版本。
   - 展開面板：候選列右側的展開鍵，桌面組字中 ↓ 打開、↑ 收起；Microsoft 速成的 ↓ 進候選窗、Tab 與 → 展開成表格，Tab 與 → 這裡已給字根提示與分段。選了字就收起（M1 票 23）。
-  - 候選列左邊顯示中英狀態；「重排」選單是重排的開關（brief §7 的雲端候選）：關、原樣（預設）、第 5 個提前（測上限用）。
+  - 候選列左邊顯示中英狀態；「重排」選單是重排的開關（brief §7 的雲端候選）：關、原樣（預設）、第 5 個提前（測上限用）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
 - 使用者資料存 `localStorage`；提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 接雲端 LLM。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。網頁測試頁的 API key 只放開發機環境變數，由 Vite 開發伺服器轉發，不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。

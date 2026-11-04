@@ -23,5 +23,8 @@
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
 | 2026-11-04 | M2 封存 M1 | 票 24：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉全過、黑箱在 QIM 重跑；M1 封存到 `docs/archive/M1.md`，M2 標進行中；細節見票 24 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
+| 2026-11-05 | M2（補 M1 25） | 單按 Shift 照 Rime：左 Shift 進臨時英文、右 Shift 先上屏，`Options.shift_switch` 三選一、網頁有選單；細節見票 25 | M1 26、27 也做完後，新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 
 ## 偏差與決定
+
+- 2026-11-05 M2（補 M1 25）：組字中單按 Shift 改照 Rime（左留碼接英文、右先上屏），設定可改；使用者試用後決定，推翻 M1 票 23 的左右都先上屏（brief §4.3）。
