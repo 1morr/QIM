@@ -3,7 +3,7 @@
 
 use crate::baseline::SetBaseline;
 use crate::score::{LENGTH_GROUPS, Metrics, SetResult};
-use crate::{Outcome, PERSONAL, PERSONAL_USERDB, Personal};
+use crate::{Latency, Outcome, PERSONAL, PERSONAL_USERDB, Personal, WASM_BINDINGS};
 
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
@@ -103,6 +103,35 @@ pub fn render(outcome: &Outcome) -> String {
     ));
     for failure in &fixed.failures {
         out.push_str(&format!("- 沒過：{failure}\n"));
+    }
+    out.push_str(&latency(&outcome.latency));
+    out
+}
+
+/// 每鍵延遲：原生與 WebAssembly 各兩組（全部、20 碼以上），微秒：現在的核心每鍵不到 1 µs，用毫秒看不出前後差別。
+fn latency(latency: &Latency) -> String {
+    let mut out = format!(
+        "\n每鍵延遲（µs；只報不擋：`--check` 不比、baseline 不記）\n\n\
+         機器 {}；固定題與各語料集合的每一題從空的組字逐鍵打、不選字，不含載入資料包。\
+         WebAssembly 用 {WASM_BINDINGS}（`cargo xtask bench` 以 release 編）。\n\n\
+         | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 |\n\
+         | --- | --- | ---: | ---: | ---: | ---: |\n",
+        latency.machine
+    );
+    for (environment, timing) in [("原生", &latency.native), ("WebAssembly", &latency.wasm)] {
+        for (group, summary) in latency.groups(timing) {
+            let label = format!("{environment}（{}）", timing.runtime);
+            out.push_str(&match summary {
+                Some(s) => format!(
+                    "| {label} | {group} | {} | {} | {:.2} | {:.2} |\n",
+                    s.inputs,
+                    s.keys,
+                    s.p50 * 1000.0,
+                    s.p95 * 1000.0
+                ),
+                None => format!("| {label} | {group} | 0 | 0 | — | — |\n"),
+            });
+        }
     }
     out
 }

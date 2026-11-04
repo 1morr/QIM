@@ -19,8 +19,8 @@ fn main() -> ExitCode {
         ["check", "--fast"] => check(true),
         ["data"] => release_run("qim-databuild", &[]),
         ["data", "--verify"] => release_run("qim-databuild", &["--verify"]),
-        ["bench"] => release_run("qim-bench", &[]),
-        ["bench", flag @ ("--check" | "--update-baseline")] => release_run("qim-bench", &[flag]),
+        ["bench"] => bench(&[]),
+        ["bench", flag @ ("--check" | "--update-baseline")] => bench(&[flag]),
         ["web"] => {
             let root = repo_root();
             if web::wasm_bindings(&root) && web::packs(&root) {
@@ -55,6 +55,14 @@ fn check(fast: bool) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// 首選字基準（plan §5.2）：WebAssembly 的每鍵延遲用 `web/src/wasm/` 的綁定量，先照目前的核心重編。
+fn bench(args: &[&str]) -> ExitCode {
+    if !web::wasm_bindings(&repo_root()) {
+        return ExitCode::FAILURE;
+    }
+    release_run("qim-bench", args)
 }
 
 /// 在 repo 根目錄用 release 跑 workspace 的 `package`：資料建置（plan §4）在 `qim-databuild`、
