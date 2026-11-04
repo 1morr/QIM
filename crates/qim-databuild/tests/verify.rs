@@ -182,12 +182,13 @@ mod corpus {
     const TRAIN: &str = "日丟\n問問日\n";
     const DEV: &str = "丟\n";
 
-    fn failed(bench: &str, train: &str, dev: &str, second: [&str; 3]) -> Vec<CheckId> {
+    fn failed(bench: &str, train: &str, dev: &str, second: [&str; 4]) -> Vec<CheckId> {
         let transcoder = Transcoder::new(&libcangjie::parse(TABLE).unwrap());
-        let digests = |[bench, train, dev]: [&str; 3]| CorpusDigests {
+        let digests = |[bench, train, dev, chars]: [&str; 4]| CorpusDigests {
             bench: bench.into(),
             train: train.into(),
             dev: dev.into(),
+            chars: chars.into(),
         };
         let first = digests(SAME);
         let second = digests(second);
@@ -207,7 +208,7 @@ mod corpus {
         .collect()
     }
 
-    const SAME: [&str; 3] = ["b", "t", "d"];
+    const SAME: [&str; 4] = ["b", "t", "d", "c"];
 
     #[test]
     fn clean_corpus_passes_even_with_lines_in_another_order() {
@@ -218,10 +219,42 @@ mod corpus {
         );
     }
 
+    /// 每個基準集對所有訓練切分的洩漏檢查：(集合名, 洩漏句數)。
+    fn leaks(benches: &[(&str, &str)], trains: &[&str]) -> Vec<(bool, String)> {
+        verify::leaks(benches, trains.iter().map(|t| t.as_bytes()))
+            .unwrap()
+            .into_iter()
+            .map(|c| {
+                assert_eq!(c.id, CheckId::CorpusNoLeak);
+                (c.passed, c.detail)
+            })
+            .collect()
+    }
+
     #[test]
-    fn bench_sentence_in_train_is_a_leak() {
+    fn bench_sentence_in_its_own_train_is_a_leak() {
         let leaked = format!("{TRAIN}丟丟\n");
-        assert_eq!(failed(BENCH, &leaked, DEV, SAME), [CheckId::CorpusNoLeak]);
+        assert_eq!(
+            leaks(&[("a", BENCH)], &[&leaked]),
+            [(false, "a test 句原樣出現在 train 1 句".into())]
+        );
+        assert_eq!(
+            leaks(&[("a", BENCH)], &[TRAIN]),
+            [(true, "a test 句原樣出現在 train 0 句".into())]
+        );
+    }
+
+    #[test]
+    fn bench_sentence_in_another_corpus_train_is_a_leak() {
+        // bigram 用所有語料的 train 訓練，所以 a 的基準句出現在 b 的 train 也算洩漏。
+        let other = "日日\n丟丟\n丟丟\n問日\n";
+        assert_eq!(
+            leaks(&[("a", BENCH), ("b", "a\t日\n")], &[TRAIN, other]),
+            [
+                (false, "a test 句原樣出現在 train 2 句".into()),
+                (true, "b test 句原樣出現在 train 0 句".into()),
+            ]
+        );
     }
 
     #[test]
@@ -248,7 +281,11 @@ mod corpus {
     #[test]
     fn different_second_build_fails() {
         assert_eq!(
-            failed(BENCH, TRAIN, DEV, ["b", "t", "x"]),
+            failed(BENCH, TRAIN, DEV, ["b", "t", "x", "c"]),
+            [CheckId::CorpusDeterministic]
+        );
+        assert_eq!(
+            failed(BENCH, TRAIN, DEV, ["b", "t", "d", "x"]),
             [CheckId::CorpusDeterministic]
         );
     }

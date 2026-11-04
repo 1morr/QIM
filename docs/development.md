@@ -47,19 +47,20 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 `cargo xtask data` 用 release 編 `qim-databuild` 並在 repo 根目錄執行，步驟見 plan §4：
 
-- 來源列在 `data/sources.toml`：每個來源釘 `version`（git 來源填 commit，其他填上游版本號）與每個檔的 sha256。下載到 `.cache/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 version、url 與 sha256，快取路徑跟著換。
+- 來源列在 `data/sources.toml`：每個來源釘 `version`（git 來源填 commit，其他填上游版本號）與每個檔的 sha256。下載到 `<快取>/sources/<來源>/<sha256 前 16 碼>/<檔案路徑>`；已有快取就不連網，下載是邊收邊寫檔，不整份讀進記憶體。快取或下載的檔 sha256 不符時建置失敗、不重新下載：確認來源後刪掉那個檔重跑，或更新 `sources.toml`。換來源版本時改 version、url 與 sha256，快取路徑跟著換。
+- `<快取>` 在 repo 外，所有 worktree 共用，新 worktree 不必重下約 360 MB 的來源：環境變數 `QIM_CACHE_DIR` 有設就用它，否則是平台的使用者快取目錄下的 `qim/`（macOS `~/Library/Caches/qim`、Linux `$XDG_CACHE_HOME/qim` 或 `~/.cache/qim`、Windows `%LOCALAPPDATA%\qim`）。路徑含釘住的 sha256，不同 worktree 釘不同版本也不會互相蓋掉。下載中被中斷時會留下 `<檔名>.part<行程 id>`，可以直接刪。
 - 進資料包的來源要寫授權，二選一，都寫或都不寫時建置失敗：
   - `license_file` 加 `license_statement`：照抄上游檔裡的授權聲明，建置時核對它確實在 `license_file` 裡（空白與換行不計），再寫進資料包的 `LICENSE`（libcangjie）。
   - `license_text`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 的 `kGradeLevel` 進速成資料包，用 `data/licenses/Unicode-3.0.txt`）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<方案 id>/` 下的 `<方案 id>.pack`、`LICENSE`、`NOTICE`。資料包格式定義在 `crates/qim-core/src/pack.rs`，改格式時加 `FORMAT_VERSION`。
-- 語料（plan §4.3）：粵語維基 dump 經抽內文、`s2hk`、切句、切分，寫出 `bench/corpus/<名>.tsv`、`bench/corpus/ATTRIBUTION.md`（進 git）與 `build/corpus/<名>/train.txt`、`dev.txt`（一行一句，不進 git）。第一次要下載約 130 MB 的 dump；之後 `cargo xtask data` 約 30 秒，`--verify` 把語料再建一次比 sha256，約 1 分鐘（Apple M6，release）。
+- 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，經 `s2hk`、切句、切分，寫出基準檔與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`chars.tsv`（字頻，見〈語料〉），後三者不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 35 秒，`--verify` 把語料再建一次比 sha256，約 75 秒（Apple M6，release）。
 
 `--verify` 的報告列出連打字集字數、擴展區字數、速成碼個數、資料包 sha256、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`。
 
 ### 語料
 
-`bench/corpus/<名>.tsv` 是首選字基準的題目，由建置產生、不要手改。UTF-8，沒有欄名，一行一句：
+`bench/corpus/<名>.tsv`（維基）與 `bench/colloquial/<名>.tsv`（口語）是首選字基準的題目，由建置產生、不要手改。UTF-8，沒有欄名，一行一句：
 
 ```text
 <逐字速成碼，空格分隔><TAB><句子>
@@ -67,7 +68,9 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 例如 `an r⇥門口`（`⇥` 是 tab）。輸入碼是把各字的碼接起來；分開寫是讓基準知道每個字用了幾個鍵。轉碼由 `qim_databuild::transcode::Transcoder` 做：每個字取第一個五代碼的速成碼，沒有五代碼才取三代碼，連打字集以外的字轉碼失敗。
 
-`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在 train、建兩次 sha256 相同。切句與取樣規則見 plan §4.3，抽 wikitext 內文的規則在 `crates/qim-databuild/src/wikitext.rs`。
+`build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻，給詞庫資料包排字序（plan §4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
+
+`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練）、建兩次基準檔、切分與字頻的 sha256 相同。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。
 
 ### Unihan 交叉比對
 
@@ -89,7 +92,7 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 `unihan` 等於 `libcangjie_cangjie5` 其中之一的列多半是三代、五代的版本差異；要找錯碼先看其餘的列，例如 `awk -F'\t' 'NR>1 && index(","$5",", ","$3",")==0' build/reports/unihan-kcangjie.tsv`。比對在 `crates/qim-databuild/src/unihan.rs`。
 
-`.cache/` 與 `build/` 不進 git。
+`build/` 不進 git。
 
 ## 首選字基準
 
@@ -110,7 +113,7 @@ cargo xtask bench --update-baseline   # 用這次的答錯數改寫 bench/baseli
 | 檔案 | 格式 |
 | --- | --- |
 | `bench/fixed.tsv` | 固定必過題，一行 `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。案例通過的那張票才加，不先加會紅的題 |
-| `bench/corpus/<名>.tsv` | 一個檔一個集合，集合名是檔名；格式見〈資料建置〉的〈語料〉 |
+| `bench/corpus/<名>.tsv`、`bench/colloquial/<名>.tsv` | 一個檔一個集合，集合名是檔名，兩個目錄間不能重名；先跑維基、再跑口語。格式見〈資料建置〉的〈語料〉 |
 | `bench/baseline.json` | `{"<集合名>": {"wrong": <答錯數>}}`，固定題不記。只用 `--update-baseline` 改，同一個 commit 說明原因 |
 
 結果是一個集合一列的 Markdown 表，可以直接貼進票的 `## Comments` 或 commit body 做前後對照：

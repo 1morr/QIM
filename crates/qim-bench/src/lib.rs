@@ -20,8 +20,9 @@ pub use score::{Failure, SetResult};
 /// 基準用的資料包，由 `cargo xtask data` 產生。
 pub const PACK: &str = "build/packs/quick/quick.pack";
 pub const FIXED: &str = "bench/fixed.tsv";
-/// 語料目錄：每個 `<名>.tsv` 是一個集合。
-pub const CORPUS: &str = "bench/corpus";
+/// 語料目錄，依序跑：每個 `<名>.tsv` 是一個集合，集合名在所有目錄間不能重複。
+/// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
+pub const CORPUS_DIRS: [&str; 2] = ["bench/corpus", "bench/colloquial"];
 pub const BASELINE: &str = "bench/baseline.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,7 +40,7 @@ pub struct Outcome {
     /// 資料包 sha256 的十六進位；同一份資料包前後對照時一樣，沒重建就看得出來。
     pub pack_sha256: String,
     pub fixed: SetResult,
-    /// 各語料集合，依名稱排序。
+    /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
     pub sets: Vec<SetResult>,
     /// 跑之前的 baseline，報告裡對照用；沒有檔案時是 `None`。
     pub baseline: Option<Baseline>,
@@ -64,10 +65,19 @@ pub fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
     let (engine, pack_sha256) = load_engine(&root.join(PACK))?;
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let fixed = score::score(&engine, "fixed", &fixed);
-    let mut sets = Vec::new();
-    for (name, path) in corpus_files(&root.join(CORPUS))? {
-        let items = parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
-        sets.push(score::score(&engine, &name, &items));
+    let mut sets: Vec<SetResult> = Vec::new();
+    for dir in CORPUS_DIRS {
+        for (name, path) in corpus_files(&root.join(dir))? {
+            if sets.iter().any(|s| s.name == name) {
+                return Err(format!(
+                    "集合 {name} 在兩個語料目錄都有：{}",
+                    path.display()
+                ));
+            }
+            let items =
+                parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
+            sets.push(score::score(&engine, &name, &items));
+        }
     }
     let baseline = load_baseline(&root.join(BASELINE))?;
     let violations = match mode {
@@ -123,9 +133,13 @@ fn read(path: &Path) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| format!("讀不到 {}：{e}", path.display()))
 }
 
-/// 語料目錄下的 `<名>.tsv`，依名稱排序。
+/// 語料目錄下的 `<名>.tsv`，依名稱排序；目錄不存在時是空的。
 fn corpus_files(dir: &Path) -> Result<Vec<(String, std::path::PathBuf)>, String> {
-    let entries = fs::read_dir(dir).map_err(|e| format!("讀不到 {}：{e}", dir.display()))?;
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("讀不到 {}：{e}", dir.display())),
+    };
     let mut files = Vec::new();
     for entry in entries {
         let path = entry

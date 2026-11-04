@@ -27,6 +27,7 @@
 | 2026-11-04 | M1 拆票 | 寫 `.scratch/m1/spec.md`，依使用者同意拆成 24 張票（票序在 spec）；plan §7.2 縮成連結，plan、brief 裡的「M1〈名稱〉」改成票號 | 新 session 下 `/implement .scratch/m1/issues/01-corpus-yue-wiki.md` |
 | 2026-11-04 | M1 01 | 粵語維基 → `bench/corpus/yue-wiki.tsv`（2,000 句）與 train / dev；`--verify` 加轉碼、洩漏、決定性三項，全過；細節見票 01 | 新 session 下 `/implement .scratch/m1/issues/02-bench-v0.md` |
 | 2026-11-04 | M1 02 | `qim-bench`、`cargo xtask bench`；M0 baseline：fixed 1/1、yue-wiki 答錯 2000/2000；細節見票 02 | 新 session 下 `/implement .scratch/m1/issues/03-corpus-zh-wiki-and-colloquial.md` |
+| 2026-11-04 | M1 03 | 中文維基、HKCanCor、Common Voice 進基準與訓練切分，字頻 `chars.tsv`；下載快取移到 repo 外；細節見票 03 | 新 session 下 `/implement .scratch/m1/issues/04-bench-corrections-and-personal.md` |
 
 ## 偏差與決定
 
@@ -44,3 +45,6 @@
 - 2026-11-04 M1 01：維基語料改用 pages-articles 自己抽內文：CirrusSearch dump 搬到 `cirrus_search_index/` 且只留約 5 週，釘了很快下載不到（plan §4.3、brief §12.1）。
 - 2026-11-04 M1 01：「只留連打字集內的字」定為含字集外字元的句子整句丟掉，不拿掉個別字，免得拼出原文沒有的相鄰字（plan §4.3）。
 - 2026-11-04 M1 02：`bench --check` 對沒有 baseline 的集合、baseline 有但沒跑到的集合也紅（plan §5.2），新增語料的票要同 commit 跑 `--update-baseline`。
+- 2026-11-04 M1 03：中文維基改取 archive.org 的 `zhwiki-20220501` 第一分片：dumps.wikimedia.org 對大站只留約 7 個月，釘了很快下載不到（brief §12.1）。
+- 2026-11-04 M1 03：Tatoeba 不加：下載檔每週覆蓋、無版本與快照，又要逐句署名；口語改用 HKCanCor 與 Common Voice 的 CC0 句子檔（brief §5.2、plan §8）。
+- 2026-11-04 M1 03：下載快取由 `.cache/sources/` 改到 repo 外的使用者快取目錄（`QIM_CACHE_DIR` 可改），各 worktree 共用（`docs/development.md`）。

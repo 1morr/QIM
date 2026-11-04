@@ -3,8 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::Pack;
+use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
-use qim_databuild::{Error, run};
 
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
@@ -46,6 +46,28 @@ Copyright © 1991-2026 Unicode, Inc.
 const UNICODE_LICENSE_PATH: &str = "data/licenses/Unicode-3.0.txt";
 
 const DUMP_FILE: &str = "zh_yuewiki-20261101-pages-articles.xml.bz2";
+const ZH_DUMP_FILE: &str = "zhwiki-20220501-pages-articles1.xml-p1p187712.bz2";
+const HKCANCOR_FILE: &str = "data/hkcancor-utf8.zip";
+const CV_YUE_FILE: &str = "server/data/yue/sentence-collector.txt";
+const CV_ZH_HK_FILE: &str = "server/data/zh-HK/sentence-collector.txt";
+
+/// 下載快取放在暫存 repo 裡的 `cache/`。
+fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<qim_databuild::Outcome, Error> {
+    qim_databuild::run(root, &root.join("cache"), fetch, verify)
+}
+
+/// 連打字集只有日曰問丟：它們組成的長度 `len` 的所有句子，依固定順序。
+fn sentences_of_length(len: usize) -> Vec<String> {
+    let chars = ['日', '曰', '問', '丟'];
+    let mut sentences = vec![String::new()];
+    for _ in 0..len {
+        sentences = sentences
+            .iter()
+            .flat_map(|s| chars.iter().map(move |c| format!("{s}{c}")))
+            .collect();
+    }
+    sentences
+}
 
 /// 連打字集只有日曰問丟，所以拿它們組 3–5 字的句子：1,344 句，約 5% 落在 test。
 /// 另有一句簡體（`s2hk` 轉成繁體才轉得了碼），與 [`DROPPED`] 句含字集外字元的句子。
@@ -77,8 +99,24 @@ fn wiki_articles() -> Vec<String> {
 
 const DROPPED: usize = 3;
 
+/// 中文維基：長度 6 的句子寫成簡體（问），`s2hk` 轉回繁體才轉得了碼。
+fn zh_wiki_articles() -> Vec<String> {
+    sentences_of_length(6)
+        .chunks(100)
+        .map(|chunk| chunk.join("。").replace('問', "问"))
+        .collect()
+}
+
 fn dump() -> Vec<u8> {
-    let pages: String = wiki_articles()
+    dump_of(&wiki_articles())
+}
+
+fn zh_dump() -> Vec<u8> {
+    dump_of(&zh_wiki_articles())
+}
+
+fn dump_of(articles: &[String]) -> Vec<u8> {
+    let pages: String = articles
         .iter()
         .enumerate()
         .map(|(i, text)| {
@@ -96,6 +134,56 @@ fn dump() -> Vec<u8> {
     bz.finish().unwrap()
 }
 
+/// HKCanCor 的一個轉寫檔：一個話輪一個 `<sent>`，`<sent_tag>` 裡一行一詞（`詞/詞性/粵拼/`）。
+fn hkcancor_transcript(utterances: &[String]) -> String {
+    let sents: String = utterances
+        .iter()
+        .map(|u| {
+            let words: String = u
+                .chars()
+                .map(|c| format!("\t\t\t{c}/v/aa1/\n"))
+                .collect();
+            format!(
+                "\t<sent>\n\t\t<sent_head>\n\t\t\tA:\n\t\t</sent_head>\n\t\t<sent_tag>\n\
+                 {words}\t\t\t。/w/VQ1/\n\t\t</sent_tag>\n\t\t<sent_tran>\n\n\t\t</sent_tran>\n\t</sent>\n"
+            )
+        })
+        .collect();
+    format!("<info>\n\t1-TN-107\n\tINFO-END\n</info>\n{sents}")
+}
+
+/// 長度 7 的前 2,000 句分成兩個轉寫檔；另有一個夾英文詞的話輪，整句丟掉。
+fn hkcancor_zip() -> Vec<u8> {
+    let mut utterances: Vec<String> = sentences_of_length(7).into_iter().take(2000).collect();
+    let second = utterances.split_off(1000);
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default();
+    zip.add_directory("utf8/", options).unwrap();
+    for (name, text) in [
+        ("utf8/FC-001_v2", hkcancor_transcript(&utterances)),
+        ("utf8/FC-002_v", hkcancor_transcript(&second)),
+        ("README", "They are released under a CC BY license.".into()),
+    ] {
+        zip.start_file(name, options).unwrap();
+        zip.write_all(text.as_bytes()).unwrap();
+    }
+    zip.start_file("utf8/FC-003_v", options).unwrap();
+    zip.write_all(
+        "<sent>\n<sent_tag>\n日/v/aa1/\nOK/e/ou1kei1/\n</sent_tag>\n</sent>\n".as_bytes(),
+    )
+    .unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+/// Common Voice：長度 8 的前 2,000 句，一半在 yue、一半在 zh-HK，一行一句。
+fn common_voice() -> (String, String) {
+    let all = sentences_of_length(8);
+    let lines = |range: std::ops::Range<usize>| -> String {
+        all[range].iter().map(|s| format!("{s}\n")).collect()
+    };
+    (lines(0..1000), lines(1000..2000))
+}
+
 fn unihan_zip() -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     zip.start_file(
@@ -110,18 +198,16 @@ fn unihan_zip() -> Vec<u8> {
 struct Files(BTreeMap<String, Vec<u8>>);
 
 impl Fetch for Files {
-    fn fetch(&self, url: &str) -> Result<Vec<u8>, String> {
-        self.0
-            .get(url)
-            .cloned()
-            .ok_or_else(|| format!("沒有 {url}"))
+    fn fetch(&self, url: &str, out: &mut dyn Write) -> Result<(), String> {
+        let body = self.0.get(url).ok_or_else(|| format!("沒有 {url}"))?;
+        out.write_all(body).map_err(|e| e.to_string())
     }
 }
 
 struct Offline;
 
 impl Fetch for Offline {
-    fn fetch(&self, url: &str) -> Result<Vec<u8>, String> {
+    fn fetch(&self, url: &str, _out: &mut dyn Write) -> Result<(), String> {
         Err(format!("離線，不該連 {url}"))
     }
 }
@@ -135,6 +221,19 @@ fn upstream(readme: &str) -> Files {
         ),
         ("https://example.invalid/Unihan.zip".into(), unihan_zip()),
         (format!("https://example.invalid/{DUMP_FILE}"), dump()),
+        (format!("https://example.invalid/{ZH_DUMP_FILE}"), zh_dump()),
+        (
+            "https://example.invalid/hkcancor.zip".into(),
+            hkcancor_zip(),
+        ),
+        (
+            "https://example.invalid/cv-yue.txt".into(),
+            common_voice().0.into(),
+        ),
+        (
+            "https://example.invalid/cv-zh-HK.txt".into(),
+            common_voice().1.into(),
+        ),
     ]))
 }
 
@@ -187,11 +286,50 @@ license = "CC-BY-SA-4.0"
 path = "{DUMP_FILE}"
 url = "https://example.invalid/{DUMP_FILE}"
 sha256 = "{dump}"
+
+[source.zh_wiki]
+repository = "https://archive.example.invalid/zhwiki-20220501"
+version = "20220501"
+license = "CC-BY-SA-4.0"
+
+[[source.zh_wiki.files]]
+path = "{ZH_DUMP_FILE}"
+url = "https://example.invalid/{ZH_DUMP_FILE}"
+sha256 = "{zh_dump}"
+
+[source.hkcancor]
+repository = "https://example.invalid/hkcancor"
+version = "39aeadf920e0b5ca93d0ad7792c59e740e7bdd65"
+license = "CC-BY-4.0"
+
+[[source.hkcancor.files]]
+path = "{HKCANCOR_FILE}"
+url = "https://example.invalid/hkcancor.zip"
+sha256 = "{hkcancor}"
+
+[source.common_voice]
+repository = "https://example.invalid/common-voice"
+version = "ec845c798ead7144f2acc95fd8955e9d3995c7d0"
+license = "CC0-1.0"
+
+[[source.common_voice.files]]
+path = "{CV_YUE_FILE}"
+url = "https://example.invalid/cv-yue.txt"
+sha256 = "{cv_yue}"
+
+[[source.common_voice.files]]
+path = "{CV_ZH_HK_FILE}"
+url = "https://example.invalid/cv-zh-HK.txt"
+sha256 = "{cv_zh_hk}"
 "#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
         unihan = sha256_hex(&unihan_zip()),
         dump = sha256_hex(&dump()),
+        zh_dump = sha256_hex(&zh_dump()),
+        hkcancor = sha256_hex(&hkcancor_zip()),
+        cv_yue = sha256_hex(common_voice().0.as_bytes()),
+        cv_zh_hk = sha256_hex(common_voice().1.as_bytes()),
     );
     std::fs::write(root.join("data/sources.toml"), sources).unwrap();
 }
@@ -291,7 +429,7 @@ fn tampered_cached_table_fails_the_build() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     run(root.path(), &upstream(README), false).unwrap();
-    let cached = walk(&root.path().join(".cache/sources"))
+    let cached = walk(&root.path().join("cache/sources"))
         .into_iter()
         .find(|p| p.ends_with("data/table.txt"))
         .unwrap();
@@ -421,10 +559,11 @@ fn wiki_dump_becomes_bench_sentences_and_training_splits() {
     }
 
     // 1,344 句加簡體轉成的那句，每句只出現一次；「日日」只在檔案說明裡，被丟掉了。
-    let [summary] = outcome.corpora.as_slice() else {
-        panic!("{:?}", outcome.corpora)
-    };
-    assert_eq!(summary.name, "yue-wiki");
+    let summary = outcome
+        .corpora
+        .iter()
+        .find(|c| c.name == "yue-wiki")
+        .unwrap();
     let counts = summary.counts;
     assert_eq!(counts.train + counts.dev + counts.test, 1_345);
     assert_eq!(counts.dropped, DROPPED);
@@ -472,14 +611,147 @@ fn corpus_build_is_deterministic_and_works_offline_from_the_cache() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     run(root.path(), &upstream(README), false).unwrap();
-    let files = [
-        "bench/corpus/yue-wiki.tsv",
-        "bench/corpus/ATTRIBUTION.md",
-        "build/corpus/yue-wiki/train.txt",
-        "build/corpus/yue-wiki/dev.txt",
+    let mut files = vec![
+        "bench/corpus/ATTRIBUTION.md".to_string(),
+        "bench/colloquial/ATTRIBUTION.md".to_string(),
     ];
+    for (dir, name) in CORPORA {
+        files.push(format!("{dir}/{name}.tsv"));
+        for split in ["train.txt", "dev.txt", "chars.tsv"] {
+            files.push(format!("build/corpus/{name}/{split}"));
+        }
+    }
     let first: Vec<String> = files.iter().map(|f| read(root.path(), f)).collect();
     run(root.path(), &Offline, false).unwrap();
     let second: Vec<String> = files.iter().map(|f| read(root.path(), f)).collect();
+    assert!(first.iter().all(|f| !f.is_empty()));
     assert_eq!(first, second);
+}
+
+/// 每個語料的基準目錄與名字。
+const CORPORA: [(&str, &str); 4] = [
+    ("bench/corpus", "yue-wiki"),
+    ("bench/corpus", "zh-wiki"),
+    ("bench/colloquial", "hkcancor"),
+    ("bench/colloquial", "common-voice-yue"),
+];
+
+/// 一個語料的檔案：基準句、train、dev、字頻。
+fn corpus_files(root: &Path, dir: &str, name: &str) -> (Vec<String>, String, String, String) {
+    let bench = read(root, &format!("{dir}/{name}.tsv"));
+    let bench = bench
+        .lines()
+        .map(|line| {
+            let (codes, sentence) = line.split_once('\t').unwrap();
+            let expected: Vec<&str> = sentence
+                .chars()
+                .map(|c| match c {
+                    '日' | '曰' => "a",
+                    '問' => "ar",
+                    '丟' => "mi",
+                    other => panic!("{name} 有連打字集外的字：{other}"),
+                })
+                .collect();
+            assert_eq!(codes, expected.join(" "), "{name}：{line}");
+            sentence.to_string()
+        })
+        .collect();
+    let split = |file: &str| read(root, &format!("build/corpus/{name}/{file}"));
+    (
+        bench,
+        split("train.txt"),
+        split("dev.txt"),
+        split("chars.tsv"),
+    )
+}
+
+#[test]
+fn every_corpus_gets_bench_sentences_training_splits_and_character_counts() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), true).unwrap();
+
+    // 各語料句子的長度不同：粵語維基 3–5（另有一句 6 字的簡體句）、中文維基 6、HKCanCor 7、Common Voice 8。
+    for ((dir, name), lengths) in CORPORA.iter().zip([3..=6, 6..=6, 7..=7, 8..=8]) {
+        let (bench, train, dev, chars) = corpus_files(root.path(), dir, name);
+        assert!(!bench.is_empty(), "{name} 沒有基準句");
+        for sentence in bench
+            .iter()
+            .map(String::as_str)
+            .chain(train.lines())
+            .chain(dev.lines())
+        {
+            assert!(
+                lengths.contains(&sentence.chars().count()),
+                "{name} 混進別的句子：{sentence}"
+            );
+        }
+        // 字頻：train 每個字出現幾次，一行「字<TAB>次數」，次數多的在前。
+        let mut expected: BTreeMap<char, usize> = BTreeMap::new();
+        for c in train.lines().flat_map(str::chars) {
+            *expected.entry(c).or_default() += 1;
+        }
+        let counted: Vec<(char, usize)> = chars
+            .lines()
+            .map(|line| {
+                let (c, n) = line.split_once('\t').unwrap();
+                (c.parse().unwrap(), n.parse().unwrap())
+            })
+            .collect();
+        assert_eq!(
+            counted.iter().copied().collect::<BTreeMap<_, _>>(),
+            expected,
+            "{name}"
+        );
+        assert!(
+            counted.windows(2).all(|w| w[0].1 >= w[1].1),
+            "{name}：{chars}"
+        );
+    }
+
+    let summary = |name: &str| outcome.corpora.iter().find(|c| c.name == name).unwrap();
+    assert_eq!(
+        summary("hkcancor").counts.dropped,
+        1,
+        "夾英文詞的話輪整句丟掉"
+    );
+    assert_eq!(
+        summary("hkcancor").bench,
+        Path::new("bench/colloquial/hkcancor.tsv")
+    );
+
+    let wiki = read(root.path(), "bench/corpus/ATTRIBUTION.md");
+    for expected in ["CC BY-SA 4.0", "zh-wiki.tsv", "20220501", ZH_DUMP_FILE] {
+        assert!(wiki.contains(expected), "缺 {expected}：\n{wiki}");
+    }
+    let colloquial = read(root.path(), "bench/colloquial/ATTRIBUTION.md");
+    for expected in [
+        "hkcancor.tsv",
+        "K. K. Luke and May L.Y. Wong (2015)",
+        "https://creativecommons.org/licenses/by/4.0/",
+        "39aeadf920e0b5ca93d0ad7792c59e740e7bdd65",
+        "common-voice-yue.tsv",
+        "ec845c798ead7144f2acc95fd8955e9d3995c7d0",
+        CV_ZH_HK_FILE,
+        "CC0-1.0",
+    ] {
+        assert!(
+            colloquial.contains(expected),
+            "缺 {expected}：\n{colloquial}"
+        );
+    }
+    assert!(!colloquial.contains("Wikipedia"), "{colloquial}");
+
+    let report = outcome.report.unwrap();
+    assert!(report.passed(), "{report}");
+    let shown = report.to_string();
+    for (_, name) in CORPORA {
+        for expected in [
+            format!("[通過] 語料轉碼：{name} 失敗 0 句"),
+            format!("[通過] 語料不洩漏：{name} test 句原樣出現在 train 0 句"),
+            format!("[通過] 語料決定性：{name} 建兩次 sha256 相同"),
+        ] {
+            assert!(shown.contains(&expected), "缺 {expected}：\n{shown}");
+        }
+    }
 }

@@ -16,7 +16,8 @@ Thumbs.db
 /web/test-results/
 /web/playwright-report/
 
-# 資料管線：下載的來源與建置產物
+# 資料管線的建置產物；下載的來源在 repo 外的使用者快取目錄（docs/development.md）。
+# /.cache/ 是舊的下載位置，已有的 checkout 裡可能還留著。
 /.cache/
 /build/
 /web/public/packs/
