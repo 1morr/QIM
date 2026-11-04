@@ -30,8 +30,11 @@ pub const FIXED: &str = "bench/fixed.tsv";
 /// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
 pub const CORPUS_DIRS: [&str; 2] = ["bench/corpus", "bench/colloquial"];
 pub const BASELINE: &str = "bench/baseline.json";
-/// dev 模式的題目：[`CORPUS_DIRS`] 每個集合 `<名>` 的 dev 切分，`cargo xtask data` 寫的，不進 git。
-pub const DEV_ITEMS: &str = "build/corpus/{name}/dev.tsv";
+/// dev 模式的題目：[`CORPUS_DIRS`] 每個集合 `name` 的 dev 切分，相對 repo 根目錄；
+/// `cargo xtask data` 寫的，不進 git。
+pub fn dev_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev.tsv")
+}
 /// dev 模式裡由集合 `<名>` 的句子取出的短輸入，集合名是 `<名>` 接這些字尾：
 /// 每個字（單字），與句子裡出現的詞庫的詞（2 到 [`SHORT_WORD_CHARS`] 字）。
 pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];
@@ -227,7 +230,7 @@ impl DevOutcome {
     }
 }
 
-/// dev 模式：照 [`run`] 的方式打各集合的 dev 切分（[`DEV_ITEMS`]）與固定題。`overrides` 是
+/// dev 模式：照 [`run`] 的方式打各集合的 dev 切分（[`dev_items`]）與固定題。`overrides` 是
 /// `<鍵>=<值>`，暫時蓋掉方案檔 `[ranking]` 的同名欄位，資料包不變。
 pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> {
     let overrides = overrides
@@ -247,7 +250,7 @@ pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> 
     let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets = Vec::new();
     for (name, _) in corpus_sets(root)? {
-        let rel = DEV_ITEMS.replace("{name}", &name);
+        let rel = dev_items(&name);
         let path = root.join(&rel);
         let text = fs::read_to_string(&path)
             .map_err(|e| format!("讀不到 {rel}：{e}；先跑 `cargo xtask data`"))?;
@@ -280,7 +283,10 @@ pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> 
     })
 }
 
-/// 把 `key=value` 套到 `ranking`；鍵是方案檔 `[ranking]` 的欄位名。
+/// `--set` 能蓋的鍵：方案檔 `[ranking]` 的欄位名。
+const RANKING_KEYS: [&str; 4] = ["word_bonus", "segment_penalty", "beam", "sentences"];
+
+/// 把 `key=value` 套到 `ranking`；鍵見 [`RANKING_KEYS`]。
 fn override_ranking(ranking: &mut Ranking, key: &str, value: &str) -> Result<(), String> {
     fn parse<T: std::str::FromStr>(key: &str, value: &str) -> Result<T, String> {
         value
@@ -294,7 +300,8 @@ fn override_ranking(ranking: &mut Ranking, key: &str, value: &str) -> Result<(),
         "sentences" => ranking.sentences = parse(key, value)?,
         _ => {
             return Err(format!(
-                "沒有這個打分參數：{key}（可用 word_bonus、segment_penalty、beam、sentences）"
+                "沒有這個打分參數：{key}（可用 {}）",
+                RANKING_KEYS.join("、")
             ));
         }
     }

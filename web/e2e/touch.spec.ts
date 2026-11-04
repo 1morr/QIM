@@ -107,3 +107,20 @@ test("手機寬度下候選列是單列：「門口」橫排不折行（brief §
 		expect(box?.y).toBe(first.y);
 	}
 });
+
+test("點空白上屏後按「回報」，清單多一行 fixed.tsv 格式的題（M1 票 12）", async ({
+	page,
+}) => {
+	const report = page.getByRole("button", { name: "回報", exact: true });
+	for (const id of ["a", "n", "r", "space"]) {
+		await page.getByTestId(`key-${id}`).tap();
+	}
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
+		"門口",
+	);
+	await report.tap();
+	await expect(page.getByRole("textbox", { name: /回報的固定題/ })).toHaveValue(
+		"anr\t門口\t網頁回報（首選 門口）",
+	);
+	await expect(report).toBeDisabled();
+});

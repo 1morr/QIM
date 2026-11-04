@@ -32,7 +32,7 @@ export interface ReportState {
 	/** 上一個 snapshot 的整串輸入碼。 */
 	input: string;
 	/** 最近一次輸入碼變動、沒有選定分段時的輸入碼與首選。 */
-	topOf?: { input: string; top: string };
+	topAtInput?: { input: string; top: string };
 	/** 最近一次上屏的組字。 */
 	last?: Composed;
 }
@@ -41,13 +41,13 @@ export const initialReport: ReportState = { input: "" };
 
 /** 核心每回一個 snapshot 就交給它。 */
 export function observe(state: ReportState, snapshot: Observed): ReportState {
-	let { topOf, last } = state;
+	let { topAtInput, last } = state;
 	if (snapshot.commit !== undefined && state.input !== "") {
 		last = snapshot.chosen
 			? {
 					input: state.input,
 					wanted: snapshot.commit,
-					top: topOf?.input === state.input ? topOf.top : "",
+					top: topAtInput?.input === state.input ? topAtInput.top : "",
 				}
 			: undefined;
 	}
@@ -57,9 +57,9 @@ export function observe(state: ReportState, snapshot: Observed): ReportState {
 		snapshot.input !== "" &&
 		snapshot.selected === ""
 	) {
-		topOf = { input: snapshot.input, top: snapshot.candidates[0] ?? "" };
+		topAtInput = { input: snapshot.input, top: snapshot.candidates[0] ?? "" };
 	}
-	return { input: snapshot.input, topOf, last };
+	return { input: snapshot.input, topAtInput, last };
 }
 
 /** `fixed.tsv` 的一行，不含換行；來源欄註明當時的首選，之後看得出原本錯成什麼。 */
