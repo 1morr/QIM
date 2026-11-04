@@ -97,21 +97,27 @@ impl UserModel {
             .then_some(count.last_commit_tick)
     }
 
-    /// `personal`（plan §2.3）：學過的（輸入碼, 字詞）在任何長度的連打裡加的分，只加不減。
-    /// `log_static` 是這一段原本的 ln 機率；沒學過時是 0。
-    pub(crate) fn personal(&self, scheme: &str, code: &str, text: &str, log_static: f64) -> f64 {
-        let Some((model, count)) = self.get(scheme, code, text) else {
-            return 0.0;
-        };
-        let p = count.decayed * decay(model.tick - count.last_tick) / max_decayed();
-        let mixed = ((1.0 - PERSONAL_WEIGHT) * log_static.exp() + PERSONAL_WEIGHT * p).ln();
-        (mixed - log_static).max(0.0)
+    /// 個人機率（plan §2.3）：衰減值衰減到現在，除以它的上限；沒學過時是 0。
+    pub(crate) fn personal_probability(&self, scheme: &str, code: &str, text: &str) -> f64 {
+        self.get(scheme, code, text).map_or(0.0, |(model, count)| {
+            count.decayed * decay(model.tick - count.last_tick) / max_decayed()
+        })
     }
 
     fn get(&self, scheme: &str, code: &str, text: &str) -> Option<(&SchemeModel, &Count)> {
         let model = self.schemes.get(scheme)?;
         Some((model, model.entries.get(code)?.get(text)?))
     }
+}
+
+/// `personal`（plan §2.3）：個人機率 `p` 在一段原本的 ln 機率 `log_static` 上加的分，只加不減；
+/// `p` 是 0（沒學過）時是 0。
+pub(crate) fn personal_bonus(log_static: f64, p: f64) -> f64 {
+    if p == 0.0 {
+        return 0.0;
+    }
+    let mixed = ((1.0 - PERSONAL_WEIGHT) * log_static.exp() + PERSONAL_WEIGHT * p).ln();
+    (mixed - log_static).max(0.0)
 }
 
 /// 衰減值的上限：每次上屏都是同一個（輸入碼, 字詞）時趨近的值，`1 / (1 − e^(−1/200))` ≈ 200.5。

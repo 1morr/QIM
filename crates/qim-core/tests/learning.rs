@@ -1,7 +1,9 @@
 //! 學習與排位（plan §2.4、brief §4.5）經公開介面的行為：上屏的字詞記進 `UserModel`，
 //! 之後的候選依它前移。
 
-use std::collections::BTreeMap;
+mod common;
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
     CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Pack, Packs, Ranking, Scheme,
@@ -28,6 +30,7 @@ fn engine(data: &Data) -> Engine {
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
+            language_model: Some("model".into()),
         },
         ranking: Ranking::default(),
     };
@@ -52,7 +55,10 @@ fn engine(data: &Data) -> Engine {
         id: "lexicon".into(),
         lexicon: Lexicon::new(words, data.chars.iter().copied()),
     };
-    Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
+    // 字的分數由字頻造的 unigram 語言模型給，分母含碼表裡的每個字。
+    let continuous: BTreeSet<char> = data.table.iter().flat_map(|(_, c)| c.chars()).collect();
+    let model = common::unigram("model", &data.chars, continuous.len());
+    Engine::new(Pack { scheme, code_table }, Some(lexicon), Some(model)).unwrap()
 }
 
 /// 一個輸入框：方案與 `Session` 各自一份，`UserModel` 由呼叫端給，可以跨方案共用。

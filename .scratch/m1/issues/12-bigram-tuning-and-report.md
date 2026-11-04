@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 04, 05, 08, 09, 11
-讀: plan §2.3、§2.5（`[ranking]`）、§4.3（口語權重）、§5.2；brief §9；`docs/research/blackbox-baseline.md`；spec〈共同規則〉
+讀: plan §2.3、§2.5（`[ranking]`）、§4.3（口語權重）、§5.2；brief §9；`.scratch/m1/issues/13-learning-counts-and-ranking.md` 的 Comments（w 的數字）；`docs/research/blackbox-baseline.md`；spec〈共同規則〉
 
 ## What to build
 
@@ -10,6 +10,7 @@ Blocked by: 04, 05, 08, 09, 11
 
 - 調參只看 dev 切分（維基 dev、口語 dev），不看 test 與個人集；搜尋方式（格點或其他）與結果寫進 `## Comments`。
 - 口語權重調完後，比較「加口語前 / 後」：口語集修正次數要下降；維基集首選正確率若退步，退多少寫進 `## Comments`。
+- `personal` 的 w（票 13 起是 0.2，在 `crates/qim-core/src/user.rs`）用 `cargo xtask bench --learning` 一起調：換上 bigram 後 w 0.2 讓 zh-wiki 學習開比學習關多，較小的 w 則讓 hkcancor 變差（數字在票 13 Comments）。口語集學習開仍要比學習關少。
 - 延遲：原生 p95 ≤ 10 ms、WebAssembly p95 ≤ 50 ms（含 20 碼以上）；不達標時照 plan §8「延遲超過預算」調 beam 或剪枝。
 - 網頁「回報」：把剛才那次組字的輸入碼和使用者要的字匯出成 `fixed.tsv` 的一行（使用者要的字怎麼輸入在本票定）。
 - 黑箱基線裡可機械驗證、現在已通過的案例加進 `fixed.tsv`。
@@ -24,3 +25,5 @@ Blocked by: 04, 05, 08, 09, 11
 - [ ] `cargo xtask bench --check` 綠燈。
 
 ## Comments
+
+- 票 11 留下的（2026-11-04）：詞的段改成「第一字用 bigram、詞內用詞頻」的混合式（plan §2.3、票 11 Comments）；它是看 test 切分與個人集選的，本票用 dev 切分複核，並試詞內在詞頻與字級 bigram 之間內插。β = 2、γ = 0 仍是 unigram 時代的值。每碼先依字頻取前 beam 個字的近似、剪枝門檻 `bigram::MIN_COUNT = 2`（不剪約 4.7 MB，仍 ≤ 8 MB）也一起量。

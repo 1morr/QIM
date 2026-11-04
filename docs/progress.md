@@ -36,6 +36,9 @@
 | 2026-11-04 | M1 09 | Gboard 速成（Android）T1–T18 寫進黑箱基線；iPhone 版未測；brief §1.3 更新，3 題進 `fixed.tsv`；細節見票 09 | 新 session 下 `/implement .scratch/m1/issues/10-composition-key-residue.md` |
 | 2026-11-04 | M1 10 | 組字中每個鍵都吃下：Enter 上屏輸入碼，標點、大寫先上屏組字，`z`、← →、`Key::Other` 不動作；標點全形；`toKey` 單元測試；細節見票 10 | 新 session 下 `/implement .scratch/m1/issues/13-learning-counts-and-ranking.md`（11、18 另在並行） |
 | 2026-11-04 | M1 13 | 學習計數、規則 2、`personal`、無痕與 `set_options`、`bench --learning`（學習開修正較少）；細節見票 13 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md`（11、18 另在並行） |
+| 2026-11-04 | M1 11 | 字級 KN bigram 資料包 2.9 MB（`--verify` 查大小與決定性），接進打分；各集合答錯都降，維基答錯少 1/10–1/4，口語少 1/8；細節見票 11 | 新 session 下 `/implement .scratch/m1/issues/12-bigram-tuning-and-report.md` |
+| 2026-11-04 | M1 18 | `qim-layout`（點擊判定）、Gboard 直向佈局由 `qim-databuild` 算出、網頁觸控模式點出「門口」；plan §1.3「不可以」欄加同步測試；細節見票 18 | 新 session 下 `/implement .scratch/m1/issues/19-layout-format-final.md` |
+| 2026-11-04 | M1 13 | 規則 2 只算整串上屏（使用者決定）；merge main，`personal` 改在 bigram 打分裡算，baseline 不變；zh-wiki 學習開變差，w 交票 12 調 | 新 session 下 `/implement .scratch/m1/issues/14-user-words-auto-phrase-export.md` |
 
 ## 偏差與決定
 
@@ -78,3 +81,5 @@
 - 2026-11-04 M1 13：排位規則只移動候選列已有的候選，前面的規則排定的位置後面不動；規則 3、4 的「第 2 位」由票 14、15 擴充（plan §2.4）。
 - 2026-11-04 M1 13：一般模式的基準模擬時開無痕，題內也不學；`--learning` 只報不擋、不寫 baseline（plan §5.2、`docs/development.md`）。
 - 2026-11-04 M1 13 後（使用者決定）：規則 2 的「上屏 ≥ 2 次」與「最近」只算整串輸入碼就是那個碼的上屏，句中各段只進 `personal`，免得句中用過的字搶到單打首選（plan §2.4、brief §4.5）。
+- 2026-11-04 M1 11：詞的段改成第一字用 bigram、詞內用詞頻（plan §2.3）：詞內也用字級 bigram 時同碼的詞分不出常用度，個人集答錯 1146 → 1452；票 12 用 dev 複核。
+- 2026-11-04 M1 18：`qim-databuild` 可以依賴 `qim-layout`（用它的型別寫出預設佈局到 `build/layouts/`），plan §1.3 拆出 `qim-bench` 一列（plan §1.2、`docs/development.md`）。

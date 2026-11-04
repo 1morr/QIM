@@ -25,7 +25,7 @@ fn main() -> ExitCode {
         ["bench", "--learning"] => release_run("qim-bench", &["--learning"]),
         ["web"] => {
             let root = repo_root();
-            if web::wasm_bindings(&root) && web::packs(&root) {
+            if web::wasm_bindings(&root) && web::serve_data_outputs(&root) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE

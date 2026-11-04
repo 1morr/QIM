@@ -66,6 +66,7 @@ fn engine_for(
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
+            language_model: None,
         },
         ranking: Ranking::default(),
     };
@@ -97,7 +98,7 @@ fn engine_for(
         id: "lexicon".into(),
         lexicon,
     };
-    Engine::new(Pack { scheme, code_table }, Some(lexicon)).unwrap()
+    Engine::new(Pack { scheme, code_table }, Some(lexicon), None).unwrap()
 }
 
 /// 同碼不同字的另一個方案：每個碼的字倒過來排、前面多一個「甲」，詞也倒過來；

@@ -88,4 +88,25 @@ Blocked by: 04, 07
   - 先紅：`a_character_used_in_sentences_does_not_count_towards_the_twice_chosen_rule` 紅在 `left: "曰"`、`right: "日"`。內容是連打 `ab` 選「曰月」三次後，單打 `a` 的首選應仍是「日」；接著單打 `a` 選「曰」兩次，首選才變「曰」。
   - 存法：`Count` 分兩組欄位。`commits`、`last_commit_tick` 只在整串上屏時更新，給規則 2 的門檻與「最近」。`decayed`、`last_tick` 由整串與句中各段一起更新，給 `personal`。
   - 「最近」也改看整串上屏：`using_a_twice_chosen_candidate_in_a_sentence_does_not_make_it_more_recent` 驗證句中用過不會讓它變近。把它改回看 `last_tick` 時這條會紅。
+- merge main（票 11 的字級 bigram、票 18 的佈局）：
+  - 靜態機率改成看前一字後，`personal` 跟著搬進 `Engine::edge_score`。邊先存好個人機率與詞內機率，接上前一字時才算加分。
+  - 一般模式的分數照 main 的加法順序算（`first + inner`），空白 `UserModel` 時和 main 逐位元相同。第一版改了結合順序，hkcancor 的修正次數因同分換序少了 3，所以改回。
+  - `bench/baseline.json` 和 main 相同，沒改；本機的個人集 baseline 因 bigram 變好而 `--update-baseline`（答錯 1146 → 1106、修正 1596 → 1500）。
+  - 合併前後的 `bench --learning`（學習關 → 學習開）：
+
+    | 集合 | 合併前（unigram，規則 2 只算整串） | 合併後（bigram） |
+    | --- | ---: | ---: |
+    | yue-wiki | 7471 → 6590 | 4607 → 4559 |
+    | zh-wiki | 5605 → 5531 | 4495 → 4755 |
+    | common-voice-yue | 8980 → 7476 | 6236 → 5746 |
+    | hkcancor | 6200 → 4121 | 4518 → 3067 |
+    | personal | 1596 → 1583 | 1500 → 1497 |
+
+  - 驗收「口語集與個人集學習開較少」仍成立，但 zh-wiki 學習開變差。試了較小的 w，學習開的修正次數如下。w 越小維基越好、hkcancor 越差；口語是主要依據（brief §9），先留 0.2，由票 12 和 β、γ 一起調（plan §2.3）：
+
+    | w | yue-wiki | zh-wiki | common-voice-yue | hkcancor | personal |
+    | ---: | ---: | ---: | ---: | ---: | ---: |
+    | 0.2 | 4559 | 4755 | 5746 | 3067 | 1497 |
+    | 0.05 | 4447 | 4570 | 5757 | 3300 | 1484 |
+    | 0.01 | 4519 | 4482 | 6027 | 3796 | 1483 |
 
