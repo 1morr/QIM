@@ -499,7 +499,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 ### 7.4 M3 智慧候選
 
 - 模型階梯實驗（§7.8）先做，依結果決定同步層要不要升級語言模型、要不要做小型神經重排，以及 LLM 候選優化與雲端聯想、補全的範圍。開工前讀青簡的神經重排（摘要在 `docs/research/qingjian.md` §4、§5；原文 `qingjian-neural`、`docs/notes/neural-rescoring.md`，GPL，只取做法）與 CyIME 的九宮格模型評估（`docs/research/cyime.md` §3 的文件，GPL，只取做法），記到 `docs/research/`。
-- 個人 bigram（§2.3）；聯想；輸入框上下文配合 n-gram；自動記住 email 這類字串；常用語（與觸發詞共用格式）；emoji 候選（CLDR 繁中 / 粵語標註）。
+- 個人 bigram（§2.3）；聯想（有開關、預設開，brief §7）；輸入框上下文配合 n-gram；自動記住 email 這類字串；常用語（與觸發詞共用格式）；emoji 候選（CLDR 繁中 / 粵語標註）。
 - 雲端（brief §8）：使用者自帶 API key，結果非同步、標示來源；送出前遮蔽 email、電話、卡號；花費上限（每日請求數，預設值依 §7.8 的費用定）；排除指定 App（介面與規則放核心，平台里程碑接上）。
 - 詞庫匯入；完整粵語詞庫（授權查清後，查不清就留在之後）；資料包線上更新（可關；更新來源在開工時定，要建遠端先問使用者）：這時才給資料包加 manifest（id、種類、版本、最低核心版本、sha256、大小、授權），設定頁可切換、刪除，也可從檔案匯入資料包；模型階梯實驗採用可選下載的模型時也走這裡。
 - 完成標準：
@@ -513,7 +513,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 - 開工前讀 HeliBoard 的 `ProximityInfo`（GPL，只取做法）與 FlorisBoard v0.5.2 的滑動輸入，記到 `docs/research/`。
 - 空間模型：觸控把每次點擊算成各字母的機率（高斯，依按鍵實際位置，§2.1 的 `Key::Weighted`）；實體鍵盤用鄰鍵表，由實體鍵盤幾何（各排錯位）按距離算出，含上下排與斜角（libime 只取同排左右，`docs/research/ranking-techniques.md` §5.2），以實體鍵位為準、不受配列影響。容錯邊帶懲罰進 lattice，懲罰和要不要只在無候選時啟動都用基準調（`docs/research/ranking-techniques.md` §5.5）。
 - 容錯（漏碼、多碼、兩碼對調；速成只在詞與句層，brief §4.8）；萬用鍵；撤銷學習（長按候選清掉它的學習紀錄，詞庫原有的詞回到原位、再選可重新學，不做永久屏蔽；CyIME 的永久屏蔽被使用者評為偏離預期，`docs/research/cyime.md` §4）；空白鍵滑動移游標；英文滑動輸入（參考 FlorisBoard v0.5.2、AnySoftKeyboard，brief §12.4）。
-- 英文模式（brief §4.7）：單字預測、自動修正（退格可還原）、Shift 與句首大寫。英文 n-gram 的來源在開工時查證。
+- 英文模式（brief §4.7）：單字預測、自動修正（退格可還原）、Shift 與句首大寫；自動修正與句首自動大寫各有開關、預設關，容錯也有開關、預設開（brief §7），都放進 `Options`。英文 n-gram 的來源在開工時查證。
 - 句中英文混輸實驗（brief §4.7）：英文詞帶懲罰進 lattice，只收拼對的常見詞、不容錯，並設最短長度；純中文集的首選與修正次數不退步才採用，結論寫回 brief。
 - 譯詞：開工先查繁體與粵語對英文詞表的來源與授權，記到 `docs/research/`；查不到合用的，再評估自己用 LLM 離線生成（青簡做法）。做成可選資料包（走 M3 的 manifest），候選旁顯示譯詞，修飾鍵加數字上屏譯詞（青簡：macOS ⌥、Windows Ctrl）。
 - 欄位類型：email、網址預設英文模式並關自動修正，數字欄開數字頁。
@@ -523,7 +523,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 - 完成標準：
   - 上述功能在網頁可用，觸控功能也在手機瀏覽器試過。
   - 首選字基準加「含打錯碼」的集合與「觸控模擬」集合（點擊位置依高斯雜訊偏移），都設 baseline；沒打錯的集合不退步。
-  - Playwright 讀回：英文模式打 `teh` 修正成 `the`，退格還原；中文狀態打 `receive` 第 2 位是 receive、打 `recieve` 不出英文候選；email 欄位預設英文且不修正；數字後的句點是半形；修飾鍵加數字上屏譯詞。
+  - Playwright 讀回：預設不修正 `teh`；打開自動修正後英文模式打 `teh` 修正成 `the`，退格還原；關掉容錯後打錯碼的集合不出修正讀法；中文狀態打 `receive` 第 2 位是 receive、打 `recieve` 不出英文候選；email 欄位預設英文且不修正；數字後的句點是半形；修飾鍵加數字上屏譯詞。
   - 實體鍵盤的「含打錯碼」集合（鄰鍵依實體幾何、含對調）設 baseline。
   - 兩個瀏覽器設定檔互相同步一個新使用者詞與一筆刪除，讀回結果一致。
 
