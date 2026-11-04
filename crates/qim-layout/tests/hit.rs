@@ -1,6 +1,6 @@
 //! 點擊判定（plan §2.6、§5.3）：從 JSON 讀進佈局，在設計尺寸的座標上點。
 
-use qim_layout::Layout;
+use qim_layout::{Layout, Page};
 
 /// 一個手機直向的佈局版本、一頁；`keys` 是按鍵陣列的 JSON。
 fn layout(keys: &str) -> Layout {
@@ -87,5 +87,9 @@ fn tap_in_a_gap_hits_the_nearest_key() {
 
 #[test]
 fn page_without_keys_hits_nothing() {
-    assert_eq!(hit(&layout("[]"), 10.0, 10.0), None);
+    let page = Page {
+        id: "empty".into(),
+        keys: vec![],
+    };
+    assert_eq!(page.hit(10.0, 10.0), None);
 }

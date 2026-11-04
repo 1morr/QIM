@@ -1,10 +1,12 @@
 //! 預設 Gboard 速成佈局：由按鍵排列算出畫布上每個鍵的位置（plan §2.6、ADR 0004）。
 //!
 //! 排列以「鍵寬」為單位，一排十個鍵寬；每個鍵占一格，四周留縫，點在縫上由點擊判定取最近的鍵。
-//! 現在只有手機直向、一頁字母（M1 票 18）；橫向、符號頁與長按在票 19、20 加。
+//! 現在只有手機直向、一頁字母（M1 票 18）；橫向、符號頁與長按在票 20 加。
+//! 顏色照 Gboard 預設主題的淺色與深色。
 
 use qim_layout::{
-    Action, Device, FORMAT, Frame, Key, Layout, LayoutVariant, Orientation, Page, Size, When,
+    Action, Device, FORMAT, Frame, Insets, Key, Layout, LayoutVariant, Orientation, Page, Shape,
+    Size, Style, ThemeColor, When,
 };
 
 /// 寫到 `build/layouts/` 的檔名。
@@ -19,6 +21,28 @@ const UNITS_PER_ROW: f64 = 10.0;
 /// 鍵與格子邊緣的距離：左右、上下。
 const GAP_X: f64 = 3.0;
 const GAP_Y: f64 = 5.0;
+/// 鍵的圓角半徑。
+const RADIUS: f64 = 6.0;
+
+fn color(light: &str, dark: &str) -> ThemeColor {
+    ThemeColor {
+        light: light.into(),
+        dark: dark.into(),
+    }
+}
+
+/// 字母鍵與空白用淺底，刪除與 Enter 用深一階的底。
+fn style(tap: &Action) -> Style {
+    let fill = match tap {
+        Action::Backspace | Action::Enter => color("#c4c7c5", "#5f6368"),
+        _ => color("#ffffff", "#3c4043"),
+    };
+    Style {
+        fill: Some(fill),
+        label_color: Some(color("#1f1f1f", "#e3e3e3")),
+        ..Style::default()
+    }
+}
 
 /// 一排裡的一格：動作、鍵寬、固定標籤（字母鍵不寫，用方案的字根）。
 struct Cell {
@@ -109,10 +133,18 @@ pub fn layout() -> Layout {
                     w: width - 2.0 * GAP_X,
                     h: ROW_HEIGHT - 2.0 * GAP_Y,
                 },
+                rotate: 0.0,
                 z: 0,
+                shape: Shape::Rect { radius: RADIUS },
+                extended_edges: Insets::default(),
                 label: cell.label.map(str::to_owned),
                 hint,
+                a11y_label: None,
+                style: Some(style(&cell.tap)),
                 tap: cell.tap.clone(),
+                long_press: Vec::new(),
+                swipe: None,
+                composing: None,
             });
             left += width;
         }
@@ -128,6 +160,8 @@ pub fn layout() -> Layout {
                 width: WIDTH,
                 height: rows.len() as f64 * ROW_HEIGHT,
             },
+            grid: None,
+            initial_page: None,
             pages: vec![Page {
                 id: "letters".into(),
                 keys,
