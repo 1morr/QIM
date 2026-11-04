@@ -26,21 +26,25 @@ struct SchemeModel {
     entries: BTreeMap<String, BTreeMap<String, Count>>,
 }
 
-/// 一個（輸入方案, 輸入碼, 候選文字）的計數。
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// 一個（輸入方案, 輸入碼, 候選文字）的計數。兩種上屏分開記（plan §2.4）：
+/// - 整串上屏：整串輸入碼就是這個碼、上屏的就是這個候選；給排位規則 2 用。
+/// - 句中各段的上屏也算進衰減值，給 `personal` 用。
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 struct Count {
-    /// 上屏次數，不衰減，排位規則的門檻用。
+    /// 整串上屏的次數，不衰減，排位規則 2 的門檻用；只在句中出現過時是 0。
     commits: u64,
-    /// 衰減值：每次上屏加一，舊的隨上屏次數指數衰減（librime `formula_d`）；記的是
-    /// `last_tick` 當時的值。
+    /// 最後一次整串上屏的 tick；`commits` 是 0 時沒有意義。
+    last_commit_tick: u64,
+    /// 衰減值：整串上屏與句中各段的上屏每次加一，舊的隨上屏次數指數衰減（librime
+    /// `formula_d`）；記的是 `last_tick` 當時的值。
     decayed: f64,
-    /// 最後上屏時的 tick。
+    /// 最後一次（整串或句中）上屏時的 tick。
     last_tick: u64,
 }
 
 impl UserModel {
-    /// 一次上屏：整串輸入碼和每一段（輸入碼, 字詞）各記一次，同一個鍵只記一次（plan §2.4）。
-    /// `segments` 依輸入碼的順序、接起來是整串；空的不記。
+    /// 一次上屏：整串輸入碼和每一段（輸入碼, 字詞）的衰減值各記一次，同一個鍵只記一次；
+    /// 整串另記一次整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串；空的不記。
     pub(crate) fn learn(&mut self, scheme: &str, segments: &[(&str, &str)]) {
         if segments.is_empty() {
             return;
@@ -58,20 +62,20 @@ impl UserModel {
                 keys.push(segment);
             }
         }
-        for (code, text) in keys {
+        for (i, (code, text)) in keys.into_iter().enumerate() {
             let count = model
                 .entries
                 .entry(code.to_string())
                 .or_default()
                 .entry(text.to_string())
-                .or_insert(Count {
-                    commits: 0,
-                    decayed: 0.0,
-                    last_tick: tick,
-                });
+                .or_default();
             count.decayed = 1.0 + count.decayed * decay(tick - count.last_tick);
-            count.commits += 1;
             count.last_tick = tick;
+            // `keys` 的第一個是整串。
+            if i == 0 {
+                count.commits += 1;
+                count.last_commit_tick = tick;
+            }
         }
     }
 
@@ -80,8 +84,8 @@ impl UserModel {
         self.get(scheme, code, text).is_some()
     }
 
-    /// 排位規則 2（plan §2.4）：上屏次數 ≥ 2 且距最後上屏不超過 [`RECENT_COMMITS`] 次時，
-    /// 回傳最後上屏的 tick，越大越近；否則是 `None`。
+    /// 排位規則 2（plan §2.4）：整串上屏 ≥ 2 次且距最後一次整串上屏不超過 [`RECENT_COMMITS`]
+    /// 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的上屏不算。
     pub(crate) fn last_tick_if_chosen_twice(
         &self,
         scheme: &str,
@@ -89,8 +93,8 @@ impl UserModel {
         text: &str,
     ) -> Option<u64> {
         let (model, count) = self.get(scheme, code, text)?;
-        (count.commits >= 2 && model.tick - count.last_tick <= RECENT_COMMITS)
-            .then_some(count.last_tick)
+        (count.commits >= 2 && model.tick - count.last_commit_tick <= RECENT_COMMITS)
+            .then_some(count.last_commit_tick)
     }
 
     /// `personal`（plan §2.3）：學過的（輸入碼, 字詞）在任何長度的連打裡加的分，只加不減。

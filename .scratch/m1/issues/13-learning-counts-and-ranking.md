@@ -84,4 +84,8 @@ Blocked by: 04, 07
   - （碼, 字詞）在 `Session` 與 `UserModel` 之間用 tuple 傳，沒有另立型別。`select_at` 與 `commit_all_then` 各自組學習用的分段（票 10 Comments 提過兩處要一起看），`select_at` 會改狀態，暫不合併。
   - 程式碼註解寫票號（「規則 1、3 在 M1 票 14」）。repo 原本就這樣寫，沒改。
   - `WebSession` 自己存一份 `Options` 再整份交給 `set_options`，因為 `Session` 沒有 getter。
+- 收尾後使用者決定（協調者轉達）：規則 2 只算整串上屏。原本句中各段也計次，連打句中用過兩次的字，單打時就搶到首選。
+  - 先紅：`a_character_used_in_sentences_does_not_count_towards_the_twice_chosen_rule` 紅在 `left: "曰"`、`right: "日"`。內容是連打 `ab` 選「曰月」三次後，單打 `a` 的首選應仍是「日」；接著單打 `a` 選「曰」兩次，首選才變「曰」。
+  - 存法：`Count` 分兩組欄位。`commits`、`last_commit_tick` 只在整串上屏時更新，給規則 2 的門檻與「最近」。`decayed`、`last_tick` 由整串與句中各段一起更新，給 `personal`。
+  - 「最近」也改看整串上屏：`using_a_twice_chosen_candidate_in_a_sentence_does_not_make_it_more_recent` 驗證句中用過不會讓它變近。把它改回看 `last_tick` 時這條會紅。
 

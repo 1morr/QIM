@@ -275,3 +275,42 @@ fn a_learned_character_beyond_the_beam_also_scores_in_longer_input() {
     assert_eq!(chosen.commit, Some(last.to_string()));
     assert_eq!(ime.top_of(&mut user, "abc"), format!("{last}丁"));
 }
+
+/// `a`「日」字頻高、「曰」低，`b`「月」；`ab` 沒有自己的字，連打出「日月」「曰月」。
+fn ri_yue() -> Data<'static> {
+    Data {
+        scheme: "quick",
+        table: vec![("a", "日曰"), ("b", "月")],
+        words: vec![],
+        chars: vec![('日', 1000), ('曰', 10), ('月', 100)],
+    }
+}
+
+/// 規則 2 只算整串輸入碼就是那個碼的上屏（使用者決定，plan §2.4）：連打句中用過的段只進
+/// `personal`。
+#[test]
+fn a_character_used_in_sentences_does_not_count_towards_the_twice_chosen_rule() {
+    let mut ime = Ime::new(&ri_yue());
+    let mut user = UserModel::default();
+    for _ in 0..3 {
+        let committed = ime.choose_on_any_page(&mut user, "ab", "曰月");
+        assert_eq!(committed.commit.as_deref(), Some("曰月"));
+    }
+    assert_eq!(ime.top_of(&mut user, "a"), "日");
+
+    ime.choose(&mut user, "a", "曰");
+    ime.choose(&mut user, "a", "曰");
+    assert_eq!(ime.top_of(&mut user, "a"), "曰");
+}
+
+#[test]
+fn using_a_twice_chosen_candidate_in_a_sentence_does_not_make_it_more_recent() {
+    let mut ime = Ime::new(&ab());
+    let mut user = UserModel::default();
+    for text in ["乙", "乙", "丙", "丙"] {
+        ime.choose(&mut user, "ab", text);
+    }
+    let committed = ime.choose_on_any_page(&mut user, "abc", "乙丁");
+    assert_eq!(committed.commit.as_deref(), Some("乙丁"));
+    assert_eq!(ime.top_of(&mut user, "ab"), "丙");
+}
