@@ -257,13 +257,16 @@ impl Session {
             return None;
         }
         // 上下文是候選所在的碼前面的分段：有目前分段時是它前面的，否則是選定的分段。
-        let before = match self.focus {
-            Some(i) => self.segments()[..i].to_vec(),
-            None => self.selected.clone(),
+        let context = match self.focus {
+            Some(i) => self.segments()[..i]
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect(),
+            None => self.selected.iter().map(|s| s.text.as_str()).collect(),
         };
         Some(RerankRequest {
             generation: self.generation,
-            context: before.iter().map(|s| s.text.as_str()).collect(),
+            context,
             candidates: self.candidates[..self.rerank_limit()]
                 .iter()
                 .map(ShownCandidate::to_candidate)

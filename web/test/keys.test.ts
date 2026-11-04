@@ -147,3 +147,10 @@ test("放開的不是 Shift、或沒有先按下 Shift 都不算", () => {
 	assert.equal(shift.up("Shift", 20), true);
 	assert.equal(shift.up("Shift", 30), false);
 });
+
+// Ctrl+Shift 是 Windows 切換輸入法，Cmd+Shift 是各種快捷鍵，都不是單按。
+test("帶 Ctrl、Meta、Alt 按下的 Shift 不算單按", () => {
+	const shift = new LoneShift();
+	shift.down("Shift", false, 0, true);
+	assert.equal(shift.up("Shift", 10), false);
+});

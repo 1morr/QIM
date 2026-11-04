@@ -74,9 +74,12 @@ export class LoneShift {
 	/** Shift 按下的時間；沒有武裝時是 `undefined`。 */
 	#since: number | undefined;
 
-	/** `keydown`：Shift 開始計時（自動重複不重新計時），其他鍵解除。 */
-	down(key: string, repeat: boolean, now: number): void {
-		if (key !== "Shift") {
+	/**
+	 * `keydown`：Shift 開始計時（自動重複不重新計時），其他鍵解除。`modified` 是按著 Ctrl、Meta
+	 * 或 Alt：Ctrl+Shift（Windows 切換輸入法）這類組合不算單按。
+	 */
+	down(key: string, repeat: boolean, now: number, modified = false): void {
+		if (key !== "Shift" || modified) {
 			this.#since = undefined;
 		} else if (!repeat) {
 			this.#since = now;

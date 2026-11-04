@@ -94,8 +94,8 @@ QIM（暫名）。
 | 標點 | 組字中先上屏整個組字再接標點；沒有組字時直接上屏標點 |
 | 大寫字母（Shift＋字母） | 組字中先上屏整個組字再接那個字母；沒有組字時照打 |
 
-- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、Delete、Home、End）與 Ctrl / Cmd / Alt 組合鍵組字中吃下不動作，不然 Cmd+V 貼進輸入框而組字還在；`z` 留給萬用鍵（§1.5）。
-- 單按 Shift：按下到放開 500 ms 內、中間沒有別的鍵才算，Shift＋字母是大寫（librime `ascii_composer` 同值）。組字中按下照 Rime `commit_text` 上屏組字，不學 `inline_ascii` 留著組字接英文：要原碼有 Enter。
+- 組字中每個鍵都吃下，不交還宿主：交還的話宿主照打那個字元，組字卻還留著。表上沒有的鍵（`z`、Delete、Home、End）與 Ctrl / Cmd / Alt 組合鍵（Cmd+C、Option＋字母也是）組字中吃下不動作，不然 Cmd+V 貼進輸入框而組字還在；`z` 留給萬用鍵（§1.5）。
+- 單按 Shift：按下到放開 500 ms 內、中間沒有別的鍵才算，Shift＋字母是大寫、Ctrl＋Shift 不算（librime `ascii_composer` 同值）。組字中按下照 Rime `commit_text` 上屏組字，不學 `inline_ascii` 留著組字接英文：要原碼有 Enter。
 - 「上屏整個組字」和一直按空白相同：已選定的分段，接著逐次取剩下的輸入碼的首選，沒有字的碼原樣上屏。移到某一段時按空白也是上屏整個組字。
 - 參考：組字中按標點，macOS、iOS 速成與 Gboard 都先上屏首選再出標點（[黑箱基線](research/blackbox-baseline.md) T18）。Enter、大寫字母照 librime express_editor：Return 是 `CommitRawInput`（選定的段上屏字、其餘上屏原碼），方案以外的可見字元是 `DirectCommit`（先上屏組字、字元照打）。macOS、Gboard 的 Enter 上屏首選，macOS 的 Shift＋字母把整串改成英文，都不學：要首選有空白，要英文有 Enter。
 - 標點預設全形：`,` `.` `?` `!` `;` `:` `(` `)` `[` `]` `{` `}` `<` `>` `\` `^` `_` 依序轉成 ， 。 ？ ！ ； ： （ ） 「 」 『 』 《 》 、 …… ——，取 rime-prelude `punctuation.yaml` `half_shape` 每鍵第一個是全形的選項，不出標點選單。其他符號上屏半形：引號要配對（智慧標點，§4.7）；`/`（Rime 是「、」，和 `\` 重複，留給網址與分數）、`$`（Rime 是「￥」，香港用 $）不學 Rime；其餘 Rime 的第一個選項就是半形。`-` / `=` 是翻頁鍵，沒有組字時照打。

@@ -183,3 +183,22 @@ test("組字中 Ctrl / Cmd 組合鍵吃下，組字與輸入框都不變", async
 	await page.keyboard.type("a ");
 	await expect(text).toHaveValue("日");
 });
+
+test.describe("剪貼簿", () => {
+	test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+	// 協調者轉入（票 10 留下）：組字中 Cmd+V 原本貼進輸入框而組字還在。
+	test("組字中 Cmd+V 不貼上、組字留著；沒有組字時照常貼上", async ({
+		page,
+	}) => {
+		const { text, composition } = ui(page);
+		await page.evaluate(() => navigator.clipboard.writeText("貼"));
+		await page.keyboard.type("an");
+		await page.keyboard.press("ControlOrMeta+V");
+		await expect(composition).toHaveText("日弓");
+		await expect(text).toHaveValue("");
+		await page.keyboard.press(" ");
+		await page.keyboard.press("ControlOrMeta+V");
+		await expect(text).toHaveValue("門貼");
+	});
+});

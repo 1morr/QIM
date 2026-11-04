@@ -104,7 +104,7 @@ impl WebSession {
         self.session.rerank_request().map(|r| WebRerankRequest {
             generation: r.generation,
             context: r.context,
-            candidates: r.candidates.into_iter().map(|c| c.text).collect(),
+            candidates: r.candidates.into_iter().map(|c| c.original).collect(),
         })
     }
 
@@ -283,7 +283,7 @@ pub struct WebRerankRequest {
     /// 候選前面的字詞（繁體原文）。
     #[wasm_bindgen(readonly)]
     pub context: String,
-    /// 前幾個候選，依目前的順序。
+    /// 前幾個候選的繁體原文，依目前的順序；和 `context` 一樣用原文，簡體模式下模型也看繁體。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<String>,
 }

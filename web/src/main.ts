@@ -37,7 +37,7 @@ const candidates = element<HTMLOListElement>("#candidates");
 const mode = element<HTMLElement>("#mode");
 const expand = element<HTMLButtonElement>("#expand");
 const panel = element<HTMLOListElement>("#panel");
-const rerank = element<HTMLSelectElement>("#rerank");
+const rerankSelect = element<HTMLSelectElement>("#rerank");
 const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
@@ -262,7 +262,7 @@ let rerankedAt: bigint | undefined;
  * 重排不動首選，所以不經過回報。
  */
 function requestRerank(generation: bigint): void {
-	const chosen = rerankMode(rerank.value);
+	const chosen = rerankMode(rerankSelect.value);
 	if (chosen === "off" || !core || generation === rerankedAt) {
 		return;
 	}
@@ -276,6 +276,10 @@ function requestRerank(generation: bigint): void {
 	request.free();
 	const session = core;
 	window.setTimeout(() => {
+		// 等待中關掉了重排，就不套用。
+		if (rerankMode(rerankSelect.value) === "off") {
+			return;
+		}
 		const result = session.applyRerank(asked, Uint32Array.from(order));
 		if (!result) {
 			return;
@@ -538,7 +542,7 @@ async function start(): Promise<void> {
 	// 單按 Shift 切中英（brief §4.3）：Shift 自己不交給核心，放開時才判定。
 	const loneShift = new LoneShift();
 	text.addEventListener("keyup", (event) => {
-		if (loneShift.up(event.key, event.timeStamp)) {
+		if (loneShift.up(event.key, event.timeStamp) && !event.isComposing) {
 			const snapshot = session.toggleAscii();
 			try {
 				apply(snapshot, false);
@@ -548,13 +552,12 @@ async function start(): Promise<void> {
 		}
 	});
 	text.addEventListener("keydown", (event) => {
-		loneShift.down(event.key, event.repeat, event.timeStamp);
+		const plain = !(event.ctrlKey || event.metaKey || event.altKey);
+		loneShift.down(event.key, event.repeat, event.timeStamp, !plain);
 		if (event.key === "Shift") {
 			return;
 		}
-		// 組字中 ↓ 打開展開面板、↑ 收起（M1 票 23）：Microsoft 速成的 ↓ 進候選窗、Tab 與 → 展開
-		// 成表格，Tab 與 → 這裡已給字根提示與分段。核心本來就吃下不動作，不必轉給它。
-		const plain = !(event.ctrlKey || event.metaKey || event.altKey);
+		// 組字中 ↓ 打開展開面板、↑ 收起（plan §3.1）；核心本來就吃下不動作，不必轉給它。
 		if (
 			plain &&
 			shown.composing &&

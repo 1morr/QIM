@@ -167,7 +167,7 @@ fn the_context_is_the_selected_segments_before_the_candidates() {
     assert_eq!(request.candidates[0].text, "日");
 }
 
-/// 移到某一段時，候選是那一段的，上下文是它前面的分段（照顯示的字）。
+/// 移到某一段時，候選是那一段的，上下文是它前面的分段的原文。
 #[test]
 fn on_a_focused_segment_the_context_is_the_segments_before_it() {
     let mut ime = Ime::new();
