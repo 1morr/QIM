@@ -71,3 +71,4 @@ Blocked by: 02
 - code-review 未處理的發現：
   - 個人集的路徑與檔頭常數在 `qim_bench` 與 `qim_databuild::personal` 各一份，沒有測試比對兩邊。plan §1.3 不准 `qim-bench` 依賴 `qim-databuild`，連 dev 依賴也不行，所以只在兩邊的註解互相指向。兩邊不一致時，bench 會一直跳過個人集並提示重轉，看得出來。
 
+- 2026-11-04 協調者回報（個人集只在主 checkout，worktree 裡量不到）：`.gitignore` 改成 `/bench/personal`（不帶斜線，連軟連結也排除），`docs/development.md`〈首選字基準〉寫明用 `ln -s <主 checkout>/bench/personal bench/personal` 接上。實測 t04 換成軟連結後 `git status` 乾淨、`--check` 有個人集數字且綠燈；舊規則下軟連結會是 `??`。

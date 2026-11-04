@@ -148,6 +148,14 @@ cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.
 
 個人集只印數字與行號（plan §5.2）。沒有 `bench/personal/rime-userdb.txt` 就跳過並註明，`bench/personal/baseline.json` 也不比；`rime-userdb.tsv` 檔頭的 sha256 和現在的 `rime-userdb.txt` 不同（還沒轉，或換了資料沒重跑 `cargo xtask data`）也跳過，提示先跑 `cargo xtask data`。個人集的行號依轉出的順序，換了 `rime-userdb.txt` 後行號會位移，先 `--update-baseline` 再比翻盤。
 
+個人集只放在主 checkout 的 `bench/personal/`。在 git worktree 裡做票時，先用軟連結接上，否則基準照樣綠燈但沒有個人集的數字：
+
+```sh
+ln -s <主 checkout>/bench/personal bench/personal
+```
+
+`.gitignore` 的 `/bench/personal` 不帶結尾斜線，目錄與軟連結都排除；帶斜線只比對目錄，軟連結會變成未追蹤檔。接上後各 worktree 共用同一份 `rime-userdb.tsv` 與 `baseline.json`：在任一個 worktree 跑 `cargo xtask data` 或 `--update-baseline` 都會改到主 checkout 那份。
+
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 
 ## 網頁
