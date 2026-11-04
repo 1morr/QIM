@@ -36,6 +36,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `npm run --prefix web e2e` | Playwright 實打網頁（自己起開發伺服器，埠 5179）；先跑 `cargo xtask web` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`，見〈資料建置〉 |
+| `cargo xtask bench [--check \| --update-baseline]` | 首選字基準，見〈首選字基準〉 |
 
 ## 資料建置
 
@@ -89,6 +90,36 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 `unihan` 等於 `libcangjie_cangjie5` 其中之一的列多半是三代、五代的版本差異；要找錯碼先看其餘的列，例如 `awk -F'\t' 'NR>1 && index(","$5",", ","$3",")==0' build/reports/unihan-kcangjie.tsv`。比對在 `crates/qim-databuild/src/unihan.rs`。
 
 `.cache/` 與 `build/` 不進 git。
+
+## 首選字基準
+
+改核心或資料包時必跑（plan §5.2），不在 `cargo xtask check` 裡。基準讀 `build/packs/quick/quick.pack`，沒有就失敗，但不會自己重建：
+
+- 改了 `data/`、`crates/qim-databuild/` 或資料包格式（`crates/qim-core/src/pack.rs`）之後，跑 bench 前先跑 `cargo xtask data`，否則量到的是舊資料包，前後數字一樣、`--check` 也照過。
+- 只改核心程式碼不必重建：`cargo xtask bench` 每次都重編核心。
+- 結果表格上方印出資料包 sha256 的前 12 碼；做前後對照時兩次不同才表示資料包真的換了，也可以和 `cargo xtask data` 印出的完整 sha256 對開頭。
+
+```sh
+cargo xtask bench                     # 印結果
+cargo xtask bench --check             # 固定題全過、各集合答錯數 ≤ baseline，否則 exit 非零
+cargo xtask bench --update-baseline   # 用這次的答錯數改寫 bench/baseline.json
+```
+
+`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。每題用新的 `Session` 與空白的 `UserModel`，經 `Session::handle` 逐鍵打完輸入碼，取當下的第一個候選當首選；沒有候選時首選是空字串。
+
+| 檔案 | 格式 |
+| --- | --- |
+| `bench/fixed.tsv` | 固定必過題，一行 `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。案例通過的那張票才加，不先加會紅的題 |
+| `bench/corpus/<名>.tsv` | 一個檔一個集合，集合名是檔名；格式見〈資料建置〉的〈語料〉 |
+| `bench/baseline.json` | `{"<集合名>": {"wrong": <答錯數>}}`，固定題不記。只用 `--update-baseline` 改，同一個 commit 說明原因 |
+
+結果是一個集合一列的 Markdown 表，可以直接貼進票的 `## Comments` 或 commit body 做前後對照：
+
+- 整句首選正確：首選與期望完全相同的題數與比例；答錯 = 題數 − 整句首選正確。
+- 字正確率：1 − Σ 編輯距離 ÷ Σ 期望字數；編輯距離以字計（Levenshtein），每題最多算到該題的字數。
+- `baseline 答錯`：跑之前 `bench/baseline.json` 的值，沒有檔或沒有該集合時是 `—`。
+
+`--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數高於 baseline、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。邏輯在 `crates/qim-bench/`。
 
 ## 網頁
 

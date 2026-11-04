@@ -417,7 +417,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 學習模式（`--learning`）：照固定順序打一個集合，模擬使用者選字並讓 `UserModel` 學習，和同一順序不學習時比修正次數。基準其他模式都用空白的 `UserModel`。
 - 修正次數：模擬使用者打完整句輸入碼，首選能接上目標句就按空白，否則選能接上的最長候選，第一頁沒有就翻頁。每次選非首選或翻頁算一次，以每句平均回報。每字按鍵數把這些動作和輸入碼都算進去（文字輸入研究常用的 KSPC）。
 - 首選跳動：逐碼打字時，首選開頭已打完的字被下一鍵改掉的次數，每句平均。先只回報，不擋 commit。
-- `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline，否則失敗。改核心或資料包時必跑。
+- `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline，否則失敗；集合沒有 baseline、或 baseline 的集合沒跑到也算失敗。改核心或資料包時必跑。
 - 更新 baseline 要用 `--update-baseline`，並在同一個 commit 說明原因。
 - 使用者回報的新案例一律加進 `fixed.tsv`。
 - 防洩漏：個人集不進訓練語料，也不匯入基準用的 `UserModel`；`qim-databuild` 報告各測試集有幾句原樣出現在訓練語料，不為零要先查明才算數（CyIME 踩過，`docs/research/cyime.md` §3）。
