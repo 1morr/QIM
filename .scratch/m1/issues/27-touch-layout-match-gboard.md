@@ -77,3 +77,9 @@ Blocked by: None (can start immediately)
   - 預設佈局：逗號、句號、符號頁的 ASCII 標點送 `punct`，標籤照 Gboard 寫半形，中文狀態由核心轉全形。核心會轉成別的符號的 `_ ^ \ < > [ ]` 照鍵上的字直接輸出：`_` 的標籤打出 `——` 會讓人意外，Gboard 這些也打半形。全形字、非 ASCII 符號、數字、表情、常用語、句號長按清單（明確挑的字形）維持 `text`。
   - 和 Gboard 的差別：符號頁底排的 `, .`，Gboard 打半形，QIM 中文狀態打全形（同實體鍵盤）。數字後的半形等票 26。
   - 先寫的 Playwright：「日」「。」→「日。」、組字中「。」先上屏首選（這兩條在舊的 `text` 路徑就過，留著當回歸），以及英文直通時觸控標點打半形（`.,?(`）、臨時英文中觸控「。」接在英文後（`anr.`）。後兩條先紅再修。`tests/punct.rs` 的 Schema 檢查放寬成任意字串時會紅（變異驗證過）。
+- 2026-11-05 合併 main（票 25b，`bab09bd`）：只有 `docs/plan.md` §2.1 的 `ToggleAscii` 那段衝突，取 main 的「照舊版 librime」加本票的觸控 ⇧ 說明。
+- 2026-11-05 合併 25b、改標點鍵之後的檢查（依序跑，bench 與 e2e 不同時）：
+  - `cargo xtask data` 通過，sha256 同上次合併（quick `ae3bc207ce7a`、quick-lexicon `20853183b2cc`、zh-hant-bigram `68b18859fd32`、cangjie-hint `9e755488f431`、opencc-hk2s `1c5ab2aa21e6`、scowl-en-us `1afd47942b69`）。
+  - `bench --check` exit 0：四個公開集合沒有翻盤，固定題 25/25。p95 原生 42.21 µs、WebAssembly 53.83 µs。
+  - `cargo xtask check` 通過（e2e `114 passed`）。
+  - 觸控亂按 5 個種子 × 150 步：夾雜實體的左右 Shift、字母、`,` `.` `-`、數字、Enter、Esc、退格，並切換 Shift 設定，沒有錯誤。
