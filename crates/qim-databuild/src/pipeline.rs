@@ -9,7 +9,7 @@ use qim_core::{
     EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SimplifierPack,
 };
 
-use crate::common_forms::{BOTH_FORMS, CommonForms, ONE_WAY_FORMS};
+use crate::common_forms::{CommonForms, ONE_WAY_FORMS, TWO_WAY_FORMS};
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
@@ -534,9 +534,10 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          added. The words of the QIM Cantonese colloquial word list, which only lists words\n\
          the steps above left out, were added with their listed frequencies. For the {both}\n\
          character pairs whose two forms are both kept ({pairs}), each such word is also\n\
-         listed in the other form with the same frequency; a word with {one_from} is also listed\n\
-         with {one_to} (not the other way round), and if that word is already in the data the\n\
-         frequencies are added. Each word is indexed by the Quick\n\
+         listed in the other form with the same frequency; for {one_way} (one way only, not\n\
+         the other way round) a word with the first form is also listed with the second, and\n\
+         if that word is already in the data the frequencies are added. Each word is indexed\n\
+         by the Quick\n\
          codes of its characters joined, at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
@@ -546,14 +547,17 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
         weights = corpus_weights(),
-        both = BOTH_FORMS.len(),
-        pairs = BOTH_FORMS
+        both = TWO_WAY_FORMS.len(),
+        pairs = TWO_WAY_FORMS
             .iter()
             .map(|(r, o)| format!("{r}/{o}"))
             .collect::<Vec<_>>()
             .join(", "),
-        one_from = ONE_WAY_FORMS[0].0,
-        one_to = ONE_WAY_FORMS[0].1,
+        one_way = ONE_WAY_FORMS
+            .iter()
+            .map(|(from, to)| format!("{from} -> {to}"))
+            .collect::<Vec<_>>()
+            .join(", "),
     )
 }
 

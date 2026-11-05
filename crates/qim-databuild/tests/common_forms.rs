@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use qim_core::{CodeEntry, CodeTable};
-use qim_databuild::common_forms::{BOTH_FORMS, BothForms, CommonForms, ONE_WAY_FORMS};
+use qim_databuild::common_forms::{BothForms, CommonForms, ONE_WAY_FORMS, TWO_WAY_FORMS};
 
 /// `(輸入碼, 字, 是否擴展區)` 組成的碼表。
 fn table(entries: &[(&str, char, bool)]) -> CodeTable {
@@ -117,7 +117,7 @@ fn a_chain_of_forms_fails() {
     assert!(error.contains("一次換不完"), "{error}");
 }
 
-/// `sample()` 再加上 [`BOTH_FORMS`] 的字，每個字各一個碼（兩種寫法不同碼）。
+/// `sample()` 再加上 [`TWO_WAY_FORMS`] 的字，每個字各一個碼（兩種寫法不同碼）。
 fn sample_with_both_forms() -> CodeTable {
     let mut entries: Vec<(String, char, bool)> = Vec::new();
     for (code, entries_at) in sample().iter() {
@@ -125,7 +125,7 @@ fn sample_with_both_forms() -> CodeTable {
             entries.push((code.to_string(), e.text, e.extension));
         }
     }
-    for (i, (representative, other)) in BOTH_FORMS.iter().chain(&ONE_WAY_FORMS).enumerate() {
+    for (i, (representative, other)) in TWO_WAY_FORMS.iter().chain(&ONE_WAY_FORMS).enumerate() {
         entries.push((format!("x{i}"), *representative, false));
         entries.push((format!("y{i}"), *other, false));
     }
@@ -138,12 +138,12 @@ fn sample_with_both_forms() -> CodeTable {
 
 #[test]
 fn from_opencc_reads_the_dictionaries_the_corpus_conversion_uses() {
-    // ferrous-opencc 內建的 t2hk、t2tw，就是前處理轉語料用的那一套；並存寫法是 BOTH_FORMS、
+    // ferrous-opencc 內建的 t2hk、t2tw，就是前處理轉語料用的那一套；並存寫法是 TWO_WAY_FORMS、
     // ONE_WAY_FORMS。
     let forms = CommonForms::from_opencc(&sample_with_both_forms()).unwrap();
     assert_eq!(forms.apply("温羣説"), "溫群說");
     assert_eq!(forms.apply("為這裡的著名"), "為這裏的著名");
-    assert_eq!(forms.both().pairs().count(), BOTH_FORMS.len());
+    assert_eq!(forms.both().two_way_pairs().count(), TWO_WAY_FORMS.len());
     assert_eq!(forms.both().one_way_pairs().count(), ONE_WAY_FORMS.len());
 }
 
@@ -151,7 +151,10 @@ fn from_opencc_reads_the_dictionaries_the_corpus_conversion_uses() {
 fn both_form_pairs_missing_from_the_table_are_skipped() {
     // 小碼表只有「戶／户」這組的字。
     let forms = CommonForms::from_opencc(&sample()).unwrap();
-    assert_eq!(forms.both().pairs().collect::<Vec<_>>(), [('戶', '户')]);
+    assert_eq!(
+        forms.both().two_way_pairs().collect::<Vec<_>>(),
+        [('戶', '户')]
+    );
     assert_eq!(forms.apply("户口"), "戶口");
 }
 
@@ -204,6 +207,14 @@ fn spellings_cover_every_mix_of_both_forms() {
     assert_eq!(both.spellings("這裏"), ["這裏", "這裡"]);
     assert_eq!(both.spellings("隨着"), ["隨着", "隨著"]);
     assert_eq!(both.spellings("着裏"), ["着裏", "着裡", "著裏", "著裡"]);
+}
+
+#[test]
+fn reversed_one_way_words_are_corrected() {
+    // rime-essay 原有的「顯着」改回「顯著」；「隨着」照舊。
+    let both = BothForms::new(&[], &ONE_WAY_FORMS).unwrap();
+    assert_eq!(both.correct("顯着"), "顯著");
+    assert_eq!(both.correct("隨着"), "隨着");
 }
 
 #[test]

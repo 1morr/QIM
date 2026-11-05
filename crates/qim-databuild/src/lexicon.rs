@@ -45,7 +45,7 @@ pub struct Counts {
     pub spellings: usize,
 }
 
-/// 詞的字形（brief §4.1、plan §4.2）。
+/// 詞的寫法（brief §4.1、plan §4.2）。
 pub struct Forms<'a> {
     /// 把詞換成語料的寫法：`t2hk` 再換回常見寫法、並存寫法換成代表寫法，和
     /// `corpora::Converter`（`Conversion::T2hk`）同一套。
@@ -64,7 +64,7 @@ pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 ///   的字、重複、essay 已收（詞頻達門檻）的詞都算錯，不默默濾掉；essay 有但低於門檻的詞用詞表的詞頻。
 /// - 單字、詞頻低於 [`MIN_FREQUENCY`] 的詞、含連打字集以外的字的詞不收；同一個詞列了幾次取最大詞頻。
 /// - essay 與詞表的詞都經 `forms.normalize` 換成語料的寫法（「羣組」→「群組」）：換完撞成同一個詞的
-///   詞頻相加，門檻與字集看換完的詞。並存寫法的詞每種寫法都收（`forms.both`），詞頻相同；
+///   詞頻相加，門檻與字集看換完的詞；單向寫法反過來寫的錯字（「顯着」）改回原字。並存寫法的詞每種寫法都收（`forms.both`），詞頻相同；
 ///   單向的寫法撞上 essay 本來就有的詞時詞頻相加。
 /// - 詞的碼是每個字的一個速成碼接起來（`code_table` 的連打字集）。多碼字的組合依換掉主碼
 ///   （`transcoder` 的碼，基準也用它）的字數由少到多取，最多 [`MAX_COMBINATIONS`] 個。
@@ -96,7 +96,7 @@ pub fn build(
     }
     let mut words: BTreeMap<String, u64> = BTreeMap::new();
     for (text, frequency) in essay_words {
-        let common = (forms.normalize)(text);
+        let common = forms.both.correct(&(forms.normalize)(text));
         counts.converted += usize::from(common != text);
         match words.entry(common) {
             Entry::Occupied(mut kept) => {
@@ -126,7 +126,7 @@ pub fn build(
         if let Some(ch) = text.chars().find(|ch| !codes.contains_key(ch)) {
             return Err(invalid(&format!("「{ch}」不在連打字集")));
         }
-        let common = (forms.normalize)(text);
+        let common = forms.both.correct(&(forms.normalize)(text));
         if !listed.insert(common.clone()) {
             return Err(invalid(&format!("「{text}」重複")));
         }

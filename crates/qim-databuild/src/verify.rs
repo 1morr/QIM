@@ -11,7 +11,7 @@ use qim_core::{
     Options, Pack, RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
-use crate::common_forms::CommonForms;
+use crate::common_forms::{CommonForms, REVERSED_ONE_WAY};
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
@@ -729,7 +729,7 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
         let list: Vec<String> = pairs.iter().map(|(f, t)| format!("{f}→{t}")).collect();
         format!("{} 組（{}）", list.len(), list.join("、"))
     };
-    let both: Vec<(char, char)> = forms.both().pairs().map(|(r, o)| (o, r)).collect();
+    let both: Vec<(char, char)> = forms.both().two_way_pairs().map(|(r, o)| (o, r)).collect();
     let mut pairs = joined(forms.pairs().collect());
     if !both.is_empty() {
         pairs = format!("{pairs}、並存寫法 {}", joined(both.clone()));
@@ -755,24 +755,7 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
     }
 }
 
-/// 單向並存寫法反過來寫出的錯字（「著」的 zhù 義項寫成「着」）：詞庫不能有。rime-essay 本身的
-/// 「顯着」（詞頻 279）是來源原有的，不列（M1 票 17c Comments）。
-pub const REVERSED_ONE_WAY: [&str; 12] = [
-    "着名",
-    "着作",
-    "着作權",
-    "原着",
-    "名着",
-    "着稱",
-    "土着",
-    "卓着",
-    "着述",
-    "着者",
-    "專着",
-    "巨着",
-];
-
-/// 詞庫（`pipeline` 建出、解回來的那份）的字形，確認建詞庫接上了 `forms`：
+/// 詞庫（`pipeline` 建出、解回來的那份）的寫法，確認建詞庫接上了 `forms`：
 /// - 沒有 `forms` 換掉的寫法，也沒有 [`REVERSED_ONE_WAY`]；
 /// - 雙向的並存寫法：含它的詞每種寫法都收、詞頻相同，兩個字的字頻相同；
 /// - 單向的：含前一個字的詞，換成後一個字的寫法也收，詞頻不低於它。
@@ -806,9 +789,9 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
                 }
             }
         }
-        if text.chars().any(|c| both.also(c).is_some()) {
+        if text.chars().any(|c| both.one_way(c).is_some()) {
             with_one_way += 1;
-            let also: String = text.chars().map(|c| both.also(c).unwrap_or(c)).collect();
+            let also: String = text.chars().map(|c| both.one_way(c).unwrap_or(c)).collect();
             match frequency.get(also.as_str()) {
                 None => missing.push(also),
                 Some(&m) if m < n => unequal.push(format!("{text} {n}／{also} {m}")),
@@ -819,15 +802,16 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
     missing.sort();
     missing.dedup();
     let chars: Vec<String> = both
-        .pairs()
+        .two_way_pairs()
         .filter_map(|(r, o)| {
             let (a, b) = (lexicon.char_frequency(r), lexicon.char_frequency(o));
             (a != b).then(|| format!("{r} {a}、{o} {b}"))
         })
         .collect();
+    const SHOWN: usize = 10;
     let few = |items: &[String]| {
-        let shown = items.iter().take(5).cloned().collect::<Vec<_>>().join("、");
-        if items.len() > 5 {
+        let shown = items[..items.len().min(SHOWN)].join("、");
+        if items.len() > SHOWN {
             format!("{shown} 等 {} 個", items.len())
         } else {
             shown
@@ -853,7 +837,7 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
                  {with_two_way} 個，每種寫法都收、詞頻相同，字頻相同；單向 {} 組：含它的詞 \
                  {with_one_way} 個都另收另一種寫法",
                 replaced.len(),
-                both.pairs().count(),
+                both.two_way_pairs().count(),
                 both.one_way_pairs().count()
             )
         } else {

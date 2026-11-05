@@ -126,7 +126,7 @@ sha256 = "0c537e9d65c1f1de10d70a1e0989d929b557628d975bf480d8b3b6fcc6291f26"
 # rime-essay（八股文，plan §4.2）：詞與詞頻，進詞庫資料包 quick-lexicon。essay.txt 一行「詞<TAB>詞頻」，442,688 列。
 # 取用：兩字以上、詞頻 ≥ 100、字都在連打字集的詞，規則在 crates/qim-databuild/src/lexicon.rs。
 # essay 是 OpenCC 標準寫法（羣組、觀衆）：每個詞經 OpenCC t2hk 再換成常見寫法（common_forms.rs），和粵語語料同一套；
-# 並存寫法（BOTH_FORMS，裏／裡這類）的詞兩種寫法都收，詞頻相同；「着」的詞另收「著」的寫法（ONE_WAY_FORMS，單向）。
+# 並存寫法（TWO_WAY_FORMS，裏／裡這類）的詞兩種寫法都收，詞頻相同；「着」的詞另收「著」的寫法（ONE_WAY_FORMS，單向）。
 # LICENSE 是 LGPL-3.0 全文，釘在同一個 commit，整份寫進資料包的 LICENSE；AUTHORS 列的上游見 docs/research/data-sources.md §5。
 [source.rime_essay]
 repository = "https://github.com/rime/rime-essay"
