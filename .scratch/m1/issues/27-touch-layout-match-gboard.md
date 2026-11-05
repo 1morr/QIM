@@ -61,3 +61,14 @@ Blocked by: None (can start immediately)
   - `letter`、逗號、`to_numbers` 直接改欄位、其他用鏈式方法：只有一兩處，不再加 builder 方法。
   - `49e325c` 的 subject 沒提符號改全形、又混了 progress：已 commit，不改寫歷史，這裡記下。
 - 2026-11-05 使用者決定（經協調者）：數字列只對內建佈局有效可以接受，自訂佈局怎麼處理留到 M5 編輯器，已寫進 plan §7.6。
+- 2026-11-05 合併 main（票 25，`37b1130`）：三個檔衝突，兩邊都留。
+  - `crates/qim-wasm/src/lib.rs`：觸控的中英鍵（`toggleAscii`，預設佈局沒有）照票 25 當右 Shift；觸控 ⇧（`shift`）仍是 `Key::Other`。
+  - `docs/design-brief.md` §7：開關清單取 main（多了「組字中單按 Shift」），數字列那條留著。
+  - `web/src/main.ts`：Shift 設定與數字列讀佈局都留。
+  - progress.md 的 union 合併抄出重複段，手動併回。
+  - 觸控 ⇧ 與核心左右 Shift 的關係寫進 brief §4.4、plan §2.1、§2.6：觸控 ⇧ 是大寫鍵，不送 `ToggleAscii`，不切中英，不受 `Options.shift_switch` 影響。
+- 2026-11-05 合併後的檢查（依序跑，沒有和 bench 同時跑 e2e）：
+  - `cargo xtask data` 通過。sha256：quick `ae3bc207ce7a`、quick-lexicon `20853183b2cc`、zh-hant-bigram `68b18859fd32`、cangjie-hint `9e755488f431`、opencc-hk2s `1c5ab2aa21e6`、scowl-en-us `1afd47942b69`。
+  - `cargo xtask bench --check` exit 0：四個公開集合沒有翻盤，固定題 25/25。每鍵 p95：原生 49.00 µs、WebAssembly 78.46 µs，只報不擋。
+  - `cargo xtask check` 通過（e2e `108 passed`，修下面的問題之前）。
+- 2026-11-05 合併後觸控亂按（5 個種子 × 150 步，另外夾雜實體的左右 Shift、字母、Enter、Esc、退格，並切換「組字中單按 Shift」設定）找到一個問題：頁面捲到「觸控鍵盤」按鈕下緣貼著鍵盤上緣時，點鍵盤上緣的一下，`pointerdown` 的目標變成那個按鈕，鍵盤就被關了。原因是 Chrome 的觸控校正會把點擊吸到附近「可點」的元素，而鍵盤沒有 click 監聽。先寫成會紅的 Playwright 測試（「鍵盤上緣正上方有按鈕時…」），再在鍵盤容器加 click 監聽並吃掉。修好後 5 個種子都沒有錯誤。這是票 20 起就有的問題，橫向加數字列時鍵盤較高才碰到。

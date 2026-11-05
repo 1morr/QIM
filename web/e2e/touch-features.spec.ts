@@ -335,6 +335,34 @@ test("轉成橫向換橫向的佈局版本，仍打得出「門口」", async ({
 	);
 });
 
+// 亂按找到的（M1 票 27 合併 main 後）：鍵盤上緣正上方有頁面的按鈕時，Chrome 的觸控校正把點在鍵盤
+// 上緣的一下吸到那個按鈕（鍵盤沒有 click 監聽，不算「可點」），點到「觸控鍵盤」就把鍵盤關了。
+test("鍵盤上緣正上方有按鈕時，點鍵盤上緣仍是按鍵，不會點到按鈕", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 839, height: 412 });
+	await page.getByRole("checkbox", { name: "數字列" }).check();
+	const toggle = page.getByRole("button", { name: "觸控鍵盤" });
+	const keyboard = page.getByTestId("keyboard");
+	await expect(keyboard).toBeVisible();
+	// 捲到「觸控鍵盤」按鈕的下緣貼著鍵盤上緣。
+	const kb = await keyboard.boundingBox();
+	const button = await toggle.boundingBox();
+	if (!kb || !button) {
+		throw new Error("鍵盤或按鈕沒畫出來");
+	}
+	await page.evaluate(
+		(dy) => window.scrollBy(0, dy),
+		button.y + button.height - kb.y,
+	);
+	const hand = await finger(page);
+	await hand.down(button.x + 5, kb.y + 5);
+	await hand.up();
+	await expect(keyboard).toBeVisible();
+	await expect(toggle).toHaveAttribute("aria-pressed", "true");
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("1");
+});
+
 test("轉向時留在同一頁", async ({ page }) => {
 	await tapKeys(page, ["to-symbols"]);
 	await page.setViewportSize({ width: 839, height: 412 });

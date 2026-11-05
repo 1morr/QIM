@@ -324,6 +324,10 @@ export function mountKeyboard(
 		}
 	});
 
+	// 鍵盤要算「可點」的元素：Chrome 的觸控校正會把點在鍵盤上緣的一下吸到附近可點的元素（例如鍵盤
+	// 上方頁面的按鈕），鍵盤有 click 監聽才留在鍵盤上。動作照 pointer 事件做，click 本身吃掉。
+	container.addEventListener("click", (event) => event.preventDefault());
+
 	container.addEventListener("pointermove", (event) => {
 		if (press?.pointerId === event.pointerId && press.choice !== undefined) {
 			choose(choiceAt(event.clientX, event.clientY));
