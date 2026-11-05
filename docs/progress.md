@@ -29,8 +29,8 @@
 | 2026-11-05 | M2（補 M1 25b） | 臨時英文改照目前發佈版 librime（≤ 1.17.0）：空白接進英文、Enter 上屏整段，再按留碼的 Shift 回中文組字；細節見票 25b | M1 17c、26、27 也做完後，新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-05 | M2（補 M1 17c） | 詞庫照語料走 `t2hk` 加常見寫法（`sqvm` 群組）；並存寫法 11 組雙向、「着→著」單向，「顯着」併進「顯著」；細節見票 17c | M1 28 也做完後，新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-05 | M2（補 M1 28） | 手動分隔鍵：組字中 `'`（觸控組字中 ⇧ 變「'詞」）插入分隔記號，連打的段不跨過它，學習的碼不含它；細節見票 28 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
-| 2026-11-05 | M2（補 M1 26b） | 單按修飾鍵、觸控切頁與 ⇧ 不結束數字（`Key::Modifier`）；單按 Shift 判定在放開別的鍵時解除；librime 用詞改成發佈版／master；細節見票 26b | 新 session 下 `/implement .scratch/m1/issues/27b-touch-shift-and-labels.md` |
 | 2026-11-05 | M2（補 M1 28b） | 詞庫的詞可跨過落在字界上的分隔記號（照 Rime 速成），單字照舊不跨；語料分隔後變錯 81 → 0；細節見票 28b | 補票 17d、26b、27b 都做完後，新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
+| 2026-11-05 | M2（補 M1 26b） | 單按修飾鍵、觸控切頁與 ⇧ 不結束數字（`Key::Modifier`）；單按 Shift 判定在放開別的鍵時解除；librime 用詞改成發佈版／master；細節見票 26b | 新 session 下 `/implement .scratch/m1/issues/27b-touch-shift-and-labels.md` |
 
 ## 偏差與決定
 
