@@ -218,6 +218,10 @@ fn is_zero(value: &f64) -> bool {
     *value == 0.0
 }
 
+/// Shift 開著時字母鍵的大寫字母比字根標籤大幾倍：照 Gboard 速成實測（M1 票 27b，
+/// `.scratch/m1/evidence/27-letters.png`），字根同大時 Gboard 的大寫 A 字高 24 px，QIM 同字級只有 13 px。
+const SHIFTED_LETTER_SCALE: f64 = 1.85;
+
 /// Shift 鍵的狀態（brief §4.4，照 Gboard 速成）：殼記著，按鍵依它換標籤與動作。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Shift {
@@ -240,11 +244,12 @@ impl Shift {
         }
     }
 
-    /// 點或長按了 `key`（不是 Shift 鍵）之後的狀態：開一次的打完字母鍵就解除，鎖定與其他鍵不變。
-    pub fn after_key(self, key: &Key) -> Shift {
-        match (self, &key.tap) {
-            (Shift::Once, Action::Letter(_)) => Shift::Off,
-            _ => self,
+    /// 點或長按了 Shift 以外的鍵之後的狀態：開一次的解除，鎖定不變。照 Gboard 速成實測，字母、
+    /// 標點、空白、刪除、切頁都算（M1 票 27b）。
+    pub fn after_other_key(self) -> Shift {
+        match self {
+            Shift::Once => Shift::Off,
+            other => other,
         }
     }
 
@@ -285,11 +290,33 @@ impl Key {
         }
     }
 
-    /// 角標：Shift 開著時字母鍵不顯示（標籤已是字母，同 Gboard），其他時候是 `hint`。
+    /// 主標籤的字級（`style.labelSize`，沒寫是 `None`，殼用自己的預設）：Shift 開著、字母鍵顯示
+    /// 大寫字母時放大 `SHIFTED_LETTER_SCALE` 倍（同 Gboard）。
+    pub fn display_label_size(&self, state: KeyState) -> Option<f64> {
+        let size = self.style.as_ref()?.label_size?;
+        Some(if self.shows_capital(state) {
+            size * SHIFTED_LETTER_SCALE
+        } else {
+            size
+        })
+    }
+
+    /// 主標籤是 Shift 開著時的大寫字母：字母鍵、Shift 開著、組字中沒有換掉標籤。
+    fn shows_capital(&self, state: KeyState) -> bool {
+        matches!(self.tap, Action::Letter(_))
+            && state.shift.is_on()
+            && self
+                .composing_override(state.composing)
+                .and_then(|c| c.label.as_ref())
+                .is_none()
+    }
+
+    /// 角標：主標籤是大寫字母時不顯示（標籤已是字母，同 Gboard），其他時候是 `hint`。
     pub fn display_hint(&self, state: KeyState) -> Option<&str> {
-        match self.tap {
-            Action::Letter(_) if state.shift.is_on() => None,
-            _ => self.hint.as_deref(),
+        if self.shows_capital(state) {
+            None
+        } else {
+            self.hint.as_deref()
         }
     }
 
@@ -323,7 +350,8 @@ impl Key {
         self.composing.as_ref().filter(|_| composing)
     }
 
-    /// 無障礙標籤：有寫 `a11yLabel` 就用它；否則是顯示的標籤加角標（「日，a」），
+    /// 無障礙標籤：有寫 `a11yLabel` 就用它；否則是顯示的標籤加顯示的角標（「日，a」；Shift 開著時
+    /// 字母鍵沒有角標，只念「A」），
     /// 沒有標籤的鍵用動作的說法（「空白」）。組字中 `composing` 換了標籤時，念 `composing` 的
     /// `a11yLabel`，沒寫就念顯示的標籤：鍵本身的 `a11yLabel` 說的是沒在組字時的動作。
     pub fn accessibility_label(&self, state: KeyState, displayed: &str) -> String {
@@ -344,8 +372,8 @@ impl Key {
         } else {
             displayed.to_owned()
         };
-        match &self.hint {
-            Some(hint) if *hint != base => format!("{base}，{hint}"),
+        match self.display_hint(state) {
+            Some(hint) if hint != base => format!("{base}，{hint}"),
             _ => base,
         }
     }

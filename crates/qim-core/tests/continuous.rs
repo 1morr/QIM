@@ -939,11 +939,17 @@ fn selected_segments_stay_before_the_inline_english() {
 }
 
 #[test]
-fn touch_text_in_inline_english_commits_it_then_the_text() {
+fn touch_text_in_inline_english_joins_the_english() {
+    // 觸控鍵輸出的字（標點、數字、全形字）和實體鍵盤的可見字元一樣接在英文後（M1 票 27b）；
+    // Enter 才上屏，回中文。
     let mut ime = Ime::new(&men_kou());
     ime.type_code("anr");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
-    let typed = ime.session.text(&ime.engine, &mut ime.user, "多謝");
-    assert_eq!(typed.commit.as_deref(), Some("anr多謝"));
-    assert!(!typed.ascii);
+    let typed = ime.session.text(&ime.engine, &mut ime.user, "。");
+    assert!(typed.handled);
+    assert_eq!(typed.commit, None);
+    assert_eq!(typed.composition.input, "anr。");
+    let entered = ime.press(Key::Enter);
+    assert_eq!(entered.commit.as_deref(), Some("anr。"));
+    assert!(!entered.ascii);
 }

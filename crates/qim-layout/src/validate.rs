@@ -86,6 +86,12 @@ pub enum Warning {
         page: String,
         key: String,
     },
+    /// `composing` 只寫了 `a11yLabel`、沒寫 `label`：讀屏只在換了標籤時念它，會被忽略。
+    ComposingA11yLabelWithoutLabel {
+        variant: usize,
+        page: String,
+        key: String,
+    },
     /// 沒有裝置與方向相符的版本，用第一個版本等比例縮放。
     NoMatchingVariant { wanted: When },
 }
@@ -131,6 +137,10 @@ impl fmt::Display for Warning {
             Warning::UnsupportedSwipe { variant, page, key } => {
                 write!(f, "佈局版本 {variant} 頁 {page}：{key} 的滑動還沒有作用")
             }
+            Warning::ComposingA11yLabelWithoutLabel { variant, page, key } => write!(
+                f,
+                "佈局版本 {variant} 頁 {page}：{key} 的 composing 只寫了 a11yLabel，沒寫 label，讀屏不會念它"
+            ),
             Warning::NoMatchingVariant { wanted } => write!(
                 f,
                 "沒有 {} {} 的佈局版本，用第一個佈局版本等比例縮放",
@@ -360,6 +370,17 @@ fn warnings(layout: &Layout) -> Vec<Warning> {
                 }
                 if key.swipe.is_some() {
                     warnings.push(Warning::UnsupportedSwipe {
+                        variant: v,
+                        page: page_id.clone(),
+                        key: id.clone(),
+                    });
+                }
+                if key
+                    .composing
+                    .as_ref()
+                    .is_some_and(|c| c.label.is_none() && c.a11y_label.is_some())
+                {
+                    warnings.push(Warning::ComposingA11yLabelWithoutLabel {
                         variant: v,
                         page: page_id.clone(),
                         key: id.clone(),

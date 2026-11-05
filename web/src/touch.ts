@@ -22,6 +22,19 @@ const SHIFT_GLYPHS: Record<string, string> = {
 	locked: "⇪",
 };
 
+/**
+ * 角標照 Gboard 放在右上角，長度都是畫布座標，和主標籤一樣隨畫布縮放（橫向不會比字根大）。
+ * 字級約 12 sp（Gboard 鍵盤寬 411 dp，換成直向畫布 390 寬），離右邊 3.1。
+ */
+const HINT_SIZE = 11.3;
+const HINT_RIGHT = 3.1;
+/**
+ * 角標上緣在鍵中心上方多遠：直向 45 高的字母鍵上離鍵頂 4.7，和置中的字根留出間距；數字列打開、
+ * 鍵變矮時跟著字根一起上移，不會貼著字根（M1 票 27b）。鍵太矮（橫向）時離鍵頂至少 `HINT_MIN_TOP`。
+ */
+const HINT_ABOVE_CENTRE = 17.8;
+const HINT_MIN_TOP = 1.5;
+
 /** 一根手指按下到放開之間的狀態。 */
 interface Press {
 	pointerId: number;
@@ -122,14 +135,16 @@ export function mountKeyboard(
 			if (color !== undefined) {
 				label.style.color = color;
 			}
-			if (key.labelSize !== undefined) {
-				label.style.fontSize = scaled(key.labelSize);
-			}
 			if (key.labelOffsetX !== 0 || key.labelOffsetY !== 0) {
 				label.style.transform = `translate(${scaled(key.labelOffsetX)}, ${scaled(key.labelOffsetY)})`;
 			}
 			const hint = document.createElement("span");
 			hint.className = "hint";
+			hint.style.fontSize = scaled(HINT_SIZE);
+			hint.style.right = scaled(HINT_RIGHT);
+			hint.style.top = scaled(
+				Math.max(HINT_MIN_TOP, key.h / 2 - HINT_ABOVE_CENTRE),
+			);
 			element.append(label, hint);
 			paint(element, key);
 			return element;
@@ -145,6 +160,9 @@ export function mountKeyboard(
 			label.textContent = key.isShift
 				? (SHIFT_GLYPHS[layout.shift] ?? key.label)
 				: key.label;
+			// Shift 開著時字母鍵的大寫字母比字根大（`display_label_size`），字級跟著狀態變。
+			label.style.fontSize =
+				key.labelSize === undefined ? "" : scaled(key.labelSize);
 		}
 		if (hint) {
 			hint.textContent = key.hint ?? "";
