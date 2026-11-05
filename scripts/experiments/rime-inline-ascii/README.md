@@ -1,6 +1,6 @@
 # Rime 臨時西文（`inline_ascii`）逐鍵實測
 
-回答的問題：舊版 librime（1.17.0 以前，改寫 commit `74bd5dc4` 之前）組字中單按左 Shift 留碼接英文後，空白、Enter、退格、Esc、再按 Shift、數字與標點各做什麼。結論在 brief §12.2「舊版 ascii_composer」那條，QIM 的做法在 brief §4.3（M1 票 25b）。
+回答的問題：目前發佈版 librime（≤ 1.17.0；master 的 `74bd5dc4` 改寫還沒發佈）組字中單按左 Shift 留碼接英文後，空白、Enter、退格、Esc、再按 Shift、數字與標點各做什麼。結論在 brief §12.2「目前發佈版的 ascii_composer」那條，QIM 的做法在 brief §4.3（M1 票 25b）。
 
 ## 跑法
 

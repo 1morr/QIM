@@ -77,13 +77,36 @@ test("沒有對應的鍵是 other", () => {
 		"ArrowDown",
 		"Home",
 		"Delete",
-		"Shift",
 		"F5",
 		"é",
 		"，",
 		"ab",
 	]) {
 		assert.deepEqual(toKey(press(key)), { kind: "other" }, key);
+	}
+});
+
+// MDN 的 Modifier keys 一表：單按沒有字元，Rime 不記，送核心不結束數字（M1 票 26b）。
+// 單按 Ctrl 的事件本身也帶 ctrlKey，組字中與否都是 modifier。
+test("單按修飾鍵是 modifier，組字中也是", () => {
+	const modifiers = [
+		["Control", { ctrlKey: true }],
+		["Meta", { metaKey: true }],
+		["Alt", { altKey: true }],
+		["AltGraph", {}],
+		["CapsLock", {}],
+		["Shift", {}],
+		["Fn", {}],
+		["NumLock", {}],
+	] as const;
+	for (const [key, flags] of modifiers) {
+		for (const composing of [false, true]) {
+			assert.deepEqual(
+				toKey(press(key, flags), composing),
+				{ kind: "modifier" },
+				`${key} ${composing}`,
+			);
+		}
 	}
 });
 
@@ -153,13 +176,20 @@ test("按住 Shift 的自動重複不重新計時", () => {
 	assert.equal(shift.up("ShiftRight", 600), undefined);
 });
 
-test("放開的不是 Shift、或沒有先按下 Shift 都不算", () => {
+test("沒有先按下 Shift 不算，一次單按只算一次", () => {
 	const shift = new LoneShift();
 	assert.equal(shift.up("ShiftLeft", 0), undefined);
 	shift.down("ShiftLeft", false, 0);
-	assert.equal(shift.up("KeyA", 10), undefined);
-	// 一次單按只算一次。
 	assert.equal(shift.up("ShiftLeft", 20), "left");
+	assert.equal(shift.up("ShiftLeft", 30), undefined);
+});
+
+// librime ascii_composer 的 other keys 分支：按下或放開別的鍵都解除（M1 票 26b）。
+test("按住 a 時按下 Shift、先放開 a 再放開 Shift，不算單按", () => {
+	const shift = new LoneShift();
+	shift.down("KeyA", false, 0);
+	shift.down("ShiftLeft", false, 10);
+	assert.equal(shift.up("KeyA", 20), undefined);
 	assert.equal(shift.up("ShiftLeft", 30), undefined);
 });
 

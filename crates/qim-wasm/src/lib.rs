@@ -205,6 +205,11 @@ impl WebSession {
         self.handle(Key::Other)
     }
 
+    /// 單按修飾鍵（Ctrl、Cmd、Alt、CapsLock…）：組字中吃下，沒有組字時交還瀏覽器、不結束數字。
+    pub fn modifier(&mut self) -> WebSnapshot {
+        self.handle(Key::Modifier)
+    }
+
     pub fn space(&mut self) -> WebSnapshot {
         self.handle(Key::Space)
     }
@@ -286,7 +291,7 @@ impl WebSession {
     }
 
     /// 做一個佈局動作：文字經 `Session::text`（組字中先上屏組字）；切頁換 `layout` 的目前頁，
-    /// 核心收到 `Key::Other`（組字中吃下、組字留著）；網頁沒有下一個鍵盤，也當 `Key::Other`。
+    /// 核心收到 `Key::Modifier`（組字中吃下、組字留著）；⇧、換鍵盤也是。
     /// 結果帶著做了的動作，核心沒吃下時網頁照它做。
     fn perform(&mut self, layout: &mut WebLayout, action: Action) -> WebSnapshot {
         let snapshot = match &action {
@@ -301,13 +306,14 @@ impl WebSession {
                     Action::Enter => Key::Enter,
                     Action::SwitchPage(page) => {
                         layout.switch_page(page);
-                        Key::Other
+                        Key::Modifier
                     }
                     // 觸控鍵盤的中英鍵（`toggleAscii`，預設佈局沒有）當右 Shift（先上屏組字，M1 票 23）。
                     Action::ToggleAscii => Key::ToggleAscii(ShiftKey::Right),
                     // 觸控的 ⇧（`shift`，M1 票 27）是大寫鍵，不是單按 Shift 的中英切換：狀態在佈局
-                    // （呼叫端改），核心收到的和切頁一樣，組字中吃下、組字留著。
-                    Action::NextKeyboard | Action::Shift | Action::Text(_) => Key::Other,
+                    // （呼叫端改），核心收到的和切頁一樣（brief §4.7）。網頁沒有下一個鍵盤。
+                    Action::NextKeyboard | Action::Shift => Key::Modifier,
+                    Action::Text(_) => unreachable!("文字動作在上面經 Session::text"),
                 };
                 self.session.handle(&self.engine, &mut self.user, key)
             }

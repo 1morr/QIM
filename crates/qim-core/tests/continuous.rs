@@ -759,7 +759,7 @@ fn shift_again_restores_the_chinese_composition_when_the_english_is_unchanged() 
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
 }
 
-// 再按留碼的 Shift 照舊版 librime（1.17.0 以前）：目前的英文整串當中文輸入碼重新組字，
+// 再按留碼的 Shift 照 librime 1.17.0：目前的英文整串當中文輸入碼重新組字，
 // 不看打過字或退格過（brief §12.2）。
 
 #[test]
@@ -855,7 +855,7 @@ fn the_commit_text_shift_in_inline_english_commits_it_and_goes_back_to_chinese()
 
 #[test]
 fn space_joins_the_inline_english_and_enter_commits_it() {
-    // 舊版 librime（1.17.0 以前）：空白也接進英文，臨時英文不結束；Enter 上屏整段（票 25b）。
+    // librime 1.17.0：空白也接進英文，臨時英文不結束；Enter 上屏整段（票 25b）。
     let mut ime = Ime::new(&men_kou());
     ime.type_code("anr");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
@@ -913,7 +913,7 @@ fn backspacing_the_inline_english_away_or_escape_goes_back_to_chinese() {
 
 #[test]
 fn selected_segments_stay_before_the_inline_english() {
-    // 和 Enter 相同：選定的分段上屏字，其餘當英文（librime 把整串換成按鍵，QIM 留著選了的字）。
+    // 和 Enter 相同：選定的分段上屏字，其餘當英文（librime 1.17.0 也留著；master 的 `74bd5dc4` 起把整串換成按鍵）。
     let mut ime = Ime::new(&men_kou());
     let typed = ime.type_code("anr");
     ime.select(&typed, "門");

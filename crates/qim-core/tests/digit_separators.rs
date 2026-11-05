@@ -209,3 +209,35 @@ fn a_digit_typed_in_english_counts_after_switching_back() {
     ime.type_keys(".");
     assert_eq!(ime.text, "3.");
 }
+
+#[test]
+fn a_modifier_key_passed_to_the_host_does_not_end_the_number() {
+    // 單按 Ctrl、觸控切頁、⇧ 沒有送字元，輸入框沒變（M1 票 26b）。
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    assert!(!ime.press(Key::Modifier).handled);
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3.");
+}
+
+#[test]
+fn a_modifier_key_in_english_does_not_end_the_number() {
+    let mut ime = Ime::new();
+    ime.press(Key::ToggleAscii(ShiftKey::Right));
+    ime.type_keys("3");
+    ime.press(Key::Modifier);
+    ime.press(Key::ToggleAscii(ShiftKey::Right));
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3.");
+}
+
+#[test]
+fn a_modifier_key_while_composing_is_eaten_and_keeps_the_composition() {
+    let mut ime = Ime::new();
+    ime.type_keys("a");
+    let snapshot = ime.press(Key::Modifier);
+    assert!(snapshot.handled);
+    assert_eq!(snapshot.commit, None);
+    assert_eq!(snapshot.composition.input, "a");
+    assert_eq!(snapshot.candidates.len(), 1);
+}

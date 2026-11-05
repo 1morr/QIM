@@ -184,7 +184,7 @@ test("Shift（單按）：左 Shift 留碼後沒改就再按左 Shift，還原�
 	await expect(text).toHaveValue("門口");
 });
 
-// 舊版 Rime（librime 1.17.0 以前，M1 票 25b）：臨時英文中空白也接進英文，Enter 才上屏。
+// librime 1.17.0（M1 票 25b）：臨時英文中空白也接進英文，Enter 才上屏。
 test("Shift（單按）：左 Shift 留碼後空白接進英文，Enter 上屏整段", async ({
 	page,
 }, testInfo) => {

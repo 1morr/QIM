@@ -217,6 +217,17 @@ test("符號頁的「3」「.」「5」讀回「3.5」；打了字之後的「.�
 	await expect(text).toHaveValue("3.5日。");
 });
 
+// 切頁與 ⇧ 只改鍵盤狀態、不送字元，數字還沒結束（M1 票 26b）。
+test("符號頁「3」→「返回」→ 字母頁句號讀回「3.」；點 ⇧ 之後也是", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await tapKeys(page, ["to-symbols", "3", "to-letters", "。"]);
+	await expect(text).toHaveValue("3.");
+	await tapKeys(page, ["to-symbols", "4", "to-letters", "shift", "。"]);
+	await expect(text).toHaveValue("3.4.");
+});
+
 test("英文直通時觸控的標點照實體鍵盤輸入半形", async ({ page }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	await text.focus();
