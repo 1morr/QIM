@@ -268,6 +268,16 @@ fn words_are_written_in_the_corpus_forms_and_merged_by_summing() {
 }
 
 #[test]
+fn two_spellings_with_the_same_frequency_are_one_count_listed_twice_and_not_summed() {
+    // rime-essay 把「巔峯／巔峰」「審覈／審核」都列成 9448、8908：同一份計數列了兩次，取一份。
+    let (lexicon, counts) = build_with_forms("甲口\t300\n日口\t300\n甲門\t150\n日門\t100\n", "");
+    assert_eq!(lexicon.lookup("ar")[0].frequency, 300);
+    // 詞頻不同的是各自的計數（「才是／纔是」），照舊相加。
+    assert_eq!(lexicon.lookup("aan")[0].frequency, 250);
+    assert_eq!(counts.merged, 2);
+}
+
+#[test]
 fn both_forms_are_indexed_under_their_own_codes_with_the_same_frequency() {
     // 弓口（`nr`）與乙口（`cr`、`bcr`）：essay 寫乙口，兩種拼法都收、詞頻一樣。
     let (lexicon, counts) = build_with_forms("乙口\t300\n弓口\t200\n", "");

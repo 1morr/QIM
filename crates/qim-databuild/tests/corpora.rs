@@ -82,3 +82,31 @@ fn wan_written_in_the_hong_kong_form_becomes_the_common_form() {
     let s2hk = Converter::new(Conversion::S2hk, forms()).unwrap();
     assert_eq!(s2hk.convert("揾工"), "搵工");
 }
+
+/// 只含單向並存寫法的字的碼表建出的對照表：着（`tu`）著（`ta`）、臺（`gg`）台（`ir`）、菸（`ty`）煙（`fg`）。
+fn forms_with_one_way() -> CommonForms {
+    let entry = |text| CodeEntry {
+        text,
+        extension: false,
+    };
+    let table = CodeTable::from_entries([
+        ("tu".to_string(), vec![entry('着')]),
+        ("ta".into(), vec![entry('著')]),
+        ("gg".into(), vec![entry('臺')]),
+        ("ir".into(), vec![entry('台')]),
+        ("ty".into(), vec![entry('菸')]),
+        ("fg".into(), vec![entry('煙')]),
+    ]);
+    CommonForms::from_opencc(&table).unwrap()
+}
+
+#[test]
+fn one_way_forms_stay_as_the_source_wrote_them() {
+    // t2hk 把「臺」「菸」換成「台」「煙」：單向並存寫法照原文留下，原文寫「台」「煙」的也照舊，
+    // 兩種寫法的字頻與 bigram 各算各的（M1 票 17d）。
+    let t2hk = Converter::new(Conversion::T2hk, forms_with_one_way()).unwrap();
+    assert_eq!(t2hk.convert("臺灣香菸，台州煙霧"), "臺灣香菸，台州煙霧");
+    // 簡體原文沒有「臺」：轉出來的照 s2hk。
+    let s2hk = Converter::new(Conversion::S2hk, forms_with_one_way()).unwrap();
+    assert_eq!(s2hk.convert("台湾的舞臺"), "台灣的舞臺");
+}

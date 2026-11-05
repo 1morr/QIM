@@ -7,11 +7,11 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::{
-    CangjieVersion, CodeTable, Engine, EnglishPack, Key, LanguageModelPack, Lexicon, LexiconPack,
-    Options, Pack, RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
+    CangjieVersion, CodeTable, Engine, EnglishPack, Key, LanguageModel, LanguageModelPack, Lexicon,
+    LexiconPack, Options, Pack, RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
 };
 
-use crate::common_forms::{CommonForms, REVERSED_ONE_WAY};
+use crate::common_forms::{BothForms, CommonForms, ONE_WAY_DISTINCT, REVERSED_ONE_WAY};
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::sources::sha256_hex;
@@ -755,11 +755,12 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
     }
 }
 
-/// 詞庫（`pipeline` 建出、解回來的那份）的寫法，確認建詞庫接上了 `forms`：
+/// 詞庫與語言模型（`pipeline` 建出、解回來的那份）的寫法，確認建詞庫與 bigram 接上了 `forms`：
 /// - 沒有 `forms` 換掉的寫法，也沒有 [`REVERSED_ONE_WAY`]；
-/// - 雙向的並存寫法：含它的詞每種寫法都收、詞頻相同，兩個字的字頻相同；
-/// - 單向的：含前一個字的詞，換成後一個字的寫法也收，詞頻不低於它。
-pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
+/// - 雙向的並存寫法：含它的詞每種寫法都收、詞頻相同，兩個字的字頻相同；詞裡含它的相鄰字，
+///   每種寫法的 bigram 相同，兩個字的 unigram 也相同（[`two_way_probability_mismatches`]）；
+/// - 單向的：含前一個字的詞，換成後一個字的寫法也收，詞頻不低於它（[`ONE_WAY_DISTINCT`] 除外）。
+pub fn lexicon_forms(lexicon: &Lexicon, model: &LanguageModel, forms: &CommonForms) -> Check {
     let replaced: BTreeSet<char> = forms.pairs().map(|(from, _)| from).collect();
     let both = forms.both();
     let two_way = |c: char| both.other(c).is_some() || both.representative(c) != c;
@@ -789,7 +790,8 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
                 }
             }
         }
-        if text.chars().any(|c| both.one_way(c).is_some()) {
+        // `ONE_WAY_DISTINCT` 照設計不生出另一種寫法（那是別的詞，詞頻可以較低），不查。
+        if text.chars().any(|c| both.one_way(c).is_some()) && !ONE_WAY_DISTINCT.contains(&text) {
             with_one_way += 1;
             let also: String = text.chars().map(|c| both.one_way(c).unwrap_or(c)).collect();
             match frequency.get(also.as_str()) {
@@ -808,6 +810,7 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
             (a != b).then(|| format!("{r} {a}、{o} {b}"))
         })
         .collect();
+    let bigrams = two_way_probability_mismatches(lexicon, model, both);
     const SHOWN: usize = 10;
     let few = |items: &[String]| {
         let shown = items[..items.len().min(SHOWN)].join("、");
@@ -823,6 +826,7 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
         ("缺", &missing),
         ("詞頻不合", &unequal),
         ("字頻不同", &chars),
+        ("bigram 不同", &bigrams),
     ] {
         if !items.is_empty() {
             problems.push(format!("{label}：{}", few(items)));
@@ -834,7 +838,7 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
         detail: if problems.is_empty() {
             format!(
                 "對照表 {} 組換掉的寫法與反向的錯字在詞庫都沒有；雙向並存寫法 {} 組：含它的詞 \
-                 {with_two_way} 個，每種寫法都收、詞頻相同，字頻相同；單向 {} 組：含它的詞 \
+                 {with_two_way} 個，每種寫法都收、詞頻相同，字頻與 bigram 相同；單向 {} 組：含它的詞 \
                  {with_one_way} 個都另收另一種寫法",
                 replaced.len(),
                 both.two_way_pairs().count(),
@@ -844,6 +848,49 @@ pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
             problems.join("；")
         },
     }
+}
+
+/// 雙向並存寫法在 `model` 裡機率不同的地方：每組兩個字的 unigram，以及詞庫裡含它的詞的每對相鄰字
+/// （代表寫法的那對，和前後字各換或不換成另一種寫法的每一對）。每項寫成「代表寫法的那對／不同的那對」。
+fn two_way_probability_mismatches(
+    lexicon: &Lexicon,
+    model: &LanguageModel,
+    both: &BothForms,
+) -> Vec<String> {
+    // (前一字, 字)，都寫成代表寫法；前一字是 `None` 的是 unigram。
+    let mut pairs: BTreeSet<(Option<char>, char)> =
+        both.two_way_pairs().map(|(r, _)| (None, r)).collect();
+    for (_, words) in lexicon.iter() {
+        for w in words {
+            let chars: Vec<char> = w.text.chars().map(|c| both.representative(c)).collect();
+            for pair in chars.windows(2) {
+                let (prev, next) = (pair[0], pair[1]);
+                if both.other(prev).is_some() || both.other(next).is_some() {
+                    pairs.insert((Some(prev), next));
+                }
+            }
+        }
+    }
+    let spellings_of = |c: char| std::iter::once(c).chain(both.other(c));
+    let shown = |prev: Option<char>, next: char| prev.into_iter().chain([next]).collect::<String>();
+    let mut different = Vec::new();
+    for (prev, next) in pairs {
+        let expected = model.log_prob(prev, next);
+        let prevs: Vec<Option<char>> =
+            prev.map_or(vec![None], |p| spellings_of(p).map(Some).collect());
+        for other_prev in prevs {
+            for other_next in spellings_of(next) {
+                if model.log_prob(other_prev, other_next) != expected {
+                    different.push(format!(
+                        "{}／{}",
+                        shown(prev, next),
+                        shown(other_prev, other_next)
+                    ));
+                }
+            }
+        }
+    }
+    different
 }
 
 fn spot(id: CheckId, passed: bool) -> Check {

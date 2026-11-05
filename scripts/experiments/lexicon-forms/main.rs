@@ -9,6 +9,7 @@ use std::path::Path;
 use ferrous_opencc::OpenCC;
 use ferrous_opencc::config::BuiltinConfig;
 use qim_databuild::common_forms::CommonForms;
+use qim_databuild::corpora::{Conversion, Converter};
 use qim_databuild::sources::{self, Fetch};
 use qim_databuild::{Error, lexicon, libcangjie, quick};
 
@@ -36,7 +37,13 @@ fn main() -> Result<(), Error> {
     };
     let rows = libcangjie::parse(&load("libcangjie", "data/table.txt")?)?;
     let table = quick::code_table(&rows, &BTreeMap::new());
-    let forms: BTreeMap<char, char> = CommonForms::from_opencc(&table)?.pairs().collect();
+    let common = CommonForms::from_opencc(&table)?;
+    if std::env::var("GAPS").is_ok() {
+        let essay = load("rime_essay", "essay.txt")?;
+        let colloquial = std::fs::read_to_string(root.join(lexicon::COLLOQUIAL_PATH)).unwrap();
+        return gaps(&table, common, &essay, &colloquial);
+    }
+    let forms: BTreeMap<char, char> = common.pairs().collect();
 
     let mut codes: BTreeMap<char, BTreeSet<&str>> = BTreeMap::new();
     let mut every = BTreeSet::new();
@@ -171,5 +178,101 @@ fn main() -> Result<(), Error> {
             }
         }
     }
+    Ok(())
+}
+
+/// 票 17d：詞庫建置實際換掉、而且兩字不同碼的字（`GAPS=1`）。essay 與口語詞表的詞（兩字以上、
+/// 詞頻達門檻、同一詞取最大）經建置同一套轉換（`t2hk`、對照表、並存寫法的代表寫法、反向錯字改回），
+/// 逐字比對原字與換完的字；同碼的換了也打得出，不列。每列：原字、換成、兩字的碼、怎麼處理、
+/// 詞數、詞頻和、例。
+fn gaps(
+    table: &qim_core::CodeTable,
+    forms: CommonForms,
+    essay: &str,
+    colloquial: &str,
+) -> Result<(), Error> {
+    let mut codes: BTreeMap<char, BTreeSet<&str>> = BTreeMap::new();
+    for (code, entries) in table.iter() {
+        for e in entries.iter().filter(|e| !e.extension) {
+            codes.entry(e.text).or_default().insert(code);
+        }
+    }
+    let both = forms.both().clone();
+    let converter = Converter::new(Conversion::T2hk, forms)?;
+    let mut words: BTreeMap<&str, (u64, &str)> = BTreeMap::new();
+    let lines = essay.lines().map(|l| (l, "essay")).chain(
+        colloquial
+            .lines()
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(|l| (l, "口語")),
+    );
+    for (line, from) in lines {
+        let (w, f) = line.split_once('\t').unwrap();
+        let f: u64 = f.parse().unwrap();
+        if w.chars().count() >= 2 && f >= lexicon::MIN_FREQUENCY {
+            let k = words.entry(w).or_insert((f, from));
+            k.0 = k.0.max(f);
+        }
+    }
+    let fmt = |c: char| {
+        codes
+            .get(&c)
+            .map(|s| s.iter().copied().collect::<Vec<_>>().join(","))
+            .unwrap_or_else(|| "字集外".into())
+    };
+    let mut usage: BTreeMap<(char, char), Usage> = BTreeMap::new();
+    let mut uneven = 0;
+    for (&w, &(f, from)) in &words {
+        let out = both.correct(&converter.convert(w));
+        if out.chars().count() != w.chars().count() {
+            uneven += 1;
+            continue;
+        }
+        let pairs: BTreeSet<(char, char)> =
+            w.chars().zip(out.chars()).filter(|(a, b)| a != b).collect();
+        for pair in pairs {
+            let u = usage.entry(pair).or_default();
+            u.words += 1;
+            u.frequency += f;
+            u.samples.push((
+                f,
+                format!("{w}→{out}{}", if from == "口語" { "（口語）" } else { "" }),
+            ));
+        }
+    }
+    println!("原字\t換成\t原字的碼\t換成的碼\t處理\t詞數\t詞頻和\t例");
+    let mut rows: Vec<_> = usage
+        .into_iter()
+        .filter(|((a, b), _)| match (codes.get(a), codes.get(b)) {
+            (Some(x), Some(y)) => x.is_disjoint(y),
+            (None, _) => false,
+            _ => true,
+        })
+        .collect();
+    rows.sort_by_key(|(_, u)| std::cmp::Reverse(u.frequency));
+    for ((a, b), mut u) in rows {
+        let handled = if both.representative(a) == b {
+            "雙向"
+        } else if both.one_way(a) == Some(b) {
+            "反向錯字改回"
+        } else {
+            "—"
+        };
+        u.samples.sort_by_key(|s| std::cmp::Reverse(s.0));
+        println!(
+            "{a}\t{b}\t{}\t{}\t{handled}\t{}\t{}\t{}",
+            fmt(a),
+            fmt(b),
+            u.words,
+            u.frequency,
+            u.samples
+                .iter()
+                .take(5)
+                .map(|s| format!("{}({})", s.1, s.0))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    eprintln!("換完字數不同、沒比的詞：{uneven}");
     Ok(())
 }

@@ -1,6 +1,5 @@
 //! 詞庫資料包的內容（plan §4.2）：rime-essay 與粵語口語詞表的多字詞展開成速成碼索引，加上語料的字頻。
 
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use qim_core::{CodeTable, Lexicon, Word};
@@ -71,8 +70,9 @@ pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 ///   的字、重複、essay 已收（詞頻達門檻）的詞都算錯，不默默濾掉；essay 有但低於門檻的詞用詞表的詞頻。
 /// - 單字、詞頻低於 [`MIN_FREQUENCY`] 的詞、含連打字集以外的字的詞不收；同一個詞列了幾次取最大詞頻。
 /// - essay 與詞表的詞都經 `forms.normalize` 換成語料的寫法（「羣組」→「群組」）：換完撞成同一個詞的
-///   詞頻相加，門檻與字集看換完的詞；單向寫法反過來寫的錯字（「顯着」）改回原字。並存寫法的詞每種寫法都收（`forms.both`），詞頻相同；
-///   單向的寫法撞上 essay 本來就有的詞時詞頻相加。
+///   照 [`combined`] 合併，門檻與字集看換完的詞；單向寫法反過來寫的錯字（「顯着」）改回原字。
+///   並存寫法的詞每種寫法都收（`forms.both`），詞頻相同；單向生出的寫法撞上 essay 本來就有的詞時
+///   也照 [`combined`] 合併。
 /// - 詞的碼是每個字的一個速成碼接起來（`code_table` 的連打字集）。多碼字的組合依換掉主碼
 ///   （`transcoder` 的碼，基準也用它）的字數由少到多取，最多 [`MAX_COMBINATIONS`] 個。
 /// - 每個碼的詞依詞頻由高到低、同頻依碼位排。
@@ -101,20 +101,17 @@ pub fn build(
             }
         }
     }
-    let mut words: BTreeMap<String, u64> = BTreeMap::new();
+    let mut merging: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     for (text, frequency) in essay_words {
         let common = forms.common(text);
         counts.converted += usize::from(common != text);
-        match words.entry(common) {
-            Entry::Occupied(mut kept) => {
-                *kept.get_mut() += frequency;
-                counts.merged += 1;
-            }
-            Entry::Vacant(slot) => {
-                slot.insert(frequency);
-            }
-        }
+        merging.entry(common).or_default().push(frequency);
     }
+    counts.merged = merging.values().map(|f| f.len() - 1).sum();
+    let mut words: BTreeMap<String, u64> = merging
+        .into_iter()
+        .map(|(text, frequencies)| (text, combined(&frequencies)))
+        .collect();
 
     let mut listed: BTreeSet<String> = BTreeSet::new();
     for (i, line) in colloquial.lines().enumerate() {
@@ -153,8 +150,8 @@ pub fn build(
             .collect::<Option<Vec<_>>>()
     };
     // 每個詞的每種寫法：單向的寫法可能和另一個詞撞成同一個（隨着寫成隨著、essay 也有隨著），
-    // 兩者是同一個義項，詞頻相加。
-    let mut spelled: BTreeMap<String, u64> = BTreeMap::new();
+    // 兩者是同一個義項（義項不同的不生出這個寫法，見 `BothForms::spellings`）。
+    let mut spelled: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     for (text, frequency) in words {
         if frequency < MIN_FREQUENCY {
             counts.below_threshold += 1;
@@ -166,12 +163,13 @@ pub fn build(
         }
         counts.words += 1;
         for spelling in forms.both.spellings(&text) {
-            *spelled.entry(spelling).or_default() += frequency;
+            spelled.entry(spelling).or_default().push(frequency);
         }
     }
     counts.spellings = spelled.len() - counts.words;
     let mut index: BTreeMap<String, Vec<Word>> = BTreeMap::new();
-    for (text, frequency) in spelled {
+    for (text, frequencies) in spelled {
+        let frequency = combined(&frequencies);
         // 並存寫法的字都在連打字集（`CommonForms::new` 檢查過），每種寫法都查得到碼。
         let Some(per_char) = per_char(&text) else {
             continue;
@@ -192,6 +190,16 @@ pub fn build(
     counts.indexed = index.values().map(Vec::len).sum();
     forms.both.share_frequency(&mut char_frequency);
     Ok((Lexicon::new(index, char_frequency), counts))
+}
+
+/// 撞成同一個詞的幾筆詞頻：相同的是同一份計數列了幾次（rime-essay 的「巔峯」「巔峰」都是 9448），
+/// 只算一次；不同的是各自的計數（「才是」「纔是」），相加。
+fn combined(frequencies: &[u64]) -> u64 {
+    frequencies
+        .iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .sum()
 }
 
 /// 「詞<TAB>詞頻」的一行；`invalid` 帶上檔名與行號。
