@@ -236,9 +236,9 @@ fn letters_page_matches_gboard_quick() {
         assert_eq!(shift.tap_action(KeyState::default()), Action::Shift);
         assert_eq!(key(letters, "space").label.as_deref(), Some("速成"));
         assert_eq!(key(letters, "space").a11y_label.as_deref(), Some("空白"));
-        // 逗號、句號送核心的標點鍵（全形、半形由核心決定，同實體鍵盤）。
-        assert_eq!(key(letters, "，").tap, Action::Punct(','));
-        assert_eq!(key(letters, "。").tap, Action::Punct('.'));
+        // 逗號、句號照鍵上的字輸出全形（使用者 2026-11-05 決定，M1 票 27b）。
+        assert_eq!(key(letters, "，").tap, Action::Text("，".into()));
+        assert_eq!(key(letters, "。").tap, Action::Text("。".into()));
         // 逗號鍵長按進常用頁（代替 Gboard 的表情入口），句號鍵長按的預設是「……」。
         assert_eq!(
             key(letters, "，").long_press,
@@ -258,8 +258,8 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             rows(symbols),
             [
                 "1 2 3 4 5 6 7 8 9 0",
-                "@ # $ _ & - + ( ) /",
-                "to-more-symbols 、 “ ” : ; ! ? backspace",
+                "@ # $ _ & - + （ ） /",
+                "to-more-symbols 、 “ ” ： ； ！ ？ backspace",
                 "to-letters , to-numbers space . enter",
             ]
         );
@@ -299,18 +299,10 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             assert_eq!(back.label.as_deref(), Some("返回"));
             assert_eq!(back.tap, switch(gboard::LETTERS));
         }
-        // 打完不切頁，留在符號頁（brief §4.4）。數字與核心會轉成別的符號的鍵直接輸入文字；
-        // 其他 ASCII 標點送標點鍵，全形、半形由核心決定（同實體鍵盤）。
-        for id in ["1", "0", "_", "、"] {
+        // 打完不切頁，留在符號頁（brief §4.4）。符號照鍵上的字輸出（M1 票 27b）：Gboard 實測打全形的
+        // `：；！？（）` 標成全形，底排的 `, .` 與其他 ASCII 標點半形。
+        for id in ["1", "0", "_", "、", "@", "？", "！", "（", ",", "."] {
             assert_eq!(key(symbols, id).tap, Action::Text(id.into()), "{id}");
-        }
-        for id in ["@", "?", "!", "(", ",", "."] {
-            let c = id.chars().next().unwrap();
-            assert_eq!(key(symbols, id).tap, Action::Punct(c), "{id}");
-        }
-        let more = page(variant, gboard::MORE_SYMBOLS);
-        for id in ["^", "\\", "<", ">", "［", "「"] {
-            assert_eq!(key(more, id).tap, Action::Text(id.into()), "{id}");
         }
     }
 }
@@ -418,5 +410,24 @@ fn number_row_layout_adds_a_row_of_digits_above_the_letters() {
         );
         let ids = |v: &LayoutVariant| v.pages.iter().map(|p| p.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(plain), ids(with_row));
+    }
+}
+
+/// 觸控鍵照鍵上的字輸出（使用者 2026-11-05 決定，M1 票 27b）：每一頁直接輸入文字的鍵，打出的就是
+/// 標籤；沒有送核心標點鍵（全形半形由核心猜）的鍵，只有組字中的分隔鍵例外（`composing`）。
+#[test]
+fn touch_keys_type_what_their_label_shows() {
+    for layout in [gboard::layout(), gboard::number_row_layout()] {
+        for variant in &layout.variants {
+            for page in &variant.pages {
+                for key in &page.keys {
+                    let at = format!("{} {}", page.id, key.id);
+                    assert!(!matches!(key.tap, Action::Punct(_)), "{at}");
+                    if let Action::Text(text) = &key.tap {
+                        assert_eq!(key.label.as_deref(), Some(text.as_str()), "{at}");
+                    }
+                }
+            }
+        }
     }
 }

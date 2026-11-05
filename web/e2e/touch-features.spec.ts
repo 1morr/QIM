@@ -176,7 +176,8 @@ test("Shift 開著時長按字母鍵出小寫，之後 Shift 解除", async ({ p
 	);
 });
 
-// 觸控的標點鍵送核心的標點鍵（Key::Punct），全形、半形由核心決定，和實體鍵盤一致（M1 票 27，協調者）。
+// 觸控的標點鍵照鍵上的字輸出（使用者 2026-11-05 決定，M1 票 27b）：字母頁「，」「。」是全形、
+// 符號頁的 ASCII 標點是半形，同 Gboard；數字後半形（票 26）只管實體鍵盤。
 test("觸控點「日」「。」讀回「日。」；組字中點「。」先上屏首選再出「。」", async ({
 	page,
 }) => {
@@ -188,19 +189,18 @@ test("觸控點「日」「。」讀回「日。」；組字中點「。」先�
 	await expect(page.getByTestId("composition")).toHaveText("");
 });
 
-// 數字後半形（M1 票 26）在觸控上一致：數字列、符號頁的數字直接輸出文字，核心也要記得前一字是數字。
-test("觸控點數字列「3」、句號鍵、「5」讀回「3.5」；「1」「，」讀回「1，」", async ({
+test("數字列「3」之後字母頁的「。」仍是「。」；「1」「，」讀回「1，」", async ({
 	page,
 }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	await page.getByRole("checkbox", { name: "數字列" }).check();
-	await tapKeys(page, ["3", "。", "5"]);
-	await expect(text).toHaveValue("3.5");
+	await tapKeys(page, ["3", "。"]);
+	await expect(text).toHaveValue("3。");
 	await tapKeys(page, ["1", "，"]);
-	await expect(text).toHaveValue("3.51，");
+	await expect(text).toHaveValue("3。1，");
 });
 
-test("符號頁的「3」「.」「5」讀回「3.5」；打了字之後的「.」是全形", async ({
+test("符號頁的「3」「.」「5」讀回「3.5」；中文狀態打了字之後符號頁的「.」仍是半形", async ({
 	page,
 }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
@@ -212,38 +212,44 @@ test("符號頁的「3」「.」「5」讀回「3.5」；打了字之後的「.�
 		"to-letters",
 		"a",
 		"space",
-		"。",
 	]);
-	await expect(text).toHaveValue("3.5日。");
+	await expect(text).toHaveValue("3.5日");
+	await tapKeys(page, ["to-symbols", "."]);
+	await expect(text).toHaveValue("3.5日.");
 });
 
-// 切頁與 ⇧ 只改鍵盤狀態、不送字元，數字還沒結束（M1 票 26b）。
-test("符號頁「3」→「返回」→ 字母頁句號讀回「3.」；點 ⇧ 之後也是", async ({
+// 切頁與 ⇧ 只改鍵盤狀態、不送字元，數字還沒結束（M1 票 26b）：接著用實體鍵盤打「.」是半形。
+test("符號頁「3」→「返回」→ 實體鍵盤「.」讀回「3.」；點 ⇧ 之後也是；字母頁的「。」照鍵上的字", async ({
 	page,
 }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
-	await tapKeys(page, ["to-symbols", "3", "to-letters", "。"]);
+	await tapKeys(page, ["to-symbols", "3", "to-letters"]);
+	await text.focus();
+	await page.keyboard.press(".");
 	await expect(text).toHaveValue("3.");
-	await tapKeys(page, ["to-symbols", "4", "to-letters", "shift", "。"]);
+	await tapKeys(page, ["to-symbols", "4", "to-letters", "shift"]);
+	await page.keyboard.press(".");
 	await expect(text).toHaveValue("3.4.");
+	await tapKeys(page, ["to-symbols", "5", "to-letters", "。"]);
+	await expect(text).toHaveValue("3.4.5。");
 });
 
-test("英文直通時觸控的標點照實體鍵盤輸入半形", async ({ page }) => {
+test("英文直通時觸控的標點也照鍵上的字", async ({ page }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	await text.focus();
 	await page.keyboard.press("ShiftRight");
 	await expect(page.getByTestId("mode")).toHaveText("英");
-	await tapKeys(page, ["。", "，", "to-symbols", "?", "("]);
-	await expect(text).toHaveValue(".,?(");
+	await tapKeys(page, ["。", "，", "to-symbols", ".", "？", "（"]);
+	await expect(text).toHaveValue("。，.？（");
 });
 
-test("臨時英文中觸控的標點接在英文後面，和實體鍵盤一樣", async ({ page }) => {
+test("臨時英文中觸控的標點接在英文後面，接的是鍵上的字", async ({ page }) => {
 	await tapKeys(page, ["a", "n", "r"]);
 	await page.getByRole("textbox", { name: "輸入框" }).focus();
 	await page.keyboard.press("ShiftLeft");
 	await expect(page.getByTestId("composition")).toHaveText("anr");
-	await tapKeys(page, ["。"]);
-	await expect(page.getByTestId("composition")).toHaveText("anr.");
+	await tapKeys(page, ["。", "to-symbols", "."]);
+	await expect(page.getByTestId("composition")).toHaveText("anr。.");
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("");
 });
 
@@ -275,7 +281,7 @@ test("符號頁：打兩個符號仍在符號頁，按「返回」回字母頁",
 	await expect(text).toHaveValue("1@");
 	// 打完不跳回（brief §4.4）。
 	await expect(page.getByTestId("key-to-letters")).toHaveText("返回");
-	await expect(page.getByTestId("key-?")).toBeVisible();
+	await expect(page.getByTestId("key-？")).toBeVisible();
 	await page.screenshot({ path: testInfo.outputPath("symbols.png") });
 	await tapKeys(page, ["to-letters"]);
 	await expect(page.getByTestId("key-a")).toHaveText("日a");
@@ -285,7 +291,7 @@ test("符號頁：打兩個符號仍在符號頁，按「返回」回字母頁",
 test("組字中切到符號頁組字留著，按符號先上屏組字再接符號", async ({ page }) => {
 	await tapKeys(page, ["a", "n", "r", "to-symbols"]);
 	await expect(page.getByTestId("composition")).toHaveText("日弓口");
-	await tapKeys(page, ["?"]);
+	await tapKeys(page, ["？"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
 		"門口？",
 	);
@@ -509,7 +515,7 @@ test("觸控的空白鍵選字上屏可以回報，組字中點符號上屏不�
 	await report.tap();
 	await expect(reports).toHaveValue("anr\t門口\t網頁回報（首選 門口）");
 
-	await tapKeys(page, ["a", "n", "r", "to-symbols", "?"]);
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
 		"門口門口？",
 	);
@@ -551,7 +557,7 @@ test("簡體模式下觸控打字：空白上屏簡體，組字中點符號先�
 	await page.getByLabel("簡體").tap();
 	await tapKeys(page, ["a", "n", "r", "space"]);
 	await expect(text).toHaveValue("门口");
-	await tapKeys(page, ["a", "n", "r", "to-symbols", "?"]);
+	await tapKeys(page, ["a", "n", "r", "to-symbols", "？"]);
 	await expect(text).toHaveValue("门口门口？");
 });
 

@@ -681,15 +681,16 @@ impl Session {
     }
 
     /// 直接輸入一段文字，不經組字（觸控鍵盤的 `text` 動作，plan §2.6）：沒有組字時上屏 `text`；
-    /// 組字中和標點相同，先上屏整個組字再接 `text`。文字不轉全形；簡體模式轉成簡體，原文留繁體
-    /// （M1 票 23）。
+    /// 組字中和標點相同，先上屏整個組字再接 `text`；臨時英文中和實體鍵盤的可見字元一樣接在英文後
+    /// （M1 票 27b）。文字照原樣、不轉全形，也不套數字後半形；簡體模式轉成簡體，原文留繁體（M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
         };
-        let snapshot = if self.inline.is_some() {
-            self.commit_inline(engine, text)
+        let snapshot = if let Some(english) = &mut self.inline {
+            english.push_str(&text.text);
+            self.snapshot(engine, true, None)
         } else if self.composing() {
             self.commit_all_then(engine, user, text)
         } else {
