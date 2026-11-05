@@ -515,3 +515,39 @@ fn switching_variants_keeps_the_page_with_the_same_id_or_falls_back_to_the_initi
     assert_eq!(variant.page_index_or_initial(Some("phrases")), Some(1));
     assert_eq!(variant.page_index_or_initial(None), Some(1));
 }
+
+#[test]
+fn composing_with_an_a11y_label_but_no_label_warns_that_it_is_ignored() {
+    // `composing.a11yLabel` 只在 `composing.label` 有寫時才念（`Key::accessibility_label`），
+    // 只寫它會被默默忽略（M1 票 27b）。
+    let composing = |composing: serde_json::Value| {
+        json!({ "id": "sep", "frame": { "x": 260, "y": 0, "w": 10, "h": 10 },
+                "tap": "shift", "composing": composing })
+    };
+    let warned = Warning::ComposingA11yLabelWithoutLabel {
+        variant: 0,
+        page: "letters".into(),
+        key: "sep".into(),
+    };
+    let only_a11y = check(&layout(vec![letters(vec![composing(
+        json!({ "a11yLabel": "分隔", "tap": { "punct": "'" } }),
+    )])]));
+    assert!(only_a11y.can_save());
+    assert!(
+        only_a11y.warnings.contains(&warned),
+        "{:?}",
+        only_a11y.warnings
+    );
+    assert_eq!(
+        warned.to_string(),
+        "佈局版本 0 頁 letters：sep 的 composing 只寫了 a11yLabel，沒寫 label，讀屏不會念它"
+    );
+
+    for fine in [
+        json!({ "label": "'詞", "a11yLabel": "分隔", "tap": { "punct": "'" } }),
+        json!({ "tap": { "punct": "'" } }),
+    ] {
+        let report = check(&layout(vec![letters(vec![composing(fine.clone())])]));
+        assert!(!report.warnings.contains(&warned), "{fine}");
+    }
+}

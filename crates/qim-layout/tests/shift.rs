@@ -66,6 +66,9 @@ fn while_shifted_letter_keys_show_and_type_the_capital_letter_without_hint() {
         assert_eq!(keys[1].display_label(state, radical), "Z");
         assert_eq!(keys[0].tap_action(state), Action::Text("A".into()));
         assert_eq!(keys[0].display_hint(state), None);
+        // 讀屏念畫面上的字：沒有角標就不念角標（不是「A，a」，M1 票 27b）。
+        assert_eq!(keys[0].accessibility_label(state, "A"), "A");
+        assert_eq!(keys[1].accessibility_label(state, "Z"), "Z");
         // 不是字母鍵的照舊。
         assert_eq!(keys[2].display_label(state, radical), "⇧");
         assert_eq!(keys[3].tap_action(state), Action::Space);
@@ -76,6 +79,7 @@ fn while_shifted_letter_keys_show_and_type_the_capital_letter_without_hint() {
     assert_eq!(keys[1].display_label(off, radical), "重");
     assert_eq!(keys[0].tap_action(off), Action::Letter('a'));
     assert_eq!(keys[0].display_hint(off), Some("a"));
+    assert_eq!(keys[0].accessibility_label(off, "日"), "日，a");
 }
 
 #[test]

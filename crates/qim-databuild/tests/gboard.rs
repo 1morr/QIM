@@ -244,6 +244,11 @@ fn letters_page_matches_gboard_quick() {
             key(letters, "，").long_press,
             [Action::SwitchPage(gboard::PHRASES.into())]
         );
+        // 讀屏念鍵名與長按的作用，不念兩次逗號（M1 票 27b）。
+        assert_eq!(
+            key(letters, "，").accessibility_label(KeyState::default(), "，"),
+            "逗號，長按切到常用"
+        );
         let period = &key(letters, "。").long_press;
         assert_eq!(period.len(), 16);
         assert_eq!(period[0], Action::Text("……".into()));

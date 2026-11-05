@@ -323,7 +323,8 @@ impl Key {
         self.composing.as_ref().filter(|_| composing)
     }
 
-    /// 無障礙標籤：有寫 `a11yLabel` 就用它；否則是顯示的標籤加角標（「日，a」），
+    /// 無障礙標籤：有寫 `a11yLabel` 就用它；否則是顯示的標籤加顯示的角標（「日，a」；Shift 開著時
+    /// 字母鍵沒有角標，只念「A」），
     /// 沒有標籤的鍵用動作的說法（「空白」）。組字中 `composing` 換了標籤時，念 `composing` 的
     /// `a11yLabel`，沒寫就念顯示的標籤：鍵本身的 `a11yLabel` 說的是沒在組字時的動作。
     pub fn accessibility_label(&self, state: KeyState, displayed: &str) -> String {
@@ -344,8 +345,8 @@ impl Key {
         } else {
             displayed.to_owned()
         };
-        match &self.hint {
-            Some(hint) if *hint != base => format!("{base}，{hint}"),
+        match self.display_hint(state) {
+            Some(hint) if hint != base => format!("{base}，{hint}"),
             _ => base,
         }
     }

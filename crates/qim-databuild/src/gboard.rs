@@ -303,7 +303,7 @@ fn letters_page() -> Vec<Row> {
     third.push(backspace());
     let mut comma = text("，").function();
     comma.hint = Some("☺".into());
-    comma.a11y_label = Some("，，長按切到常用".into());
+    comma.a11y_label = Some("逗號，長按切到常用".into());
     comma.long_press = vec![Action::SwitchPage(PHRASES.into())];
     vec![
         row(0.0, letters("qwertyuiop")),
