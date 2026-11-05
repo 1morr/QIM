@@ -50,7 +50,8 @@ for (const input of inputs) {
 	const times: string[] = [];
 	for (const c of input) {
 		const start = performance.now();
-		const snapshot = session.letter(c);
+		// 分隔記號送標點鍵（`Key::for_input`），同 `qim-bench` 的原生計時。
+		const snapshot = session.inputChar(c);
 		for (const segment of snapshot.segments) {
 			void segment.radicals;
 			segment.free();

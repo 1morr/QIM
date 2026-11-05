@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use crate::lattice::{self, CandidateSpan, Lattice};
+use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
@@ -113,6 +114,18 @@ pub enum Key {
     ToggleAscii(ShiftKey),
     /// 殼不轉成上面各種的鍵（Tab、Delete、↑ ↓、Home、End…）：組字中吃下，免得宿主拿它改輸入框。
     Other,
+}
+
+impl Key {
+    /// 打出輸入碼裡的字元 `c` 要按的鍵（實體鍵盤）：分隔記號是 `Punct`，其餘是 `Letter`。
+    /// 照輸入碼重打一次組字時用（基準、測試）。
+    pub fn for_input(c: char) -> Key {
+        if c == SEPARATOR {
+            Key::Punct(c)
+        } else {
+            Key::Letter(c)
+        }
+    }
 }
 
 /// 組字狀態。
@@ -443,6 +456,15 @@ impl Session {
         }
         // 組字中每個鍵都吃下：交還宿主的話宿主照打那個字元，組字卻還留著。
         match key {
+            // 分隔記號（brief §4.3）：接在剩下的輸入碼後面，像字母一樣回到整串；已經以它結尾時不再加。
+            Key::Punct(SEPARATOR) => {
+                if !self.lattice.input().ends_with(SEPARATOR) {
+                    self.focus = None;
+                    self.lattice.push(engine, user, SEPARATOR);
+                    self.refresh_candidates(engine, user);
+                }
+                self.snapshot(engine, true, None)
+            }
             Key::Backspace => {
                 self.focus = None;
                 self.lattice.pop();
@@ -510,14 +532,14 @@ impl Session {
     /// 切中英（單按 Shift，brief §4.3），照 Rime `ascii_composer`：沒有組字時只切換；組字中
     /// 依 [`ShiftSwitch`] 先上屏整個組字（`commit_text`）或留碼接英文（`inline_ascii`）。
     /// 臨時英文中按留碼的 Shift 照舊版 librime（1.17.0 以前）：英文整串當中文的輸入碼重新
-    /// 組字；英文含方案字母以外的字元時中文組字裝不下，和另一邊一樣上屏英文。兩種都回中文。
+    /// 組字；英文含方案字母與分隔記號以外的字元時中文組字裝不下，和另一邊一樣上屏英文。兩種都回中文。
     fn toggle_ascii(&mut self, engine: &Engine, user: &mut UserModel, shift: ShiftKey) -> Snapshot {
         let keeps_code = self.options.shift_switch.keeps_code(shift);
         if self.inline.is_some() {
             let scheme = engine.scheme();
             let Some(english) = self
                 .inline
-                .take_if(|english| keeps_code && scheme.spells(english))
+                .take_if(|english| keeps_code && scheme.composes(english))
             else {
                 return self.commit_inline(engine, Commit::plain(String::new()));
             };
@@ -717,14 +739,20 @@ impl Session {
             .collect()
     }
 
-    /// 學一次上屏（plan §2.4）；無痕模式不學。
+    /// 學一次上屏（plan §2.4）；無痕模式不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
+    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。
     fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[(String, String)]) {
         if self.options.incognito {
             return;
         }
-        let segments: Vec<(&str, &str)> = segments
+        let codes: Vec<String> = segments
             .iter()
-            .map(|(code, text)| (code.as_str(), text.as_str()))
+            .map(|(code, _)| without_separators(code))
+            .collect();
+        let segments: Vec<(&str, &str)> = codes
+            .iter()
+            .zip(segments)
+            .map(|(code, (_, text))| (code.as_str(), text.as_str()))
             .collect();
         user.learn(&engine.scheme().id, &segments);
     }
@@ -740,7 +768,10 @@ impl Session {
         if self.options.incognito {
             return;
         }
-        let code: String = segments.iter().map(|(code, _)| code.as_str()).collect();
+        let code: String = segments
+            .iter()
+            .map(|(code, _)| without_separators(code))
+            .collect();
         let text: String = segments.iter().map(|(_, text)| text.as_str()).collect();
         if !engine.has_entry(&code, &text) {
             user.add_auto_phrase(&engine.scheme().id, &code, &text);

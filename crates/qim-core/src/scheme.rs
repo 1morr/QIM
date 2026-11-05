@@ -2,6 +2,16 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// 手動分隔記號（brief §4.3）：組字中按它在目前位置斷開，連打的段不跨過它（plan §2.3）。
+/// 同 Rime 拼音方案 `speller/delimiter` 的 `'`；速成、倉頡的碼不用這個字元，所以各方案共用一個，
+/// 不放進方案檔。它留在輸入碼裡，算在前一段的碼尾；查碼表、學習時去掉。
+pub const SEPARATOR: char = '\'';
+
+/// 輸入碼去掉分隔記號：查碼表、學習計數的碼（plan §2.4）。
+pub(crate) fn without_separators(input: &str) -> String {
+    input.chars().filter(|&c| c != SEPARATOR).collect()
+}
+
 /// 輸入方案：方案檔（`data/schemes/*.toml`）由 `qim-databuild` 編進資料包，欄位見 plan §2.5。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Scheme {
@@ -33,6 +43,14 @@ impl Scheme {
     /// `code` 的每個字元都是方案的鍵，可以當輸入碼（觸發詞、臨時英文回中文組字）。
     pub fn spells(&self, code: &str) -> bool {
         code.chars().all(|c| self.alphabet.contains(c))
+    }
+
+    /// `input` 是中文組字打得出的輸入碼：方案的鍵，中間夾著分隔記號，不連著兩個（組字中
+    /// 連按會吃下不動作）。臨時英文回中文組字時用；英文由組字的輸入碼起頭、只從尾端增刪，
+    /// 所以不會以分隔記號開頭。
+    pub(crate) fn composes(&self, input: &str) -> bool {
+        !input.contains(&format!("{SEPARATOR}{SEPARATOR}"))
+            && self.spells(&without_separators(input))
     }
 }
 

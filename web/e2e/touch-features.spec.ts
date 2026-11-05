@@ -159,15 +159,7 @@ test("快速點兩下 Shift 鎖定大寫，再點一下解除；隔太久的第�
 	await expect(shift).toHaveAttribute("data-shift", "off");
 });
 
-test("組字中點 Shift 再點字母：先上屏組字再接大寫字母", async ({ page }) => {
-	await tapKeys(page, ["a", "n", "r", "shift"]);
-	await expect(page.getByTestId("composition")).toHaveText("日弓口");
-	await tapKeys(page, ["a"]);
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue(
-		"門口A",
-	);
-	await expect(page.getByTestId("composition")).toHaveText("");
-});
+// 組字中的 ⇧ 是分隔鍵「'詞」（M1 票 28），見 `separator.spec.ts`。
 
 test("Shift 開著時長按字母鍵出小寫，之後 Shift 解除", async ({ page }) => {
 	await tapKeys(page, ["shift"]);

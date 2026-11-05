@@ -255,7 +255,7 @@ fn type_through(engine: &Engine, units: &[Unit]) -> (String, usize) {
     let (mut top, mut done_chars, mut jitter) = (String::new(), 0, 0);
     for unit in units {
         for c in unit.code.chars() {
-            let next = top_of(&session.handle(engine, &mut user, Key::Letter(c)));
+            let next = top_of(&session.handle(engine, &mut user, Key::for_input(c)));
             let settled: String = top.chars().take(done_chars).collect();
             if !next.starts_with(&settled) {
                 jitter += 1;
@@ -330,7 +330,7 @@ fn simulate(engine: &Engine, learning: Option<&mut UserModel>, units: &[Unit]) -
             };
             let end = if one_by_one { next + 1 } else { units.len() };
             for c in units[next..end].iter().flat_map(|u| u.code.chars()) {
-                snapshot = press(Key::Letter(c), &mut typing);
+                snapshot = press(Key::for_input(c), &mut typing);
             }
             if snapshot.composition.input.is_empty() {
                 return typing;

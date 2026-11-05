@@ -125,7 +125,7 @@ fn native(engine: &Engine, inputs: &[String]) -> Timing {
                 .chars()
                 .map(|c| {
                     let start = Instant::now();
-                    let snapshot = session.handle(engine, &mut user, Key::Letter(c));
+                    let snapshot = session.handle(engine, &mut user, Key::for_input(c));
                     let ms = start.elapsed().as_secs_f64() * 1000.0;
                     drop(black_box(snapshot));
                     ms

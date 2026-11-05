@@ -147,6 +147,21 @@ fn report_counts_fixed_passes_and_corpus_metrics() {
     assert!(outcome.violations.is_empty());
 }
 
+/// 固定題的輸入碼可以含分隔記號（網頁「回報」照打的記）：`a'b` 按的是 `a`、`'`、`b`，
+/// 段不跨過分隔記號，所以首選是「日月」不是 `ab` 的「明」。
+#[test]
+fn a_fixed_item_with_a_separator_is_typed_with_the_separator_key() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/fixed.tsv",
+        "a'b\t日月\t測試\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert_eq!(outcome.fixed.total(), 1);
+    assert_eq!(outcome.fixed.wrong(), 0, "{:?}", outcome.fixed);
+}
+
 fn check(repo: &TempDir) -> Vec<String> {
     run(repo.path(), Mode::Check).unwrap().violations
 }

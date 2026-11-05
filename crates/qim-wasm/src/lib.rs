@@ -123,6 +123,13 @@ impl WebSession {
         self.handle(Key::Letter(c))
     }
 
+    /// 打出輸入碼裡的字元 `c`（`Key::for_input`：分隔記號送標點鍵，其餘送字母）；照輸入碼
+    /// 重打一次組字時用（WebAssembly 的每鍵計時）。
+    #[wasm_bindgen(js_name = inputChar)]
+    pub fn input_char(&mut self, c: char) -> WebSnapshot {
+        self.handle(Key::for_input(c))
+    }
+
     /// 數字、字母、空白以外的可見 ASCII 字元。
     pub fn punct(&mut self, c: char) -> WebSnapshot {
         self.handle(Key::Punct(c))
@@ -629,10 +636,10 @@ impl WebLayout {
                     rotate: key.rotate,
                     z: key.z,
                     radius: key.shape.corner_radius(),
-                    a11y_label: key.accessibility_label(&label),
+                    a11y_label: key.accessibility_label(state, &label),
                     label,
                     hint: key.display_hint(state).map(str::to_owned),
-                    is_shift: key.tap == Action::Shift,
+                    is_shift: key.tap_action(state) == Action::Shift,
                     fill_light: style.fill.as_ref().map(|c| c.light.clone()),
                     fill_dark: style.fill.map(|c| c.dark),
                     label_color_light: style.label_color.as_ref().map(|c| c.light.clone()),
@@ -706,7 +713,7 @@ pub struct WebLayoutKey {
     /// 角標（[`qim_layout::Key::display_hint`]），Shift 開著時字母鍵沒有。
     #[wasm_bindgen(readonly)]
     pub hint: Option<String>,
-    /// 是不是 Shift 鍵；網頁依 [`WebLayout::shift`] 畫它的狀態。
+    /// 現在點下去是不是 Shift（組字中 ⇧ 是分隔鍵，不是）；網頁依 [`WebLayout::shift`] 畫它的狀態。
     #[wasm_bindgen(readonly, js_name = isShift)]
     pub is_shift: bool,
     #[wasm_bindgen(readonly, js_name = a11yLabel)]

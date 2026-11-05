@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use proptest::prelude::*;
 use qim_core::{
     CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Pack, Packs,
-    Ranking, Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
+    Ranking, SEPARATOR, Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// 測試方案的最長碼；碼表裡有更長的碼，那些不是字的碼。
@@ -43,7 +43,7 @@ fn key() -> impl Strategy<Value = Key> {
         1 => Just(Key::Right),
         1 => prop::sample::select(vec![ShiftKey::Left, ShiftKey::Right]).prop_map(Key::ToggleAscii),
         1 => Just(Key::Other),
-        1 => prop::sample::select(vec![',', '.', '@', '-']).prop_map(Key::Punct),
+        1 => prop::sample::select(vec![',', '.', '@', '-', SEPARATOR]).prop_map(Key::Punct),
     ]
 }
 
@@ -166,13 +166,17 @@ fn other_scheme(
     (table, words)
 }
 
-/// `text` 能拆成一串字詞（`pieces` 的「文字, 碼」），碼接起來是 `input` 開頭的一段（至少一碼）。
+/// `text` 能拆成一串字詞（`pieces` 的「文字, 碼」），碼接起來是 `input` 開頭的一段（至少一碼）；
+/// 分隔記號只能在字詞之間，不在碼裡。
 fn composes(text: &str, input: &str, pieces: &[(String, String)]) -> bool {
     let mut seen = BTreeSet::new();
     let mut todo = vec![(0, 0)];
     while let Some((t, c)) = todo.pop() {
         if t == text.len() && c > 0 {
             return true;
+        }
+        if input[c..].starts_with(SEPARATOR) && c > 0 && seen.insert((t, c + 1)) {
+            todo.push((t, c + 1));
         }
         for (piece, code) in pieces {
             if text[t..].starts_with(piece.as_str())
@@ -289,7 +293,7 @@ proptest! {
             let mut fresh_user = user.clone();
             let mut typed = Snapshot::default();
             for c in composition.unselected_input().chars() {
-                typed = fresh.handle(&engine, &mut fresh_user, Key::Letter(c));
+                typed = fresh.handle(&engine, &mut fresh_user, Key::for_input(c));
             }
             prop_assert_eq!(&composition.segments[selected..], &typed.composition.segments[..], "{:?} 後", action);
         }

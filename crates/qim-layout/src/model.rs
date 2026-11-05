@@ -324,8 +324,18 @@ impl Key {
     }
 
     /// 無障礙標籤：有寫 `a11yLabel` 就用它；否則是顯示的標籤加角標（「日，a」），
-    /// 沒有標籤的鍵用動作的說法（「空白」）。
-    pub fn accessibility_label(&self, displayed: &str) -> String {
+    /// 沒有標籤的鍵用動作的說法（「空白」）。組字中 `composing` 換了標籤時，念 `composing` 的
+    /// `a11yLabel`，沒寫就念顯示的標籤：鍵本身的 `a11yLabel` 說的是沒在組字時的動作。
+    pub fn accessibility_label(&self, state: KeyState, displayed: &str) -> String {
+        if let Some(composing) = self
+            .composing_override(state.composing)
+            .filter(|c| c.label.is_some())
+        {
+            return composing
+                .a11y_label
+                .clone()
+                .unwrap_or_else(|| displayed.to_owned());
+        }
         if let Some(label) = &self.a11y_label {
             return label.clone();
         }
@@ -465,10 +475,13 @@ pub struct Swipe {
 
 /// 組字中改用的標籤與動作，各自可省略。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Composing {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// 組字中的無障礙標籤，`label` 有寫時才用（[`Key::accessibility_label`]）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub a11y_label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tap: Option<Action>,
 }

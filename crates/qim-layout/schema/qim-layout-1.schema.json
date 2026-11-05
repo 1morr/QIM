@@ -166,6 +166,11 @@
               "additionalProperties": false,
               "properties": {
                 "label": { "type": "string" },
+                "a11yLabel": {
+                  "description": "組字中的無障礙標籤，label 有寫時才用；省略時念 label。",
+                  "type": "string",
+                  "minLength": 1
+                },
                 "tap": { "$ref": "#/$defs/action" }
               }
             }
