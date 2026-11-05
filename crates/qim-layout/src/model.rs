@@ -311,11 +311,12 @@ impl Key {
                 .is_none()
     }
 
-    /// 角標：Shift 開著時字母鍵不顯示（標籤已是字母，同 Gboard），其他時候是 `hint`。
+    /// 角標：主標籤是大寫字母時不顯示（標籤已是字母，同 Gboard），其他時候是 `hint`。
     pub fn display_hint(&self, state: KeyState) -> Option<&str> {
-        match self.tap {
-            Action::Letter(_) if state.shift.is_on() => None,
-            _ => self.hint.as_deref(),
+        if self.shows_capital(state) {
+            None
+        } else {
+            self.hint.as_deref()
         }
     }
 

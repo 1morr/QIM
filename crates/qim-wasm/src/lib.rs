@@ -578,10 +578,7 @@ impl WebLayout {
             .map(|page| page.id.clone());
         let (variant, warning) = self.layout.select(wanted);
         self.variant = variant;
-        self.page = self
-            .variant()
-            .page_index_or_initial(current.as_deref())
-            .expect("validate 保證 initialPage 存在、每個版本至少一頁");
+        self.show_page_or_initial(current.as_deref());
         Ok(warning.map(|w| w.to_string()))
     }
 
@@ -590,10 +587,7 @@ impl WebLayout {
     #[wasm_bindgen(js_name = keepStateOf)]
     pub fn keep_state_of(&mut self, old: &WebLayout) {
         self.shift = old.shift;
-        self.page = self
-            .variant()
-            .page_index_or_initial(Some(&old.page().id))
-            .expect("validate 保證 initialPage 存在、每個版本至少一頁");
+        self.show_page_or_initial(Some(&old.page().id));
     }
 
     /// Shift 鍵的狀態：`off`、`once`（下一個字母大寫）、`locked`（鎖定大寫）；網頁依它畫 Shift 鍵、
@@ -682,6 +676,14 @@ impl WebLayout {
             .keys
             .get(index)
             .ok_or_else(|| JsError::new(&format!("佈局沒有第 {index} 個鍵")))
+    }
+
+    /// 目前版本有 `id` 這頁就切過去，否則回到一開始的頁。
+    fn show_page_or_initial(&mut self, id: Option<&str>) {
+        self.page = self
+            .variant()
+            .page_index_or_initial(id)
+            .expect("validate 保證 initialPage 存在、每個版本至少一頁");
     }
 
     /// 切到目前版本的 `id` 頁；`validate` 保證 `switchPage` 指到的頁存在。
