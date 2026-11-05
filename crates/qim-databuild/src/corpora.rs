@@ -62,10 +62,10 @@ impl Conversion {
     fn description(self) -> &'static str {
         match self {
             Conversion::S2hk => {
-                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms"
+                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form"
             }
             Conversion::T2hk => {
-                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms"
+                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form"
             }
         }
     }

@@ -9,7 +9,7 @@ use qim_core::{
     EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SimplifierPack,
 };
 
-use crate::common_forms::CommonForms;
+use crate::common_forms::{CommonForms, ONE_WAY_FORMS, TWO_WAY_FORMS};
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
@@ -308,6 +308,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     }
 
     // 詞庫的碼由這次建出的速成碼表展開，字頻由各語料的 train 乘上權重相加；每次從快取重讀 essay.txt。
+    // 詞和粵語語料一樣經 `t2hk` 再換回常見寫法（rime-essay 是 OpenCC 標準寫法，brief §4.1）。
+    let essay_converter = corpora::Converter::new(corpora::Conversion::T2hk, forms.clone())?;
     let build_lexicon =
         |quick: &QuickBuild, chars: &[(String, u64)]| -> Result<(Vec<u8>, LexiconSummary), Error> {
             let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
@@ -319,6 +321,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 &quick.pack.code_table,
                 &Transcoder::new(&quick.rows),
                 frequency,
+                &lexicon::Forms {
+                    normalize: &|word| essay_converter.convert(word),
+                    both: forms.both(),
+                },
             )?;
             let bytes = LexiconPack {
                 id: lexicon_id.clone(),
@@ -352,7 +358,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
             .collect::<BTreeSet<char>>()
             .len();
-        let (model, summary) = bigram::train(&counter, vocabulary, bigram::MIN_COUNT);
+        let (model, summary) = bigram::train(&counter, vocabulary, bigram::MIN_COUNT, forms.both());
         let bytes = LanguageModelPack {
             id: language_model_id.clone(),
             model,
@@ -439,6 +445,9 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             &corpora::CANTONESE_KEPT,
         ));
         corpus_checks.push(verify::common_forms(&frequency, &forms));
+        let built = LexiconPack::from_bytes(&lexicon_bytes)
+            .map_err(|e| Error::invalid("詞庫資料包", e.to_string()))?;
+        corpus_checks.push(verify::lexicon_forms(&built.lexicon, &forms));
     }
 
     let report = if verify {
@@ -523,17 +532,35 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
         "{id} is the lexicon of the QIM input scheme \"{scheme}\". QIM changed the rime-essay\n\
          data as follows: single characters, words with a frequency below {min}, and words\n\
          containing characters outside the continuous set of the scheme were dropped; a word\n\
-         listed more than once keeps its highest frequency. The words of the QIM Cantonese\n\
-         colloquial word list, which only lists words the steps above left out, were added\n\
-         with their listed frequencies. Each word is indexed by the Quick codes of its characters joined,\n\
-         at most {max} combinations per word.\n\
+         listed more than once keeps its highest frequency. Every word was converted with\n\
+         OpenCC t2hk and then written in the common forms the corpora use (for example\n\
+         羣 as 群); words that became the same word have their frequencies\n\
+         added. The words of the QIM Cantonese colloquial word list, which only lists words\n\
+         the steps above left out, were added with their listed frequencies. For the {both}\n\
+         character pairs whose two forms are both kept ({pairs}), each such word is also\n\
+         listed in the other form with the same frequency; for {one_way} (one way only, not\n\
+         the other way round) a word with the first form is also listed with the second, and\n\
+         if that word is already in the data the frequencies are added. Each word is indexed\n\
+         by the Quick codes of its characters joined, at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
          each corpus, multiplied by the weight of that corpus ({weights}) and\n\
-         added together. {CORPUS_PREPROCESSING}",
+         added together; the two forms of a kept pair share their summed frequency.\n\
+         {CORPUS_PREPROCESSING}",
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
         weights = corpus_weights(),
+        both = TWO_WAY_FORMS.len(),
+        pairs = TWO_WAY_FORMS
+            .iter()
+            .map(|(r, o)| format!("{r}/{o}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        one_way = ONE_WAY_FORMS
+            .iter()
+            .map(|(from, to)| format!("{from} -> {to}"))
+            .collect::<Vec<_>>()
+            .join(", "),
     )
 }
 

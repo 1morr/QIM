@@ -26,3 +26,7 @@ tempfile = "3.27.0"
 [[example]]
 name = "s2hk-diff"
 path = "../../scripts/experiments/s2hk-diff/main.rs"
+
+[[example]]
+name = "lexicon-forms"
+path = "../../scripts/experiments/lexicon-forms/main.rs"
