@@ -5,6 +5,7 @@ use qim_core::{
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, RadicalHintPack, RadicalHints,
     Simplifier, SimplifierPack, Word,
 };
+use qim_databuild::common_forms::BothForms;
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::verify::{self, CheckId, PackBytes, Report};
@@ -75,6 +76,10 @@ fn lexicon_with(char_frequency: BTreeMap<char, u64>) -> LexiconPack {
         &pack().code_table,
         &Transcoder::new(&rows),
         char_frequency,
+        &lexicon::Forms {
+            normalize: &|s| s.to_string(),
+            both: &BothForms::default(),
+        },
     )
     .unwrap();
     LexiconPack {
@@ -98,7 +103,7 @@ fn language_model_from(corpus: &str) -> LanguageModelPack {
     counter.add(corpus.as_bytes(), 1).unwrap();
     LanguageModelPack {
         id: "t-bigram".into(),
-        model: bigram::train(&counter, 8, 1).0,
+        model: bigram::train(&counter, 8, 1, &BothForms::default()).0,
     }
 }
 
@@ -786,7 +791,7 @@ mod kept_characters {
 mod common_forms {
     use std::collections::BTreeMap;
 
-    use qim_core::{CodeEntry, CodeTable};
+    use qim_core::{CodeEntry, CodeTable, Lexicon, Word};
     use qim_databuild::common_forms::CommonForms;
     use qim_databuild::verify::{self, CheckId};
 
@@ -826,5 +831,119 @@ mod common_forms {
                 "對照表 2 組（温→溫、羣→群），換掉的寫法還在 train：温 3、羣 1".into()
             )
         );
+    }
+
+    /// 碼表有溫温、群羣（同碼）、雙向的並存寫法裏（`yv`）／裡（`lg`）與單向的着（`tu`）→ 著（`ta`）。
+    fn forms() -> CommonForms {
+        let entry = |text| CodeEntry {
+            text,
+            extension: false,
+        };
+        let table = CodeTable::from_entries([
+            ("et".to_string(), vec![entry('溫'), entry('温')]),
+            ("sq".into(), vec![entry('群'), entry('羣')]),
+            ("yv".into(), vec![entry('裏')]),
+            ("lg".into(), vec![entry('裡')]),
+            ("tu".into(), vec![entry('着')]),
+            ("ta".into(), vec![entry('著')]),
+        ]);
+        CommonForms::from_opencc(&table).unwrap()
+    }
+
+    #[test]
+    fn other_both_form_left_in_train_fails() {
+        // 單向的「著」本來就各算各的，不算留下。
+        let frequency = BTreeMap::from([('裏', 5), ('裡', 2), ('着', 3), ('著', 4)]);
+        let check = verify::common_forms(&frequency, &forms());
+        assert!(!check.passed);
+        assert!(
+            check.detail.ends_with("還在 train：裡 2"),
+            "{}",
+            check.detail
+        );
+    }
+
+    fn lexicon_check(words: &[(&str, &str, u64)], chars: &[(char, u64)]) -> (bool, String) {
+        let mut index: BTreeMap<String, Vec<Word>> = BTreeMap::new();
+        for &(code, text, frequency) in words {
+            index.entry(code.into()).or_default().push(Word {
+                text: text.into(),
+                frequency,
+            });
+        }
+        let lexicon = Lexicon::new(index, chars.iter().copied());
+        let check = verify::lexicon_forms(&lexicon, &forms());
+        assert_eq!(check.id, CheckId::LexiconForms);
+        (check.passed, check.detail)
+    }
+
+    /// 都合規的詞庫：群組；這裏、這裡同頻；隨着與它的另一種寫法隨著（essay 也有隨著，詞頻較高）；著名。
+    const GOOD: [(&str, &str, u64); 5] = [
+        ("sqvm", "群組", 500),
+        ("yyv", "這裏", 80),
+        ("ylg", "這裡", 80),
+        ("nlbtu", "隨着", 50),
+        ("nlbta", "隨著", 70),
+    ];
+
+    #[test]
+    fn lexicon_in_common_forms_with_every_spelling_passes() {
+        let mut words = GOOD.to_vec();
+        words.push(("tani", "著名", 900));
+        assert_eq!(
+            lexicon_check(&words, &[('裏', 9), ('裡', 9), ('着', 3), ('著', 7)]),
+            (
+                true,
+                "對照表 2 組換掉的寫法與反向的錯字在詞庫都沒有；雙向並存寫法 1 組：含它的詞 2 個，\
+                 每種寫法都收、詞頻相同，字頻相同；單向 1 組：含它的詞 1 個都另收另一種寫法"
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn replaced_form_or_reversed_one_way_word_in_the_lexicon_fails() {
+        let (passed, detail) = lexicon_check(&[("sqvm", "羣組", 500)], &[]);
+        assert!(!passed);
+        assert!(detail.contains("不該有的寫法還在詞庫：羣組"), "{detail}");
+        // 「著名」反過來生出「着名」。
+        let (passed, detail) = lexicon_check(&[("tani", "著名", 900), ("tuni", "着名", 900)], &[]);
+        assert!(!passed);
+        assert!(detail.contains("不該有的寫法還在詞庫：着名"), "{detail}");
+    }
+
+    #[test]
+    fn missing_spelling_or_unequal_frequency_fails() {
+        let (passed, detail) = lexicon_check(&[("nlbtu", "隨着", 50)], &[]);
+        assert!(!passed);
+        assert!(detail.contains("缺：隨著"), "{detail}");
+        let (passed, detail) = lexicon_check(&[("yyv", "這裏", 80)], &[]);
+        assert!(!passed);
+        assert!(detail.contains("缺：這裡"), "{detail}");
+        let (passed, detail) = lexicon_check(
+            &[
+                ("yyv", "這裏", 80),
+                ("ylg", "這裡", 70),
+                ("nlbtu", "隨着", 50),
+                ("nlbta", "隨著", 40),
+            ],
+            &[('裏', 9), ('裡', 8)],
+        );
+        assert!(!passed);
+        assert!(
+            detail.contains("詞頻不合：這裏 80／這裡 70、隨着 50／隨著 40；"),
+            "{detail}"
+        );
+        assert!(detail.contains("字頻不同：裏 9、裡 8"), "{detail}");
+    }
+
+    #[test]
+    fn unrelated_words_and_one_way_frequencies_do_not_fail() {
+        // 單向的「着／著」字頻各算各的；不含並存寫法的詞不必有別的寫法。
+        let mut words = GOOD.to_vec();
+        words.push(("ar", "日口", 3));
+        let (passed, detail) =
+            lexicon_check(&words, &[('裏', 4), ('裡', 4), ('着', 1), ('著', 99)]);
+        assert!(passed, "{detail}");
     }
 }

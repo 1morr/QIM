@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::Lexicon;
-use qim_databuild::lexicon::{self, Counts, MAX_COMBINATIONS};
+use qim_databuild::common_forms::BothForms;
+use qim_databuild::lexicon::{self, Counts, Forms, MAX_COMBINATIONS};
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::{libcangjie, quick};
 
@@ -37,6 +38,22 @@ fn try_build(
     colloquial: &str,
     char_frequency: BTreeMap<char, u64>,
 ) -> Result<(Lexicon, Counts), qim_databuild::Error> {
+    try_build_with_forms(
+        essay,
+        colloquial,
+        char_frequency,
+        &|s| s.to_string(),
+        &BothForms::default(),
+    )
+}
+
+fn try_build_with_forms(
+    essay: &str,
+    colloquial: &str,
+    char_frequency: BTreeMap<char, u64>,
+    normalize: &dyn Fn(&str) -> String,
+    both: &BothForms,
+) -> Result<(Lexicon, Counts), qim_databuild::Error> {
     let rows = libcangjie::parse(TABLE).unwrap();
     let code_table = quick::code_table(&rows, &BTreeMap::new());
     lexicon::build(
@@ -45,7 +62,28 @@ fn try_build(
         &code_table,
         &Transcoder::new(&rows),
         char_frequency,
+        &Forms { normalize, both },
     )
+}
+
+/// 假的寫法：「甲」是要換成「日」的寫法（像「羣」換成「群」）；「弓／乙」是並存寫法，代表寫法是弓。
+fn normalize(text: &str) -> String {
+    text.replace('甲', "日").replace('乙', "弓")
+}
+
+fn both() -> BothForms {
+    BothForms::new(&[('弓', '乙')], &[]).unwrap()
+}
+
+fn build_with_forms(essay: &str, colloquial: &str) -> (Lexicon, Counts) {
+    try_build_with_forms(
+        essay,
+        colloquial,
+        BTreeMap::from([('弓', 7), ('乙', 3), ('日', 5)]),
+        &normalize,
+        &both(),
+    )
+    .unwrap()
 }
 
 fn texts(lexicon: &Lexicon, code: &str) -> Vec<String> {
@@ -98,6 +136,9 @@ fn single_characters_rare_words_and_words_outside_the_continuous_set_are_left_ou
             codes: 2,
             indexed: 2,
             colloquial: 0,
+            converted: 0,
+            merged: 0,
+            spellings: 0,
         }
     );
 }
@@ -161,7 +202,12 @@ fn malformed_lines_are_errors() {
     let code_table = quick::code_table(&rows, &BTreeMap::new());
     let transcoder = Transcoder::new(&rows);
     for essay in ["門口\n", "門口\t9435\t1\n", "門口\tmany\n", "\t9\n"] {
-        let err = lexicon::build(essay, "", &code_table, &transcoder, BTreeMap::new()).unwrap_err();
+        let forms = Forms {
+            normalize: &|s| s.to_string(),
+            both: &BothForms::default(),
+        };
+        let err = lexicon::build(essay, "", &code_table, &transcoder, BTreeMap::new(), &forms)
+            .unwrap_err();
         assert!(err.to_string().contains("第 1 行"), "{essay:?}：{err}");
     }
     assert!(lexicon::char_frequency(&[("日 3\n", 1)]).is_err());
@@ -208,4 +254,77 @@ fn colloquial_list_errors_name_the_file_and_line() {
         );
         assert!(err.contains(reason), "{colloquial:?}：{err}");
     }
+}
+
+#[test]
+fn words_are_written_in_the_corpus_forms_and_merged_by_summing() {
+    // 甲口換成日口，和原本的日口撞在一起：詞頻相加（同一個詞列兩次才取最大）。
+    let (lexicon, counts) = build_with_forms("甲口\t300\n日口\t200\n甲門\t150\n", "");
+    assert_eq!(texts(&lexicon, "ar"), ["日口"]);
+    assert_eq!(lexicon.lookup("ar")[0].frequency, 500);
+    assert_eq!(texts(&lexicon, "aan"), ["日門"]);
+    assert!(codes_of(&lexicon, "甲口").is_empty());
+    assert_eq!((counts.converted, counts.merged, counts.words), (2, 1, 2));
+}
+
+#[test]
+fn both_forms_are_indexed_under_their_own_codes_with_the_same_frequency() {
+    // 弓口（`nr`）與乙口（`cr`、`bcr`）：essay 寫乙口，兩種拼法都收、詞頻一樣。
+    let (lexicon, counts) = build_with_forms("乙口\t300\n弓口\t200\n", "");
+    assert_eq!(texts(&lexicon, "nr"), ["弓口"]);
+    assert_eq!(texts(&lexicon, "cr"), ["乙口"]);
+    assert_eq!(lexicon.lookup("nr")[0].frequency, 500);
+    assert_eq!(lexicon.lookup("cr")[0].frequency, 500);
+    assert_eq!((counts.words, counts.spellings), (1, 1));
+}
+
+#[test]
+fn both_forms_share_one_character_frequency() {
+    let (lexicon, _) = build_with_forms("門口\t300\n", "");
+    assert_eq!(lexicon.char_frequency('弓'), 10);
+    assert_eq!(lexicon.char_frequency('乙'), 10);
+    assert_eq!(lexicon.char_frequency('日'), 5);
+}
+
+#[test]
+fn colloquial_words_go_through_the_same_forms() {
+    // 詞表寫乙門：換成代表寫法查重，兩種拼法都收。
+    let (lexicon, _) = build_with_forms("門口\t300\n", "乙門\t400\n");
+    assert_eq!(texts(&lexicon, "nan"), ["弓門"]);
+    assert_eq!(texts(&lexicon, "can"), ["乙門"]);
+    let err = try_build_with_forms(
+        "弓口\t300\n",
+        "乙口\t400\n",
+        BTreeMap::new(),
+        &normalize,
+        &both(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("rime-essay 已收"), "{err}");
+}
+
+#[test]
+fn one_way_forms_add_the_other_spelling_but_never_the_reverse() {
+    // 假的單向組：門的詞也可寫成日（像隨着 → 隨著），日的詞不反過來寫成門（像著名不能寫成着名）。
+    let (lexicon, counts) = try_build_with_forms(
+        "門口\t300\n日口\t200\n日弓\t150\n",
+        "",
+        BTreeMap::from([('門', 4), ('日', 9)]),
+        &|s| s.to_string(),
+        &BothForms::new(&[], &[('門', '日')]).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(texts(&lexicon, "anr"), ["門口"]);
+    assert_eq!(lexicon.lookup("anr")[0].frequency, 300);
+    // 門口寫成日口，和 essay 本來的日口是同一個詞：詞頻相加，只收一次。
+    assert_eq!(texts(&lexicon, "ar"), ["日口"]);
+    assert_eq!(lexicon.lookup("ar")[0].frequency, 500);
+    assert!(codes_of(&lexicon, "門弓").is_empty());
+    assert_eq!((counts.words, counts.spellings), (3, 0));
+    // 字頻各算各的。
+    assert_eq!(
+        (lexicon.char_frequency('門'), lexicon.char_frequency('日')),
+        (4, 9)
+    );
 }
