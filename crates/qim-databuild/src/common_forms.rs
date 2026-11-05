@@ -276,6 +276,7 @@ impl CommonForms {
         self.forms.iter().map(|(&from, &to)| (from, to))
     }
 
+    /// 並存寫法（雙向與單向），建資料包時展開詞的寫法用。
     pub fn both(&self) -> &BothForms {
         &self.both
     }

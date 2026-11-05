@@ -54,6 +54,13 @@ pub struct Forms<'a> {
     pub both: &'a BothForms,
 }
 
+impl Forms<'_> {
+    /// 詞換成語料的寫法，單向寫法反過來寫的錯字改回原字。
+    fn common(&self, text: &str) -> String {
+        self.both.correct(&(self.normalize)(text))
+    }
+}
+
 /// 粵語口語詞表在 repo 裡的位置（plan §4.2、brief §5.2）：QIM 自行整理，CC0。
 pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 
@@ -96,7 +103,7 @@ pub fn build(
     }
     let mut words: BTreeMap<String, u64> = BTreeMap::new();
     for (text, frequency) in essay_words {
-        let common = forms.both.correct(&(forms.normalize)(text));
+        let common = forms.common(text);
         counts.converted += usize::from(common != text);
         match words.entry(common) {
             Entry::Occupied(mut kept) => {
@@ -126,7 +133,7 @@ pub fn build(
         if let Some(ch) = text.chars().find(|ch| !codes.contains_key(ch)) {
             return Err(invalid(&format!("「{ch}」不在連打字集")));
         }
-        let common = forms.both.correct(&(forms.normalize)(text));
+        let common = forms.common(text);
         if !listed.insert(common.clone()) {
             return Err(invalid(&format!("「{text}」重複")));
         }

@@ -541,8 +541,7 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          listed in the other form with the same frequency; for {one_way} (one way only, not\n\
          the other way round) a word with the first form is also listed with the second, and\n\
          if that word is already in the data the frequencies are added. Each word is indexed\n\
-         by the Quick\n\
-         codes of its characters joined, at most {max} combinations per word.\n\
+         by the Quick codes of its characters joined, at most {max} combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
          each corpus, multiplied by the weight of that corpus ({weights}) and\n\

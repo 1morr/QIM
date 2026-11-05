@@ -88,15 +88,17 @@ pub fn train(
     min_count: u64,
     both: &BothForms,
 ) -> (LanguageModel, Summary) {
-    let to = |c: char| both.representative(c);
+    let representative = |c: char| both.representative(c);
     let mut unigrams: BTreeMap<char, u64> = BTreeMap::new();
     for (&c, &n) in &counter.unigrams {
-        *unigrams.entry(to(c)).or_default() += n;
+        *unigrams.entry(representative(c)).or_default() += n;
     }
     let unigrams: Vec<(char, u64)> = unigrams.into_iter().collect();
     let mut merged: BTreeMap<(char, char), u64> = BTreeMap::new();
     for (&(p, c), &n) in &counter.bigrams {
-        *merged.entry((to(p), to(c))).or_default() += n;
+        *merged
+            .entry((representative(p), representative(c)))
+            .or_default() += n;
     }
     let bigrams: Vec<((char, char), u64)> = merged.into_iter().collect();
 
