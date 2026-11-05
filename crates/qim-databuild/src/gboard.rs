@@ -196,10 +196,29 @@ fn texts(row: &str) -> Vec<Cell> {
     row.split(' ').map(text).collect()
 }
 
+/// 核心會把這些 ASCII 標點轉成別的符號（`_` → ——、`^` → ……、`\` → 、、`< >` → 《》、
+/// `[ ]` → 「」，brief §4.3）；鍵上寫的就是要打的字，所以照原樣直接輸出，不送標點鍵。
+const KEEP_AS_TYPED: &str = "_^\\<>[]{}";
+
+/// 標點鍵：送核心的標點鍵（同實體鍵盤按 `c`），全形、半形由核心決定；標籤寫 `label`。
+fn punct(c: char, label: &str) -> Cell {
+    Cell::new(label, Action::Punct(c), Some(label))
+}
+
+/// 符號頁的一個鍵：ASCII 標點（[`KEEP_AS_TYPED`] 以外）送標點鍵，其他（全形字、¥ € 這類
+/// 符號、數字）直接輸出文字。
+fn symbol(t: &str) -> Cell {
+    let mut chars = t.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) if c.is_ascii_punctuation() && !KEEP_AS_TYPED.contains(c) => punct(c, t),
+        _ => text(t),
+    }
+}
+
 /// 符號頁的符號與數字：字比字根大（同 Gboard）。
 fn symbols(row: &str) -> Vec<Cell> {
     row.split(' ')
-        .map(|t| text(t).size(SYMBOL_LABEL_SIZE))
+        .map(|t| symbol(t).size(SYMBOL_LABEL_SIZE))
         .collect()
 }
 
@@ -289,7 +308,7 @@ fn letters_page() -> Vec<Row> {
     let mut third = vec![shift()];
     third.extend(letters("zxcvbnm"));
     third.push(backspace());
-    let mut comma = text("，").function();
+    let mut comma = punct(',', "，").function();
     comma.hint = Some("☺".into());
     comma.a11y_label = Some("，，長按切到常用".into());
     comma.long_press = vec![Action::SwitchPage(PHRASES.into())];
@@ -303,7 +322,7 @@ fn letters_page() -> Vec<Row> {
                 switch(SYMBOLS, "?123").units(1.5).pill(),
                 comma,
                 space(5.0),
-                text("。")
+                punct('.', "。")
                     .function()
                     .long_press(texts_of(PERIOD_LONG_PRESS)),
                 enter(),
@@ -348,10 +367,10 @@ fn symbol_page(rows: [&str; 2], other: Cell, third: &str, [left, right]: [&str; 
             0.0,
             vec![
                 back(),
-                text(left).function(),
+                symbol(left).function(),
                 to_numbers(),
                 space(4.0),
-                text(right).function(),
+                symbol(right).function(),
                 enter(),
             ],
         ),
@@ -359,17 +378,18 @@ fn symbol_page(rows: [&str; 2], other: Cell, third: &str, [left, right]: [&str; 
 }
 
 /// 符號頁（?123）：照 Gboard；打完留在符號頁（brief §4.4），「返回」回字母頁，「=\<」切到更多符號。
-/// 打出的字元照 Gboard 實測：括號與 `：；！？` 全形，底排逗號句號與其他符號半形。
+/// 標籤照 Gboard；ASCII 標點送標點鍵，中文狀態由核心轉全形（`：；！？（）` 同 Gboard 實測；
+/// 底排 `, .` Gboard 是半形，QIM 照核心，同實體鍵盤）。
 fn symbols_page() -> Vec<Row> {
     symbol_page(
-        ["1 2 3 4 5 6 7 8 9 0", "@ # $ _ & - + （ ） /"],
+        ["1 2 3 4 5 6 7 8 9 0", "@ # $ _ & - + ( ) /"],
         switch(MORE_SYMBOLS, "=\\<"),
-        "、 “ ” ： ； ！ ？",
+        "、 “ ” : ; ! ?",
         [",", "."],
     )
 }
 
-/// 更多符號頁（=\<）：照 Gboard；左邊「?123」回符號頁，方括號全形（實測）。
+/// 更多符號頁（=\<）：照 Gboard；左邊「?123」回符號頁；方括號照實測打全形 `［］`（直接輸出）。
 fn more_symbols_page() -> Vec<Row> {
     symbol_page(
         ["~ ` | • √ π ÷ × * §", "£ ¢ € ¥ ^ ° = 「 」 \\"],
@@ -386,7 +406,7 @@ fn numbers_page() -> Vec<Placed> {
     let mut placed = Vec::new();
     for (i, op) in ["+", "-", "*", "/"].into_iter().enumerate() {
         placed.push(Placed::new(
-            text(op).function(),
+            symbol(op).function(),
             0.0,
             i as f64 * 0.75,
             1.5,
@@ -406,7 +426,7 @@ fn numbers_page() -> Vec<Placed> {
     space.label = Some("␣".into());
     space.label_size = LABEL_SIZE;
     for (i, cell) in [
-        text("%").function().size(SYMBOL_LABEL_SIZE),
+        symbol("%").function().size(SYMBOL_LABEL_SIZE),
         space,
         backspace(),
     ]
@@ -417,11 +437,11 @@ fn numbers_page() -> Vec<Placed> {
     }
     let bottom = [
         (back(), 1.5),
-        (text(",").function(), 1.0),
+        (symbol(",").function(), 1.0),
         (switch(SYMBOLS, "!?#").plain(), digit - 1.0),
         (text("0").size(NUMPAD_LABEL_SIZE), digit),
-        (text("=").size(SYMBOL_LABEL_SIZE), digit - 1.0),
-        (text(".").function(), 1.0),
+        (symbol("=").size(SYMBOL_LABEL_SIZE), digit - 1.0),
+        (symbol(".").function(), 1.0),
         (enter(), 1.5),
     ];
     let mut left = 0.0;
@@ -451,9 +471,9 @@ fn phrases_page() -> Vec<Row> {
             0.0,
             vec![
                 switch(LETTERS, "ABC").units(1.5).pill(),
-                text("，").function(),
+                punct(',', "，").function(),
                 space(5.0),
-                text("。").function(),
+                punct('.', "。").function(),
                 enter(),
             ],
         ),

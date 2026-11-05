@@ -280,6 +280,8 @@ impl WebSession {
             other => {
                 let key = match other {
                     Action::Letter(c) => Key::Letter(*c),
+                    // 同實體鍵盤按那個標點鍵：全形、半形、臨時英文由核心決定。
+                    Action::Punct(c) => Key::Punct(*c),
                     Action::Space => Key::Space,
                     Action::Backspace => Key::Backspace,
                     Action::Enter => Key::Enter,
@@ -298,8 +300,8 @@ impl WebSession {
         };
         let mut snapshot = self.track_composing(snapshot);
         snapshot.action = Some(action.name().into());
-        snapshot.letter = match action {
-            Action::Letter(c) => Some(c.to_string()),
+        snapshot.character = match action {
+            Action::Letter(c) | Action::Punct(c) => Some(c.to_string()),
             _ => None,
         };
         snapshot
@@ -358,9 +360,9 @@ pub struct WebSnapshot {
     /// 實體鍵盤的鍵是 `None`。
     #[wasm_bindgen(readonly)]
     pub action: Option<String>,
-    /// `action` 是 `letter` 時的字母。
+    /// `action` 是 `letter` 或 `punct` 時按的字元；核心沒吃下時網頁照打它。
     #[wasm_bindgen(readonly)]
-    pub letter: Option<String>,
+    pub character: Option<String>,
     /// `commit` 的繁體原文；「回報」用。
     #[wasm_bindgen(readonly, js_name = commitOriginal)]
     pub commit_original: Option<String>,
@@ -409,7 +411,7 @@ impl From<Snapshot> for WebSnapshot {
             page: s.page,
             commit: s.commit,
             action: None,
-            letter: None,
+            character: None,
             commit_original: s.commit_original,
             ascii: s.ascii,
             generation: s.generation,

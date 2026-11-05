@@ -221,6 +221,9 @@ fn letters_page_matches_gboard_quick() {
         assert_eq!(key(letters, "shift").tap, Action::Shift);
         assert_eq!(key(letters, "space").label.as_deref(), Some("速成"));
         assert_eq!(key(letters, "space").a11y_label.as_deref(), Some("空白"));
+        // 逗號、句號送核心的標點鍵（全形、半形由核心決定，同實體鍵盤）。
+        assert_eq!(key(letters, "，").tap, Action::Punct(','));
+        assert_eq!(key(letters, "。").tap, Action::Punct('.'));
         // 逗號鍵長按進常用頁（代替 Gboard 的表情入口），句號鍵長按的預設是「……」。
         assert_eq!(
             key(letters, "，").long_press,
@@ -240,8 +243,8 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             rows(symbols),
             [
                 "1 2 3 4 5 6 7 8 9 0",
-                "@ # $ _ & - + （ ） /",
-                "to-more-symbols 、 “ ” ： ； ！ ？ backspace",
+                "@ # $ _ & - + ( ) /",
+                "to-more-symbols 、 “ ” : ; ! ? backspace",
                 "to-letters , to-numbers space . enter",
             ]
         );
@@ -281,9 +284,18 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             assert_eq!(back.label.as_deref(), Some("返回"));
             assert_eq!(back.tap, switch(gboard::LETTERS));
         }
-        // 數字與符號鍵直接輸入文字：打完不切頁，留在符號頁（brief §4.4）。
-        for id in ["1", "0", "@", "？", "！"] {
-            assert_eq!(key(symbols, id).tap, Action::Text(id.into()));
+        // 打完不切頁，留在符號頁（brief §4.4）。數字與核心會轉成別的符號的鍵直接輸入文字；
+        // 其他 ASCII 標點送標點鍵，全形、半形由核心決定（同實體鍵盤）。
+        for id in ["1", "0", "_", "、"] {
+            assert_eq!(key(symbols, id).tap, Action::Text(id.into()), "{id}");
+        }
+        for id in ["@", "?", "!", "(", ",", "."] {
+            let c = id.chars().next().unwrap();
+            assert_eq!(key(symbols, id).tap, Action::Punct(c), "{id}");
+        }
+        let more = page(variant, gboard::MORE_SYMBOLS);
+        for id in ["^", "\\", "<", ">", "［", "「"] {
+            assert_eq!(key(more, id).tap, Action::Text(id.into()), "{id}");
         }
     }
 }

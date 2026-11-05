@@ -312,7 +312,10 @@ impl Key {
 
     /// 按住時要不要顯示放大預覽（brief §4.4）：點一下會輸入字的鍵（字母、文字）才要，功能鍵不要。
     pub fn shows_preview(&self, state: KeyState) -> bool {
-        matches!(self.tap_action(state), Action::Letter(_) | Action::Text(_))
+        matches!(
+            self.tap_action(state),
+            Action::Letter(_) | Action::Punct(_) | Action::Text(_)
+        )
     }
 
     /// 組字中時的 `composing`；沒在組字或沒寫時是 `None`。
@@ -476,6 +479,8 @@ pub struct Composing {
 pub enum Action {
     /// 送一個字母給輸入法（`a`–`z`）。
     Letter(char),
+    /// 送一個 ASCII 標點鍵給輸入法，同實體鍵盤按那個鍵：全形、半形與組字中的處理由核心決定。
+    Punct(char),
     /// 直接輸入一段文字，不經組字。
     Text(String),
     Backspace,
@@ -496,6 +501,7 @@ impl Action {
     pub fn name(&self) -> &'static str {
         match self {
             Action::Letter(_) => "letter",
+            Action::Punct(_) => "punct",
             Action::Text(_) => "text",
             Action::Backspace => "backspace",
             Action::Space => "space",
@@ -510,7 +516,7 @@ impl Action {
     /// 沒有標籤時給螢幕閱讀器念的說法；長按清單也用它當選項的標籤（文字、字母就是本身）。
     pub fn spoken(&self) -> String {
         match self {
-            Action::Letter(c) => c.to_string(),
+            Action::Letter(c) | Action::Punct(c) => c.to_string(),
             Action::Text(text) => text.clone(),
             Action::Backspace => "刪除".into(),
             Action::Space => "空白".into(),

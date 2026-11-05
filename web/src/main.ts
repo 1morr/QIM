@@ -353,7 +353,8 @@ function addReport(): void {
 function hostDefault(snapshot: Snapshot): void {
 	switch (snapshot.action) {
 		case "letter":
-			insert(snapshot.letter ?? "");
+		case "punct":
+			insert(snapshot.character ?? "");
 			return;
 		case "space":
 			insert(" ");

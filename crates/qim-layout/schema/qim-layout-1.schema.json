@@ -226,6 +226,13 @@
           "properties": { "letter": { "type": "string", "pattern": "^[a-z]$" } }
         },
         {
+          "description": "ASCII 的可見標點，同實體鍵盤按那個鍵；全形、半形由核心決定。",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["punct"],
+          "properties": { "punct": { "type": "string", "pattern": "^[!-/:-@\\[-`{-~]$" } }
+        },
+        {
           "type": "object",
           "additionalProperties": false,
           "required": ["text"],
