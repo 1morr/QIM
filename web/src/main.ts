@@ -40,6 +40,7 @@ const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
 const englishCandidates = element<HTMLInputElement>("#english-candidates");
+const digitSeparators = element<HTMLInputElement>("#digit-separators");
 const shiftSwitchSelect = element<HTMLSelectElement>("#shift-switch");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
@@ -530,6 +531,12 @@ async function start(): Promise<void> {
 		session.setShiftSwitch(shiftSwitch(shiftSwitchSelect.value));
 		text.focus();
 	});
+	// 數字後的句點、冒號用半形（預設開）；逗號照舊全形。
+	session.setDigitSeparators(digitSeparators.checked);
+	digitSeparators.addEventListener("change", () => {
+		session.setDigitSeparators(digitSeparators.checked);
+		text.focus();
+	});
 	/** 依「數字列」開關讀佈局，選目前裝置與方向的版本。 */
 	const readLayout = (): Layout => {
 		const read = new Layout(
@@ -640,6 +647,11 @@ async function start(): Promise<void> {
 		}
 		const key = toKey(event, shown.composing, shown.inlineAscii);
 		if (!key) {
+			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心，數字後半形才
+			// 知道前一個字不一定是數字了（brief §4.7）。沒有組字時核心不吃、不動作。
+			if (!shown.composing) {
+				session.other().free();
+			}
 			return;
 		}
 		// 組字中按 Tab 切換字根提示（brief §4.3）；核心本來就吃下不動作，不必轉給它。
