@@ -68,6 +68,7 @@ fn space_backspace_and_enter_are_bare_action_names() {
 fn action_names_match_the_json_tags() {
     for action in [
         Action::Letter('a'),
+        Action::Punct(','),
         Action::Text("，".into()),
         Action::Backspace,
         Action::Space,
@@ -75,6 +76,7 @@ fn action_names_match_the_json_tags() {
         Action::SwitchPage("symbols".into()),
         Action::NextKeyboard,
         Action::ToggleAscii,
+        Action::Shift,
     ] {
         let json = serde_json::to_value(&action).unwrap();
         let tag = json

@@ -6,10 +6,21 @@ export interface Keyboard {
 	refresh(): void;
 	/** 佈局版本換了（轉向）時整個重畫。 */
 	relayout(): void;
+	/** 換一份佈局（例如打開數字列），整個重畫；舊的由呼叫端釋放。 */
+	setLayout(layout: Layout): void;
 }
 
 /** 按住多久算長按。 */
 const KEY_LONG_PRESS_MS = 400;
+/** 同一個鍵兩次點擊隔多久以內算快速點兩下（Shift 鎖定大寫用）；Android 的雙擊門檻也是 300 ms。 */
+const QUICK_REPEAT_MS = 300;
+/** 長按清單一排最多幾個選項，多的換到下一排（Gboard 句號鍵的清單是兩排）。 */
+const LONG_PRESS_COLUMNS = 8;
+/** Shift 鍵開著時畫的圖示：開一次、鎖定（同 Gboard 的實心、實心加底線）；關著時用佈局的標籤（空心 ⇧）。 */
+const SHIFT_GLYPHS: Record<string, string> = {
+	once: "⬆",
+	locked: "⇪",
+};
 
 /** 一根手指按下到放開之間的狀態。 */
 interface Press {
@@ -39,16 +50,21 @@ function themed(light: string | undefined, dark: string | undefined) {
  */
 export function mountKeyboard(
 	container: HTMLElement,
-	layout: Layout,
+	initialLayout: Layout,
 	session: Session,
 	onSnapshot: (snapshot: Snapshot) => void,
 	onUnhandled: (snapshot: Snapshot) => void,
 ): Keyboard {
+	let layout = initialLayout;
 	let keys: LayoutKey[] = [];
 	let elements: HTMLElement[] = [];
 	let press: Press | undefined;
 	/** 畫出來的是哪一頁；切頁鍵換了 `layout` 的目前頁後，和它不同就要整個重畫。 */
 	let shownPage = "";
+	/** 畫出來時的 Shift 狀態；和 `layout.shift` 不同就要重畫標籤。 */
+	let shownShift = "";
+	/** 上一次點一下的鍵與時間，判斷快速點兩下。 */
+	let lastTap: { page: string; index: number; at: number } | undefined;
 	const preview = document.createElement("div");
 	preview.className = "key-preview";
 	preview.dataset.testid = "key-preview";
@@ -73,6 +89,7 @@ export function mountKeyboard(
 		}
 		keys = layout.keys(session);
 		shownPage = layout.pageId;
+		shownShift = layout.shift;
 		const width = layout.canvasWidth;
 		const height = layout.canvasHeight;
 		container.style.aspectRatio = `${width} / ${height}`;
@@ -101,7 +118,6 @@ export function mountKeyboard(
 			}
 			const label = document.createElement("span");
 			label.className = "label";
-			label.textContent = key.label;
 			const color = themed(key.labelColorLight, key.labelColorDark);
 			if (color !== undefined) {
 				label.style.color = color;
@@ -112,16 +128,33 @@ export function mountKeyboard(
 			if (key.labelOffsetX !== 0 || key.labelOffsetY !== 0) {
 				label.style.transform = `translate(${scaled(key.labelOffsetX)}, ${scaled(key.labelOffsetY)})`;
 			}
-			element.append(label);
-			if (key.hint !== undefined) {
-				const hint = document.createElement("span");
-				hint.className = "hint";
-				hint.textContent = key.hint;
-				element.append(hint);
-			}
+			const hint = document.createElement("span");
+			hint.className = "hint";
+			element.append(label, hint);
+			paint(element, key);
 			return element;
 		});
 		container.replaceChildren(...elements, preview, popup);
+	}
+
+	/** 畫會隨狀態變的部分：標籤、角標、無障礙標籤、Shift 鍵的狀態。 */
+	function paint(element: HTMLElement, key: LayoutKey): void {
+		const label = element.querySelector<HTMLElement>(".label");
+		const hint = element.querySelector<HTMLElement>(".hint");
+		if (label) {
+			label.textContent = key.isShift
+				? (SHIFT_GLYPHS[layout.shift] ?? key.label)
+				: key.label;
+		}
+		if (hint) {
+			hint.textContent = key.hint ?? "";
+			hint.hidden = key.hint === undefined;
+		}
+		element.setAttribute("aria-label", key.a11yLabel);
+		if (key.isShift) {
+			element.dataset.shift = layout.shift;
+			element.setAttribute("aria-pressed", String(layout.shift !== "off"));
+		}
 	}
 
 	/**
@@ -153,9 +186,13 @@ export function mountKeyboard(
 		element.style.fontSize = scaled(key.h * 0.6);
 	}
 
+	/** 放大預覽照 Gboard：鍵上方的圓形氣泡，直徑約 1.2 個鍵高。 */
 	function showPreview(key: LayoutKey): void {
 		preview.textContent = key.label;
 		placeAbove(preview, key, 1.2);
+		preview.style.minWidth = "";
+		preview.style.aspectRatio = "1";
+		preview.style.borderRadius = "50%";
 		preview.hidden = false;
 	}
 
@@ -170,7 +207,14 @@ export function mountKeyboard(
 				return option;
 			}),
 		);
-		placeAbove(popup, key, 1.1, true);
+		const columns = Math.min(key.longPress.length, LONG_PRESS_COLUMNS);
+		const rows = Math.ceil(key.longPress.length / LONG_PRESS_COLUMNS);
+		popup.style.gridTemplateColumns = `repeat(${columns}, auto)`;
+		placeAbove(popup, key, 1.1 * rows, true);
+		if (rows > 1) {
+			// 多排時字小一點，一排 8 個才放得進手機寬度。
+			popup.style.fontSize = scaled(key.h * 0.4);
+		}
 		preview.hidden = true;
 		popup.hidden = false;
 		choose(0);
@@ -185,13 +229,17 @@ export function mountKeyboard(
 		});
 	}
 
-	/** 長按清單出現後手指橫向移到哪個選項：左右超出就取兩端的。 */
-	function choiceAt(clientX: number): number {
-		const options = [...popup.querySelectorAll("[role=option]")];
-		const index = options.findIndex(
-			(option) => clientX < option.getBoundingClientRect().right,
+	/** 長按清單出現後手指移到哪個選項：取離手指最近的那個，超出清單也取最近的。 */
+	function choiceAt(clientX: number, clientY: number): number {
+		const distances = [...popup.querySelectorAll("[role=option]")].map(
+			(option) => {
+				const rect = option.getBoundingClientRect();
+				const dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
+				const dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+				return dx * dx + dy * dy;
+			},
 		);
-		return index === -1 ? options.length - 1 : index;
+		return distances.indexOf(Math.min(...distances));
 	}
 
 	/** 收起預覽與長按清單，忘掉這次按下。 */
@@ -204,13 +252,29 @@ export function mountKeyboard(
 		popup.hidden = true;
 	}
 
-	/** 切頁鍵換了 `layout` 的目前頁時整個重畫；回傳有沒有重畫。 */
+	/** 切頁鍵換了 `layout` 的目前頁時整個重畫，Shift 狀態變了時重畫標籤；回傳有沒有整個重畫。 */
 	function followPage(): boolean {
-		if (layout.pageId === shownPage) {
-			return false;
+		if (layout.pageId !== shownPage) {
+			render();
+			return true;
 		}
-		render();
-		return true;
+		if (layout.shift !== shownShift) {
+			repaint();
+		}
+		return false;
+	}
+
+	/** 重取按鍵、重畫標籤（同一頁，組字或 Shift 狀態變了）。 */
+	function repaint(): void {
+		const old = keys;
+		keys = layout.keys(session);
+		for (const key of old) {
+			key.free();
+		}
+		shownShift = layout.shift;
+		keys.forEach((key, i) => {
+			paint(elements[i], key);
+		});
 	}
 
 	/** 照綁定的結果更新畫面。重畫會釋放舊頁的鍵，所以先交給外面再看要不要重畫。 */
@@ -260,9 +324,13 @@ export function mountKeyboard(
 		}
 	});
 
+	// 鍵盤要算「可點」的元素：Chrome 的觸控校正會把點在鍵盤上緣的一下吸到附近可點的元素（例如鍵盤
+	// 上方頁面的按鈕），鍵盤有 click 監聽才留在鍵盤上。動作照 pointer 事件做，click 本身吃掉。
+	container.addEventListener("click", (event) => event.preventDefault());
+
 	container.addEventListener("pointermove", (event) => {
 		if (press?.pointerId === event.pointerId && press.choice !== undefined) {
-			choose(choiceAt(event.clientX));
+			choose(choiceAt(event.clientX, event.clientY));
 		}
 	});
 
@@ -273,11 +341,20 @@ export function mountKeyboard(
 		}
 		const { index, choice } = press;
 		cancel();
-		const snapshot =
-			choice === undefined
-				? session.tap(layout, index)
-				: session.longPress(layout, index, choice);
-		finish(snapshot);
+		if (choice !== undefined) {
+			lastTap = undefined;
+			finish(session.longPress(layout, index, choice));
+			return;
+		}
+		const now = performance.now();
+		const quickRepeat =
+			lastTap !== undefined &&
+			lastTap.page === layout.pageId &&
+			lastTap.index === index &&
+			now - lastTap.at < QUICK_REPEAT_MS;
+		// 快速點兩下用掉了就重算，第三下不再算「快速再點」。
+		lastTap = quickRepeat ? undefined : { page: layout.pageId, index, at: now };
+		finish(session.tap(layout, index, quickRepeat));
 	}
 
 	container.addEventListener("pointerup", (event) => {
@@ -300,19 +377,12 @@ export function mountKeyboard(
 			if (followPage()) {
 				return;
 			}
-			const old = keys;
-			keys = layout.keys(session);
-			for (const key of old) {
-				key.free();
-			}
-			keys.forEach((key, i) => {
-				const label = elements[i].querySelector(".label");
-				if (label) {
-					label.textContent = key.label;
-				}
-				elements[i].setAttribute("aria-label", key.a11yLabel);
-			});
+			repaint();
 		},
 		relayout: render,
+		setLayout(next) {
+			layout = next;
+			render();
+		},
 	};
 }
