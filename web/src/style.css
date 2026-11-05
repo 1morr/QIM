@@ -132,8 +132,8 @@ textarea {
 	transform: translateX(-50%);
 	/* 寬度以畫面寬為上限，高度不超過畫面高的 45%（--aspect 是佈局版本畫布的寬高比，touch.ts 設）。 */
 	width: min(100%, calc(45vh * var(--aspect, 1.8)));
-	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（plan §2.6）。 */
-	background: light-dark(#e8eaed, #202124);
+	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（plan §2.6）；照 Gboard 實測（M1 票 27）。 */
+	background: light-dark(#ededf6, #17191f);
 	touch-action: none;
 	user-select: none;
 	/* 按鍵的圓角與字級以 cqw 依鍵盤寬度縮放（touch.ts）。 */
@@ -155,17 +155,27 @@ body:has(#keyboard:not([hidden])) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: light-dark(#fff, #3c4043);
-	box-shadow: 0 1px 0 light-dark(#9aa0a6, #000);
+	background: light-dark(#fff, #292c34);
+	/* Gboard 的鍵幾乎是平的，只有很淡的陰影。 */
+	box-shadow: 0 1px 1px light-dark(rgb(0 0 0 / 12%), rgb(0 0 0 / 40%));
 	font-size: 1.25rem;
 }
 
+/* 兩行的標籤（數字鍵盤的「12 / 34」）。 */
+#keyboard .label {
+	white-space: pre-line;
+	text-align: center;
+	line-height: 1.05;
+}
+
+/* 角標照 Gboard：右上角、約 12 sp（鍵盤寬 411 dp）；字級與位置隨鍵盤寬度縮放。 */
 #keyboard .hint {
 	position: absolute;
-	top: 2px;
-	right: 4px;
-	color: gray;
-	font-size: 0.7rem;
+	top: 1.2cqw;
+	right: 0.8cqw;
+	color: light-dark(#5d5f68, #a9aab5);
+	font-size: 2.9cqw;
+	line-height: 1;
 }
 
 /* 按鍵放大預覽與長按清單：浮在按下的鍵上方（位置與大小由 touch.ts 依按鍵算）。 */
@@ -177,10 +187,16 @@ body:has(#keyboard:not([hidden])) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: light-dark(#fff, #3c4043);
-	color: light-dark(#1f1f1f, #e3e3e3);
+	background: light-dark(#fff, #292c34);
+	color: light-dark(#30323a, #e4e5f0);
 	box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
 	pointer-events: none;
+}
+
+/* 長按清單一排最多 8 個，多的換到下一排（欄數由 touch.ts 依選項數設）。 */
+#keyboard .long-press {
+	display: grid;
+	grid-auto-rows: 1fr;
 }
 
 #keyboard .key-preview[hidden],
@@ -198,9 +214,10 @@ body:has(#keyboard:not([hidden])) {
 	border-radius: inherit;
 }
 
+/* 選到的選項照 Gboard 的深藍圓底（淺色實測；深色是同色系的估計）。 */
 #keyboard .long-press .option[aria-selected="true"] {
-	background: light-dark(#0b57d0, #a8c7fa);
-	color: light-dark(#fff, #062e6f);
+	background: light-dark(#4c5e8b, #b5c4ff);
+	color: light-dark(#fff, #1d2d5c);
 }
 
 #report-panel {
