@@ -42,3 +42,4 @@ M1 封存後補票的審查（2026-11-05，獨立審查，對照 librime 原始�
 - progress 的票欄寫「M2（補 M1 26b）」：`docs` 閘門只收進行中的里程碑 M2 開頭。
 - 合併 main（票 28b，`c42de50`）：衝突只在 brief §4.3、plan §2.1 的相鄰段落，取本票的 Shift／臨時英文／`Key::Modifier` 段與 main 的分隔記號段；28b 只改 lattice 與 engine，和 `Key::Modifier` 不互相影響。合併後 `cargo xtask data --verify` 通過；`bench --check` 通過，五個集合都沒有翻盤，固定題 75/75；`cargo xtask check` 通過（e2e 138 條）。
 - 合併後的 code-review（`git diff main...HEAD`）：沒有阻擋問題。已處理：progress〈偏差與決定〉本票的兩條移到 28b 之後，和 session 紀錄同序。未處理：merge commit 照協調者指定用 git 的預設訊息；`c80ae23` 的 subject 只寫 wasm，也改了核心與 e2e 的註解（body 有交代）；`unreachable!` 的訊息是中文，同 repo 裡所有 `expect` / `panic!` 的慣例；票 27 的 Comments 裡「照舊版 librime」是當時合併的歷史紀錄，不在本票改正範圍。
+- 合併 main（票 17d，`e42d112`）：沒有衝突，只改詞庫建置與資料，和本票的程式不重疊；progress 本票的列與兩條偏差移回最後。合併後 `cargo xtask data --verify` 通過；`bench --check` 通過，五個集合都沒有翻盤，固定題 84/84；`cargo xtask check` 通過（e2e 144 條）。
