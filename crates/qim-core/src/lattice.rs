@@ -86,8 +86,8 @@ impl Lattice {
     }
 
     /// 多打一個字母：只算新的一欄，前面的欄不動。分隔記號（[`SEPARATOR`]）的一欄照抄前一欄：
-    /// 沒有邊結束在它前面的位置之後、又從它前面開始，所以段不跨過它；路徑經過它時，它算在
-    /// 前一段的碼尾。
+    /// 沒有邊結束或開始在它上面，路徑在它這裡斷開時它算在前一段的碼尾。邊只有詞能跨過它，
+    /// 而且它要落在詞內兩字的碼之間（`Engine::exact`）。
     pub fn push(&mut self, engine: &Engine, user: &UserModel, c: char) {
         self.input.push(c);
         if c == SEPARATOR {
@@ -166,9 +166,9 @@ impl Lattice {
 /// 文字重複的只留第一個。`english_candidates` 為真、整串輸入碼是英文單字（[`Engine::english_candidate`]）、
 /// 又有其他候選時，最後加上那個英文字。接著依序套用排位規則（[`RULES`]）。
 ///
-/// 分隔記號（[`SEPARATOR`]）：字詞不跨過它；結尾的分隔記號算在最後一段裡，所以 `mi'` 的候選
-/// 是 `mi` 的、蓋住整串。只蓋住開頭一段的字詞後面緊接分隔記號時，連它一起蓋住，選了之後剩下的
-/// 輸入碼不以分隔記號開頭。
+/// 分隔記號（[`SEPARATOR`]）：字不跨過它，詞只在它落在兩字的碼之間時跨過它；結尾的分隔記號
+/// 算在最後一段裡，所以 `mi'` 的候選是 `mi` 的、蓋住整串。只蓋住開頭一段的字詞後面緊接分隔記號
+/// 時，連它一起蓋住，選了之後剩下的輸入碼不以分隔記號開頭。
 pub(crate) fn candidates(
     engine: &Engine,
     user: &UserModel,
@@ -180,7 +180,7 @@ pub(crate) fn candidates(
     if n == 0 {
         return Vec::new();
     }
-    // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間還有分隔記號時查不到，字詞因此不跨過它。
+    // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間的分隔記號由 `Engine::span` 處理。
     let lookup_code = input.trim_end_matches(SEPARATOR);
     let mut full: Vec<(f64, CandidateSpan)> = engine
         .span(user, lookup_code)
