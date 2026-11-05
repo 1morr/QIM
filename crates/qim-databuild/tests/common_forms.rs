@@ -224,6 +224,39 @@ fn one_way_forms_are_never_spelled_backwards() {
 }
 
 #[test]
+fn variants_t2hk_replaces_in_the_lexicon_are_spelled_both_ways() {
+    // t2hk 把 rime-essay 的「鉤溼擡糉柺囪」換成右邊的寫法，兩字不同碼：打哪個碼都要出得了詞（票 17d）。
+    let both = BothForms::new(&TWO_WAY_FORMS, &ONE_WAY_FORMS).unwrap();
+    for (written, other) in [
+        ("鈎子", "鉤子"),
+        ("濕地", "溼地"),
+        ("抬頭", "擡頭"),
+        ("粽子", "糉子"),
+        ("枴杖", "柺杖"),
+        ("煙囱", "煙囪"),
+    ] {
+        assert_eq!(both.spellings(written), [written, other]);
+    }
+}
+
+#[test]
+fn a_one_way_word_whose_other_spelling_is_another_word_keeps_one_spelling() {
+    // 「合着」寫成「合著」就是合寫的書，義項不同：不生出這個寫法。「刻着／刻著」是同一個詞，照生。
+    let both = BothForms::new(&[], &ONE_WAY_FORMS).unwrap();
+    assert_eq!(both.spellings("合着"), ["合着"]);
+    assert_eq!(both.spellings("刻着"), ["刻着", "刻著"]);
+}
+
+#[test]
+fn one_way_forms_are_put_back_as_written_only_when_the_conversion_keeps_the_length() {
+    let both = BothForms::new(&[], &ONE_WAY_FORMS).unwrap();
+    // OpenCC 換掉的「臺」放回去，其他換掉的字照轉換結果。
+    assert_eq!(both.as_written("臺灣羣", "台灣群"), "臺灣群");
+    // 字數變了就對不上位置：照轉換結果，不放回。
+    assert_eq!(both.as_written("臺灣", "台灣省"), "台灣省");
+}
+
+#[test]
 fn both_forms_share_the_summed_frequency() {
     // 單向的「着／著」各算各的。
     let mut frequency = BTreeMap::from([('裏', 70), ('裡', 30), ('着', 8), ('著', 9), ('群', 5)]);

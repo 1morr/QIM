@@ -11,7 +11,8 @@
 //! - 雙向（[`TWO_WAY_FORMS`]，純異體）：計數時歸到代表寫法（[`CommonForms::apply`] 把另一種換成它），
 //!   建資料包時再由 [`BothForms`] 把代表寫法的字頻、詞與 bigram 照抄給另一種，兩種寫法的機率相同。
 //! - 單向（[`ONE_WAY_FORMS`]）：前一個字的每個用法都能寫成後一個，反過來不行（「著名」不能寫成
-//!   「着名」）。只有詞庫照抄：含前一個字的詞另收後一個字的寫法；語料不換、字頻與 bigram 各算各的。
+//!   「着名」、「台州」不能寫成「臺州」）。只有詞庫照抄：含前一個字的詞另收後一個字的寫法；語料照
+//!   原文寫（OpenCC 換掉的放回去），字頻與 bigram 各算各的。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,7 +24,8 @@ use crate::Error;
 
 /// 雙向的並存寫法（代表寫法, 另一種寫法），使用者 2026-11-05 決定（M1 票 17c、brief §4.1）。
 /// 代表寫法是計數歸到的那一個，也是基準題目的寫法；兩種寫法打出來的機率相同。
-pub const TWO_WAY_FORMS: [(char, char); 11] = [
+/// 後 6 組是 `t2hk` 換掉 rime-essay 寫法、兩種寫法同義的字，代表寫法是 `t2hk` 換成的那個（M1 票 17d）。
+pub const TWO_WAY_FORMS: [(char, char); 17] = [
     ('線', '綫'),
     ('啟', '啓'),
     ('麵', '麪'),
@@ -35,11 +37,21 @@ pub const TWO_WAY_FORMS: [(char, char); 11] = [
     ('污', '汙'),
     ('泄', '洩'),
     ('枱', '檯'),
+    ('鈎', '鉤'),
+    ('濕', '溼'),
+    ('抬', '擡'),
+    ('粽', '糉'),
+    ('枴', '柺'),
+    ('囱', '囪'),
 ];
 
-/// 單向的並存寫法（寫法, 也可寫成）：「着」的用法都能寫成「著」（隨着、隨著），「著」的 zhù 義項
-/// （著名、著作、土著）不能寫成「着」（M1 票 17c，2026-11-05）。
-pub const ONE_WAY_FORMS: [(char, char); 1] = [('着', '著')];
+/// 單向的並存寫法（寫法, 也可寫成）：
+/// - 「着」的用法都能寫成「著」（隨着、隨著），「著」的 zhù 義項（著名、著作、土著）不能寫成「着」
+///   （M1 票 17c，2026-11-05）。
+/// - 「臺」「菸」都能寫成「台」「煙」（臺灣、台灣；香菸、香煙），「台州」「煙霧」不能寫成「臺州」
+///   「菸霧」（M1 票 17d，使用者 2026-11-05 同意）。`t2hk` 把「臺」「菸」換成「台」「煙」，前處理
+///   照原文放回去（[`BothForms::as_written`]）。
+pub const ONE_WAY_FORMS: [(char, char); 3] = [('着', '著'), ('臺', '台'), ('菸', '煙')];
 
 /// 單向寫法反過來寫的錯字（「著」的 zhù 義項寫成「着」）：建詞庫時改回「著」（[`BothForms::correct`]），
 /// `--verify` 查詞庫沒有這些詞。「顯着」是 rime-essay 原有的（詞頻 279，使用者 2026-11-05 決定
@@ -59,6 +71,11 @@ pub const REVERSED_ONE_WAY: [&str; 13] = [
     "巨着",
     "顯着",
 ];
+
+/// 單向寫法生出的另一種寫法是別的詞、義項不同的詞（M1 票 17d）：只收原寫法，不生出另一種、
+/// 也不併進那個詞。「合着」（原來如此）≠「合著」（合寫的書）；「所着」（穿的）≠「所著」（寫的）；
+/// 「舊着」≠「舊著」（舊作）。「刻着／刻著」「張着／張著」這類是同一個詞，照生。
+pub const ONE_WAY_DISTINCT: [&str; 3] = ["合着", "所着", "舊着"];
 
 /// 並存寫法的對照：雙向的每組一個代表寫法與另一種寫法，單向的每組一個寫法與也可寫成的字。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -115,6 +132,18 @@ impl BothForms {
         self.one_way.get(&c).copied()
     }
 
+    /// 單向的寫法照原文：`converted` 是 `raw` 經 OpenCC 轉換的結果，被換掉的單向寫法（「臺」→「台」）
+    /// 放回原字。轉換改了字數時照 `converted`（OpenCC 的轉換逐字對應，M1 票 17b 查過四份語料）。
+    pub fn as_written(&self, raw: &str, converted: &str) -> String {
+        if raw.chars().count() != converted.chars().count() {
+            return converted.to_string();
+        }
+        raw.chars()
+            .zip(converted.chars())
+            .map(|(r, c)| if self.one_way.contains_key(&r) { r } else { c })
+            .collect()
+    }
+
     /// 單向寫法反過來寫的錯字（[`REVERSED_ONE_WAY`]，例如「顯着」）改回原字（「顯著」），其餘不變。
     pub fn correct(&self, text: &str) -> String {
         if !REVERSED_ONE_WAY.contains(&text) {
@@ -124,8 +153,11 @@ impl BothForms {
     }
 
     /// `text` 的每一種寫法：雙向的代表寫法、單向的寫法各換或不換成另一個字，第一個是 `text` 本身。
-    /// 單向的不反過來換：「著名」只有「著名」。
+    /// 單向的不反過來換：「著名」只有「著名」；[`ONE_WAY_DISTINCT`] 的詞只換雙向的。
     pub fn spellings(&self, text: &str) -> Vec<String> {
+        if ONE_WAY_DISTINCT.contains(&text) {
+            return self.two_way_spellings(text);
+        }
         expand(text, |c| self.other(c).or_else(|| self.one_way(c)))
     }
 
