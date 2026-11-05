@@ -1,16 +1,21 @@
-//! 手動分隔鍵（brief §4.3、plan §2.3）：組字中按 `'` 在目前位置插入分隔記號，連打的段不跨過它。
+//! 手動分隔鍵（brief §4.3、plan §2.3）：組字中按 `'` 在目前位置插入分隔記號，這裡一定要斷字：
+//! 單字的碼不跨過它，詞庫的詞只在它落在詞內兩字的碼之間時跨過它（照 Rime 速成，M1 票 28b）。
 
 mod common;
 
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, SEPARATOR, Scheme, Session, ShiftKey,
-    Snapshot, UserModel,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, Packs, Ranking, SEPARATOR,
+    Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// `mir`（一戈口）：「一台」是 `m` + `ir`，「歹口」是 `mi` + `r`，「一戈口」是 `m` + `i` + `r`。
-/// 「一」「台」字頻高，所以不分隔時首選是「一台」。
+/// 「一」「台」字頻高，所以不分隔時首選是「一台」；詞庫也有「一台」。
+///
+/// 另有語料實驗的真實例子（M1 票 28b，碼照速成碼表）：`vivdjg` 是「絃樂室」（`vi` + `vd` + `jg`），
+/// 也是「幾好塞」；「幾」「好」字頻高、「幾好」是詞，靠「絃樂室」的詞頻才是首選。
+/// 「甲乙」是 `pqs`：「甲」有 `p`、`pq` 兩個碼，「乙」有 `qs`、`s`，兩種切法字界不同。
 fn engine() -> Engine {
     let scheme = Scheme {
         id: "quick".into(),
@@ -20,6 +25,7 @@ fn engine() -> Engine {
         max_code_length: 2,
         radicals: BTreeMap::from([('m', "一".into()), ('i', "戈".into()), ('r', "口".into())]),
         packs: Packs {
+            lexicon: Some("lexicon".into()),
             language_model: Some("unigram".into()),
             ..Packs::default()
         },
@@ -31,6 +37,15 @@ fn engine() -> Engine {
         ("r", "口"),
         ("mi", "歹"),
         ("ir", "台"),
+        ("v", "女"),
+        ("d", "木"),
+        ("vi", "幾絃"),
+        ("vd", "好樂"),
+        ("jg", "塞室"),
+        ("p", "甲"),
+        ("pq", "甲"),
+        ("qs", "乙"),
+        ("s", "乙"),
     ];
     let code_table = CodeTable::from_entries(table.iter().map(|(code, chars)| {
         let entries = chars
@@ -48,9 +63,41 @@ fn engine() -> Engine {
         ('口', 300),
         ('歹', 20),
         ('戈', 5),
+        ('幾', 900),
+        ('好', 900),
+        ('塞', 50),
+        ('絃', 5),
+        ('樂', 100),
+        ('室', 100),
+        ('女', 10),
+        ('木', 10),
+        ('甲', 10),
+        ('乙', 10),
     ];
+    let words = [
+        ("mir", "一台", 100),
+        ("vivd", "幾好", 1000),
+        ("vivdjg", "絃樂室", 1000),
+        ("pqs", "甲乙", 1000),
+    ];
+    let mut by_code: BTreeMap<String, Vec<Word>> = BTreeMap::new();
+    for (code, text, frequency) in words {
+        by_code.entry(code.into()).or_default().push(Word {
+            text: text.into(),
+            frequency,
+        });
+    }
+    let lexicon = LexiconPack {
+        id: "lexicon".into(),
+        lexicon: Lexicon::new(by_code, chars),
+    };
     let language_model = common::unigram("unigram", &chars, chars.len());
-    Engine::new(Pack { scheme, code_table }, None, Some(language_model)).unwrap()
+    Engine::new(
+        Pack { scheme, code_table },
+        Some(lexicon),
+        Some(language_model),
+    )
+    .unwrap()
 }
 
 struct Ime {
@@ -92,8 +139,9 @@ fn without_a_separator_mir_tops_yi_toi() {
     assert_eq!(texts(&ime.type_keys("mir"))[0], "一台");
 }
 
+/// `m`｜`ir` 的字界不在分隔記號的位置：詞「一台」與「一」「台」兩段都不出現。
 #[test]
-fn segments_do_not_cross_the_separator() {
+fn nothing_crosses_a_separator_that_is_not_on_a_boundary_between_characters() {
     let mut ime = Ime::new();
     let shown = ime.type_keys("mi'r");
     let all = texts(&shown);
@@ -103,6 +151,93 @@ fn segments_do_not_cross_the_separator() {
         "一台 跨過分隔記號：{all:?}"
     );
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("歹口"));
+}
+
+#[test]
+fn a_word_crosses_a_separator_on_the_boundary_between_its_characters() {
+    let mut plain = Ime::new();
+    assert_eq!(texts(&plain.type_keys("vivdjg"))[0], "絃樂室");
+    // 這組測試資料只有 `m`、`i`、`r` 有字根，其餘字母與分隔記號照原字元顯示。
+    for (typed, radicals) in [
+        ("vi'vdjg", "v戈'vdjg"),
+        ("vivd'jg", "v戈vd'jg"),
+        ("vi'vd'jg", "v戈'vd'jg"),
+    ] {
+        let mut ime = Ime::new();
+        let shown = ime.type_keys(typed);
+        assert_eq!(texts(&shown)[0], "絃樂室", "{typed}");
+        assert_eq!(
+            segments(&shown),
+            [(typed, radicals, "絃樂室", false)],
+            "{typed}"
+        );
+        assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("絃樂室"));
+    }
+}
+
+#[test]
+fn a_word_does_not_cross_a_separator_inside_the_code_of_one_of_its_characters() {
+    let mut ime = Ime::new();
+    let all = texts(&ime.type_keys("v'ivdjg"));
+    assert!(
+        !all.iter().any(|t| t.contains("絃樂室") || t.contains('幾')),
+        "{all:?}"
+    );
+    let mut ime = Ime::new();
+    let all = texts(&ime.type_keys("vivdj'g"));
+    assert!(
+        !all.iter().any(|t| t.contains("絃樂室") || t.contains('塞')),
+        "{all:?}"
+    );
+}
+
+#[test]
+fn a_single_character_does_not_cross_a_separator() {
+    let mut ime = Ime::new();
+    let all = texts(&ime.type_keys("v'd"));
+    assert_eq!(all[0], "女木", "{all:?}");
+    assert!(!all.iter().any(|t| t == "好" || t == "樂"), "{all:?}");
+}
+
+/// 字有幾個碼時，任一種切法的字界落在分隔記號上就可以跨：詞「甲乙」是一段，不是「甲」「乙」兩段。
+#[test]
+fn a_word_crosses_when_any_split_of_its_code_puts_a_boundary_on_the_separator() {
+    for typed in ["p'qs", "pq's"] {
+        let mut ime = Ime::new();
+        let shown = ime.type_keys(typed);
+        assert_eq!(segments(&shown), [(typed, typed, "甲乙", false)], "{typed}");
+    }
+}
+
+#[test]
+fn backspace_after_a_word_across_a_separator_deletes_the_letters_then_the_separator() {
+    let mut ime = Ime::new();
+    ime.type_keys("vi'vd");
+    let shown = ime.press(Key::Backspace);
+    assert_eq!(shown.composition.input, "vi'v");
+    let shown = ime.press(Key::Backspace);
+    assert_eq!(shown.composition.input, "vi'");
+    let shown = ime.press(Key::Backspace);
+    assert_eq!(shown.composition.input, "vi");
+}
+
+/// 跨過分隔記號的詞記的碼不含分隔記號，同其他分段（plan §2.4）。
+#[test]
+fn learning_a_word_across_a_separator_records_its_code_without_it() {
+    let mut ime = Ime::new();
+    let shown = ime.type_keys("vi'vd");
+    assert_eq!(segments(&shown), [("vi'vd", "v戈'vd", "幾好", false)]);
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("幾好"));
+    let exported = ime.user.export();
+    let rows: Vec<(&str, &str)> = exported
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| {
+            let mut columns = l.split('\t').skip(1);
+            Some((columns.next()?, columns.next()?))
+        })
+        .collect();
+    assert_eq!(rows, [("幾好", "vivd")], "{exported}");
 }
 
 /// 各分段的（碼, 字根, 字詞, 是否已選定）。

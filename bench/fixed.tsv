@@ -70,3 +70,7 @@ buhp	肥皂	詞庫照語料的 t2hk 轉法：rime-essay 的「肥皁」換成「
 cjti	針對	詞庫照語料的 t2hk 轉法：rime-essay 的「鍼對」換成「針對」（票 17c）
 rsrg	踴躍	詞庫照語料的 t2hk 轉法：rime-essay 的「踊躍」換成「踴躍」（票 17c）
 an'r	門口	手動分隔：段不跨過分隔記號，「門」「口」兩段仍是首選，同 Gboard 速成（docs/research/blackbox-baseline.md T18，票 28）
+vi'vdjg	絃樂室	手動分隔：詞跨過落在字界的分隔記號，照 Rime 速成；分隔前後首選相同（zh-wiki 語料，票 28b）
+yk'tutktj	文苑英華	手動分隔：詞跨過落在字界的分隔記號，照 Rime 速成；票 28 的段不跨時是「放着艾草」（zh-wiki 語料，票 28b）
+holcer'yb	從順治帝	手動分隔：兩個詞之間的分隔記號，分隔前後首選相同（zh-wiki 語料，票 28b）
+m'vutjme	一統華夏	手動分隔：不分隔時是「環山草酸」，分隔後才對（zh-wiki 語料，票 28b）
