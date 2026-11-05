@@ -1,4 +1,4 @@
-import { type Key, LoneShift, toKey } from "./keys.ts";
+import { type Key, LoneShift, shiftSwitch, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
 import { fakeOrder, RERANK_DELAY_MS, rerankMode } from "./rerank.ts";
 import "./style.css";
@@ -40,6 +40,7 @@ const status = element<HTMLElement>("#status");
 const incognito = element<HTMLInputElement>("#incognito");
 const simplified = element<HTMLInputElement>("#simplified");
 const englishCandidates = element<HTMLInputElement>("#english-candidates");
+const shiftSwitchSelect = element<HTMLSelectElement>("#shift-switch");
 const keyboard = element<HTMLElement>("#keyboard");
 const touchToggle = element<HTMLButtonElement>("#touch-toggle");
 const darkToggle = element<HTMLButtonElement>("#dark-toggle");
@@ -97,7 +98,7 @@ function press(session: Session, key: Key): Snapshot {
 		case "right":
 			return session.right();
 		case "toggleAscii":
-			return session.toggleAscii();
+			return session.toggleAscii(key.shift);
 		case "other":
 			return session.other();
 	}
@@ -109,6 +110,8 @@ let page = 0;
 /** 畫面上的組字與候選；切換字根提示時不必再問核心就能重畫。 */
 const shown = {
 	composing: false,
+	/** 臨時英文（組字中單按留碼的 Shift）：組字是英文，沒有候選、字根提示與展開面板。 */
+	inlineAscii: false,
 	candidates: [] as string[],
 	/** 候選的繁體原文，字根提示用：簡體模式下要提示的是打得出的繁體字。 */
 	originals: [] as string[],
@@ -117,6 +120,11 @@ const shown = {
 	/** 候選展開面板開著；組字結束就關掉。 */
 	panel: false,
 };
+/** 中文組字中：有候選、字根提示與展開面板可用；臨時英文不算。 */
+function composingChinese(): boolean {
+	return shown.composing && !shown.inlineAscii;
+}
+
 /** 核心；載入完成前是 `undefined`。展開面板與重排要直接問它。 */
 let core: Session | undefined;
 /** 字根提示；載入完成前是 `undefined`。 */
@@ -143,7 +151,7 @@ function hintText(candidate: string): string {
 }
 
 /**
- * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示字根（brief §4.3）；目前分段標
+ * 組字一段一個 `<span>`：選定的顯示字詞，沒選定的顯示字根（brief §4.3），臨時英文顯示英文；目前分段標
  * `aria-current`。點一段就移到那段（brief §4.4），由 `start` 掛的事件處理。
  */
 function render(snapshot: Snapshot): void {
@@ -153,7 +161,8 @@ function render(snapshot: Snapshot): void {
 			const span = document.createElement("span");
 			span.className = "segment";
 			span.dataset.index = String(i);
-			span.textContent = segment.selected ? segment.text : segment.radicals;
+			span.textContent =
+				segment.selected || segment.raw ? segment.text : segment.radicals;
 			if (i === snapshot.focus) {
 				span.setAttribute("aria-current", "true");
 			}
@@ -161,19 +170,20 @@ function render(snapshot: Snapshot): void {
 		}),
 	);
 	shown.composing = segments.length > 0;
+	shown.inlineAscii = shown.composing && snapshot.ascii;
 	for (const segment of segments) {
 		segment.free();
 	}
 	page = snapshot.page;
 	shown.candidates = snapshot.candidates;
 	shown.originals = snapshot.candidatesOriginal;
-	if (!shown.composing) {
+	if (!composingChinese()) {
 		shown.hints = false;
 		shown.panel = false;
 	}
 	mode.textContent = snapshot.ascii ? "英" : "中";
 	mode.setAttribute("aria-label", snapshot.ascii ? "英文" : "中文");
-	expand.hidden = !shown.composing;
+	expand.hidden = !composingChinese();
 	renderCandidates();
 	renderPanel();
 }
@@ -198,9 +208,9 @@ function renderPanel(): void {
 	);
 }
 
-/** 打開或收起展開面板；沒有組字時不開。 */
+/** 打開或收起展開面板；沒有組字或臨時英文時不開。 */
 function setPanel(open: boolean): void {
-	shown.panel = open && shown.composing;
+	shown.panel = open && composingChinese();
 	renderPanel();
 }
 
@@ -228,7 +238,7 @@ function renderCandidates(): void {
 
 /** 組字中才有候選可查；切換候選旁的字根提示。 */
 function toggleHints(): void {
-	if (shown.composing) {
+	if (composingChinese()) {
 		shown.hints = !shown.hints;
 		renderCandidates();
 	}
@@ -513,6 +523,12 @@ async function start(): Promise<void> {
 		applyEnglishCandidates();
 		text.focus();
 	});
+	// 組字中單按 Shift 的處理（預設照 Rime）；不動目前的組字，不必重畫。
+	session.setShiftSwitch(shiftSwitch(shiftSwitchSelect.value));
+	shiftSwitchSelect.addEventListener("change", () => {
+		session.setShiftSwitch(shiftSwitch(shiftSwitchSelect.value));
+		text.focus();
+	});
 	/** 依「數字列」開關讀佈局，選目前裝置與方向的版本。 */
 	const readLayout = (): Layout => {
 		const read = new Layout(
@@ -591,11 +607,13 @@ async function start(): Promise<void> {
 		applyHandled(session.focusSegment(Number(segment.dataset.index)), false);
 	});
 
-	// 單按 Shift 切中英（brief §4.3）：Shift 自己不交給核心，放開時才判定。
+	// 單按 Shift 切中英（brief §4.3）：Shift 自己不交給核心，放開時才判定；左右由
+	// `KeyboardEvent.code` 分辨。
 	const loneShift = new LoneShift();
 	text.addEventListener("keyup", (event) => {
-		if (loneShift.up(event.key, event.timeStamp) && !event.isComposing) {
-			const snapshot = session.toggleAscii();
+		const side = loneShift.up(event.code, event.timeStamp);
+		if (side && !event.isComposing) {
+			const snapshot = session.toggleAscii(side);
 			try {
 				apply(snapshot, false);
 			} finally {
@@ -605,37 +623,40 @@ async function start(): Promise<void> {
 	});
 	text.addEventListener("keydown", (event) => {
 		const plain = !(event.ctrlKey || event.metaKey || event.altKey);
-		loneShift.down(event.key, event.repeat, event.timeStamp, !plain);
+		loneShift.down(event.code, event.repeat, event.timeStamp, !plain);
 		if (event.key === "Shift") {
 			return;
 		}
 		// 組字中 ↓ 打開展開面板、↑ 收起（plan §3.1）；核心本來就吃下不動作，不必轉給它。
 		if (
 			plain &&
-			shown.composing &&
+			composingChinese() &&
 			(event.key === "ArrowDown" || event.key === "ArrowUp")
 		) {
 			event.preventDefault();
 			setPanel(event.key === "ArrowDown");
 			return;
 		}
-		const key = toKey(event, shown.composing);
+		const key = toKey(event, shown.composing, shown.inlineAscii);
 		if (!key) {
 			return;
 		}
 		// 組字中按 Tab 切換字根提示（brief §4.3）；核心本來就吃下不動作，不必轉給它。
-		if (event.key === "Tab" && shown.composing) {
+		if (event.key === "Tab" && composingChinese()) {
 			event.preventDefault();
 			toggleHints();
 			return;
 		}
+		// 臨時英文中空白與數字是字元，不是選字。
+		const chosen =
+			!shown.inlineAscii && (key.kind === "space" || key.kind === "digit");
 		const snapshot = press(session, key);
 		try {
 			if (!snapshot.handled) {
 				return;
 			}
 			event.preventDefault();
-			apply(snapshot, key.kind === "space" || key.kind === "digit");
+			apply(snapshot, chosen);
 		} finally {
 			snapshot.free();
 		}

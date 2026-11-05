@@ -3,7 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, Scheme, Session, Snapshot, UserModel,
+    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, Scheme, Session, ShiftKey, Snapshot,
+    UserModel,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -289,7 +290,7 @@ fn only_a_change_of_candidates_changes_the_generation() {
 #[test]
 fn toggle_ascii_passes_keys_to_the_host_until_toggled_back() {
     let mut ime = Ime::new();
-    let toggled = ime.press(Key::ToggleAscii);
+    let toggled = ime.press(Key::ToggleAscii(ShiftKey::Right));
     assert!(toggled.handled);
     assert!(toggled.ascii);
     for key in [
@@ -305,7 +306,7 @@ fn toggle_ascii_passes_keys_to_the_host_until_toggled_back() {
         assert!(pressed.ascii, "{key:?}");
         assert_eq!(pressed.composition.input, "", "{key:?}");
     }
-    let back = ime.press(Key::ToggleAscii);
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Right));
     assert!(!back.ascii);
     assert_eq!(ime.press(Key::Letter('a')).composition.input, "a");
 }
@@ -316,7 +317,7 @@ fn toggle_ascii_passes_keys_to_the_host_until_toggled_back() {
 fn toggle_ascii_while_composing_commits_the_composition_first() {
     let mut ime = Ime::new();
     ime.press(Key::Letter('a'));
-    let toggled = ime.press(Key::ToggleAscii);
+    let toggled = ime.press(Key::ToggleAscii(ShiftKey::Right));
     assert!(toggled.handled);
     assert!(toggled.ascii);
     assert_eq!(toggled.commit.as_deref(), Some("日"));
