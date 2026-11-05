@@ -9,7 +9,9 @@ use qim_core::{
     EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SimplifierPack,
 };
 
-use crate::common_forms::{CommonForms, ONE_WAY_FORMS, TWO_WAY_FORMS};
+use crate::common_forms::{
+    CommonForms, ONE_WAY_DISTINCT, ONE_WAY_FORMS, REVERSED_ONE_WAY, TWO_WAY_FORMS,
+};
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
@@ -447,7 +449,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         corpus_checks.push(verify::common_forms(&frequency, &forms));
         let built = LexiconPack::from_bytes(&lexicon_bytes)
             .map_err(|e| Error::invalid("詞庫資料包", e.to_string()))?;
-        corpus_checks.push(verify::lexicon_forms(&built.lexicon, &forms));
+        let model = LanguageModelPack::from_bytes(&language_model_bytes)
+            .map_err(|e| Error::invalid("語言模型資料包", e.to_string()))?
+            .model;
+        corpus_checks.push(verify::lexicon_forms(&built.lexicon, &model, &forms));
     }
 
     let report = if verify {
@@ -528,20 +533,32 @@ const CORPUS_PREPROCESSING: &str = "Each corpus is extracted, converted to Hong 
 
 /// 詞庫資料包 NOTICE 最後一段：怎麼用來源。
 fn lexicon_about(id: &str, scheme: &str) -> String {
+    let list = |pairs: &[(char, char)], sep: &str| {
+        pairs
+            .iter()
+            .map(|(a, b)| format!("{a}{sep}{b}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     format!(
         "{id} is the lexicon of the QIM input scheme \"{scheme}\". QIM changed the rime-essay\n\
          data as follows: single characters, words with a frequency below {min}, and words\n\
          containing characters outside the continuous set of the scheme were dropped; a word\n\
          listed more than once keeps its highest frequency. Every word was converted with\n\
-         OpenCC t2hk and then written in the common forms the corpora use (for example\n\
-         羣 as 群); words that became the same word have their frequencies\n\
-         added. The words of the QIM Cantonese colloquial word list, which only lists words\n\
-         the steps above left out, were added with their listed frequencies. For the {both}\n\
-         character pairs whose two forms are both kept ({pairs}), each such word is also\n\
-         listed in the other form with the same frequency; for {one_way} (one way only, not\n\
-         the other way round) a word with the first form is also listed with the second, and\n\
-         if that word is already in the data the frequencies are added. Each word is indexed\n\
-         by the Quick codes of its characters joined, at most {max} combinations per word.\n\
+         OpenCC t2hk, keeping {kept} as written, and then written in the common forms the\n\
+         corpora use (for example 羣 as 群). Words that became the same word were merged:\n\
+         equal frequencies (the same count listed under two forms, such as 巔峯 and 巔峰)\n\
+         count once, different frequencies are added. Words that write the 著 of 著名 as 着\n\
+         (any of {reversed}; this rime-essay version has only 顯着) were written with 著 and\n\
+         merged the same way, so 顯着 went into 顯著. The words of\n\
+         the QIM Cantonese colloquial word list, which only lists words the steps above left\n\
+         out, were added with their listed frequencies. For the {both} character pairs whose\n\
+         two forms are both kept ({pairs}), each such word is also listed in the other form\n\
+         with the same frequency; for {one_way} (one way only, not the other way round) a\n\
+         word with the first form is also listed with the second, merged the same way if that\n\
+         word is already in the data, except {distinct}, whose second form is a different\n\
+         word. Each word is indexed by the Quick codes of its characters joined, at most {max}\n\
+         combinations per word.\n\
          \n\
          Character frequencies are the counts of each character in the training split of\n\
          each corpus, multiplied by the weight of that corpus ({weights}) and\n\
@@ -550,17 +567,12 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
         weights = corpus_weights(),
+        kept = ONE_WAY_FORMS.map(|(from, _)| from.to_string()).join(", "),
+        reversed = REVERSED_ONE_WAY.join(", "),
         both = TWO_WAY_FORMS.len(),
-        pairs = TWO_WAY_FORMS
-            .iter()
-            .map(|(r, o)| format!("{r}/{o}"))
-            .collect::<Vec<_>>()
-            .join(", "),
-        one_way = ONE_WAY_FORMS
-            .iter()
-            .map(|(from, to)| format!("{from} -> {to}"))
-            .collect::<Vec<_>>()
-            .join(", "),
+        pairs = list(&TWO_WAY_FORMS, "/"),
+        one_way = list(&ONE_WAY_FORMS, " -> "),
+        distinct = ONE_WAY_DISTINCT.join(", "),
     )
 }
 

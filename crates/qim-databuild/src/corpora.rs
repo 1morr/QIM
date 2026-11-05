@@ -62,10 +62,10 @@ impl Conversion {
     fn description(self) -> &'static str {
         match self {
             Conversion::S2hk => {
-                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form"
+                "OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form; 着, 臺 and 菸 are kept as the source wrote them"
             }
             Conversion::T2hk => {
-                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form"
+                "OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form; 着, 臺 and 菸 are kept as the source wrote them"
             }
         }
     }
@@ -92,8 +92,12 @@ impl Converter {
         Ok(Self { opencc, forms })
     }
 
+    /// 轉換、單向的寫法照原文放回（[`BothForms::as_written`](crate::common_forms::BothForms::as_written)），
+    /// 再換成常見寫法。
     pub fn convert(&self, raw: &str) -> String {
-        self.forms.apply(&self.opencc.convert(raw))
+        let converted = self.opencc.convert(raw);
+        self.forms
+            .apply(&self.forms.both().as_written(raw, &converted))
     }
 }
 

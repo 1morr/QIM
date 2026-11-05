@@ -791,7 +791,7 @@ mod kept_characters {
 mod common_forms {
     use std::collections::BTreeMap;
 
-    use qim_core::{CodeEntry, CodeTable, Lexicon, Word};
+    use qim_core::{CharModel, CodeEntry, CodeTable, LanguageModel, Lexicon, Word};
     use qim_databuild::common_forms::CommonForms;
     use qim_databuild::verify::{self, CheckId};
 
@@ -864,6 +864,28 @@ mod common_forms {
     }
 
     fn lexicon_check(words: &[(&str, &str, u64)], chars: &[(char, u64)]) -> (bool, String) {
+        lexicon_check_with(words, chars, &model(&[]))
+    }
+
+    /// 裏、裡、這、隨的機率相同、「這裏」「這裡」的 bigram 相同的語言模型；`overrides` 蓋掉其中幾對。
+    fn model(overrides: &[(char, char, f64)]) -> LanguageModel {
+        let char_model = CharModel {
+            start: -5.0,
+            continuation: -6.0,
+            backoff: -0.5,
+        };
+        let chars = ['這', '裏', '裡', '隨', '着', '著'].map(|c| (c, char_model));
+        let bigrams = [('這', '裏', -1.0), ('這', '裡', -1.0)]
+            .into_iter()
+            .chain(overrides.iter().copied());
+        LanguageModel::new(chars, char_model, bigrams)
+    }
+
+    fn lexicon_check_with(
+        words: &[(&str, &str, u64)],
+        chars: &[(char, u64)],
+        model: &LanguageModel,
+    ) -> (bool, String) {
         let mut index: BTreeMap<String, Vec<Word>> = BTreeMap::new();
         for &(code, text, frequency) in words {
             index.entry(code.into()).or_default().push(Word {
@@ -872,7 +894,7 @@ mod common_forms {
             });
         }
         let lexicon = Lexicon::new(index, chars.iter().copied());
-        let check = verify::lexicon_forms(&lexicon, &forms());
+        let check = verify::lexicon_forms(&lexicon, model, &forms());
         assert_eq!(check.id, CheckId::LexiconForms);
         (check.passed, check.detail)
     }
@@ -895,7 +917,7 @@ mod common_forms {
             (
                 true,
                 "對照表 2 組換掉的寫法與反向的錯字在詞庫都沒有；雙向並存寫法 1 組：含它的詞 2 個，\
-                 每種寫法都收、詞頻相同，字頻相同；單向 1 組：含它的詞 1 個都另收另一種寫法"
+                 每種寫法都收、詞頻相同，字頻與 bigram 相同；單向 1 組：含它的詞 1 個都另收另一種寫法"
                     .into()
             )
         );
@@ -935,6 +957,20 @@ mod common_forms {
             "{detail}"
         );
         assert!(detail.contains("字頻不同：裏 9、裡 8"), "{detail}");
+    }
+
+    #[test]
+    fn two_way_forms_with_different_bigrams_fail() {
+        // 「這裡」的 bigram 沒照抄「這裏」：bigram 傳了空的並存寫法（M1 票 17d 的接線變異）。
+        let chars = [('裏', 9), ('裡', 9), ('着', 3), ('著', 7)];
+        let model = model(&[('這', '裡', -3.0)]);
+        let (passed, detail) = lexicon_check_with(&GOOD, &chars, &model);
+        assert!(!passed);
+        assert!(detail.contains("bigram 不同：這裏／這裡"), "{detail}");
+        // 單向的「着／著」各算各的，不比。
+        let model = self::model(&[('隨', '著', -3.0)]);
+        let (passed, detail) = lexicon_check_with(&GOOD, &chars, &model);
+        assert!(passed, "{detail}");
     }
 
     #[test]

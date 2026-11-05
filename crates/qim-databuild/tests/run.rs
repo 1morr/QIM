@@ -29,6 +29,20 @@ const TABLE: &str = "\
 廿 廿 1 1 0 0 1 0 0 0 0 t t NA 23000
 竹 竹 1 1 0 0 1 0 0 0 0 h h NA 23001
 水 水 1 1 0 0 1 0 0 0 0 e e NA 23002
+群 群 1 1 0 0 1 0 0 0 0 srtq srtq NA 0
+羣 羣 1 1 0 0 1 0 0 0 0 srtq srtq NA 0
+組 组 1 1 0 0 1 0 0 0 0 vmbm vmbm NA 0
+吃 吃 1 1 0 0 1 0 0 0 0 ron ron NA 0
+喫 喫 1 1 0 0 1 0 0 0 0 rdhk rdhk NA 0
+飯 饭 1 1 0 0 1 0 0 0 0 oihne oihne NA 0
+裏 裏 1 1 0 0 1 0 0 0 0 ywgv ywgv NA 0
+裡 裡 1 1 0 0 1 0 0 0 0 lwg lwg NA 0
+這 这 1 1 0 0 1 0 0 0 0 yymr yymr NA 0
+着 着 1 1 0 0 1 0 0 0 0 tqbu tqbu NA 0
+著 著 1 1 0 0 1 0 0 0 0 tjka tjka NA 0
+顯 显 1 1 0 0 1 0 0 0 0 afmbc afmbc NA 0
+臺 台 1 1 0 0 1 0 0 0 0 grmbg grmbg NA 0
+台 台 1 1 0 0 1 0 0 0 0 ir ir NA 0
 ";
 
 /// 聲明原文在上游檔裡換了行，sources.toml 照抄成一行。
@@ -76,7 +90,11 @@ const CC_LICENSES: [(&str, &str); 3] = [
 ];
 
 /// rime-essay 的 `essay.txt`：門口、問日、日日收進詞庫；單字、低於門檻、含擴展區的字的不收。
-const ESSAY: &str = "日\t71052\n門口\t9435\n問日\t300\n日日\t100\n丟丟\t99\n日𠀀\t500\n";
+/// 後面幾個詞驗建詞庫接上了寫法（M1 票 17d）：羣組（對照表）、喫飯（`t2hk`）、這裡（雙向並存）、
+/// 顯着（反向的錯字）、晒日（`t2hk` 不換、`s2hk` 會換成曬）、臺日與台口（單向並存）。
+const ESSAY: &str = "日\t71052\n門口\t9435\n問日\t300\n日日\t100\n丟丟\t99\n日𠀀\t500\n\
+                     羣組\t500\n喫飯\t400\n這裡\t300\n顯着\t300\n顯著\t200\n晒日\t500\n\
+                     臺日\t500\n台口\t300\n";
 
 /// repo 裡的粵語口語詞表：口門收進詞庫（rime-essay 沒有）。
 const COLLOQUIAL: &str = "# 粵語口語詞表\n\n口門\t300\n";
@@ -259,7 +277,8 @@ fn hkcancor_zip() -> Vec<u8> {
 }
 
 /// Common Voice：長度 8 的前 2,000 句，一半在 yue、一半在 zh-HK，一行一句。
-/// yue 另有前處理保留的粵語用字開頭的 8 字句，每字 10 句，總會有落在 train 的。
+/// yue 另有前處理保留的粵語用字開頭的 8 字句，每字 10 句，總會有落在 train 的；並存寫法的
+/// 「裡」（換成代表寫法裏）、「臺」（照原文）開頭與結尾的 8 字句也各 10 句。
 fn common_voice() -> (String, String) {
     let all = sentences_of_length(8);
     let lines = |range: std::ops::Range<usize>| -> String {
@@ -267,6 +286,7 @@ fn common_voice() -> (String, String) {
     };
     let kept: String = qim_databuild::corpora::CANTONESE_KEPT
         .iter()
+        .chain(&['裡', '臺'])
         .flat_map(|k| {
             sentences_of_length(7)
                 .into_iter()
@@ -274,6 +294,17 @@ fn common_voice() -> (String, String) {
                 .map(move |s| format!("{k}{s}\n"))
         })
         .collect();
+    let ending: String = ['裡', '臺']
+        .iter()
+        .flat_map(|k| {
+            sentences_of_length(7)
+                .into_iter()
+                .skip(10)
+                .take(10)
+                .map(move |s| format!("{s}{k}\n"))
+        })
+        .collect();
+    let kept = kept + &ending;
     (lines(0..1000) + &kept, lines(1000..2000))
 }
 
@@ -544,7 +575,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (18, 1));
+    assert_eq!((report.continuous, report.extension), (32, 1));
 }
 
 #[test]
@@ -580,7 +611,7 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
             c.words,
             c.colloquial,
         ),
-        (6, 1, 1, 1, 4, 1)
+        (14, 1, 1, 1, 11, 1)
     );
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(&outcome.pack_path).unwrap();
@@ -599,6 +630,10 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
+    // LGPL 要寫明對來源做了什麼：錯字「顯着」改寫併進「顯著」、同頻只算一次、單向的例外（M1 票 17d）。
+    for expected in ["顯着 went into 顯著", "equal frequencies", "except 合着"] {
+        assert!(notice.contains(expected), "缺 {expected}：{notice}");
+    }
     // 字頻乘上語料權重：NOTICE 寫出各語料的權重（M1 票 24）。
     assert!(notice.contains("hkcancor 64"), "{notice}");
     // 口語詞表在 repo 裡：NOTICE 列出它的路徑、sha256 與 CC0，LICENSE 有它的一段。
@@ -618,6 +653,60 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     let quick_license =
         std::fs::read_to_string(root.path().join("build/packs/quick/LICENSE")).unwrap();
     assert!(!quick_license.contains("LGPL"), "{quick_license}");
+}
+
+#[test]
+fn lexicon_and_language_model_are_built_in_the_forms_of_the_corpus() {
+    // 建詞庫與 bigram 都要接上寫法的轉換（M1 票 17d：拿掉任一處，其他測試照樣綠）。
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+    let lexicon = LexiconPack::from_bytes(&std::fs::read(&outcome.lexicon_path).unwrap())
+        .unwrap()
+        .lexicon;
+    let mut words: BTreeMap<String, u64> = BTreeMap::new();
+    for (_, list) in lexicon.iter() {
+        for w in list {
+            words.insert(w.text.clone(), w.frequency);
+        }
+    }
+    let frequency = |word: &str| words.get(word).copied();
+    // 對照表、`t2hk`（不是 `s2hk`：晒日不換成曬日）、反向的錯字改回。
+    assert_eq!(frequency("群組"), Some(500));
+    assert_eq!(frequency("吃飯"), Some(400));
+    assert_eq!(frequency("晒日"), Some(500));
+    assert_eq!(frequency("顯著"), Some(500));
+    for gone in ["羣組", "喫飯", "顯着"] {
+        assert_eq!(frequency(gone), None, "{gone}");
+    }
+    // 雙向：兩種寫法同頻；單向：臺日另收台日，台口不生出臺口。
+    assert_eq!(
+        (frequency("這裏"), frequency("這裡")),
+        (Some(300), Some(300))
+    );
+    assert_eq!(
+        (frequency("臺日"), frequency("台日")),
+        (Some(500), Some(500))
+    );
+    assert_eq!((frequency("台口"), frequency("臺口")), (Some(300), None));
+    // 語料：「裡」歸到「裏」、兩字共用字頻；「臺」照原文，有自己的字頻。
+    assert!(lexicon.char_frequency('裏') > 0);
+    assert_eq!(lexicon.char_frequency('裡'), lexicon.char_frequency('裏'));
+    assert!(lexicon.char_frequency('臺') > 0);
+
+    let model =
+        LanguageModelPack::from_bytes(&std::fs::read(&outcome.language_model_path).unwrap())
+            .unwrap()
+            .model;
+    // 雙向的另一種寫法照抄代表寫法的 unigram 與前後字的 bigram。
+    for (prev, c) in [(None, '裏'), (Some('裏'), '日'), (Some('日'), '裏')] {
+        let other = |ch: char| if ch == '裏' { '裡' } else { ch };
+        assert_eq!(
+            model.log_prob(prev.map(other), other(c)),
+            model.log_prob(prev, c),
+            "{prev:?} {c}"
+        );
+    }
 }
 
 #[test]
@@ -1106,6 +1195,9 @@ fn corpus_files(root: &Path, dir: &str, name: &str) -> (Vec<String>, String, Str
                     '咸' => "ir",
                     '响' => "rr",
                     '仆' => "oy",
+                    // 並存寫法：「裡」換成代表寫法「裏」，「臺」照原文。
+                    '裏' => "yv",
+                    '臺' => "gg",
                     other => panic!("{name} 有連打字集外的字：{other}"),
                 })
                 .collect();
@@ -1214,7 +1306,7 @@ fn every_corpus_gets_bench_sentences_training_splits_and_character_counts() {
     // 粵語用字只在 Common Voice 的夾具裡。
     assert!(shown.contains("[通過] 前處理保留粵語用字：晒 "), "{shown}");
     assert!(
-        shown.contains("[通過] 字形用常見寫法：對照表 1 組（揾→搵）"),
+        shown.contains("[通過] 字形用常見寫法：對照表 2 組（揾→搵、羣→群）"),
         "{shown}"
     );
     for expected in ["Conversion: OpenCC s2hk", "Conversion: OpenCC t2hk"] {
