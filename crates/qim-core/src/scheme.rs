@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-/// 手動分隔記號（brief §4.3）：組字中按它在目前位置斷開，連打的段不跨過它（plan §2.3）。
+/// 手動分隔記號（brief §4.3）：組字中按它指定這裡一定要斷字：單字的碼不跨過它，詞只在它落在
+/// 兩字的碼之間時跨過它（plan §2.3）。
 /// 同 Rime 拼音方案 `speller/delimiter` 的 `'`；速成、倉頡的碼不用這個字元，所以各方案共用一個，
 /// 不放進方案檔。它留在輸入碼裡，算在前一段的碼尾；查碼表、學習時去掉。
 pub const SEPARATOR: char = '\'';
