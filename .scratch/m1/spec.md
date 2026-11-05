@@ -89,5 +89,9 @@
 | [26](issues/26-half-width-after-digits.md) | — | M1 封存後補：數字後的句點與冒號用半形（逗號照舊全形，使用者決定），可關 |
 | [27](issues/27-touch-layout-match-gboard.md) | — | M1 封存後補：觸控佈局對齊 Gboard 速成、數字列開關 |
 | [28](issues/28-manual-segment-separator.md) | 27 | M1 封存後補：手動分隔鍵（實體 `'`、觸控組字中 ⇧ 變「'詞」，使用者決定） |
+| [17d](issues/17d-lexicon-variant-gaps.md) | 17c | 補票審查後補：鉤溼擡糉柺雙向、臺菸單向收原寫法、同頻重複不翻倍、建置接線測試 |
+| [26b](issues/26b-digit-state-after-touch-and-modifiers.md) | 26, 27 | 補票審查後補：觸控切頁與單按修飾鍵不結束數字、Shift 判定、「發佈版／master」用詞 |
+| [27b](issues/27b-touch-shift-and-labels.md) | 26b | 補票審查後補：觸控 Shift 狀態、讀屏標籤、數字列角標與字級 |
+| [28b](issues/28b-words-cross-separator.md) | 28 | 補票審查後補：詞可跨落在字界的分隔記號（照 Rime 速成，使用者決定） |
 
 08、09 不依賴核心，只擋 12；要用使用者的 iPhone，照編號做時在 07 之後輪到。一個一個做時照編號；同時能做的票（例如 04、05，或 13 之後的 14–16）可以並行。
