@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type KeyEvent, LoneShift, toKey } from "../src/keys.ts";
+import { type KeyEvent, LoneShift, shiftSwitch, toKey } from "../src/keys.ts";
 
 function press(key: string, modifiers: Partial<KeyEvent> = {}): KeyEvent {
 	return {
@@ -112,45 +112,74 @@ test("在別的輸入法組字中的事件一律留給瀏覽器", () => {
 });
 
 // librime ascii_composer：Shift 按下到放開 500 ms 內、中間沒有別的鍵，才算單按。
-test("單按 Shift：按下後 500 ms 內放開", () => {
+// `down` / `up` 吃 `KeyboardEvent.code`，單按時回傳哪一邊（Rime 左右 Shift 的預設不同）。
+test("單按 Shift：按下後 500 ms 內放開，回傳哪一邊", () => {
 	const shift = new LoneShift();
-	shift.down("Shift", false, 0);
-	assert.equal(shift.up("Shift", 499), true);
+	shift.down("ShiftLeft", false, 0);
+	assert.equal(shift.up("ShiftLeft", 499), "left");
+	shift.down("ShiftRight", false, 1000);
+	assert.equal(shift.up("ShiftRight", 1010), "right");
 });
 
 test("Shift 按太久不算單按", () => {
 	const shift = new LoneShift();
-	shift.down("Shift", false, 0);
-	assert.equal(shift.up("Shift", 500), false);
+	shift.down("ShiftLeft", false, 0);
+	assert.equal(shift.up("ShiftLeft", 500), undefined);
 });
 
 test("Shift 按著時按了別的鍵（打大寫）不算單按", () => {
 	const shift = new LoneShift();
-	shift.down("Shift", false, 0);
-	shift.down("A", false, 10);
-	assert.equal(shift.up("Shift", 20), false);
+	shift.down("ShiftLeft", false, 0);
+	shift.down("KeyA", false, 10);
+	assert.equal(shift.up("ShiftLeft", 20), undefined);
+});
+
+// librime：第二個 Shift 按下時不重新計時，先放開的那邊切換，另一邊放開時已經解除。
+test("左右 Shift 一起按：照第一個按下的計時，先放開的那邊算單按", () => {
+	const shift = new LoneShift();
+	shift.down("ShiftLeft", false, 0);
+	shift.down("ShiftRight", false, 400);
+	assert.equal(shift.up("ShiftRight", 450), "right");
+	assert.equal(shift.up("ShiftLeft", 460), undefined);
+	shift.down("ShiftLeft", false, 1000);
+	shift.down("ShiftRight", false, 1400);
+	assert.equal(shift.up("ShiftRight", 1500), undefined);
 });
 
 test("按住 Shift 的自動重複不重新計時", () => {
 	const shift = new LoneShift();
-	shift.down("Shift", false, 0);
-	shift.down("Shift", true, 400);
-	assert.equal(shift.up("Shift", 600), false);
+	shift.down("ShiftRight", false, 0);
+	shift.down("ShiftRight", true, 400);
+	assert.equal(shift.up("ShiftRight", 600), undefined);
 });
 
 test("放開的不是 Shift、或沒有先按下 Shift 都不算", () => {
 	const shift = new LoneShift();
-	assert.equal(shift.up("Shift", 0), false);
-	shift.down("Shift", false, 0);
-	assert.equal(shift.up("a", 10), false);
+	assert.equal(shift.up("ShiftLeft", 0), undefined);
+	shift.down("ShiftLeft", false, 0);
+	assert.equal(shift.up("KeyA", 10), undefined);
 	// 一次單按只算一次。
-	assert.equal(shift.up("Shift", 20), true);
-	assert.equal(shift.up("Shift", 30), false);
+	assert.equal(shift.up("ShiftLeft", 20), "left");
+	assert.equal(shift.up("ShiftLeft", 30), undefined);
 });
 
 // Ctrl+Shift 是 Windows 切換輸入法，Cmd+Shift 是各種快捷鍵，都不是單按。
 test("帶 Ctrl、Meta、Alt 按下的 Shift 不算單按", () => {
 	const shift = new LoneShift();
-	shift.down("Shift", false, 0, true);
-	assert.equal(shift.up("Shift", 10), false);
+	shift.down("ShiftLeft", false, 0, true);
+	assert.equal(shift.up("ShiftLeft", 10), undefined);
+});
+
+test("臨時英文中 - 與 = 是字元，不是翻頁", () => {
+	assert.deepEqual(toKey(press("-"), true, true), { kind: "punct", char: "-" });
+	assert.deepEqual(toKey(press("="), true, true), { kind: "punct", char: "=" });
+	assert.deepEqual(toKey(press("-"), true), { kind: "pageUp" });
+	assert.deepEqual(toKey(press("PageDown"), true, true), { kind: "pageDown" });
+});
+
+test("組字中單按 Shift 的設定值：認得的照原樣，其他當預設 rime", () => {
+	assert.equal(shiftSwitch("commit-text"), "commit-text");
+	assert.equal(shiftSwitch("inline-ascii"), "inline-ascii");
+	assert.equal(shiftSwitch("rime"), "rime");
+	assert.equal(shiftSwitch("left"), "rime");
 });

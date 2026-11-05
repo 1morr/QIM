@@ -29,7 +29,7 @@ pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use scheme::{Packs, Ranking, Scheme};
 pub use session::{
     Candidate, Composition, Key, Options, PAGE_SIZE, RERANK_LIMIT, RerankRequest, Segment, Session,
-    Snapshot,
+    ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{ImportError, UserModel, UserWordError};

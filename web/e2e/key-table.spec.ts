@@ -132,15 +132,124 @@ test("Shift（單按）：切換中英文，英文直接輸出，再按一次回
 	await expect(text).toHaveValue("hello, 門口");
 });
 
-test("Shift（單按）：組字中先上屏整個組字再切英文", async ({ page }) => {
+// 組字中單按 Shift 預設照 Rime（M1 票 25）：左 Shift 留碼接英文，右 Shift 先上屏組字再切英文。
+// Playwright 的 `Shift` 是左 Shift（`KeyboardEvent.code` 為 `ShiftLeft`）。
+test("Shift（單按）：組字中右 Shift 先上屏整個組字再切英文", async ({
+	page,
+}) => {
 	const { text, composition, mode } = ui(page);
 	await page.keyboard.type("anr");
-	await page.keyboard.press("Shift");
+	await page.keyboard.press("ShiftRight");
 	await expect(text).toHaveValue("門口");
 	await expect(composition).toHaveText("");
 	await expect(mode).toHaveText("英");
 	await page.keyboard.type("a");
 	await expect(text).toHaveValue("門口a");
+});
+
+test("Shift（單按）：組字中左 Shift 留著輸入碼當英文接下去，Enter 上屏後回中文", async ({
+	page,
+}, testInfo) => {
+	const { text, composition, items, mode } = ui(page);
+	await page.keyboard.type("anr");
+	await page.keyboard.press("ShiftLeft");
+	await expect(composition).toHaveText("anr");
+	await expect(items).toHaveCount(0);
+	await expect(mode).toHaveText("英");
+	await expect(text).toHaveValue("");
+	// 臨時英文中 `-` 是字元，不是翻頁。
+	await page.keyboard.type("x-1");
+	await expect(composition).toHaveText("anrx-1");
+	await page.screenshot({ path: testInfo.outputPath("inline-ascii.png") });
+	await page.keyboard.press("Enter");
+	await expect(text).toHaveValue("anrx-1");
+	await expect(composition).toHaveText("");
+	await expect(mode).toHaveText("中");
+	await page.keyboard.type("anr ");
+	await expect(text).toHaveValue("anrx-1門口");
+});
+
+test("Shift（單按）：左 Shift 留碼後沒改就再按左 Shift，還原中文組字", async ({
+	page,
+}) => {
+	const { text, composition, items, mode } = ui(page);
+	await page.keyboard.type("anr");
+	await page.keyboard.press("Shift");
+	await expect(composition).toHaveText("anr");
+	await page.keyboard.press("Shift");
+	await expect(mode).toHaveText("中");
+	await expect(composition).toHaveText("日弓口");
+	await expect(items.first()).toHaveText("1門口");
+	await page.keyboard.press(" ");
+	await expect(text).toHaveValue("門口");
+});
+
+// 舊版 Rime（librime 1.17.0 以前，M1 票 25b）：臨時英文中空白也接進英文，Enter 才上屏。
+test("Shift（單按）：左 Shift 留碼後空白接進英文，Enter 上屏整段", async ({
+	page,
+}, testInfo) => {
+	const { text, composition, mode } = ui(page);
+	await page.keyboard.type("anr");
+	await page.keyboard.press("ShiftLeft");
+	await page.keyboard.type("hello world");
+	await expect(composition).toHaveText("anrhello world");
+	await expect(mode).toHaveText("英");
+	await expect(text).toHaveValue("");
+	await page.screenshot({
+		path: testInfo.outputPath("inline-ascii-space.png"),
+	});
+	await page.keyboard.press("Enter");
+	await expect(text).toHaveValue("anrhello world");
+	await expect(composition).toHaveText("");
+	await expect(mode).toHaveText("中");
+});
+
+test("Shift（單按）：留碼後打了字再按左 Shift，整串當輸入碼回中文組字", async ({
+	page,
+}) => {
+	const { text, composition, items, mode } = ui(page);
+	await page.keyboard.type("an");
+	await page.keyboard.press("Shift");
+	await page.keyboard.type("r");
+	await expect(composition).toHaveText("anr");
+	await page.keyboard.press("Shift");
+	await expect(mode).toHaveText("中");
+	await expect(composition).toHaveText("日弓口");
+	await expect(items.first()).toHaveText("1門口");
+	await page.keyboard.press(" ");
+	await expect(text).toHaveValue("門口");
+
+	// 英文含空白：中文組字裝不下，上屏英文回中文。
+	await page.keyboard.type("anr");
+	await page.keyboard.press("Shift");
+	await page.keyboard.type(" x");
+	await page.keyboard.press("Shift");
+	await expect(text).toHaveValue("門口anr x");
+	await expect(composition).toHaveText("");
+	await expect(mode).toHaveText("中");
+});
+
+test("組字中單按 Shift 的設定：左右都先上屏、左右都留碼", async ({ page }) => {
+	const { text, mode } = ui(page);
+	const setting = page.getByLabel("組字中單按 Shift");
+	await expect(setting).toHaveValue("rime");
+
+	await setting.selectOption("commit-text");
+	await text.focus();
+	await page.keyboard.type("anr");
+	await page.keyboard.press("ShiftLeft");
+	await expect(text).toHaveValue("門口");
+	await expect(mode).toHaveText("英");
+	await page.keyboard.press("ShiftLeft");
+
+	await setting.selectOption("inline-ascii");
+	await text.focus();
+	await page.keyboard.type("anr");
+	await page.keyboard.press("ShiftRight");
+	await page.keyboard.type("x");
+	await page.keyboard.press("Enter");
+	await expect(text).toHaveValue("門口anrx");
+	await expect(mode).toHaveText("中");
 });
 
 test("Shift 加字母打大寫，不算單按、不切換", async ({ page }) => {

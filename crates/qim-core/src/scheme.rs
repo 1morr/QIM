@@ -29,6 +29,11 @@ impl Scheme {
             })
             .collect()
     }
+
+    /// `code` 的每個字元都是方案的鍵，可以當輸入碼（觸發詞、臨時英文回中文組字）。
+    pub fn spells(&self, code: &str) -> bool {
+        code.chars().all(|c| self.alphabet.contains(c))
+    }
 }
 
 /// 方案要搭配的其他資料包的 id（方案檔的 `[packs]`）。

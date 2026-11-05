@@ -45,3 +45,19 @@ test("選第 2 個候選上屏後按「回報」，清單多一行 fixed.tsv 格
 		`mir\t${second}\t網頁回報（首選 一台）\nanr\t門口\t網頁回報（首選 門口）`,
 	);
 });
+
+// 臨時英文（組字中單按左 Shift，M1 票 25、25b）中的空白與數字是字元：上屏的是英文，不是選出來的字。
+test("臨時英文打了空白與數字再按 Enter 上屏，不能回報", async ({ page }) => {
+	await page.goto("/");
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const report = page.getByRole("button", { name: "回報", exact: true });
+	await expect(text).toHaveAttribute("data-ready", "true");
+	await text.focus();
+	await page.keyboard.type("anr");
+	await page.keyboard.press("ShiftLeft");
+	await page.keyboard.type("1 ");
+	await expect(text).toHaveValue("");
+	await page.keyboard.press("Enter");
+	await expect(text).toHaveValue("anr1 ");
+	await expect(report).toBeDisabled();
+});

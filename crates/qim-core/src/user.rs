@@ -134,7 +134,7 @@ impl UserModel {
         }
         let scheme = engine.scheme();
         if let Some(trigger) = trigger
-            && (trigger.is_empty() || !trigger.chars().all(|c| scheme.alphabet.contains(c)))
+            && (trigger.is_empty() || !scheme.spells(trigger))
         {
             return Err(UserWordError::InvalidTrigger(trigger.to_string()));
         }
