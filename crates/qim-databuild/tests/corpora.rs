@@ -83,7 +83,7 @@ fn wan_written_in_the_hong_kong_form_becomes_the_common_form() {
     assert_eq!(s2hk.convert("揾工"), "搵工");
 }
 
-/// `forms()` 的碼表再加上單向並存寫法的字：着（`tu`）著（`ta`）、臺（`gg`）台（`ir`）、菸（`ty`）煙（`fg`）。
+/// 只含單向並存寫法的字的碼表建出的對照表：着（`tu`）著（`ta`）、臺（`gg`）台（`ir`）、菸（`ty`）煙（`fg`）。
 fn forms_with_one_way() -> CommonForms {
     let entry = |text| CodeEntry {
         text,

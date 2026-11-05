@@ -69,7 +69,7 @@ essay 與口語詞表的詞（詞頻 ≥ 100）經建置同一套轉換後逐字
 | `ucuj` | 巔峰（9448 + 9448 = 18896） | 巔峰（9448） |
 | `orta` | 合著（604 + 合着 1365） | 含著 佔著 合著（604，第 3） |
 
-`ggen` `iren` `iril` `haty` `eggd` `qgmc` `dsdk` `fghk` `fend` 加進 `bench/fixed.tsv`（80/80；`iren`、`iril` 改前就對，只當防退步）。Playwright `web/e2e/common-forms.spec.ts` 加 `crnd` 第一頁有「鉤子」、`gg` 第一頁有「臺」、`ggil` 不出「臺州」、`ggen`／`iren`／`haty` 首選（13/13；換回改前的資料包時 `crnd`、`gg`、`ggen`、`haty` 4 項紅）。
+`ggen` `iren` `iril` `haty` `eggd` `qgmc` `dsdk` `fghk` `fend` 加進 `bench/fixed.tsv`（80/80，合併 main 的票 28b 後 84/84；`iren`、`iril` 改前就對，只當防退步）。Playwright `web/e2e/common-forms.spec.ts` 加 `crnd` 第一頁有「鉤子」、`gg` 第一頁有「臺」、`ggil` 不出「臺州」、`ggen`／`iren`／`haty` 首選（13/13；換回改前的資料包時 `crnd`、`gg`、`ggen`、`haty` 4 項紅）。
 
 ### 同頻重複（`lexicon.rs` 的 `combined`）
 
@@ -165,3 +165,11 @@ essay 裡「X着」與「X著」都有的 7 組：
 - 實驗腳本 `gaps` 自己重寫收詞條件（兩字以上、門檻、同詞取最大）、用字串標來源：實驗腳本照 17c 的寫法，只讀快取回答一次性的問題，改建置規則時 README 寫明要重跑，不抽共用。
 - `tests/run.rs` 的 `kept`／`ending` 兩段迭代相似、`Converter::convert` 的 `self.forms.both().as_written`：判斷題，不改。
 - 17c 決定 6 的「合併計數只在同一個義項之間」：配上 `ONE_WAY_DISTINCT` 仍成立，不改。
+
+### merge main（票 28b）與 code-review（`main...HEAD`）
+
+`bench/fixed.tsv` 衝突：兩邊都在檔尾加題，取 main 的 `an'r` 說明與 28b 的 4 題，再接本票的 9 題（84 題）。合併後 `cargo xtask data --verify` 通過、資料包 sha256 與合併前相同；`cargo xtask bench --check` 通過，各集合與 baseline 相同、固定題 84/84；`cargo xtask check` 通過（e2e 138 項）。
+
+已處理：plan §4.3 用到的 OpenCC「著／着」行為補進 brief〈查證過的事實〉附來源；`forms_with_one_way` 的註解和程式碼不符；progress 的偏差排在 28b 之後、session 紀錄改用代表寫法的寫法。
+未處理：最後一列的下一步照協調者並行派票的寫法（26b、27b 由協調者派），不改成 `/implement`；`combined` 以同頻認定重複是票定的規則（plan §4.2）。
+
