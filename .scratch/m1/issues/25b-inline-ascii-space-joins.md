@@ -29,3 +29,4 @@ Blocked by: None (can start immediately)
 - 亂按：桌面兩輪各 1,500 步（字母為主，夾左右 Shift、空白、Enter、退格、Esc、數字、標點、大寫、方向鍵、Tab、翻頁、`z`、Ctrl+A，每 300 步換一次 Shift 設定），進臨時英文 186、161 步，沒有頁面錯誤與原生對話框，也沒有「沒組字卻有候選」「臨時英文卻有候選」。
 - code-review 已處理：brief 那條改成只寫現況（原本用「原本…現在」寫票 25 的舊行為，歷史留在 progress）；「整串都是方案字母」抽成 `Scheme::spells`，觸發詞的檢查也改用它；`toggle_ascii` 的區域變數 `inline` 與欄位同名，改成 `keeps_code`（`ShiftSwitch::inline` 跟著改名），用 `take_if` 拿掉 `expect`；補「左右都留碼」設定下按右 Shift 回中文組字的測試；brief 補觸控 `text` 在臨時英文中先上屏英文；§12.2 的鍵碼範圍照原始碼寫。
 - code-review 未處理：偏離發佈版的四處（含方案字母以外的字元時再按 Shift 上屏、Shift＋空白接進英文、選定分段遇退格 / Esc 照票 25、← / Home / Delete 不動作）在總結裡請使用者確認，使用者接受（2026-11-05，經協調者轉達）；`Session.inline` 用 `Option<String>` 表示臨時英文（Primitive Obsession）：原本的結構只剩一個欄位，取最簡；`probe.c`、`run.sh` 的註解是英文，同旁邊 `rime-cases/` 的慣例。
+- 2026-11-05 M1 票 26b 改正本票的用詞：「舊版 / 新版 librime」改成「目前發佈版（≤ 1.17.0）/ 未發佈的 master」，行為與決定不變。
