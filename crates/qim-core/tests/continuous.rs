@@ -759,29 +759,88 @@ fn shift_again_restores_the_chinese_composition_when_the_english_is_unchanged() 
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
 }
 
+// 再按留碼的 Shift 照舊版 librime（1.17.0 以前）：目前的英文整串當中文輸入碼重新組字，
+// 不看打過字或退格過（brief §12.2）。
+
 #[test]
-fn shift_again_commits_the_english_after_a_backspace_even_back_to_the_same_letters() {
-    // librime 退格時丟掉進臨時西文前的輸入，之後切回只能上屏。
+fn shift_again_recomposes_the_edited_english_as_chinese_input() {
     let mut ime = Ime::new(&men_kou());
     ime.type_code("anr");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    ime.press(Key::Letter('a'));
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert!(!back.ascii);
+    assert_eq!(back.commit, None);
+    let typed = Ime::new(&men_kou()).type_code("anra");
+    assert_eq!(back.composition, typed.composition);
+    assert_eq!(texts(&back), texts(&typed));
+}
+
+#[test]
+fn inline_ascii_setting_recomposes_on_the_right_shift_too() {
+    let mut ime = Ime::new(&men_kou());
+    ime.shift_switch(ShiftSwitch::InlineAscii);
+    ime.type_code("an");
+    ime.press(Key::ToggleAscii(ShiftKey::Right));
+    ime.press(Key::Letter('r'));
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Right));
+    assert!(!back.ascii);
+    assert_eq!(back.commit, None);
+    assert_eq!(top(&back), "門口");
+}
+
+#[test]
+fn shift_again_after_typing_and_backspacing_restores_the_same_input() {
+    let mut ime = Ime::new(&men_kou());
+    let typed = ime.type_code("anr");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
     ime.press(Key::Letter('x'));
     ime.press(Key::Backspace);
     let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
-    assert_eq!(back.commit.as_deref(), Some("anr"));
     assert!(!back.ascii);
+    assert_eq!(back.commit, None);
+    assert_eq!(back.composition, typed.composition);
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
 }
 
 #[test]
-fn shift_again_commits_the_english_once_it_changed() {
+fn shift_again_keeps_the_selected_segments_and_recomposes_the_rest() {
     let mut ime = Ime::new(&men_kou());
-    ime.type_code("anr");
+    let typed = ime.type_code("anr");
+    ime.select(&typed, "門");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
-    ime.press(Key::Letter('x'));
+    ime.press(Key::Letter('a'));
     let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
-    assert_eq!(back.commit.as_deref(), Some("anrx"));
-    assert!(!back.ascii);
-    assert_eq!(back.composition.input, "");
+
+    let mut fresh = Ime::new(&men_kou());
+    let typed = fresh.type_code("anr");
+    fresh.select(&typed, "門");
+    let expected = fresh.type_code("a");
+    assert_eq!(back.composition, expected.composition);
+    assert_eq!(texts(&back), texts(&expected));
+}
+
+#[test]
+fn shift_again_commits_english_that_is_not_all_scheme_letters() {
+    // 空白、數字、大寫、標點、`z` 不是中文的輸入碼，中文組字裝不下（librime 會切成原樣的分段），
+    // 只好上屏英文再回中文。
+    for key in [
+        Key::Space,
+        Key::Digit(1),
+        Key::Letter('C'),
+        Key::Punct('.'),
+        Key::Letter('z'),
+    ] {
+        let mut ime = Ime::new(&men_kou());
+        ime.type_code("anr");
+        ime.press(Key::ToggleAscii(ShiftKey::Left));
+        let typed = ime.press(key);
+        let english = typed.composition.input.clone();
+        let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
+        assert_eq!(back.commit.as_deref(), Some(english.as_str()), "{key:?}");
+        assert!(!back.ascii, "{key:?}");
+        assert_eq!(back.composition.input, "", "{key:?}");
+    }
 }
 
 #[test]
@@ -795,14 +854,22 @@ fn the_commit_text_shift_in_inline_english_commits_it_and_goes_back_to_chinese()
 }
 
 #[test]
-fn space_in_inline_english_commits_it_with_a_space() {
+fn space_joins_the_inline_english_and_enter_commits_it() {
+    // 舊版 librime（1.17.0 以前）：空白也接進英文，臨時英文不結束；Enter 上屏整段（票 25b）。
     let mut ime = Ime::new(&men_kou());
     ime.type_code("anr");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
+    ime.type_code("hello");
     let spaced = ime.press(Key::Space);
-    assert_eq!(spaced.commit.as_deref(), Some("anr "));
-    assert!(!spaced.ascii);
-    assert_eq!(spaced.composition.input, "");
+    assert!(spaced.handled);
+    assert_eq!(spaced.commit, None);
+    assert!(spaced.ascii);
+    assert_eq!(spaced.composition.input, "anrhello ");
+    ime.type_code("world");
+    let entered = ime.press(Key::Enter);
+    assert_eq!(entered.commit.as_deref(), Some("anrhello world"));
+    assert!(!entered.ascii);
+    assert_eq!(entered.composition.input, "");
 }
 
 #[test]
