@@ -139,7 +139,7 @@ pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit
 pub enum ShiftKey { Left, Right }
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub shift_switch: ShiftSwitch }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub shift_switch: ShiftSwitch }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
@@ -172,6 +172,7 @@ impl Session {
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
+- 數字後半形：`Options.digit_separators`（預設開，brief §4.7、§7）。沒有組字、前一個上屏的字是半形數字時，`.` `:` 直接上屏半形，不進組字；逗號照舊全形（使用者決定，M1 票 26）；「前一個上屏的字」由 `Session` 記最近送出去的字（上屏與交還宿主的數字鍵），M3 有 `set_context` 後改看前文。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 上下文（M3）：`Session::set_context(before: &str)`，n-gram 與個人 bigram 用前文當起點。
 - 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的碼的字詞（和單打那個碼相同）；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
@@ -559,7 +560,7 @@ M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/iss
 ### 7.4 M3 智慧候選
 
 - 模型階梯實驗（§7.8）先做，依結果決定同步層要不要升級語言模型、要不要做小型神經重排，以及 LLM 候選優化與雲端聯想、補全的範圍。開工前讀青簡的神經重排（摘要在 `docs/research/qingjian.md` §4、§5；原文 `qingjian-neural`、`docs/notes/neural-rescoring.md`，GPL，只取做法）與 CyIME 的九宮格模型評估（`docs/research/cyime.md` §3 的文件，GPL，只取做法），記到 `docs/research/`。
-- 個人 bigram（§2.3）；聯想（有開關、預設開，brief §7）；輸入框上下文配合 n-gram；自動記住 email 這類字串；常用語（與觸發詞共用格式）；emoji 候選（CLDR 繁中 / 粵語標註）。
+- 個人 bigram（§2.3）；聯想（有開關、預設開，brief §7）；輸入框上下文配合 n-gram（數字後半形也改看前文，M1 票 26）；自動記住 email 這類字串；常用語（與觸發詞共用格式）；emoji 候選（CLDR 繁中 / 粵語標註）。
 - 雲端（brief §8）：使用者自帶 API key，結果非同步、標示來源；送出前遮蔽 email、電話、卡號；花費上限（每日請求數，預設值依 §7.8 的費用定）；排除指定 App（介面與規則放核心，平台里程碑接上）。
 - 詞庫匯入；完整粵語詞庫（授權查清後，查不清就留在之後）；資料包線上更新（可關；更新來源在開工時定，要建遠端先問使用者）：這時才給資料包加 manifest（id、種類、版本、最低核心版本、sha256、大小、授權），設定頁可切換、刪除，也可從檔案匯入資料包；模型階梯實驗採用可選下載的模型時也走這裡。
 - 完成標準：
@@ -577,13 +578,13 @@ M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/iss
 - 句中英文混輸實驗（brief §4.7）：英文詞帶懲罰進 lattice，只收拼對的常見詞、不容錯，並設最短長度；純中文集的首選與修正次數不退步才採用，結論寫回 brief。
 - 譯詞：開工先查繁體與粵語對英文詞表的來源與授權，記到 `docs/research/`；查不到合用的，再評估自己用 LLM 離線生成（青簡做法）。做成可選資料包（走 M3 的 manifest），候選旁顯示譯詞，修飾鍵加數字上屏譯詞（青簡：macOS ⌥、Windows Ctrl）。
 - 欄位類型：email、網址預設英文模式並關自動修正，數字欄開數字頁。
-- 智慧標點（可關）：數字後的句點與逗號用半形；成對符號自動配對；英文模式連按兩下空白輸出句點。
+- 智慧標點（可關）：成對符號自動配對；英文模式連按兩下空白輸出句點。數字後半形已在 M1 票 26 做。
 - 評估中文滑動輸入，結論寫回 brief。
 - 同步的合併規則與使用者詞庫格式（含刪除墓碑）定稿，放在核心；平台殼之後不改格式。實際傳輸方式跟平台里程碑。
 - 完成標準：
   - 上述功能在網頁可用，觸控功能也在手機瀏覽器試過。
   - 首選字基準加「含打錯碼」的集合與「觸控模擬」集合（點擊位置依高斯雜訊偏移），都設 baseline；沒打錯的集合不退步。
-  - Playwright 讀回：預設不修正 `teh`；打開自動修正後英文模式打 `teh` 修正成 `the`，退格還原；關掉容錯後打錯碼的集合不出修正讀法；中文狀態打 `receive` 第 2 位是 receive、打 `recieve` 不出英文候選；email 欄位預設英文且不修正；數字後的句點是半形；修飾鍵加數字上屏譯詞。
+  - Playwright 讀回：預設不修正 `teh`；打開自動修正後英文模式打 `teh` 修正成 `the`，退格還原；關掉容錯後打錯碼的集合不出修正讀法；中文狀態打 `receive` 第 2 位是 receive、打 `recieve` 不出英文候選；email 欄位預設英文且不修正；修飾鍵加數字上屏譯詞。
   - 實體鍵盤的「含打錯碼」集合（鄰鍵依實體幾何、含對調）設 baseline。
   - 兩個瀏覽器設定檔互相同步一個新使用者詞與一筆刪除，讀回結果一致。
 

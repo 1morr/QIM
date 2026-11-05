@@ -33,6 +33,9 @@ pub struct Options {
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
+    /// 數字後的 `.` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，同 librime
+    /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
+    pub digit_separators: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
 }
@@ -72,7 +75,7 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：無痕只影響學習。
+    /// 兩份選項列出的候選相同：只有簡體與英文候選影響候選，無痕、Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified && self.english_candidates == other.english_candidates
     }
@@ -84,6 +87,7 @@ impl Default for Options {
             simplified: false,
             incognito: false,
             english_candidates: true,
+            digit_separators: true,
             shift_switch: ShiftSwitch::Rime,
         }
     }
@@ -256,6 +260,9 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
+    /// 最近一次送出去的文字（上屏或交還宿主打的鍵）以半形數字結尾。只看核心自己經手的：
+    /// 輸入框的前文要等 M3 的 `set_context`，所以游標移到別處、宿主自己改了字都看不到。
+    after_digit: bool,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
     /// 中文的組字（選定的分段、lattice）留著，英文沒動過時切回不必重算。
@@ -285,7 +292,7 @@ impl Session {
         } else {
             self.snapshot(engine, false, None)
         };
-        with_radicals(engine, snapshot)
+        self.finish(engine, snapshot)
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有
@@ -382,6 +389,20 @@ impl Session {
             self.refresh_candidates(engine, user);
         }
         let snapshot = self.handle_key(engine, user, key);
+        // 交還宿主的鍵宿主照打：只有數字鍵讓下一個字緊接在數字後。其他鍵都當成數字結束；librime
+        // 只認可見字元、退格與 Enter，不學它：方向鍵也會把游標移離數字。
+        if !snapshot.handled {
+            self.after_digit = matches!(key, Key::Digit(_));
+        }
+        self.finish(engine, snapshot)
+    }
+
+    /// 會上屏的公開方法回傳前都經過這裡：記下上屏的字是不是以半形數字結尾
+    /// （[`Session::after_digit`]，沒上屏時不變，同 librime 的 commit history），再補分段的字根。
+    fn finish(&mut self, engine: &Engine, snapshot: Snapshot) -> Snapshot {
+        if let Some(commit) = &snapshot.commit {
+            self.after_digit = commit.ends_with(|c: char| c.is_ascii_digit());
+        }
         with_radicals(engine, snapshot)
     }
 
@@ -407,6 +428,13 @@ impl Session {
         // 沒有組字時，有全形的標點上屏全形，其他鍵都交還宿主：Backspace 刪輸入框的字、數字照打。
         if !self.composing() {
             return match key {
+                Key::Punct(c)
+                    if self.after_digit
+                        && self.options.digit_separators
+                        && punctuation::is_digit_separator(c) =>
+                {
+                    self.snapshot(engine, true, Some(Commit::plain(c.to_string())))
+                }
                 Key::Punct(c) if let Some(full) = punctuation::full_width(c) => {
                     self.snapshot(engine, true, Some(Commit::plain(full.to_string())))
                 }
@@ -640,7 +668,7 @@ impl Session {
             self.snapshot(engine, true, Some(text))
         };
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
-        with_radicals(engine, snapshot)
+        self.finish(engine, snapshot)
     }
 
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
