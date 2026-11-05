@@ -94,9 +94,38 @@ fn accessibility_label_defaults_to_the_shown_label_and_hint() {
         ]"#,
     );
     let page = &layout.variants[0].pages[0];
-    assert_eq!(page.keys[0].accessibility_label("日"), "日，a");
-    assert_eq!(page.keys[1].accessibility_label(""), "空白");
-    assert_eq!(page.keys[2].accessibility_label("月"), "月，英文 b");
+    assert_eq!(page.keys[0].accessibility_label(IDLE, "日"), "日，a");
+    assert_eq!(page.keys[1].accessibility_label(IDLE, ""), "空白");
+    assert_eq!(page.keys[2].accessibility_label(IDLE, "月"), "月，英文 b");
+}
+
+/// 組字中換了標籤的鍵，讀屏念組字中的說法：`composing` 的 `a11yLabel`，沒寫時是顯示的標籤；
+/// 鍵本身的 `a11yLabel` 說的是沒在組字時的動作，不用。
+#[test]
+fn while_composing_a_relabelled_key_is_announced_by_its_composing_label() {
+    let json = r#"[
+            { "id": "shift", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": "shift", "label": "⇧",
+              "a11yLabel": "大寫", "composing": { "label": "'詞", "a11yLabel": "分隔", "tap": { "punct": "'" } } },
+            { "id": "enter", "frame": { "x": 10, "y": 0, "w": 10, "h": 10 }, "tap": "enter", "label": "↵",
+              "a11yLabel": "換行", "composing": { "label": "確定" } },
+            { "id": "space", "frame": { "x": 20, "y": 0, "w": 10, "h": 10 }, "tap": "space",
+              "a11yLabel": "空白", "composing": { "tap": "enter" } },
+            { "id": "a", "frame": { "x": 30, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" } }
+        ]"#;
+    let layout = keys(json);
+    // JSON Schema 也收 `composing` 的 `a11yLabel`。
+    let wrapped = serde_json::to_string(&layout).unwrap();
+    qim_layout::validate(&wrapped, qim_layout::Target::default())
+        .into_layout()
+        .unwrap();
+    let page = &layout.variants[0].pages[0];
+    let (shift, enter, space) = (&page.keys[0], &page.keys[1], &page.keys[2]);
+    assert_eq!(shift.accessibility_label(IDLE, "⇧"), "大寫");
+    assert_eq!(shift.accessibility_label(COMPOSING, "'詞"), "分隔");
+    assert_eq!(shift.tap_action(COMPOSING), Action::Punct('\''));
+    assert_eq!(enter.accessibility_label(COMPOSING, "確定"), "確定");
+    // 只換動作、沒換標籤的照舊。
+    assert_eq!(space.accessibility_label(COMPOSING, ""), "空白");
 }
 
 #[test]

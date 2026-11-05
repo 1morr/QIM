@@ -629,7 +629,7 @@ impl WebLayout {
                     rotate: key.rotate,
                     z: key.z,
                     radius: key.shape.corner_radius(),
-                    a11y_label: key.accessibility_label(&label),
+                    a11y_label: key.accessibility_label(state, &label),
                     label,
                     hint: key.display_hint(state).map(str::to_owned),
                     is_shift: key.tap == Action::Shift,

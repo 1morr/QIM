@@ -7,9 +7,10 @@
 //! `.scratch/m1/evidence/27-*.png`）：字母、符號（?123）、更多符號（=\<）、數字鍵盤（12/34），
 //! 加上 Gboard 沒有的常用頁（自訂頁面的示範，長按逗號鍵進去，代替 Gboard 的表情入口）。
 
+use qim_core::SEPARATOR;
 use qim_layout::{
-    Action, Device, FORMAT, Frame, Insets, Key, Layout, LayoutVariant, Orientation, Page, Shape,
-    Size, Style, ThemeColor, When,
+    Action, Composing, Device, FORMAT, Frame, Insets, Key, Layout, LayoutVariant, Orientation,
+    Page, Shape, Size, Style, ThemeColor, When,
 };
 
 /// 寫到 `build/layouts/` 的檔名。
@@ -118,6 +119,8 @@ struct Cell {
     label_size: f64,
     /// 膠囊形（圓角是半高），Gboard 的 ?123、返回、Enter。
     pill: bool,
+    /// 組字中改用的標籤與動作。
+    composing: Option<Composing>,
 }
 
 impl Cell {
@@ -133,6 +136,7 @@ impl Cell {
             tone: Tone::Plain,
             label_size: LABEL_SIZE,
             pill: false,
+            composing: None,
         }
     }
 
@@ -245,12 +249,19 @@ fn backspace() -> Cell {
         .units(1.5)
 }
 
+/// ⇧：組字中換成分隔鍵「'詞」，送核心的分隔記號（同 Gboard 速成，M1 票 28）。
 fn shift() -> Cell {
-    Cell::new("shift", Action::Shift, Some("⇧"))
+    let mut cell = Cell::new("shift", Action::Shift, Some("⇧"))
         .spoken()
         .size(ICON_LABEL_SIZE)
         .function()
-        .units(1.5)
+        .units(1.5);
+    cell.composing = Some(Composing {
+        label: Some(format!("{SEPARATOR}詞")),
+        a11y_label: Some("分隔".into()),
+        tap: Some(Action::Punct(SEPARATOR)),
+    });
+    cell
 }
 
 fn enter() -> Cell {
@@ -546,7 +557,7 @@ fn page(id: &str, placed: Vec<Placed>, rows: f64, geometry: &Geometry, height: f
                 tap: cell.tap,
                 long_press: cell.long_press,
                 swipe: None,
-                composing: None,
+                composing: cell.composing,
             }
         })
         .collect();

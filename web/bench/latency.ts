@@ -50,7 +50,8 @@ for (const input of inputs) {
 	const times: string[] = [];
 	for (const c of input) {
 		const start = performance.now();
-		const snapshot = session.letter(c);
+		// 輸入碼裡的分隔記號是實體鍵盤的 `'`，同 `qim-bench` 的原生計時。
+		const snapshot = c === "'" ? session.punct(c) : session.letter(c);
 		for (const segment of snapshot.segments) {
 			void segment.radicals;
 			segment.free();

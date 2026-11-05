@@ -1,7 +1,9 @@
 //! 預設 Gboard 速成佈局（plan §2.6）：由排列算出，經 `qim-layout` 讀回與點擊。
 
 use qim_databuild::gboard;
-use qim_layout::{Action, Device, Frame, Layout, LayoutVariant, Orientation, Page, check_builtin};
+use qim_layout::{
+    Action, Device, Frame, KeyState, Layout, LayoutVariant, Orientation, Page, check_builtin,
+};
 
 fn layout() -> Layout {
     // 經過 JSON：網頁讀的是寫出去的檔。
@@ -219,6 +221,19 @@ fn letters_page_matches_gboard_quick() {
             ]
         );
         assert_eq!(key(letters, "shift").tap, Action::Shift);
+        // 組字中 ⇧ 換成分隔鍵「'詞」（同 Gboard 速成，M1 票 28），送核心的分隔記號。
+        let composing = KeyState {
+            composing: true,
+            ..KeyState::default()
+        };
+        let shift = key(letters, "shift");
+        assert_eq!(shift.display_label(composing, |_| None), "'詞");
+        assert_eq!(
+            shift.tap_action(composing),
+            Action::Punct(qim_core::SEPARATOR)
+        );
+        assert_eq!(shift.accessibility_label(composing, "'詞"), "分隔");
+        assert_eq!(shift.tap_action(KeyState::default()), Action::Shift);
         assert_eq!(key(letters, "space").label.as_deref(), Some("速成"));
         assert_eq!(key(letters, "space").a11y_label.as_deref(), Some("空白"));
         // 逗號、句號送核心的標點鍵（全形、半形由核心決定，同實體鍵盤）。
