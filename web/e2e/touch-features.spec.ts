@@ -196,6 +196,35 @@ test("觸控點「日」「。」讀回「日。」；組字中點「。」先�
 	await expect(page.getByTestId("composition")).toHaveText("");
 });
 
+// 數字後半形（M1 票 26）在觸控上一致：數字列、符號頁的數字直接輸出文字，核心也要記得前一字是數字。
+test("觸控點數字列「3」、句號鍵、「5」讀回「3.5」；「1」「，」讀回「1，」", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await page.getByRole("checkbox", { name: "數字列" }).check();
+	await tapKeys(page, ["3", "。", "5"]);
+	await expect(text).toHaveValue("3.5");
+	await tapKeys(page, ["1", "，"]);
+	await expect(text).toHaveValue("3.51，");
+});
+
+test("符號頁的「3」「.」「5」讀回「3.5」；打了字之後的「.」是全形", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await tapKeys(page, [
+		"to-symbols",
+		"3",
+		".",
+		"5",
+		"to-letters",
+		"a",
+		"space",
+		"。",
+	]);
+	await expect(text).toHaveValue("3.5日。");
+});
+
 test("英文直通時觸控的標點照實體鍵盤輸入半形", async ({ page }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	await text.focus();
