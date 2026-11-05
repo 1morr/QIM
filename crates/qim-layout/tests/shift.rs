@@ -84,14 +84,12 @@ fn while_shifted_letter_keys_show_and_type_the_capital_letter_without_hint() {
 }
 
 #[test]
-fn once_wears_off_after_a_letter_key_but_lock_and_other_keys_keep_it() {
-    let layout = layout();
-    let keys = &layout.variants[0].pages[0].keys;
-    let (letter, space) = (&keys[0], &keys[3]);
-    assert_eq!(Shift::Once.after_key(letter), Shift::Off);
-    assert_eq!(Shift::Locked.after_key(letter), Shift::Locked);
-    assert_eq!(Shift::Once.after_key(space), Shift::Once);
-    assert_eq!(Shift::Off.after_key(letter), Shift::Off);
+fn once_wears_off_after_any_other_key_but_lock_keeps_it() {
+    // 照 Android 模擬器上的 Gboard 速成實測（M1 票 27b）：開一次的 Shift 打了字母、逗號、句號、
+    // 空白、刪除或切頁都解除；鎖定的都不解除。
+    assert_eq!(Shift::Once.after_other_key(), Shift::Off);
+    assert_eq!(Shift::Locked.after_other_key(), Shift::Locked);
+    assert_eq!(Shift::Off.after_other_key(), Shift::Off);
 }
 
 #[test]

@@ -244,11 +244,12 @@ impl Shift {
         }
     }
 
-    /// 點或長按了 `key`（不是 Shift 鍵）之後的狀態：開一次的打完字母鍵就解除，鎖定與其他鍵不變。
-    pub fn after_key(self, key: &Key) -> Shift {
-        match (self, &key.tap) {
-            (Shift::Once, Action::Letter(_)) => Shift::Off,
-            _ => self,
+    /// 點或長按了 Shift 以外的鍵之後的狀態：開一次的解除，鎖定不變。照 Gboard 速成實測，字母、
+    /// 標點、空白、刪除、切頁都算（M1 票 27b）。
+    pub fn after_other_key(self) -> Shift {
+        match self {
+            Shift::Once => Shift::Off,
+            other => other,
         }
     }
 

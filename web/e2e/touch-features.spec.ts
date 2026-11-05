@@ -159,6 +159,25 @@ test("點一下 Shift：字母鍵換成大寫，點「日」上屏 A，打完自
 	await expect(page.getByTestId("composition")).toHaveText("日");
 });
 
+// 照 Android 模擬器上的 Gboard 速成實測（M1 票 27b）：開一次的 Shift 被任何別的鍵解除，鎖定的不會。
+test("開一次的 Shift 打了逗號或切頁就解除；鎖定的打了逗號、切頁仍鎖定", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const shift = page.getByTestId("key-shift");
+	await tapKeys(page, ["shift", "，"]);
+	await expect(shift).toHaveAttribute("data-shift", "off");
+	await expect(page.getByTestId("key-a")).toHaveText("日a");
+	await tapKeys(page, ["shift", "to-symbols", "to-letters"]);
+	await expect(shift).toHaveAttribute("data-shift", "off");
+	await tapKeys(page, ["a", "space"]);
+	await expect(text).toHaveValue("，日");
+	await tapKeys(page, ["shift", "shift", "，", "to-symbols", "to-letters"]);
+	await expect(shift).toHaveAttribute("data-shift", "locked");
+	await tapKeys(page, ["a"]);
+	await expect(text).toHaveValue("，日，A");
+});
+
 // 照 Gboard：大寫字母比字根大得多（M1 票 27b）。
 test("Shift 開著時字母鍵的大寫字母比字根大，關掉後回到原本的字級", async ({
 	page,

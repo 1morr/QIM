@@ -262,11 +262,10 @@ impl WebSession {
     ) -> Result<WebSnapshot, JsError> {
         let key = layout.key(index)?;
         let action = key.tap_action(self.key_state(layout));
-        let after = layout.shift.after_key(key);
         let snapshot = self.perform(layout, action.clone());
         layout.shift = match action {
             Action::Shift => layout.shift.after_shift_tap(quick_repeat),
-            _ => after,
+            _ => layout.shift.after_other_key(),
         };
         Ok(snapshot)
     }
@@ -284,9 +283,8 @@ impl WebSession {
             key.long_press.get(choice).cloned().ok_or_else(|| {
                 JsError::new(&format!("鍵 {} 的長按清單沒有第 {choice} 個", key.id))
             })?;
-        let after = layout.shift.after_key(key);
         let snapshot = self.perform(layout, action);
-        layout.shift = after;
+        layout.shift = layout.shift.after_other_key();
         Ok(snapshot)
     }
 
