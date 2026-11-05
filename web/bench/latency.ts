@@ -6,7 +6,7 @@
 // 用網頁同一份綁定（`web/src/wasm/`）；每鍵計時含網頁畫組字與候選要讀的欄位。
 
 import { readFileSync } from "node:fs";
-import { initSync, Session, separator } from "../src/wasm/qim_wasm.js";
+import { initSync, Session } from "../src/wasm/qim_wasm.js";
 
 const USAGE =
 	"用法：node bench/latency.ts <資料包路徑>…（速成方案必給，詞庫、語言模型、英文選給），stdin 一行一個輸入碼";
@@ -45,14 +45,13 @@ const inputs = readFileSync(0, "utf8")
 	.split("\n")
 	.filter((line) => line.length > 0);
 
-const SEPARATOR = separator();
 const lines = [`Node ${process.version}`];
 for (const input of inputs) {
 	const times: string[] = [];
 	for (const c of input) {
 		const start = performance.now();
-		// 輸入碼裡的分隔記號送標點鍵（`Key::for_input`），同 `qim-bench` 的原生計時。
-		const snapshot = c === SEPARATOR ? session.punct(c) : session.letter(c);
+		// 分隔記號送標點鍵（`Key::for_input`），同 `qim-bench` 的原生計時。
+		const snapshot = session.inputChar(c);
 		for (const segment of snapshot.segments) {
 			void segment.radicals;
 			segment.free();

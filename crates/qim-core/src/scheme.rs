@@ -45,11 +45,11 @@ impl Scheme {
         code.chars().all(|c| self.alphabet.contains(c))
     }
 
-    /// `input` 是中文組字打得出的輸入碼：方案的鍵，中間夾著分隔記號；分隔記號不在開頭、
-    /// 不連著兩個（組字中這樣按會吃下不動作）。臨時英文回中文組字時用。
+    /// `input` 是中文組字打得出的輸入碼：方案的鍵，中間夾著分隔記號，不連著兩個（組字中
+    /// 連按會吃下不動作）。臨時英文回中文組字時用；英文由組字的輸入碼起頭、只從尾端增刪，
+    /// 所以不會以分隔記號開頭。
     pub(crate) fn composes(&self, input: &str) -> bool {
-        !input.starts_with(SEPARATOR)
-            && !input.contains(&format!("{SEPARATOR}{SEPARATOR}"))
+        !input.contains(&format!("{SEPARATOR}{SEPARATOR}"))
             && self.spells(&without_separators(input))
     }
 }

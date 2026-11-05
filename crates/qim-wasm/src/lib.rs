@@ -123,6 +123,13 @@ impl WebSession {
         self.handle(Key::Letter(c))
     }
 
+    /// 打出輸入碼裡的字元 `c`（`Key::for_input`：分隔記號送標點鍵，其餘送字母）；照輸入碼
+    /// 重打一次組字時用（WebAssembly 的每鍵計時）。
+    #[wasm_bindgen(js_name = inputChar)]
+    pub fn input_char(&mut self, c: char) -> WebSnapshot {
+        self.handle(Key::for_input(c))
+    }
+
     /// 數字、字母、空白以外的可見 ASCII 字元。
     pub fn punct(&mut self, c: char) -> WebSnapshot {
         self.handle(Key::Punct(c))
@@ -430,12 +437,6 @@ impl From<Snapshot> for WebSnapshot {
 #[wasm_bindgen(js_name = pageSize)]
 pub fn page_size() -> usize {
     qim_core::PAGE_SIZE
-}
-
-/// 分隔記號（`qim_core::SEPARATOR`）：照輸入碼重打一次時，它要送 [`WebSession::punct`]。
-#[wasm_bindgen]
-pub fn separator() -> String {
-    qim_core::SEPARATOR.to_string()
 }
 
 /// 組字的一段（`qim_core::Segment`）。JS 端叫 `Segment`。
