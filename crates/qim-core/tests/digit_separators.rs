@@ -188,3 +188,23 @@ fn tapping_a_candidate_with_nothing_composed_does_not_end_the_number() {
     ime.type_keys(".5");
     assert_eq!(ime.text, "3.5");
 }
+
+#[test]
+fn an_arrow_key_passed_to_the_host_ends_the_number() {
+    // 不學 Rime（它不記方向鍵）：游標已離開數字（brief §4.7）。
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    assert!(!ime.press(Key::Left).handled);
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3。");
+}
+
+#[test]
+fn a_digit_typed_in_english_counts_after_switching_back() {
+    let mut ime = Ime::new();
+    ime.press(Key::ToggleAscii(ShiftKey::Right));
+    ime.type_keys("3");
+    ime.press(Key::ToggleAscii(ShiftKey::Right));
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3.");
+}

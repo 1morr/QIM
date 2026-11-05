@@ -625,6 +625,11 @@ async function start(): Promise<void> {
 		}
 		const key = toKey(event, shown.composing, shown.inlineAscii);
 		if (!key) {
+			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心，數字後半形才
+			// 知道前一個字不一定是數字了（brief §4.7）。沒有組字時核心不吃、不動作。
+			if (!shown.composing) {
+				session.other().free();
+			}
 			return;
 		}
 		// 組字中按 Tab 切換字根提示（brief §4.3）；核心本來就吃下不動作，不必轉給它。

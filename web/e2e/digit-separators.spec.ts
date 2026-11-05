@@ -55,3 +55,15 @@ test("留碼接英文時數字與標點照原樣接在英文後", async ({ page 
 	await page.keyboard.press("Enter");
 	await expect(text).toHaveValue("anr3.5,0:1");
 });
+
+test("數字後按了留給瀏覽器的組合鍵（Ctrl+B 移游標）就不算緊接在數字後", async ({
+	page,
+}) => {
+	const { text } = await ready(page);
+	await text.focus();
+	await page.keyboard.type("3");
+	await page.keyboard.press("Control+KeyB");
+	await page.keyboard.type(".");
+	await expect(text).not.toHaveValue(/\./);
+	await expect(text).toHaveValue(/。/);
+});

@@ -139,7 +139,7 @@ pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit
 pub enum ShiftKey { Left, Right }
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub shift_switch: ShiftSwitch, pub digit_separators: bool }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub shift_switch: ShiftSwitch }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）

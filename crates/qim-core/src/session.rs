@@ -75,7 +75,7 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：無痕只影響學習。
+    /// 兩份選項列出的候選相同：只有簡體與英文候選影響候選，無痕、Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified && self.english_candidates == other.english_candidates
     }
@@ -300,8 +300,7 @@ impl Session {
         } else {
             self.snapshot(engine, false, None)
         };
-        self.note_commit(&snapshot);
-        with_radicals(engine, snapshot)
+        self.finish(engine, snapshot)
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有
@@ -403,16 +402,16 @@ impl Session {
         if !snapshot.handled {
             self.after_digit = matches!(key, Key::Digit(_));
         }
-        self.note_commit(&snapshot);
-        with_radicals(engine, snapshot)
+        self.finish(engine, snapshot)
     }
 
-    /// 記下這次上屏的字是不是以半形數字結尾（[`Session::after_digit`]）；沒上屏時不變，同
-    /// librime 的 commit history。
-    fn note_commit(&mut self, snapshot: &Snapshot) {
+    /// 會上屏的公開方法回傳前都經過這裡：記下上屏的字是不是以半形數字結尾
+    /// （[`Session::after_digit`]，沒上屏時不變，同 librime 的 commit history），再補分段的字根。
+    fn finish(&mut self, engine: &Engine, snapshot: Snapshot) -> Snapshot {
         if let Some(commit) = &snapshot.commit {
             self.after_digit = commit.ends_with(|c: char| c.is_ascii_digit());
         }
+        with_radicals(engine, snapshot)
     }
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
@@ -675,9 +674,8 @@ impl Session {
         } else {
             self.snapshot(engine, true, Some(text))
         };
-        self.note_commit(&snapshot);
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
-        with_radicals(engine, snapshot)
+        self.finish(engine, snapshot)
     }
 
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
