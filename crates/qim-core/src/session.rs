@@ -537,7 +537,7 @@ impl Session {
 
     /// 切中英（單按 Shift，brief §4.3），照 Rime `ascii_composer`：沒有組字時只切換；組字中
     /// 依 [`ShiftSwitch`] 先上屏整個組字（`commit_text`）或留碼接英文（`inline_ascii`）。
-    /// 臨時英文中按留碼的 Shift 照目前發佈版 librime（≤ 1.17.0）：英文整串當中文的輸入碼重新
+    /// 臨時英文中按留碼的 Shift 照 librime 1.17.0：英文整串當中文的輸入碼重新
     /// 組字；英文含方案字母與分隔記號以外的字元時中文組字裝不下，和另一邊一樣上屏英文。兩種都回中文。
     fn toggle_ascii(&mut self, engine: &Engine, user: &mut UserModel, shift: ShiftKey) -> Snapshot {
         let keeps_code = self.options.shift_switch.keeps_code(shift);
@@ -573,7 +573,7 @@ impl Session {
         self.snapshot(engine, true, None)
     }
 
-    /// 臨時英文中的鍵，照目前發佈版 librime `ascii_composer`（≤ 1.17.0）：可見字元與空白接在英文
+    /// 臨時英文中的鍵，照 librime 1.17.0 的 `ascii_composer`：可見字元與空白接在英文
     /// 後面（數字、`-` / `=` 也是字元）；Enter 上屏英文；退格刪光或 Esc 放棄。三種都回中文。
     /// 其他鍵吃下不動作。
     fn handle_inline(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
