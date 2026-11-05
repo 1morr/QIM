@@ -147,10 +147,11 @@ fn digits_and_punctuation_in_inline_english_stay_as_typed() {
     let mut ime = Ime::new();
     ime.type_keys("a");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
-    ime.type_keys("3.5,0:1");
+    // 空白也接進英文（票 25b），空白後的數字與標點同樣照原樣。
+    ime.type_keys("3.5,0 1:2.");
     let snapshot = ime.press(Key::Enter);
-    assert_eq!(snapshot.commit.as_deref(), Some("a3.5,0:1"));
-    assert_eq!(ime.text, "a3.5,0:1");
+    assert_eq!(snapshot.commit.as_deref(), Some("a3.5,0 1:2."));
+    assert_eq!(ime.text, "a3.5,0 1:2.");
 }
 
 #[test]

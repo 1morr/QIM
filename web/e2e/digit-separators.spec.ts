@@ -51,9 +51,10 @@ test("留碼接英文時數字與標點照原樣接在英文後", async ({ page 
 	await page.keyboard.type("anr");
 	// Playwright 的 `ShiftLeft` 是左 Shift，預設留碼接英文（brief §4.3）。
 	await page.keyboard.press("ShiftLeft");
-	await page.keyboard.type("3.5,0:1");
+	// 空白也接進英文（票 25b）。
+	await page.keyboard.type("3.5,0 1:2.");
 	await page.keyboard.press("Enter");
-	await expect(text).toHaveValue("anr3.5,0:1");
+	await expect(text).toHaveValue("anr3.5,0 1:2.");
 });
 
 test("數字後按了留給瀏覽器的組合鍵（Ctrl+B 移游標）就不算緊接在數字後", async ({
