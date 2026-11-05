@@ -432,6 +432,12 @@ pub fn page_size() -> usize {
     qim_core::PAGE_SIZE
 }
 
+/// 分隔記號（`qim_core::SEPARATOR`）：照輸入碼重打一次時，它要送 [`WebSession::punct`]。
+#[wasm_bindgen]
+pub fn separator() -> String {
+    qim_core::SEPARATOR.to_string()
+}
+
 /// 組字的一段（`qim_core::Segment`）。JS 端叫 `Segment`。
 #[wasm_bindgen(js_name = Segment, getter_with_clone)]
 #[derive(Clone)]
@@ -632,7 +638,7 @@ impl WebLayout {
                     a11y_label: key.accessibility_label(state, &label),
                     label,
                     hint: key.display_hint(state).map(str::to_owned),
-                    is_shift: key.tap == Action::Shift,
+                    is_shift: key.tap_action(state) == Action::Shift,
                     fill_light: style.fill.as_ref().map(|c| c.light.clone()),
                     fill_dark: style.fill.map(|c| c.dark),
                     label_color_light: style.label_color.as_ref().map(|c| c.light.clone()),
@@ -706,7 +712,7 @@ pub struct WebLayoutKey {
     /// 角標（[`qim_layout::Key::display_hint`]），Shift 開著時字母鍵沒有。
     #[wasm_bindgen(readonly)]
     pub hint: Option<String>,
-    /// 是不是 Shift 鍵；網頁依 [`WebLayout::shift`] 畫它的狀態。
+    /// 現在點下去是不是 Shift（組字中 ⇧ 是分隔鍵，不是）；網頁依 [`WebLayout::shift`] 畫它的狀態。
     #[wasm_bindgen(readonly, js_name = isShift)]
     pub is_shift: bool,
     #[wasm_bindgen(readonly, js_name = a11yLabel)]

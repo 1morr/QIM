@@ -24,7 +24,7 @@
 | 重排 | `Rerank` | 譯詞 | `Gloss` |
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
 | 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
-| 英文直通 / 臨時英文 | `ascii` / `inline` | | |
+| 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
 
 ## 1. 架構總覽
 

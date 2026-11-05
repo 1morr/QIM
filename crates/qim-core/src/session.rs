@@ -116,6 +116,18 @@ pub enum Key {
     Other,
 }
 
+impl Key {
+    /// 打出輸入碼裡的字元 `c` 要按的鍵（實體鍵盤）：分隔記號是 `Punct`，其餘是 `Letter`。
+    /// 照輸入碼重打一次組字時用（基準、測試）。
+    pub fn for_input(c: char) -> Key {
+        if c == SEPARATOR {
+            Key::Punct(c)
+        } else {
+            Key::Letter(c)
+        }
+    }
+}
+
 /// 組字狀態。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Composition {
@@ -527,8 +539,7 @@ impl Session {
             let scheme = engine.scheme();
             let Some(english) = self
                 .inline
-                // 分隔記號也是中文組字打得出的（brief §4.3）。
-                .take_if(|english| keeps_code && scheme.spells(&without_separators(english)))
+                .take_if(|english| keeps_code && scheme.composes(english))
             else {
                 return self.commit_inline(engine, Commit::plain(String::new()));
             };

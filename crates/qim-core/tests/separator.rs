@@ -76,12 +76,7 @@ impl Ime {
     fn type_keys(&mut self, typed: &str) -> Snapshot {
         let mut snapshot = Snapshot::default();
         for c in typed.chars() {
-            let key = if c == SEPARATOR {
-                Key::Punct(c)
-            } else {
-                Key::Letter(c)
-            };
-            snapshot = self.press(key);
+            snapshot = self.press(Key::for_input(c));
         }
         snapshot
     }
@@ -277,4 +272,29 @@ fn separators_typed_in_inline_english_split_the_chinese_composition_on_return() 
     assert_eq!(back.commit, None);
     assert_eq!(back.composition.input, "mi'r");
     assert_eq!(texts(&back)[0], "歹口");
+}
+
+/// 臨時英文裡連打兩個 `'` 時中文組字裝不下（組字中不能連著兩個分隔記號），按回留碼的
+/// Shift 上屏英文，同英文含其他標點時。
+#[test]
+fn inline_english_with_two_separators_in_a_row_is_committed_on_return() {
+    let mut ime = Ime::new();
+    ime.type_keys("mi");
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    ime.type_keys("''r");
+    let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert_eq!(back.commit.as_deref(), Some("mi''r"));
+    assert_eq!(back.composition.input, "");
+}
+
+/// QIM 沒有輸入碼內的游標：有目前分段時按 `'` 和打字母一樣回到整串，接在輸入碼最後。
+#[test]
+fn a_separator_with_a_focused_segment_goes_to_the_end_like_a_letter() {
+    let mut ime = Ime::new();
+    ime.type_keys("mi'r");
+    let focused = ime.press(Key::Left);
+    assert_eq!(focused.composition.focus, 1);
+    let shown = ime.press(Key::Punct(SEPARATOR));
+    assert_eq!(shown.composition.input, "mi'r'");
+    assert_eq!(shown.composition.focus, shown.composition.segments.len());
 }

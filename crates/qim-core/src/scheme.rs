@@ -44,6 +44,14 @@ impl Scheme {
     pub fn spells(&self, code: &str) -> bool {
         code.chars().all(|c| self.alphabet.contains(c))
     }
+
+    /// `input` 是中文組字打得出的輸入碼：方案的鍵，中間夾著分隔記號；分隔記號不在開頭、
+    /// 不連著兩個（組字中這樣按會吃下不動作）。臨時英文回中文組字時用。
+    pub(crate) fn composes(&self, input: &str) -> bool {
+        !input.starts_with(SEPARATOR)
+            && !input.contains(&format!("{SEPARATOR}{SEPARATOR}"))
+            && self.spells(&without_separators(input))
+    }
 }
 
 /// 方案要搭配的其他資料包的 id（方案檔的 `[packs]`）。

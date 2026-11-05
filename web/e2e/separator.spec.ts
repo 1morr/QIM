@@ -124,4 +124,21 @@ test.describe("觸控", () => {
 		await tapKeys(page, ["shift"]);
 		await expect(shift).toHaveAttribute("data-shift", "once");
 	});
+
+	test("Shift 開著時用實體鍵盤開始組字，⇧ 仍換成「'詞」並送分隔記號", async ({
+		page,
+	}) => {
+		const { composition } = ui(page);
+		const shift = page.getByTestId("key-shift");
+		await tapKeys(page, ["shift"]);
+		await expect(shift).toHaveAttribute("data-shift", "once");
+		await ui(page).text.focus();
+		await page.keyboard.type("mi");
+		await expect(composition).toHaveText("一戈");
+		await expect(shift).toHaveText("'詞");
+		await expect(shift).toHaveAttribute("aria-pressed", "false");
+		await expect(shift).toHaveAttribute("aria-label", "分隔");
+		await tapKeys(page, ["shift"]);
+		await expect(composition).toHaveText("一戈'");
+	});
 });

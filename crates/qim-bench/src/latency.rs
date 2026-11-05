@@ -9,9 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-use qim_core::{Engine, Session, UserModel};
-
-use crate::score::key_of;
+use qim_core::{Engine, Key, Session, UserModel};
 
 /// 組字已有這麼多碼時的按鍵另成一組：連打變長時延遲會不會跟著長（票 12 的延遲預算要看它）。
 /// 只算每個輸入的第 20 鍵起：前 19 鍵的組字和短輸入一樣短，算進來會稀釋。
@@ -127,7 +125,7 @@ fn native(engine: &Engine, inputs: &[String]) -> Timing {
                 .chars()
                 .map(|c| {
                     let start = Instant::now();
-                    let snapshot = session.handle(engine, &mut user, key_of(c));
+                    let snapshot = session.handle(engine, &mut user, Key::for_input(c));
                     let ms = start.elapsed().as_secs_f64() * 1000.0;
                     drop(black_box(snapshot));
                     ms

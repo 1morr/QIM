@@ -154,6 +154,10 @@ export function mountKeyboard(
 		if (key.isShift) {
 			element.dataset.shift = layout.shift;
 			element.setAttribute("aria-pressed", String(layout.shift !== "off"));
+		} else if (element.dataset.shift !== undefined) {
+			// 組字中 ⇧ 換成分隔鍵：Shift 開著也不畫成按下。
+			element.dataset.shift = "off";
+			element.setAttribute("aria-pressed", "false");
 		}
 	}
 

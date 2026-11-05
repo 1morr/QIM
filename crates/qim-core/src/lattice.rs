@@ -181,9 +181,9 @@ pub(crate) fn candidates(
         return Vec::new();
     }
     // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間還有分隔記號時查不到，字詞因此不跨過它。
-    let code = input.trim_end_matches(SEPARATOR);
+    let lookup_code = input.trim_end_matches(SEPARATOR);
     let mut full: Vec<(f64, CandidateSpan)> = engine
-        .span(user, code)
+        .span(user, lookup_code)
         .into_iter()
         .map(|(score, text)| (score, CandidateSpan::single(text, n)))
         .collect();
@@ -207,11 +207,11 @@ pub(crate) fn candidates(
 
     let full = full.into_iter().map(|(_, span)| span);
     let extension = engine
-        .extension(code)
+        .extension(lookup_code)
         .map(|c| CandidateSpan::single(c.to_string(), n));
     // 觸發詞是整串的使用者詞，由排位規則 1 移到首選；它的碼多半不是整串，lattice 裡沒有。
     let triggered = user
-        .triggered(&engine.scheme().id, code)
+        .triggered(&engine.scheme().id, lookup_code)
         .into_iter()
         .map(|text| CandidateSpan::single(text.to_string(), n));
     let prefixes = (1..n)
@@ -251,7 +251,8 @@ pub(crate) fn candidates(
         engine,
         user,
         input,
-        code: without_separators(input),
+        lookup_code,
+        user_code: without_separators(input),
         free: list,
         pinned: BTreeMap::new(),
     };
@@ -275,8 +276,10 @@ struct Ranked<'a> {
     user: &'a UserModel,
     /// 這列候選的輸入碼，含分隔記號。
     input: &'a str,
-    /// `input` 去掉分隔記號：規則比對的碼，同學習計數記的碼（plan §2.4）。
-    code: String,
+    /// 查碼表、詞庫與觸發詞的碼：`input` 去掉結尾的分隔記號。
+    lookup_code: &'a str,
+    /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（plan §2.4）。
+    user_code: String,
     /// 還沒排定的候選，依原本的順序。
     free: Vec<CandidateSpan>,
     /// 已由前面的規則排定的：位置 → 候選。
@@ -303,7 +306,9 @@ impl Ranked<'_> {
         tick: impl Fn(&UserModel, &str, &str, &str) -> Option<u64>,
     ) -> Option<usize> {
         self.free_full()
-            .filter_map(|(i, c)| Some((tick(self.user, self.scheme(), &self.code, &c.text)?, i)))
+            .filter_map(|(i, c)| {
+                Some((tick(self.user, self.scheme(), &self.user_code, &c.text)?, i))
+            })
             .max()
             .map(|(_, i)| i)
     }
@@ -369,8 +374,7 @@ impl Ranked<'_> {
 fn triggered_first(ranked: &mut Ranked) {
     let first = ranked
         .user
-        // 和加進候選列時同一個碼：中間有分隔記號時沒有觸發詞。
-        .triggered(ranked.scheme(), ranked.input.trim_end_matches(SEPARATOR))
+        .triggered(ranked.scheme(), ranked.lookup_code)
         .into_iter()
         .next();
     let at = first.and_then(|text| ranked.free_full().find(|(_, c)| c.text == text));
@@ -395,7 +399,7 @@ fn chosen_twice_first(ranked: &mut Ranked) {
 fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
     let (user, scheme, input) = (ranked.user, ranked.scheme(), ranked.input);
     let top_once = ranked.free.first().is_some_and(|c| {
-        c.len == input.len() && user.whole_commits(scheme, &ranked.code, &c.text) == 1
+        c.len == input.len() && user.whole_commits(scheme, &ranked.user_code, &c.text) == 1
     });
     if !top_once {
         return;

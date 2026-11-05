@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use qim_core::{Candidate, Engine, Key, Options, SEPARATOR, Session, Snapshot, UserModel};
+use qim_core::{Candidate, Engine, Key, Options, Session, Snapshot, UserModel};
 
 use crate::items::{Item, Unit};
 
@@ -237,16 +237,6 @@ pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> L
     }
 }
 
-/// 輸入碼的一個字元要按的鍵：分隔記號是實體鍵盤的 `'`（`Key::Punct`），其餘是字母。
-/// `fixed.tsv` 的題目可以含分隔記號（網頁的「回報」照打的輸入碼記）。
-pub(crate) fn key_of(c: char) -> Key {
-    if c == SEPARATOR {
-        Key::Punct(c)
-    } else {
-        Key::Letter(c)
-    }
-}
-
 fn top_of(snapshot: &Snapshot) -> String {
     snapshot
         .candidates
@@ -265,7 +255,7 @@ fn type_through(engine: &Engine, units: &[Unit]) -> (String, usize) {
     let (mut top, mut done_chars, mut jitter) = (String::new(), 0, 0);
     for unit in units {
         for c in unit.code.chars() {
-            let next = top_of(&session.handle(engine, &mut user, key_of(c)));
+            let next = top_of(&session.handle(engine, &mut user, Key::for_input(c)));
             let settled: String = top.chars().take(done_chars).collect();
             if !next.starts_with(&settled) {
                 jitter += 1;
@@ -340,7 +330,7 @@ fn simulate(engine: &Engine, learning: Option<&mut UserModel>, units: &[Unit]) -
             };
             let end = if one_by_one { next + 1 } else { units.len() };
             for c in units[next..end].iter().flat_map(|u| u.code.chars()) {
-                snapshot = press(key_of(c), &mut typing);
+                snapshot = press(Key::for_input(c), &mut typing);
             }
             if snapshot.composition.input.is_empty() {
                 return typing;

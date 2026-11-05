@@ -293,8 +293,7 @@ proptest! {
             let mut fresh_user = user.clone();
             let mut typed = Snapshot::default();
             for c in composition.unselected_input().chars() {
-                let key = if c == SEPARATOR { Key::Punct(c) } else { Key::Letter(c) };
-                typed = fresh.handle(&engine, &mut fresh_user, key);
+                typed = fresh.handle(&engine, &mut fresh_user, Key::for_input(c));
             }
             prop_assert_eq!(&composition.segments[selected..], &typed.composition.segments[..], "{:?} 後", action);
         }
