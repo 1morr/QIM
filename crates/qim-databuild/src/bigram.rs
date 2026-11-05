@@ -8,6 +8,8 @@
 //! - `P_cont(w) = (N1+(•w) + 1) ÷ (N1+(••) + V)`，`P_start(w) = (c(w) + 1) ÷ (N + V)`，
 //!   `V` 是連打字集的字數；加一讓沒出現過的字也有機率。
 //! - 剪枝：只留 `c(v,w) ≥` [`MIN_COUNT`] 的 bigram，`α(v)` 重算成讓 `Σ_w P(w | v) = 1`。
+//! - 並存寫法（`common_forms::BothForms`）：次數歸到代表寫法再訓練，訓練完把代表寫法的 unigram 與
+//!   含它的 bigram 照抄給另一種寫法，兩種寫法的機率相同（brief §4.1）。
 //!
 //! 浮點運算都依字的順序做，同樣的語料算出位元組相同的資料包。
 
@@ -16,6 +18,8 @@ use std::fmt;
 use std::io::{self, BufRead};
 
 use qim_core::{CharModel, LanguageModel};
+
+use crate::common_forms::BothForms;
 
 /// 剪枝門檻：bigram 出現至少這麼多次才留下（plan §4.3：資料包 ≤ [`MAX_BYTES`]）。
 pub const MIN_COUNT: u64 = 2;
@@ -57,8 +61,10 @@ pub struct Summary {
     pub bigrams: usize,
     /// 剪枝門檻：留下次數 ≥ 它的 bigram。
     pub min_count: u64,
-    /// 剪枝後留下的 bigram 數。
+    /// 剪枝後留下的 bigram 數，不含照抄給並存寫法的。
     pub kept: usize,
+    /// 照抄給並存寫法另一種寫法的 bigram 數。
+    pub copied: usize,
     /// Kneser-Ney 的折扣 `D`。
     pub discount: f64,
 }
@@ -67,20 +73,32 @@ impl fmt::Display for Summary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "bigram：{} 字、不重複的相鄰字 {} 對，留下次數 ≥ {} 的 {} 對（D = {:.3}）",
-            self.characters, self.bigrams, self.min_count, self.kept, self.discount
+            "bigram：{} 字、不重複的相鄰字 {} 對，留下次數 ≥ {} 的 {} 對（D = {:.3}），\
+             並存寫法另抄 {} 對",
+            self.characters, self.bigrams, self.min_count, self.kept, self.discount, self.copied
         )
     }
 }
 
 /// 由次數訓練出語言模型；`vocabulary` 是連打字集的字數（`V`），只留次數 ≥ `min_count` 的
-/// bigram（建置用 [`MIN_COUNT`]）。
-pub fn train(counter: &Counter, vocabulary: usize, min_count: u64) -> (LanguageModel, Summary) {
-    let mut unigrams: Vec<(char, u64)> = counter.unigrams.iter().map(|(&c, &n)| (c, n)).collect();
-    unigrams.sort_unstable();
-    let mut bigrams: Vec<((char, char), u64)> =
-        counter.bigrams.iter().map(|(&p, &n)| (p, n)).collect();
-    bigrams.sort_unstable();
+/// bigram（建置用 [`MIN_COUNT`]）；`both` 的另一種寫法歸到代表寫法計數，訓練完照抄。
+pub fn train(
+    counter: &Counter,
+    vocabulary: usize,
+    min_count: u64,
+    both: &BothForms,
+) -> (LanguageModel, Summary) {
+    let to = |c: char| both.representative(c);
+    let mut unigrams: BTreeMap<char, u64> = BTreeMap::new();
+    for (&c, &n) in &counter.unigrams {
+        *unigrams.entry(to(c)).or_default() += n;
+    }
+    let unigrams: Vec<(char, u64)> = unigrams.into_iter().collect();
+    let mut merged: BTreeMap<(char, char), u64> = BTreeMap::new();
+    for (&(p, c), &n) in &counter.bigrams {
+        *merged.entry((to(p), to(c))).or_default() += n;
+    }
+    let bigrams: Vec<((char, char), u64)> = merged.into_iter().collect();
 
     let v = vocabulary as f64;
     let total: u64 = unigrams.iter().map(|(_, n)| n).sum();
@@ -117,6 +135,16 @@ pub fn train(counter: &Counter, vocabulary: usize, min_count: u64) -> (LanguageM
         mass.1 += continuation(c);
         kept.push((p, c, prob.ln()));
     }
+    // 照抄給並存寫法：前一字、後一字各自換或不換成另一種寫法。
+    let forms = |c: char| std::iter::once(c).chain(both.other(c));
+    let copies: Vec<(char, char, f64)> = kept
+        .iter()
+        .flat_map(|&(p, c, lp)| {
+            forms(p)
+                .flat_map(move |p2| forms(c).map(move |c2| (p2, c2, lp)))
+                .filter(move |&(p2, c2, _)| (p2, c2) != (p, c))
+        })
+        .collect();
 
     let model = |c: char, n: u64| {
         let (p, q) = kept_mass.get(&c).copied().unwrap_or((0.0, 0.0));
@@ -136,8 +164,15 @@ pub fn train(counter: &Counter, vocabulary: usize, min_count: u64) -> (LanguageM
         bigrams: bigrams.len(),
         min_count,
         kept: kept.len(),
+        copied: copies.len(),
         discount,
     };
-    let chars = unigrams.iter().map(|&(c, n)| (c, model(c, n)));
-    (LanguageModel::new(chars, unknown, kept), summary)
+    let chars = unigrams.iter().flat_map(|&(c, n)| {
+        let m = model(c, n);
+        forms(c).map(move |c| (c, m))
+    });
+    (
+        LanguageModel::new(chars, unknown, kept.into_iter().chain(copies)),
+        summary,
+    )
 }

@@ -59,8 +59,12 @@ pub enum CheckId {
     CorpusDeterministic,
     /// 前處理保留的粵語用字（`corpora::CANTONESE_KEPT`）在 train 的字頻都大於 0（M1 票 17b）。
     KeptCharacters,
-    /// 字形對照表（`common_forms`）換掉的香港寫法在 train 的字頻都是 0（M1 票 17b，brief §4.1）。
+    /// 字形對照表（`common_forms`）換掉的香港寫法、並存寫法的另一種寫法在 train 的字頻都是 0
+    /// （M1 票 17b、17c，brief §4.1）。
     CommonForms,
+    /// 詞庫沒有對照表換掉的寫法與反向的錯字；並存寫法的詞每種寫法都收（`verify::lexicon_forms`，
+    /// M1 票 17c）。
+    LexiconForms,
 }
 
 impl fmt::Display for CheckId {
@@ -86,6 +90,7 @@ impl fmt::Display for CheckId {
             Self::CorpusDeterministic => "語料決定性",
             Self::KeptCharacters => "前處理保留粵語用字",
             Self::CommonForms => "字形用常見寫法",
+            Self::LexiconForms => "詞庫用常見寫法",
         })
     }
 }
@@ -167,17 +172,21 @@ impl fmt::Display for LexiconSummary {
         let c = &self.counts;
         write!(
             f,
-            "詞庫：rime-essay {} 列，單字 {} 列不收；詞頻 < {} 濾掉 {} 詞、含連打字集以外的字濾掉 {} 詞；\
+            "詞庫：rime-essay {} 列，單字 {} 列不收；換成常見寫法 {} 詞（其中 {} 詞和別的詞合併）；\
+             詞頻 < {} 濾掉 {} 詞、含連打字集以外的字濾掉 {} 詞；\
              粵語口語詞表補上 {} 詞；\
-             收 {} 詞，碼 {} 個、詞條 {} 個（{} 詞的碼組合超過 {} 個，只收前 {} 個）\n\
-             字頻：{} 字（各語料 train 切分乘上權重相加）",
+             收 {} 詞，並存寫法另收 {} 種寫法；碼 {} 個、詞條 {} 個（{} 詞的碼組合超過 {} 個，只收前 {} 個）\n\
+             字頻：{} 字（各語料 train 切分乘上權重相加，並存寫法兩字共用）",
             c.entries,
             c.single_characters,
+            c.converted,
+            c.merged,
             lexicon::MIN_FREQUENCY,
             c.below_threshold,
             c.outside_continuous,
             c.colloquial,
             c.words,
+            c.spellings,
             c.codes,
             c.indexed,
             c.capped,
@@ -713,16 +722,21 @@ pub fn kept_characters(frequency: &BTreeMap<char, u64>, kept: &[char]) -> Check 
     }
 }
 
-/// `forms` 換掉的字在 `frequency`（各語料 train 乘上權重相加的字頻）都不出現：前處理確實接上了
-/// 對照表。
+/// `forms` 換掉的字與並存寫法的另一種寫法在 `frequency`（各語料 train 乘上權重相加的字頻）都不
+/// 出現：前處理確實接上了對照表。
 pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Check {
-    let pairs: Vec<String> = forms
-        .pairs()
-        .map(|(from, to)| format!("{from}→{to}"))
-        .collect();
-    let pairs = format!("{} 組（{}）", pairs.len(), pairs.join("、"));
+    let joined = |pairs: Vec<(char, char)>| {
+        let list: Vec<String> = pairs.iter().map(|(f, t)| format!("{f}→{t}")).collect();
+        format!("{} 組（{}）", list.len(), list.join("、"))
+    };
+    let both: Vec<(char, char)> = forms.both().pairs().map(|(r, o)| (o, r)).collect();
+    let mut pairs = joined(forms.pairs().collect());
+    if !both.is_empty() {
+        pairs = format!("{pairs}、並存寫法 {}", joined(both.clone()));
+    }
     let left: Vec<String> = forms
         .pairs()
+        .chain(both)
         .filter_map(|(from, _)| {
             frequency
                 .get(&from)
@@ -737,6 +751,113 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
             format!("對照表 {pairs}，換掉的寫法在 train 都沒有")
         } else {
             format!("對照表 {pairs}，換掉的寫法還在 train：{}", left.join("、"))
+        },
+    }
+}
+
+/// 單向並存寫法反過來寫出的錯字（「著」的 zhù 義項寫成「着」）：詞庫不能有。rime-essay 本身的
+/// 「顯着」（詞頻 279）是來源原有的，不列（M1 票 17c Comments）。
+pub const REVERSED_ONE_WAY: [&str; 12] = [
+    "着名",
+    "着作",
+    "着作權",
+    "原着",
+    "名着",
+    "着稱",
+    "土着",
+    "卓着",
+    "着述",
+    "着者",
+    "專着",
+    "巨着",
+];
+
+/// 詞庫（`pipeline` 建出、解回來的那份）的字形，確認建詞庫接上了 `forms`：
+/// - 沒有 `forms` 換掉的寫法，也沒有 [`REVERSED_ONE_WAY`]；
+/// - 雙向的並存寫法：含它的詞每種寫法都收、詞頻相同，兩個字的字頻相同；
+/// - 單向的：含前一個字的詞，換成後一個字的寫法也收，詞頻不低於它。
+pub fn lexicon_forms(lexicon: &Lexicon, forms: &CommonForms) -> Check {
+    let replaced: BTreeSet<char> = forms.pairs().map(|(from, _)| from).collect();
+    let both = forms.both();
+    let two_way = |c: char| both.other(c).is_some() || both.representative(c) != c;
+    let mut frequency: BTreeMap<&str, u64> = BTreeMap::new();
+    for (_, words) in lexicon.iter() {
+        for w in words {
+            frequency.insert(&w.text, w.frequency);
+        }
+    }
+    let (mut left, mut missing, mut unequal) = (vec![], vec![], vec![]);
+    let (mut with_two_way, mut with_one_way) = (0, 0);
+    for (&text, &n) in &frequency {
+        if text.chars().any(|c| replaced.contains(&c)) || REVERSED_ONE_WAY.contains(&text) {
+            left.push(text.to_string());
+        }
+        if text.chars().any(two_way) {
+            with_two_way += 1;
+            let representative: String = text.chars().map(|c| both.representative(c)).collect();
+            for spelling in both.two_way_spellings(&representative) {
+                match frequency.get(spelling.as_str()) {
+                    None => missing.push(spelling),
+                    // 每組只在代表寫法那個詞報一次。
+                    Some(&m) if m != n && text == representative => {
+                        unequal.push(format!("{text} {n}／{spelling} {m}"));
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        if text.chars().any(|c| both.also(c).is_some()) {
+            with_one_way += 1;
+            let also: String = text.chars().map(|c| both.also(c).unwrap_or(c)).collect();
+            match frequency.get(also.as_str()) {
+                None => missing.push(also),
+                Some(&m) if m < n => unequal.push(format!("{text} {n}／{also} {m}")),
+                Some(_) => {}
+            }
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    let chars: Vec<String> = both
+        .pairs()
+        .filter_map(|(r, o)| {
+            let (a, b) = (lexicon.char_frequency(r), lexicon.char_frequency(o));
+            (a != b).then(|| format!("{r} {a}、{o} {b}"))
+        })
+        .collect();
+    let few = |items: &[String]| {
+        let shown = items.iter().take(5).cloned().collect::<Vec<_>>().join("、");
+        if items.len() > 5 {
+            format!("{shown} 等 {} 個", items.len())
+        } else {
+            shown
+        }
+    };
+    let mut problems = Vec::new();
+    for (label, items) in [
+        ("不該有的寫法還在詞庫", &left),
+        ("缺", &missing),
+        ("詞頻不合", &unequal),
+        ("字頻不同", &chars),
+    ] {
+        if !items.is_empty() {
+            problems.push(format!("{label}：{}", few(items)));
+        }
+    }
+    Check {
+        id: CheckId::LexiconForms,
+        passed: problems.is_empty(),
+        detail: if problems.is_empty() {
+            format!(
+                "對照表 {} 組換掉的寫法與反向的錯字在詞庫都沒有；雙向並存寫法 {} 組：含它的詞 \
+                 {with_two_way} 個，每種寫法都收、詞頻相同，字頻相同；單向 {} 組：含它的詞 \
+                 {with_one_way} 個都另收另一種寫法",
+                replaced.len(),
+                both.pairs().count(),
+                both.one_way_pairs().count()
+            )
+        } else {
+            problems.join("；")
         },
     }
 }

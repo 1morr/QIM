@@ -73,7 +73,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 `build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻；各語料的次數乘上語料權重（和 bigram 同一個，`corpora.rs` 的 `weight`）相加後放進詞庫資料包，`Engine` 載入時用它排字序（plan §4.1、§4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
 
-`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練）、建兩次基準檔、切分與字頻的 sha256 相同；另有一項看全部語料：前處理保留的粵語用字（`corpora.rs` 的 `CANTONESE_KEPT`）在 train 的字頻都大於 0，字形對照表（`common_forms.rs`）換掉的香港寫法在 train 都不出現（確認前處理接上了對照表；表本身由轉換用的 OpenCC 查出，不另驗覆蓋）。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。換 OpenCC 或語料版本時，用 `scripts/experiments/s2hk-diff/` 重看轉換換掉了哪些字（用法在它的 README）。
+`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句的碼也要等於轉碼結果）、基準句沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練）、建兩次基準檔、切分與字頻的 sha256 相同；另有一項看全部語料：前處理保留的粵語用字（`corpora.rs` 的 `CANTONESE_KEPT`）在 train 的字頻都大於 0，字形對照表（`common_forms.rs`）換掉的香港寫法與並存寫法（`BOTH_FORMS`）的另一種寫法在 train 都不出現（確認前處理接上了對照表；表本身由轉換用的 OpenCC 查出，不另驗覆蓋）；詞庫也查一項：沒有對照表換掉的寫法與「着名」這類反向的錯字（`verify.rs` 的 `REVERSED_ONE_WAY`），含雙向並存寫法的詞每種寫法都收、詞頻相同、兩字字頻相同，含「着」的詞都另收「著」的寫法（`ONE_WAY_FORMS`）。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。換 OpenCC 或語料版本時，用 `scripts/experiments/s2hk-diff/` 重看轉換換掉了哪些字；換 rime-essay 或 OpenCC 版本時，用 `scripts/experiments/lexicon-forms/` 重看詞庫裡和常見寫法不同的字（用法在各自的 README）。
 
 ### Unihan 交叉比對
 

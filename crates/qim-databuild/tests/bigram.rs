@@ -7,12 +7,13 @@
 
 use qim_core::{LOG_PROB_STEP, LanguageModel};
 use qim_databuild::bigram::{Counter, Summary, train};
+use qim_databuild::common_forms::BothForms;
 
 fn model(min_count: u64) -> (LanguageModel, Summary) {
     let mut counter = Counter::default();
     counter.add("甲乙\n甲乙\n甲丙\n".as_bytes(), 1).unwrap();
     counter.add("乙丙\n".as_bytes(), 1).unwrap();
-    train(&counter, 4, min_count)
+    train(&counter, 4, min_count, &BothForms::default())
 }
 
 fn assert_close(actual: f64, expected_p: f64, tolerance: f64) {
@@ -39,6 +40,7 @@ fn interpolated_kneser_ney_without_pruning() {
             bigrams: 3,
             min_count: 1,
             kept: 3,
+            copied: 0,
             discount: 0.5,
         }
     );
@@ -104,7 +106,8 @@ fn corpus_weight_multiplies_the_counts() {
     once.add("甲乙\n".as_bytes(), 1).unwrap();
     let mut weighted = Counter::default();
     weighted.add("甲乙\n".as_bytes(), 2).unwrap();
-    assert_eq!(train(&once, 4, 1).0, train(&weighted, 4, 1).0);
+    let none = BothForms::default();
+    assert_eq!(train(&once, 4, 1, &none).0, train(&weighted, 4, 1, &none).0);
 }
 
 #[test]
@@ -114,7 +117,7 @@ fn training_is_deterministic() {
         counter
             .add("一二三四五六七八九十\n十九八七六五四三二一\n".as_bytes(), 1)
             .unwrap();
-        let (model, _) = train(&counter, 10, 1);
+        let (model, _) = train(&counter, 10, 1, &BothForms::default());
         qim_core::LanguageModelPack {
             id: "bigram".into(),
             model,
@@ -123,4 +126,47 @@ fn training_is_deterministic() {
         .unwrap()
     };
     assert_eq!(bytes(), bytes());
+}
+
+/// 並存寫法「丙／丁」，代表寫法是丙。
+fn with_both_forms(corpus: &str) -> (LanguageModel, Summary) {
+    let mut counter = Counter::default();
+    counter.add(corpus.as_bytes(), 1).unwrap();
+    train(
+        &counter,
+        4,
+        1,
+        &BothForms::new(&[('丙', '丁')], &[]).unwrap(),
+    )
+}
+
+#[test]
+fn both_forms_get_the_probabilities_of_the_representative() {
+    let (model, summary) = with_both_forms("甲乙\n甲乙\n甲丙\n乙丙\n丙甲\n");
+    for prev in [None, Some('甲'), Some('乙')] {
+        assert_eq!(
+            model.log_prob(prev, '丁'),
+            model.log_prob(prev, '丙'),
+            "{prev:?}"
+        );
+    }
+    assert_eq!(
+        model.log_prob(Some('丁'), '甲'),
+        model.log_prob(Some('丙'), '甲')
+    );
+    assert_eq!(
+        model.log_prob(Some('丁'), '乙'),
+        model.log_prob(Some('丙'), '乙')
+    );
+    // 甲丙、乙丙、丙甲各抄一對。
+    assert_eq!((summary.kept, summary.copied), (4, 3));
+}
+
+#[test]
+fn both_forms_are_counted_under_the_representative() {
+    // 語料寫丁，和寫丙訓練出同一個模型。
+    assert_eq!(
+        with_both_forms("甲乙\n甲丁\n乙丙\n").0,
+        with_both_forms("甲乙\n甲丙\n乙丙\n").0
+    );
 }

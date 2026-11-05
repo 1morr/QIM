@@ -19,7 +19,7 @@ by spaces) and a tab.
 - File: zh_yuewiki-20261101-pages-articles.xml.bz2 (sha256 e493dce7899884e250de0dcb208e560f6dff1e8b7970e7abdd015dc61da83126), https://dumps.wikimedia.org/zh_yuewiki/20261101/zh_yuewiki-20261101-pages-articles.xml.bz2
 - License: CC-BY-SA-4.0, https://creativecommons.org/licenses/by-sa/4.0/
 - Extraction: article text extracted from the wikitext (templates, tables, references, file links, headings and lists removed).
-- Conversion: OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms.
+- Conversion: OpenCC t2hk (Traditional to Hong Kong variant forms; the source is already Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form.
 
 ## zh-wiki.tsv
 
@@ -28,4 +28,4 @@ by spaces) and a tab.
 - File: zhwiki-20220501-pages-articles1.xml-p1p187712.bz2 (sha256 c7e1b65a7a36092ac35c2f2f2eaa2c12babf07caa223b46217f8ab6db7fea0aa), https://archive.org/download/zhwiki-20220501/zhwiki-20220501-pages-articles1.xml-p1p187712.bz2
 - License: CC-BY-SA-4.0, https://creativecommons.org/licenses/by-sa/4.0/
 - Extraction: article text extracted from the wikitext (templates, tables, references, file links, headings and lists removed).
-- Conversion: OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms.
+- Conversion: OpenCC s2hk (Simplified to Hong Kong Traditional Chinese), then Hong Kong variant forms written in their common forms, and characters with two kept forms (such as 裏/裡) written in one representative form.

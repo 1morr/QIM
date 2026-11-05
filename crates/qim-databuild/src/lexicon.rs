@@ -1,10 +1,12 @@
 //! 詞庫資料包的內容（plan §4.2）：rime-essay 與粵語口語詞表的多字詞展開成速成碼索引，加上語料的字頻。
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use qim_core::{CodeTable, Lexicon, Word};
 
 use crate::Error;
+use crate::common_forms::BothForms;
 use crate::transcode::Transcoder;
 
 /// 最低詞頻，低於它的詞不收；初值與 rime-quick 舊版的 `min_phrase_weight` 相同，由基準調整。
@@ -35,6 +37,21 @@ pub struct Counts {
     pub indexed: usize,
     /// 粵語口語詞表的詞數。
     pub colloquial: usize,
+    /// rime-essay 的詞（兩字以上，重複的列算一個）經 [`Forms::normalize`] 換了寫法的詞數。
+    pub converted: usize,
+    /// 換了寫法之後和別的詞撞成同一個、詞頻相加的詞數。
+    pub merged: usize,
+    /// 並存寫法另外收的寫法數（一個詞的每種寫法各算一個，不含詞本身；撞上別的詞的不算）。
+    pub spellings: usize,
+}
+
+/// 詞的字形（brief §4.1、plan §4.2）。
+pub struct Forms<'a> {
+    /// 把詞換成語料的寫法：`t2hk` 再換回常見寫法、並存寫法換成代表寫法，和
+    /// `corpora::Converter`（`Conversion::T2hk`）同一套。
+    pub normalize: &'a dyn Fn(&str) -> String,
+    /// 並存寫法：代表寫法的詞也用另一種寫法收一份，詞頻相同；字頻兩種寫法相加後共用。
+    pub both: &'a BothForms,
 }
 
 /// 粵語口語詞表在 repo 裡的位置（plan §4.2、brief §5.2）：QIM 自行整理，CC0。
@@ -46,20 +63,24 @@ pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 /// - 口語詞表只補 essay 沒收的詞，是人工整理的：單字、詞頻低於 [`MIN_FREQUENCY`]、含連打字集以外
 ///   的字、重複、essay 已收（詞頻達門檻）的詞都算錯，不默默濾掉；essay 有但低於門檻的詞用詞表的詞頻。
 /// - 單字、詞頻低於 [`MIN_FREQUENCY`] 的詞、含連打字集以外的字的詞不收；同一個詞列了幾次取最大詞頻。
+/// - essay 與詞表的詞都經 `forms.normalize` 換成語料的寫法（「羣組」→「群組」）：換完撞成同一個詞的
+///   詞頻相加，門檻與字集看換完的詞。並存寫法的詞每種寫法都收（`forms.both`），詞頻相同；
+///   單向的寫法撞上 essay 本來就有的詞時詞頻相加。
 /// - 詞的碼是每個字的一個速成碼接起來（`code_table` 的連打字集）。多碼字的組合依換掉主碼
 ///   （`transcoder` 的碼，基準也用它）的字數由少到多取，最多 [`MAX_COMBINATIONS`] 個。
 /// - 每個碼的詞依詞頻由高到低、同頻依碼位排。
-/// - `char_frequency` 原樣放進詞庫（[`char_frequency`]）。
+/// - `char_frequency`（[`char_frequency`]）放進詞庫，並存寫法的兩個字共用兩者的和。
 pub fn build(
     essay: &str,
     colloquial: &str,
     code_table: &CodeTable,
     transcoder: &Transcoder,
-    char_frequency: BTreeMap<char, u64>,
+    mut char_frequency: BTreeMap<char, u64>,
+    forms: &Forms,
 ) -> Result<(Lexicon, Counts), Error> {
     let codes = char_codes(code_table, transcoder);
     let mut counts = Counts::default();
-    let mut words: BTreeMap<&str, u64> = BTreeMap::new();
+    let mut essay_words: BTreeMap<&str, u64> = BTreeMap::new();
     for (i, line) in essay.lines().enumerate() {
         let invalid = |reason: &str| Error::invalid(format!("essay.txt 第 {} 行", i + 1), reason);
         let (text, frequency) = word_and_frequency(line, &invalid)?;
@@ -68,13 +89,27 @@ pub fn build(
             0 => return Err(invalid("詞是空的")),
             1 => counts.single_characters += 1,
             _ => {
-                let kept = words.entry(text).or_insert(frequency);
+                let kept = essay_words.entry(text).or_insert(frequency);
                 *kept = (*kept).max(frequency);
             }
         }
     }
+    let mut words: BTreeMap<String, u64> = BTreeMap::new();
+    for (text, frequency) in essay_words {
+        let common = (forms.normalize)(text);
+        counts.converted += usize::from(common != text);
+        match words.entry(common) {
+            Entry::Occupied(mut kept) => {
+                *kept.get_mut() += frequency;
+                counts.merged += 1;
+            }
+            Entry::Vacant(slot) => {
+                slot.insert(frequency);
+            }
+        }
+    }
 
-    let mut listed: BTreeSet<&str> = BTreeSet::new();
+    let mut listed: BTreeSet<String> = BTreeSet::new();
     for (i, line) in colloquial.lines().enumerate() {
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -91,10 +126,11 @@ pub fn build(
         if let Some(ch) = text.chars().find(|ch| !codes.contains_key(ch)) {
             return Err(invalid(&format!("「{ch}」不在連打字集")));
         }
-        if !listed.insert(text) {
+        let common = (forms.normalize)(text);
+        if !listed.insert(common.clone()) {
             return Err(invalid(&format!("「{text}」重複")));
         }
-        let kept = words.entry(text).or_insert(0);
+        let kept = words.entry(common).or_insert(0);
         if *kept >= MIN_FREQUENCY {
             return Err(invalid(&format!(
                 "「{text}」rime-essay 已收（詞頻 {kept}），不必列"
@@ -104,26 +140,40 @@ pub fn build(
         counts.colloquial += 1;
     }
 
-    let mut index: BTreeMap<String, Vec<Word>> = BTreeMap::new();
+    let per_char = |text: &str| {
+        text.chars()
+            .map(|ch| codes.get(&ch).map(Vec::as_slice))
+            .collect::<Option<Vec<_>>>()
+    };
+    // 每個詞的每種寫法：單向的寫法可能和另一個詞撞成同一個（隨着寫成隨著、essay 也有隨著），
+    // 兩者是同一個義項，詞頻相加。
+    let mut spelled: BTreeMap<String, u64> = BTreeMap::new();
     for (text, frequency) in words {
         if frequency < MIN_FREQUENCY {
             counts.below_threshold += 1;
             continue;
         }
-        let Some(per_char) = text
-            .chars()
-            .map(|ch| codes.get(&ch).map(Vec::as_slice))
-            .collect::<Option<Vec<_>>>()
-        else {
+        if per_char(&text).is_none() {
             counts.outside_continuous += 1;
             continue;
-        };
+        }
         counts.words += 1;
+        for spelling in forms.both.spellings(&text) {
+            *spelled.entry(spelling).or_default() += frequency;
+        }
+    }
+    counts.spellings = spelled.len() - counts.words;
+    let mut index: BTreeMap<String, Vec<Word>> = BTreeMap::new();
+    for (text, frequency) in spelled {
+        // 並存寫法的字都在連打字集（`CommonForms::new` 檢查過），每種寫法都查得到碼。
+        let Some(per_char) = per_char(&text) else {
+            continue;
+        };
         let (combinations, capped) = combinations(&per_char);
         counts.capped += usize::from(capped);
         for code in combinations {
             index.entry(code).or_default().push(Word {
-                text: text.to_string(),
+                text: text.clone(),
                 frequency,
             });
         }
@@ -133,6 +183,7 @@ pub fn build(
     }
     counts.codes = index.len();
     counts.indexed = index.values().map(Vec::len).sum();
+    forms.both.share_frequency(&mut char_frequency);
     Ok((Lexicon::new(index, char_frequency), counts))
 }
 
