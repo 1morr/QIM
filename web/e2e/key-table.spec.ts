@@ -180,13 +180,52 @@ test("Shift（單按）：左 Shift 留碼後沒改就再按左 Shift，還原�
 	await expect(mode).toHaveText("中");
 	await expect(composition).toHaveText("日弓口");
 	await expect(items.first()).toHaveText("1門口");
-	// 空白在臨時英文中是上屏英文加空白；回中文後是上屏首選。
 	await page.keyboard.press(" ");
 	await expect(text).toHaveValue("門口");
+});
+
+// 舊版 Rime（librime 1.17.0 以前，M1 票 25b）：臨時英文中空白也接進英文，Enter 才上屏。
+test("Shift（單按）：左 Shift 留碼後空白接進英文，Enter 上屏整段", async ({
+	page,
+}, testInfo) => {
+	const { text, composition, mode } = ui(page);
+	await page.keyboard.type("anr");
+	await page.keyboard.press("ShiftLeft");
+	await page.keyboard.type("hello world");
+	await expect(composition).toHaveText("anrhello world");
+	await expect(mode).toHaveText("英");
+	await expect(text).toHaveValue("");
+	await page.screenshot({
+		path: testInfo.outputPath("inline-ascii-space.png"),
+	});
+	await page.keyboard.press("Enter");
+	await expect(text).toHaveValue("anrhello world");
+	await expect(composition).toHaveText("");
+	await expect(mode).toHaveText("中");
+});
+
+test("Shift（單按）：留碼後打了字再按左 Shift，整串當輸入碼回中文組字", async ({
+	page,
+}) => {
+	const { text, composition, items, mode } = ui(page);
+	await page.keyboard.type("an");
+	await page.keyboard.press("Shift");
+	await page.keyboard.type("r");
+	await expect(composition).toHaveText("anr");
+	await page.keyboard.press("Shift");
+	await expect(mode).toHaveText("中");
+	await expect(composition).toHaveText("日弓口");
+	await expect(items.first()).toHaveText("1門口");
+	await page.keyboard.press(" ");
+	await expect(text).toHaveValue("門口");
+
+	// 英文含空白：中文組字裝不下，上屏英文回中文。
 	await page.keyboard.type("anr");
 	await page.keyboard.press("Shift");
-	await page.keyboard.press(" ");
-	await expect(text).toHaveValue("門口anr ");
+	await page.keyboard.type(" x");
+	await page.keyboard.press("Shift");
+	await expect(text).toHaveValue("門口anr x");
+	await expect(composition).toHaveText("");
 	await expect(mode).toHaveText("中");
 });
 

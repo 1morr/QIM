@@ -88,5 +88,6 @@
 | [25b](issues/25b-inline-ascii-space-joins.md) | 25 | M1 封存後補：留碼接英文時空白接進英文（舊版 Rime，使用者決定） |
 | [26](issues/26-half-width-after-digits.md) | — | M1 封存後補：數字後的句點與冒號用半形（逗號照舊全形，使用者決定），可關 |
 | [27](issues/27-touch-layout-match-gboard.md) | — | M1 封存後補：觸控佈局對齊 Gboard 速成、數字列開關 |
+| [28](issues/28-manual-segment-separator.md) | 27 | M1 封存後補：手動分隔鍵（實體 `'`、觸控組字中 ⇧ 變「'詞」，使用者決定） |
 
 08、09 不依賴核心，只擋 12；要用使用者的 iPhone，照編號做時在 07 之後輪到。一個一個做時照編號；同時能做的票（例如 04、05，或 13 之後的 14–16）可以並行。

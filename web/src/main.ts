@@ -638,9 +638,8 @@ async function start(): Promise<void> {
 			toggleHints();
 			return;
 		}
-		// 臨時英文中空白與數字是字元，不是選字。
-		const chosen =
-			!shown.inlineAscii && (key.kind === "space" || key.kind === "digit");
+		// 臨時英文中空白與數字是字元，不會上屏，所以不必另外排除。
+		const chosen = key.kind === "space" || key.kind === "digit";
 		const snapshot = press(session, key);
 		try {
 			if (!snapshot.handled) {
