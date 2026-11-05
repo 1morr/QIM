@@ -68,3 +68,26 @@ test("數字後按了留給瀏覽器的組合鍵（Ctrl+B 移游標）就不算�
 	await expect(text).not.toHaveValue(/\./);
 	await expect(text).toHaveValue(/。/);
 });
+
+// 單按修飾鍵沒有送字元（Rime 也不記），數字還沒結束（M1 票 26b）。
+for (const modifier of ["Control", "Meta", "Alt", "CapsLock"]) {
+	test(`數字後單按 ${modifier} 仍算緊接在數字後`, async ({ page }) => {
+		const { text } = await ready(page);
+		await text.focus();
+		await page.keyboard.type("3");
+		await page.keyboard.press(modifier);
+		await page.keyboard.type(".");
+		await expect(text).toHaveValue("3.");
+	});
+}
+
+test("組字中單按 Ctrl 吃下，組字與輸入框都不變", async ({ page }) => {
+	const { text, composition } = await ready(page);
+	await text.focus();
+	await page.keyboard.type("a");
+	await page.keyboard.press("Control");
+	await expect(composition).toHaveText("日");
+	await expect(text).toHaveValue("");
+	await page.keyboard.press(" ");
+	await expect(text).toHaveValue("日");
+});

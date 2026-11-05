@@ -12,7 +12,8 @@ export type Key =
 	| { kind: "left" }
 	| { kind: "right" }
 	| { kind: "toggleAscii"; shift: ShiftKey }
-	| { kind: "other" };
+	| { kind: "other" }
+	| { kind: "modifier" };
 
 /** 單按的是哪一邊的 Shift；對應 `qim_core::ShiftKey`。 */
 export type ShiftKey = "left" | "right";
@@ -49,9 +50,31 @@ const NAMED: Record<string, Key> = {
 };
 
 /**
+ * 單按時沒有字元的修飾鍵（`KeyboardEvent.key`），照 MDN「Modifier keys」一表；Rime 不記這類鍵，
+ * 送核心的 `modifier` 不結束數字（brief §4.7）。
+ */
+const MODIFIERS = new Set([
+	"Alt",
+	"AltGraph",
+	"CapsLock",
+	"Control",
+	"Fn",
+	"FnLock",
+	"Hyper",
+	"Meta",
+	"NumLock",
+	"ScrollLock",
+	"Shift",
+	"Super",
+	"Symbol",
+	"SymbolLock",
+]);
+
+/**
  * 鍵盤事件轉成 `Key`；屬於別的輸入法的事件回 `null`，直接留給瀏覽器。帶 Ctrl、Meta、Alt 的
  * 組合鍵沒有組字時也回 `null`；`composing`（組字中）時是 `other`，由核心吃下：組字中每個鍵都
  * 吃下，否則 Cmd+V 貼進輸入框而組字還在（brief §4.3）。
+ * 單按修飾鍵（Ctrl、Cmd、Alt、CapsLock…，事件本身也帶 `ctrlKey` 這類旗標）是 `modifier`。
  * 其他沒有對應的鍵是 `other`：組字中核心吃下，免得 Tab、Delete、方向鍵改到輸入框。
  * `inlineAscii`（臨時英文，組字中單按留碼的 Shift）時 `-` / `=` 是字元，接在英文後面。
  */
@@ -62,6 +85,9 @@ export function toKey(
 ): Key | null {
 	if (event.isComposing) {
 		return null;
+	}
+	if (MODIFIERS.has(event.key)) {
+		return { kind: "modifier" };
 	}
 	if (event.ctrlKey || event.metaKey || event.altKey) {
 		return composing ? { kind: "other" } : null;
@@ -96,7 +122,7 @@ const SHIFT_SIDE: Record<string, ShiftKey> = {
 
 /**
  * 判定單按 Shift（切中英，brief §4.3）：Shift 按下到放開不超過 `LONE_SHIFT_MS`、中間沒有按
- * 別的鍵（打大寫字母就不算）。照 librime `ascii_composer`：按下時武裝，任何別的鍵按下就解除。
+ * 別的鍵（打大寫字母就不算）。照 librime `ascii_composer`：按下時武裝，任何別的鍵按下或放開就解除。
  * 用 `KeyboardEvent.code` 分辨左右：組字中左右 Shift 的處理可以不同（Rime 預設）。左右一起按時
  * 也照 librime：第二個不重新計時，先放開的那邊算。
  */
@@ -116,10 +142,17 @@ export class LoneShift {
 		}
 	}
 
-	/** `keyup`：放開的是 Shift、武裝中、沒超過時限，就是單按，回傳哪一邊；否則 `undefined`。 */
+	/**
+	 * `keyup`：放開的是 Shift、武裝中、沒超過時限，就是單按，回傳哪一邊；否則 `undefined`。
+	 * 放開別的鍵也解除：按住 a 時按下 Shift、先放開 a 不算單按（librime 的 other keys）。
+	 */
 	up(code: string, now: number): ShiftKey | undefined {
 		const side = SHIFT_SIDE[code];
-		if (side === undefined || this.#since === undefined) {
+		if (side === undefined) {
+			this.#since = undefined;
+			return undefined;
+		}
+		if (this.#since === undefined) {
 			return undefined;
 		}
 		const lone = now - this.#since < LONE_SHIFT_MS;

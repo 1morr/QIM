@@ -102,6 +102,8 @@ function press(session: Session, key: Key): Snapshot {
 			return session.toggleAscii(key.shift);
 		case "other":
 			return session.other();
+		case "modifier":
+			return session.modifier();
 	}
 }
 

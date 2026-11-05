@@ -114,6 +114,10 @@ pub enum Key {
     ToggleAscii(ShiftKey),
     /// 殼不轉成上面各種的鍵（Tab、Delete、↑ ↓、Home、End…）：組字中吃下，免得宿主拿它改輸入框。
     Other,
+    /// 只改鍵盤狀態、不送字元的鍵：單按 Ctrl、Alt、Cmd、CapsLock 這類修飾鍵，觸控鍵盤的切頁、⇧、
+    /// 換鍵盤。組字中同 `Other` 吃下；沒有組字時交還宿主，但不結束數字（brief §4.7，同 librime
+    /// 不記沒有字元的鍵）。
+    Modifier,
 }
 
 impl Key {
@@ -403,8 +407,8 @@ impl Session {
         }
         let snapshot = self.handle_key(engine, user, key);
         // 交還宿主的鍵宿主照打：只有數字鍵讓下一個字緊接在數字後。其他鍵都當成數字結束；librime
-        // 只認可見字元、退格與 Enter，不學它：方向鍵也會把游標移離數字。
-        if !snapshot.handled {
+        // 只認可見字元、退格與 Enter，不學它：方向鍵也會把游標移離數字。不送字元的修飾鍵不動它。
+        if !snapshot.handled && key != Key::Modifier {
             self.after_digit = matches!(key, Key::Digit(_));
         }
         self.finish(engine, snapshot)
@@ -525,13 +529,15 @@ impl Session {
             }
             // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、其他鍵：吃下不動作。
             // 切中英在上面處理過了。
-            Key::Letter(_) | Key::ToggleAscii(_) | Key::Other => self.snapshot(engine, true, None),
+            Key::Letter(_) | Key::ToggleAscii(_) | Key::Other | Key::Modifier => {
+                self.snapshot(engine, true, None)
+            }
         }
     }
 
     /// 切中英（單按 Shift，brief §4.3），照 Rime `ascii_composer`：沒有組字時只切換；組字中
     /// 依 [`ShiftSwitch`] 先上屏整個組字（`commit_text`）或留碼接英文（`inline_ascii`）。
-    /// 臨時英文中按留碼的 Shift 照舊版 librime（1.17.0 以前）：英文整串當中文的輸入碼重新
+    /// 臨時英文中按留碼的 Shift 照目前發佈版 librime（≤ 1.17.0）：英文整串當中文的輸入碼重新
     /// 組字；英文含方案字母與分隔記號以外的字元時中文組字裝不下，和另一邊一樣上屏英文。兩種都回中文。
     fn toggle_ascii(&mut self, engine: &Engine, user: &mut UserModel, shift: ShiftKey) -> Snapshot {
         let keeps_code = self.options.shift_switch.keeps_code(shift);
@@ -567,7 +573,7 @@ impl Session {
         self.snapshot(engine, true, None)
     }
 
-    /// 臨時英文中的鍵，照舊版 librime `ascii_composer`（1.17.0 以前）：可見字元與空白接在英文
+    /// 臨時英文中的鍵，照目前發佈版 librime `ascii_composer`（≤ 1.17.0）：可見字元與空白接在英文
     /// 後面（數字、`-` / `=` 也是字元）；Enter 上屏英文；退格刪光或 Esc 放棄。三種都回中文。
     /// 其他鍵吃下不動作。
     fn handle_inline(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
