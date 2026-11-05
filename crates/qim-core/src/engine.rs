@@ -1,9 +1,8 @@
-use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use crate::lattice::{self, Lattice};
-use crate::scheme::SEPARATOR;
+use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::personal_bonus;
 use crate::{
     CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel, LanguageModelPack, Lexicon,
@@ -248,49 +247,60 @@ impl Engine {
         }
     }
 
-    /// 剛好是輸入碼 `typed` 的連打字集的字與詞，接著使用者詞。字取字頻最高的 `limit` 個（字序在
-    /// [`Engine::new`] 排過），另加 `user` 學過的：它們有 `personal`，字頻排名在後也可能勝出。
-    /// 詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
+    /// 剛好是輸入碼 `input`（整串輸入碼的一段）的連打字集的字與詞，接著使用者詞。字取字頻最高的
+    /// `limit` 個（字序在 [`Engine::new`] 排過），另加 `user` 學過的：它們有 `personal`，字頻排名
+    /// 在後也可能勝出。詞全給，詞庫的順序由建置端決定，核心不靠它截斷。
     ///
-    /// `typed` 中間可以有分隔記號（[`SEPARATOR`]，不在頭尾）：這裡一定要斷字，所以沒有字，只有
+    /// `input` 中間可以有分隔記號（[`SEPARATOR`]，不在頭尾）：這裡一定要斷字，所以沒有字，只有
     /// 每個分隔記號都剛好落在兩字的碼之間的詞與使用者詞（[`Engine::splits_at`]），照 Rime 速成
     /// （M1 票 28b，brief §12.2）。查碼表、詞庫與學習計數的碼都去掉分隔記號。
-    fn exact(&self, user: &UserModel, typed: &str, start: usize, limit: usize) -> Vec<Edge> {
-        debug_assert!(!typed.starts_with(SEPARATOR) && !typed.ends_with(SEPARATOR));
-        let (code, cuts) = split_at_separators(typed);
-        let code = code.as_ref();
-        let fits = |text: &str| cuts.is_empty() || self.splits_at(text, code, &cuts);
-        let mut edges: Vec<Edge> = Vec::new();
+    fn exact(&self, user: &UserModel, input: &str, start: usize, limit: usize) -> Vec<Edge> {
+        debug_assert!(!input.starts_with(SEPARATOR) && !input.ends_with(SEPARATOR));
+        let cuts = separator_cuts(input);
         if cuts.is_empty() {
-            edges.extend(
-                self.char_entries(code)
-                    .iter()
-                    .filter(|e| !e.extension)
-                    .enumerate()
-                    .filter(|&(i, e)| {
-                        i < limit
-                            || user.has_learned(
-                                &self.scheme.id,
-                                code,
-                                e.text.encode_utf8(&mut [0; 4]),
-                            )
-                    })
-                    .map(|(_, e)| self.char_edge(user, code, start, e.text)),
-            );
+            return self.exact_code(user, input, start, limit).collect();
         }
-        edges.extend(
-            self.lexicon
-                .lookup(code)
-                .iter()
-                .filter(|w| fits(&w.text))
-                .map(|w| self.word_edge(user, code, start, w)),
-        );
-        edges.extend(
-            user.words(&self.scheme.id, code)
-                .filter(|text| fits(text))
-                .map(|text| self.user_word_edge(user, code, start, text)),
-        );
-        edges
+        let code = without_separators(input);
+        let words = self
+            .lexicon
+            .lookup(&code)
+            .iter()
+            .filter(|w| self.splits_at(&w.text, &code, &cuts))
+            .map(|w| self.word_edge(user, &code, start, w));
+        let user_words = user
+            .words(&self.scheme.id, &code)
+            .filter(|text| self.splits_at(text, &code, &cuts))
+            .map(|text| self.user_word_edge(user, &code, start, text));
+        words.chain(user_words).collect()
+    }
+
+    /// 沒有分隔記號的碼 `code` 的字、詞與使用者詞，見 [`Engine::exact`]。
+    fn exact_code<'a>(
+        &'a self,
+        user: &'a UserModel,
+        code: &'a str,
+        start: usize,
+        limit: usize,
+    ) -> impl Iterator<Item = Edge> + 'a {
+        let chars = self
+            .char_entries(code)
+            .iter()
+            .filter(|e| !e.extension)
+            .enumerate()
+            .filter(move |&(i, e)| {
+                i < limit
+                    || user.has_learned(&self.scheme.id, code, e.text.encode_utf8(&mut [0; 4]))
+            })
+            .map(move |(_, e)| self.char_edge(user, code, start, e.text));
+        let words = self
+            .lexicon
+            .lookup(code)
+            .iter()
+            .map(move |w| self.word_edge(user, code, start, w));
+        let user_words = user
+            .words(&self.scheme.id, code)
+            .map(move |text| self.user_word_edge(user, code, start, text));
+        chars.chain(words).chain(user_words)
     }
 
     /// `text` 能不能一字一碼地拆開 `code`，使 `cuts` 的每個位置（去掉分隔記號後的碼裡）都是
@@ -299,23 +309,26 @@ impl Engine {
     fn splits_at(&self, text: &str, code: &str, cuts: &[usize]) -> bool {
         let chars: Vec<char> = text.chars().collect();
         let longest = usize::from(self.scheme.max_code_length);
-        // 待走的（已拆的字數, 已用的碼長）。
+        // 待走的（已對齊的字數, 已用掉的碼長）。
         let mut todo = vec![(0, 0)];
         let mut seen = HashSet::new();
-        while let Some((i, p)) = todo.pop() {
-            let Some(&c) = chars.get(i) else {
-                if p == code.len() {
+        while let Some((aligned, used)) = todo.pop() {
+            let Some(&c) = chars.get(aligned) else {
+                if used == code.len() {
                     return true;
                 }
                 continue;
             };
-            for end in p + 1..=(p + longest).min(code.len()) {
-                let inside = cuts.iter().any(|&cut| p < cut && cut < end);
-                if !inside
-                    && self.char_entries(&code[p..end]).iter().any(|e| e.text == c)
-                    && seen.insert((i + 1, end))
+            for end in used + 1..=(used + longest).min(code.len()) {
+                let cut_inside = cuts.iter().any(|&cut| used < cut && cut < end);
+                if !cut_inside
+                    && self
+                        .char_entries(&code[used..end])
+                        .iter()
+                        .any(|e| e.text == c)
+                    && seen.insert((aligned + 1, end))
                 {
-                    todo.push((i + 1, end));
+                    todo.push((aligned + 1, end));
                 }
             }
         }
@@ -345,11 +358,11 @@ impl Engine {
             .collect()
     }
 
-    /// 輸入碼 `typed` 的全部連打字集的字與詞與它們在組字開頭的分數，依分數由高到低（同分照
-    /// 碼表、詞庫的順序）；`typed` 中間的分隔記號見 [`Engine::exact`]。
-    pub(crate) fn span(&self, user: &UserModel, typed: &str) -> Vec<(f64, String)> {
+    /// 輸入碼 `input` 的全部連打字集的字與詞與它們在組字開頭的分數，依分數由高到低（同分照
+    /// 碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
+    pub(crate) fn span(&self, user: &UserModel, input: &str) -> Vec<(f64, String)> {
         let mut edges: Vec<(f64, String)> = self
-            .exact(user, typed, 0, usize::MAX)
+            .exact(user, input, 0, usize::MAX)
             .into_iter()
             .map(|e| (self.edge_score(None, &e), e.text))
             .collect();
@@ -366,21 +379,15 @@ impl Engine {
     }
 }
 
-/// 輸入碼去掉分隔記號後的碼，與每個分隔記號在那個碼裡的位置；沒有分隔記號時不配置。
-fn split_at_separators(typed: &str) -> (Cow<'_, str>, Vec<usize>) {
-    if !typed.contains(SEPARATOR) {
-        return (Cow::Borrowed(typed), Vec::new());
-    }
-    let mut code = String::with_capacity(typed.len());
-    let mut cuts = Vec::new();
-    for c in typed.chars() {
-        if c == SEPARATOR {
-            cuts.push(code.len());
-        } else {
-            code.push(c);
-        }
-    }
-    (Cow::Owned(code), cuts)
+/// 每個分隔記號在去掉分隔記號後的碼裡的位置：`vi'vd'jg` 是 2、4。
+fn separator_cuts(input: &str) -> Vec<usize> {
+    input
+        .chars()
+        .enumerate()
+        .filter(|&(_, c)| c == SEPARATOR)
+        .enumerate()
+        .map(|(seen, (at, _))| at - seen)
+        .collect()
 }
 
 /// 字序：字頻高的在前；字頻相同（含都沒有字頻）時照碼表原本的順序，也就是建置端排好的

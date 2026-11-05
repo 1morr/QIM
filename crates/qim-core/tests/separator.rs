@@ -15,7 +15,7 @@ use qim_core::{
 ///
 /// 另有語料實驗的真實例子（M1 票 28b，碼照速成碼表）：`vivdjg` 是「絃樂室」（`vi` + `vd` + `jg`），
 /// 也是「幾好塞」；「幾」「好」字頻高、「幾好」是詞，靠「絃樂室」的詞頻才是首選。
-/// 「甲乙」是 `pqs`：「甲」有 `p`、`pq` 兩個碼，「乙」有 `qs`、`s`，兩種切法字界不同。
+/// 「門口」是 `an` + `r`（Rime 三案例）。「甲乙」是 `pqs`：「甲」有 `p`、`pq` 兩個碼，「乙」有 `qs`、`s`，兩種切法字界不同。
 fn engine() -> Engine {
     let scheme = Scheme {
         id: "quick".into(),
@@ -37,6 +37,7 @@ fn engine() -> Engine {
         ("r", "口"),
         ("mi", "歹"),
         ("ir", "台"),
+        ("an", "門"),
         ("v", "女"),
         ("d", "木"),
         ("vi", "幾絃"),
@@ -69,6 +70,7 @@ fn engine() -> Engine {
         ('絃', 5),
         ('樂', 100),
         ('室', 100),
+        ('門', 200),
         ('女', 10),
         ('木', 10),
         ('甲', 10),
@@ -76,6 +78,7 @@ fn engine() -> Engine {
     ];
     let words = [
         ("mir", "一台", 100),
+        ("anr", "門口", 1000),
         ("vivd", "幾好", 1000),
         ("vivdjg", "絃樂室", 1000),
         ("pqs", "甲乙", 1000),
@@ -173,6 +176,15 @@ fn a_word_crosses_a_separator_on_the_boundary_between_its_characters() {
         );
         assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("絃樂室"));
     }
+}
+
+/// 同 Gboard 速成（黑箱 T18）首選仍是門口；分隔落在「門」「口」之間，所以是一個詞、一段。
+#[test]
+fn an_r_tops_the_word_mun_hau_across_the_separator() {
+    let mut ime = Ime::new();
+    let shown = ime.type_keys("an'r");
+    assert_eq!(texts(&shown)[0], "門口");
+    assert_eq!(segments(&shown), [("an'r", "an'口", "門口", false)]);
 }
 
 #[test]

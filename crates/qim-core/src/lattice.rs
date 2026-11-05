@@ -87,7 +87,7 @@ impl Lattice {
 
     /// 多打一個字母：只算新的一欄，前面的欄不動。分隔記號（[`SEPARATOR`]）的一欄照抄前一欄：
     /// 沒有邊結束或開始在它上面，路徑在它這裡斷開時它算在前一段的碼尾。邊只有詞能跨過它，
-    /// 而且它要落在詞內兩字的碼之間（[`Engine::edges_ending`]）。
+    /// 而且它要落在詞內兩字的碼之間（`Engine::exact`）。
     pub fn push(&mut self, engine: &Engine, user: &UserModel, c: char) {
         self.input.push(c);
         if c == SEPARATOR {
