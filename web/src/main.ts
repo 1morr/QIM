@@ -525,7 +525,7 @@ async function start(): Promise<void> {
 		session.setShiftSwitch(shiftSwitch(shiftSwitchSelect.value));
 		text.focus();
 	});
-	// 數字後的句點、逗號、冒號用半形（預設開）。
+	// 數字後的句點、冒號用半形（預設開）；逗號照舊全形。
 	session.setDigitSeparators(digitSeparators.checked);
 	digitSeparators.addEventListener("change", () => {
 		session.setDigitSeparators(digitSeparators.checked);

@@ -1,5 +1,6 @@
-//! 數字後的句點、逗號、冒號用半形（brief §4.7，M1 票 26）：前一個上屏的字是半形數字時直接
-//! 上屏半形，不待定、不出候選（使用者決定，同 librime `digit_separator_action: commit`）。
+//! 數字後的句點、冒號用半形（brief §4.7，M1 票 26）：前一個上屏的字是半形數字時直接上屏半形，
+//! 不待定、不出候選；逗號照舊全形（使用者決定，同 librime 預設 `.:` 加 `digit_separator_action:
+//! commit`）。
 
 use std::collections::BTreeMap;
 
@@ -101,7 +102,7 @@ fn the_separator_commits_at_once_with_nothing_left_composing() {
 #[test]
 fn a_second_separator_is_full_width_because_it_no_longer_follows_a_digit() {
     assert_eq!(Ime::typed("3.."), "3.。");
-    assert_eq!(Ime::typed("1,,"), "1,，");
+    assert_eq!(Ime::typed("12::"), "12:：");
 }
 
 #[test]
@@ -110,8 +111,10 @@ fn a_period_between_digits_stays_half_width() {
 }
 
 #[test]
-fn a_comma_between_digits_stays_half_width() {
-    assert_eq!(Ime::typed("1,000"), "1,000");
+fn a_comma_after_a_digit_stays_full_width() {
+    // 「共3，」「第1，第2」：中文裡數字後的逗號多半是句子的逗號。
+    assert_eq!(Ime::typed("1,"), "1，");
+    assert_eq!(Ime::typed("1,2,"), "1，2，");
 }
 
 #[test]
@@ -161,7 +164,7 @@ fn digits_from_the_touch_keyboard_count_as_digits() {
 
 #[test]
 fn a_number_can_have_several_separators() {
-    assert_eq!(Ime::typed("1,000.5"), "1,000.5");
+    assert_eq!(Ime::typed("12:30:15.5"), "12:30:15.5");
     assert_eq!(Ime::typed("1.2.3"), "1.2.3");
 }
 

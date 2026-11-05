@@ -33,8 +33,8 @@ pub struct Options {
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
-    /// 數字後的 `.` `,` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，
-    /// 同 librime `digit_separators` 的 `digit_separator_action: commit`。預設開（brief §7）。
+    /// 數字後的 `.` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，同 librime
+    /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
     pub digit_separators: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,

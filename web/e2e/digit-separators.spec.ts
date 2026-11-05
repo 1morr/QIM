@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// 數字後的句點、逗號、冒號用半形（M1 票 26，brief §4.7）：前一個上屏的字是半形數字時直接上屏
-// 半形，不待定、不出候選（使用者決定）；開關預設開。
+// 數字後的句點、冒號用半形（M1 票 26，brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，
+// 不待定、不出候選；逗號照舊全形（使用者決定）。開關預設開。
 
 async function ready(page: Page) {
 	await page.goto("/");
@@ -14,7 +14,9 @@ async function ready(page: Page) {
 	};
 }
 
-test("打 3.5、1,000、12:30 讀回半形，不進組字", async ({ page }, testInfo) => {
+test("打 3.5、12:30 讀回半形、不進組字，數字後的逗號是全形", async ({
+	page,
+}, testInfo) => {
 	const { text, toggle, composition } = await ready(page);
 	await expect(toggle).toBeChecked();
 	await text.focus();
@@ -22,8 +24,8 @@ test("打 3.5、1,000、12:30 讀回半形，不進組字", async ({ page }, tes
 	await expect(text).toHaveValue("3.");
 	await expect(composition).toHaveText("");
 	await page.screenshot({ path: testInfo.outputPath("digit-separator.png") });
-	await page.keyboard.type("5 1,000 12:30");
-	await expect(text).toHaveValue("3.5 1,000 12:30");
+	await page.keyboard.type("5 12:30 1,");
+	await expect(text).toHaveValue("3.5 12:30 1，");
 });
 
 test("不在數字後、或數字後連按兩下，第二個是全形", async ({ page }) => {
