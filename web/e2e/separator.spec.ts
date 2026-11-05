@@ -1,7 +1,9 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-// 手動分隔鍵（brief §4.3、§4.4，M1 票 28）：組字中按 `'`（觸控是組字中的「'詞」）插入分隔記號，
-// 連打的段不跨過它。`mir` 的首選「一台」是 `m` + `ir`，`mi'r` 只能是 `mi` 的字詞接 `r` 的字詞。
+// 手動分隔鍵（brief §4.3、§4.4，M1 票 28、28b）：組字中按 `'`（觸控是組字中的「'詞」）插入分隔
+// 記號，這裡一定要斷字：單字的碼不跨過它，詞只在它落在兩字的碼之間時跨過它（照 Rime 速成）。
+// `mir` 的首選「一台」是 `m` + `ir`，`mi'r` 只能是 `mi` 的字詞接 `r` 的字詞；`vi'vdjg` 的
+// 「絃樂室」是 `vi` + `vd` + `jg`，分隔落在字界上，仍是一個詞。
 
 function ui(page: Page) {
 	return {
@@ -74,9 +76,22 @@ test.describe("實體鍵盤", () => {
 		await expect(composition).toHaveText("");
 	});
 
-	test("an'r 首選仍是門口（同 Gboard 速成）", async ({ page }) => {
+	test("分隔落在詞內的字界上：vi'vdjg 仍是一個詞「絃樂室」", async ({
+		page,
+	}) => {
+		const { text, composition, items } = ui(page);
+		await page.keyboard.type("vi'vdjg");
+		await expect(composition).toHaveText("女戈'女木十土");
+		await expect(items.first()).toHaveText("1絃樂室");
+		await page.keyboard.type(" ");
+		await expect(text).toHaveValue("絃樂室");
+	});
+
+	test("an'r 首選仍是門口（同 Gboard 速成）：詞「門口」跨過字界上的分隔記號", async ({
+		page,
+	}) => {
 		await page.keyboard.type("an'r");
-		await expect(ui(page).segments).toHaveText(["日弓'", "口"]);
+		await expect(ui(page).segments).toHaveText(["日弓'口"]);
 		await expect(ui(page).items.first()).toHaveText("1門口");
 	});
 });
@@ -123,6 +138,24 @@ test.describe("觸控", () => {
 		await expect(shift).toHaveText("⇧");
 		await tapKeys(page, ["shift"]);
 		await expect(shift).toHaveAttribute("data-shift", "once");
+	});
+
+	test("點「'詞」後退格先刪分隔記號，刪光組字後 ⇧ 變回 Shift", async ({
+		page,
+	}) => {
+		const { composition } = ui(page);
+		const shift = page.getByTestId("key-shift");
+		await tapKeys(page, ["m", "i", "shift", "r"]);
+		await expect(composition).toHaveText("一戈'口");
+		await tapKeys(page, ["backspace"]);
+		await expect(composition).toHaveText("一戈'");
+		await tapKeys(page, ["backspace"]);
+		await expect(composition).toHaveText("一戈");
+		await expect(shift).toHaveText("'詞");
+		await tapKeys(page, ["backspace", "backspace"]);
+		await expect(composition).toHaveText("");
+		await expect(shift).toHaveText("⇧");
+		await expect(shift).toHaveAttribute("aria-label", "大寫");
 	});
 
 	test("Shift 開著時用實體鍵盤開始組字，⇧ 仍換成「'詞」並送分隔記號", async ({
