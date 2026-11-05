@@ -159,6 +159,24 @@ test("點一下 Shift：字母鍵換成大寫，點「日」上屏 A，打完自
 	await expect(page.getByTestId("composition")).toHaveText("日");
 });
 
+// 照 Gboard：大寫字母比字根大得多（M1 票 27b）。
+test("Shift 開著時字母鍵的大寫字母比字根大，關掉後回到原本的字級", async ({
+	page,
+}) => {
+	const label = page.getByTestId("key-a").locator(".label");
+	const size = async () =>
+		Number.parseFloat(
+			await label.evaluate((element) => getComputedStyle(element).fontSize),
+		);
+	const radical = await size();
+	await tapKeys(page, ["shift"]);
+	await expect(label).toHaveText("A");
+	expect(await size()).toBeGreaterThan(radical * 1.8);
+	await tapKeys(page, ["a"]);
+	await expect(label).toHaveText("日");
+	expect(await size()).toBeCloseTo(radical);
+});
+
 test("快速點兩下 Shift 鎖定大寫，再點一下解除；隔太久的第二下是關掉", async ({
 	page,
 }) => {

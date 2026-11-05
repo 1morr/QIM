@@ -218,6 +218,10 @@ fn is_zero(value: &f64) -> bool {
     *value == 0.0
 }
 
+/// Shift 開著時字母鍵的大寫字母比字根標籤大幾倍：照 Gboard 速成實測（M1 票 27b，
+/// `.scratch/m1/evidence/27-letters.png`），字根同大時 Gboard 的大寫 A 字高 24 px，QIM 同字級只有 13 px。
+const SHIFTED_LETTER_SCALE: f64 = 1.85;
+
 /// Shift 鍵的狀態（brief §4.4，照 Gboard 速成）：殼記著，按鍵依它換標籤與動作。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Shift {
@@ -283,6 +287,27 @@ impl Key {
             }
             (None, _) => String::new(),
         }
+    }
+
+    /// 主標籤的字級（`style.labelSize`，沒寫是 `None`，殼用自己的預設）：Shift 開著、字母鍵顯示
+    /// 大寫字母時放大 `SHIFTED_LETTER_SCALE` 倍（同 Gboard）。
+    pub fn display_label_size(&self, state: KeyState) -> Option<f64> {
+        let size = self.style.as_ref()?.label_size?;
+        Some(if self.shows_capital(state) {
+            size * SHIFTED_LETTER_SCALE
+        } else {
+            size
+        })
+    }
+
+    /// 主標籤是 Shift 開著時的大寫字母：字母鍵、Shift 開著、組字中沒有換掉標籤。
+    fn shows_capital(&self, state: KeyState) -> bool {
+        matches!(self.tap, Action::Letter(_))
+            && state.shift.is_on()
+            && self
+                .composing_override(state.composing)
+                .and_then(|c| c.label.as_ref())
+                .is_none()
     }
 
     /// 角標：Shift 開著時字母鍵不顯示（標籤已是字母，同 Gboard），其他時候是 `hint`。

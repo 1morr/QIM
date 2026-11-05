@@ -11,11 +11,12 @@ fn layout() -> Layout {
               "canvas": { "width": 40, "height": 10 },
               "pages": [{ "id": "letters", "keys": [
                 { "id": "a", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" },
-                  "hint": "a", "longPress": [{ "text": "a" }] },
+                  "hint": "a", "longPress": [{ "text": "a" }], "style": { "labelSize": 10 } },
                 { "id": "z", "frame": { "x": 10, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "z" },
                   "label": "重", "hint": "z" },
                 { "id": "shift", "frame": { "x": 20, "y": 0, "w": 10, "h": 10 }, "tap": "shift", "label": "⇧" },
-                { "id": "space", "frame": { "x": 30, "y": 0, "w": 10, "h": 10 }, "tap": "space", "hint": "␣" }
+                { "id": "space", "frame": { "x": 30, "y": 0, "w": 10, "h": 10 }, "tap": "space", "hint": "␣",
+                  "style": { "labelSize": 10 } }
               ] }] }] }"#,
         Target::default(),
     )
@@ -91,4 +92,30 @@ fn once_wears_off_after_a_letter_key_but_lock_and_other_keys_keep_it() {
     assert_eq!(Shift::Locked.after_key(letter), Shift::Locked);
     assert_eq!(Shift::Once.after_key(space), Shift::Once);
     assert_eq!(Shift::Off.after_key(letter), Shift::Off);
+}
+
+#[test]
+fn while_shifted_letter_keys_draw_the_capital_bigger_like_gboard() {
+    // Gboard 速成的大寫字母比字根大得多（M1 票 27b，`.scratch/m1/evidence/27-letters.png`）。
+    let layout = layout();
+    let keys = &layout.variants[0].pages[0].keys;
+    let off = KeyState::default();
+    assert_eq!(keys[0].display_label_size(off), Some(10.0));
+    for shift in [Shift::Once, Shift::Locked] {
+        let size = keys[0].display_label_size(shifted(shift)).unwrap();
+        assert!((18.0..=19.0).contains(&size), "{size}");
+        // 不是字母鍵的、沒寫字級的照舊。
+        assert_eq!(keys[3].display_label_size(shifted(shift)), Some(10.0));
+        assert_eq!(keys[1].display_label_size(shifted(shift)), None);
+    }
+    // 組字中 Shift 開著也是大寫字母（點了先上屏組字再接大寫），一樣放大。
+    let composing = KeyState {
+        composing: true,
+        shift: Shift::Once,
+    };
+    assert_eq!(keys[0].display_label(composing, radical), "A");
+    assert_eq!(
+        keys[0].display_label_size(composing),
+        keys[0].display_label_size(shifted(Shift::Once))
+    );
 }

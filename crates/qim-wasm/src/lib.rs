@@ -662,7 +662,7 @@ impl WebLayout {
                     label_color_light: style.label_color.as_ref().map(|c| c.light.clone()),
                     label_color_dark: style.label_color.map(|c| c.dark),
                     opacity: style.opacity,
-                    label_size: style.label_size,
+                    label_size: key.display_label_size(state),
                     label_offset_x,
                     label_offset_y,
                     preview: key.shows_preview(state),
