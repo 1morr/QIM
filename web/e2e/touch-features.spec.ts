@@ -119,6 +119,25 @@ test("數字列預設關；打開後字母頁上方多一排數字，點「1」�
 	await expect(page.getByTestId("composition")).toHaveText("日");
 });
 
+// 數字列換的是另一份佈局檔，Shift 與目前頁要帶過去（M1 票 27b）。
+test("切數字列時鎖定的大寫與目前頁留著", async ({ page }) => {
+	const numberRow = page.getByRole("checkbox", { name: "數字列" });
+	const shift = page.getByTestId("key-shift");
+	await tapKeys(page, ["shift", "shift"]);
+	await expect(shift).toHaveAttribute("data-shift", "locked");
+	await numberRow.check();
+	await expect(page.getByTestId("key-1")).toBeVisible();
+	await expect(shift).toHaveAttribute("data-shift", "locked");
+	await expect(page.getByTestId("key-a")).toHaveText("A");
+	await tapKeys(page, ["a", "s"]);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("AS");
+	await tapKeys(page, ["to-symbols"]);
+	await numberRow.uncheck();
+	await expect(page.getByTestId("key-to-letters")).toHaveText("返回");
+	await tapKeys(page, ["to-letters"]);
+	await expect(shift).toHaveAttribute("data-shift", "locked");
+});
+
 // Shift（brief §4.4，照 Gboard 速成實測，M1 票 27）。
 test("點一下 Shift：字母鍵換成大寫，點「日」上屏 A，打完自動回到字根", async ({
 	page,

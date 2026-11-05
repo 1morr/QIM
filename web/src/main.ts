@@ -574,6 +574,7 @@ async function start(): Promise<void> {
 	numberRow.addEventListener("change", () => {
 		const old = layout;
 		layout = readLayout();
+		layout.keepStateOf(old);
 		mounted.setLayout(layout);
 		old.free();
 		text.focus();

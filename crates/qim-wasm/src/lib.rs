@@ -587,6 +587,17 @@ impl WebLayout {
         Ok(warning.map(|w| w.to_string()))
     }
 
+    /// 換成同一個鍵盤的另一份佈局檔（數字列開關）時接手 `old` 的 Shift 與目前頁：有同 id 的頁就留在
+    /// 那頁，否則回到一開始的頁（同轉向，M1 票 27b）。
+    #[wasm_bindgen(js_name = keepStateOf)]
+    pub fn keep_state_of(&mut self, old: &WebLayout) {
+        self.shift = old.shift;
+        self.page = self
+            .variant()
+            .page_index_or_initial(Some(&old.page().id))
+            .expect("validate 保證 initialPage 存在、每個版本至少一頁");
+    }
+
     /// Shift 鍵的狀態：`off`、`once`（下一個字母大寫）、`locked`（鎖定大寫）；網頁依它畫 Shift 鍵、
     /// 狀態變了就重畫標籤。
     #[wasm_bindgen(getter)]
