@@ -85,3 +85,9 @@ Blocked by: None (can start immediately)
   - 觸控亂按 5 個種子 × 150 步：夾雜實體的左右 Shift、字母、`,` `.` `-`、數字、Enter、Esc、退格，並切換 Shift 設定，沒有錯誤。
 - 2026-11-05 合併 main（票 26，`5941bc7`）：`docs/design-brief.md` §7 與 `web/src/main.ts` 衝突，兩邊都留（§7 取 main 的智慧標點說明加本票的數字列；main.ts 留數字後半形開關與數字列讀佈局）。
 - 2026-11-05 協調者要求觸控數字也讓核心記得前一字是數字：先寫 Playwright（數字列「3」、句號鍵、「5」讀回 `3.5`，「1」「，」讀回 `1，`；符號頁「3」「.」「5」讀回 `3.5`，打了字之後的句號是全形），**合併後直接通過，寫不出會紅的失效條件，所以沒改核心**。原因：票 26 已讓 `handle`、`select`、`text` 三個會上屏的方法都經過 `Session::finish` 記錄，觸控的數字走 `Session::text`，核心測試 `digits_from_the_touch_keyboard_count_as_digits` 也已涵蓋。其他回傳 `Snapshot` 的方法（`refresh`、`focus_segment`、`apply_rerank`）不上屏。兩條 Playwright 留著當回歸，plan §2.1 補上各條路徑。
+- 2026-11-05 變異驗證：暫時讓 `Session::text` 不經過 `finish`，上面兩條 Playwright 都紅；還原後綠。
+- 2026-11-05 合併票 26 後的檢查（依序跑，bench 與 e2e 不同時）：
+  - `cargo xtask data` 通過，sha256 同上次。
+  - `bench --check` exit 0：四個公開集合沒有翻盤，固定題 25/25。p95 原生 40.75 µs、WebAssembly 52.25 µs。
+  - `cargo xtask check` 通過（e2e `121 passed`）。
+  - 觸控亂按 5 個種子 × 150 步：夾雜實體鍵與數字列開關，沒有錯誤。
