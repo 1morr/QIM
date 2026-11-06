@@ -32,7 +32,7 @@
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾 `/code-review <開工時的 commit>`、commit。
 3. 驗證：`docs/development.md`〈全部檢查〉加 test；貼指令輸出。
 4. 實作若推翻 plan、brief 或先前的決定，同一 commit 改文件，並在 progress.md「偏差與決定」記一行。只在票內的取捨記到票的 `## Comments`；影響架構的另寫 ADR。
-5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；progress.md 加一列 session 紀錄（做了什麼、下一步，細節留在票裡）；commit。
+5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；progress.md 加一列 session 紀錄（做了什麼、下一步，細節留在票裡）；收尾票多一步：照 progress.md〈寫法與封存〉封存這個里程碑；commit。
 
 完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、progress.md 已更新、已 commit。缺一就還沒完成。
 
@@ -58,7 +58,7 @@
 - 需求與設計訪談：`/grill-with-docs`（邊問邊寫 `GLOSSARY.md` 與 ADR），結論寫回 brief。
 - 里程碑開工：入口是使用者在新 session 下 `/to-tickets docs/plan.md 拆 <里程碑> 的票`。這個 session 依序做完三步，第 3 步 commit 後才算完成：
   1. 把 plan〈里程碑任務〉裡它的那一節，依最新的 brief、plan 與上一個里程碑的結果細化成 `.scratch/<里程碑>/spec.md`，plan 那一節縮成一行連結。文件不足以寫出 spec 時，問使用者並補進文件。
-  2. 照 skill 提出切法，使用者同意後寫票，每張票寫明「讀：plan §x、brief §y」與驗收條件。
+  2. 照 skill 提出切法，使用者同意後寫票，每張票寫明「讀：plan §x、brief §y」與驗收條件。最後一張固定是**收尾票** `NN-m<N>-close`，被其他所有票擋：從開工的 commit 起跑里程碑 code-review、在乾淨 checkout 重驗 spec〈驗收〉、各票 Comments 沒處理的發現逐條註明去處，最後照 progress.md〈寫法與封存〉封存；由 `cargo xtask check` 的 `docs` 步驟守它存在。
   3. 票序寫回 spec〈票序〉，progress.md 加一列 session 紀錄。
 - 訪談、寫 plan 的 session 收尾在「plan 已更新」。之後的里程碑留在 plan，開工時才有 spec。
 - 做票：一張票一個 session，`/implement`；整批跑票：`/1morr:ticket-coordinator`。

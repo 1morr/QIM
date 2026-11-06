@@ -1,4 +1,4 @@
-//! `docs` 步驟：`docs/progress.md` 與里程碑 spec 的規則（`docs/plan.md` §6）。
+//! `docs` 步驟：`docs/progress.md`、里程碑 spec 與收尾票的規則（`docs/plan.md` §6）。
 
 use std::path::Path;
 
@@ -402,7 +402,8 @@ fn is_date(text: &str) -> bool {
         })
 }
 
-/// `.scratch/` 下的目錄：里程碑目錄（`m<數字>`）只給已開工的里程碑；有 `issues/` 的都要有完整的 spec。
+/// `.scratch/` 下的目錄：里程碑目錄（`m<數字>`）只給已開工的里程碑；有 `issues/` 的都要有完整的 spec，
+/// 里程碑目錄的 `issues/` 還要有一張 `-close.md` 結尾的收尾票。
 /// 其他名字的目錄是不屬於里程碑的工作（docs/agents/issue-tracker.md），不受里程碑表管。
 fn check_scratch(
     root: &Path,
@@ -430,7 +431,29 @@ fn check_scratch(
         let dir = scratch.join(name);
         if dir.join("issues").is_dir() {
             check_spec(&dir.join("spec.md"), name, violations);
+            if is_milestone_dir(name) {
+                check_close_ticket(&dir.join("issues"), name, violations)?;
+            }
         }
+    }
+    Ok(())
+}
+
+/// 里程碑的 `issues/` 至少有一張 `-close.md` 結尾的收尾票；不要求它是編號最大的（收尾後補票是允許的）。
+fn check_close_ticket(
+    issues: &Path,
+    name: &str,
+    violations: &mut Vec<String>,
+) -> Result<(), String> {
+    let entries = std::fs::read_dir(issues)
+        .map_err(|error| format!("讀不到 {SCRATCH}/{name}/issues/：{error}"))?;
+    let has_close = entries
+        .filter_map(|entry| entry.ok())
+        .any(|entry| entry.file_name().to_string_lossy().ends_with("-close.md"));
+    if !has_close {
+        violations.push(format!(
+            "{SCRATCH}/{name}/issues/: 沒有收尾票：里程碑最後一張是 NN-{name}-close.md（CLAUDE.md〈Skills〉里程碑開工）"
+        ));
     }
     Ok(())
 }
@@ -553,6 +576,7 @@ repo 骨架與閘門就位。
 ";
 
     const SPEC: &str = ".scratch/m0/spec.md";
+    const CLOSE: &str = ".scratch/m0/issues/02-m0-close.md";
 
     fn repo_root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -561,7 +585,7 @@ repo 骨架與閘門就位。
             .to_path_buf()
     }
 
-    /// 在暫存目錄寫出範本 repo：progress、`.scratch/m0/` 的 spec 與一張票。
+    /// 在暫存目錄寫出範本 repo：progress、`.scratch/m0/` 的 spec、一張票與收尾票。
     fn fixture() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
@@ -570,6 +594,7 @@ repo 骨架與閘門就位。
         fs::write(root.join(PROGRESS), PROGRESS_FIXTURE).unwrap();
         fs::write(root.join(SPEC), SPEC_FIXTURE).unwrap();
         fs::write(root.join(".scratch/m0/issues/01-a.md"), "# 01: a\n").unwrap();
+        fs::write(root.join(CLOSE), "# 02: m0 close\n").unwrap();
         dir
     }
 
@@ -978,6 +1003,41 @@ repo 骨架與閘門就位。
         fs::write(
             dir.path().join(".scratch/docs-cleanup/spec.md"),
             SPEC_FIXTURE,
+        )
+        .unwrap();
+        assert_green(dir.path());
+    }
+
+    #[test]
+    fn milestone_without_close_ticket_is_red() {
+        let dir = fixture();
+        fs::remove_file(dir.path().join(CLOSE)).unwrap();
+        assert_red(dir.path(), &[".scratch/m0/issues/", "收尾票"]);
+    }
+
+    #[test]
+    fn rewriting_renumbering_or_following_the_close_ticket_is_green() {
+        let dir = fixture();
+        edit(dir.path(), CLOSE, |text| text.replacen("close", "收尾", 1));
+        assert_green(dir.path());
+        fs::rename(
+            dir.path().join(CLOSE),
+            dir.path().join(".scratch/m0/issues/07-m0-close.md"),
+        )
+        .unwrap();
+        assert_green(dir.path());
+        fs::write(dir.path().join(".scratch/m0/issues/08-b.md"), "# 08: b\n").unwrap();
+        assert_green(dir.path());
+    }
+
+    #[test]
+    fn effort_directory_without_close_ticket_is_green() {
+        let dir = fixture();
+        fs::create_dir_all(dir.path().join(".scratch/docs-diet/issues")).unwrap();
+        fs::write(dir.path().join(".scratch/docs-diet/spec.md"), SPEC_FIXTURE).unwrap();
+        fs::write(
+            dir.path().join(".scratch/docs-diet/issues/01-x.md"),
+            "# 01: x\n",
         )
         .unwrap();
         assert_green(dir.path());
