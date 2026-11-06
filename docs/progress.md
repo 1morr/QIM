@@ -33,6 +33,7 @@
 | 2026-11-05 | M2（補 M1 17d） | 詞庫補漏：鈎鉤、濕溼等 6 組補成雙向；臺→台、菸→煙單向，語料也照原文；同頻重複只算一次、合着不併合著；建置接線補測試；細節見票 17d | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票`（補票 26b、27b 也做完後） |
 | 2026-11-05 | M2（補 M1 26b） | 單按修飾鍵、觸控切頁與 ⇧ 不結束數字（`Key::Modifier`）；單按 Shift 判定在放開別的鍵時解除；librime 用詞改成發佈版／master；細節見票 26b | 新 session 下 `/implement .scratch/m1/issues/27b-touch-shift-and-labels.md` |
 | 2026-11-05 | M2（補 M1 27b） | 觸控標點照鍵上的字（使用者決定）；開一次的 Shift 照 Gboard 實測被任何鍵解除；讀屏、數字列狀態、角標與大寫字級照 Gboard；細節見票 27b | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
+| 2026-11-06 | M2（公開 repo） | 補 Apache-2.0 `LICENSE` 與 `README.md`，repo 公開到 https://github.com/1morr/QIM | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 
 ## 偏差與決定
 
