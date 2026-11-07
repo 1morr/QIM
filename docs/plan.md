@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0、M1 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`）；M2 進行中、尚未拆票；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0、M1 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`）；M2 進行中（`.scratch/m2/spec.md`）；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -556,21 +556,7 @@ M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/iss
 
 ### 7.3 M2 平台可行性實驗
 
-要回答：核心與資料包放不放得進 iOS 鍵盤擴充，端上模型與上下文能用到什麼程度。只量數字，不做產品。結果決定 M3 模型階梯的大小上限、資料包格式要不要改。
-
-- 開工先查證：免費佈建能否在實機跑鍵盤擴充、App Group 能否使用（brief §11）。不能的話，請使用者決定要不要提前申請付費帳號，或改在模擬器做並註明限制。
-- `crates/qim-ffi/` 最小版：只包到能載入資料包、處理按鍵的介面，用來量真實綁定的開銷。
-- `scripts/experiments/ios-memory/`：鍵盤擴充載入核心與 M1 的資料包，在使用者的 iPhone 上量常駐記憶體，並逐步加壓找出被系統終止的上限。記下機型與 iOS 版本（上限隨機型而異，brief §12.3）。
-- 同一個實驗順帶回答：Foundation Models 能否在鍵盤擴充內使用；`documentContextBeforeInput` 實際讀得到多少字。
-- 小型神經模型開銷：用隨機權重的 Gboard 級（約 1.4M 參數）與青簡級（約 23M 參數）模型，在鍵盤擴充裡量載入時間、單次推論延遲、記憶體。推論引擎先試青簡用的 candle，行動端是否可行本身就是要回答的問題。
-- 已定（2026-11-07 M1 review，使用者決定）：
-  - `qim-ffi` 之前先一張清理票：先寫會紅的測試再修 `set_options` 後 `select`、`focus_segment`、`text` 用舊候選列的 bug；把 `qim-wasm` 的邏輯收進 `Session` 與 `qim-layout`、按鍵收成一個入口、統一命名（`.scratch/m1/issues/24-m1-close.md` Comments 的 M2 各條）。
-  - 另開一張小票接 GitHub Actions：跑 `cargo xtask check --fast` 與 `cargo test`，`bench --check` 要下載大來源，先不進；推到遠端前問使用者。
-  - 實機只有 iPhone 18 Pro Max：記憶體上限只在這台量，寫回 brief 時註明旗艦機的數字可能偏高。
-  - 上 iOS 前先在 Mac 量各資料包載入後的常駐記憶體（postcard 反序列化後可能比檔案大數倍），有無 `jsonschema` 各一次。
-- 完成標準：
-  - 四個問題都有實測結果，寫回 brief §9（記憶體目標）、§11、§12.3。
-  - 放不下時，資料包改 mmap 友善格式的決定寫回本檔 §1.4、§4。
+進行中：目標、範圍、共同規則、驗收與票序見 `.scratch/m2/spec.md`（2026-11-07 由本節細化，含 M1 review 的決定）。
 
 ### 7.4 M3 智慧候選
 

@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 完成，[已封存](archive/M0.md) |
 | M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 完成，[已封存](archive/M1.md) |
-| M2 | `.scratch/m2/issues/` | brief §9、§11、§12.3；plan §1.4、§3、§7.3；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現） | 進行中，尚未拆票 |
+| M2 | `.scratch/m2/issues/` | brief §9、§11、§12.3；plan §1.4、§3、§7.3；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 進行中，已拆票 |
 
 ## Session 紀錄
 
@@ -35,6 +35,7 @@
 | 2026-11-05 | M2（補 M1 27b） | 觸控標點照鍵上的字（使用者決定）；開一次的 Shift 照 Gboard 實測被任何鍵解除；讀屏、數字列狀態、角標與大寫字級照 Gboard；細節見票 27b | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-06 | M2（公開 repo） | 補 Apache-2.0 `LICENSE` 與 `README.md`，repo 公開到 https://github.com/1morr/QIM | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-07 | M2（M1 review） | 重跑 check 與 bench 全過；決定 M2 先清理 FFI 前的介面與 `set_options` bug、另開 CI 小票、只用 iPhone 18 Pro Max 量；見 plan §7.3 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
+| 2026-11-07 | M2 拆票 | plan §7.3 細化成 `.scratch/m2/spec.md`，拆 12 張票（票序見 spec）；01、04、05、06 可平行 | 新 session 下 `/implement .scratch/m2/issues/01-set-options-stale-candidates.md` |
 
 ## 偏差與決定
 
