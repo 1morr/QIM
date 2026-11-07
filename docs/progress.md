@@ -34,6 +34,7 @@
 | 2026-11-05 | M2（補 M1 26b） | 單按修飾鍵、觸控切頁與 ⇧ 不結束數字（`Key::Modifier`）；單按 Shift 判定在放開別的鍵時解除；librime 用詞改成發佈版／master；細節見票 26b | 新 session 下 `/implement .scratch/m1/issues/27b-touch-shift-and-labels.md` |
 | 2026-11-05 | M2（補 M1 27b） | 觸控標點照鍵上的字（使用者決定）；開一次的 Shift 照 Gboard 實測被任何鍵解除；讀屏、數字列狀態、角標與大寫字級照 Gboard；細節見票 27b | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-06 | M2（公開 repo） | 補 Apache-2.0 `LICENSE` 與 `README.md`，repo 公開到 https://github.com/1morr/QIM | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
+| 2026-11-07 | M2（M1 review） | 重跑 check 與 bench 全過；決定 M2 先清理 FFI 前的介面與 `set_options` bug、另開 CI 小票、只用 iPhone 18 Pro Max 量；見 plan §7.3 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 
 ## 偏差與決定
 
@@ -56,3 +57,4 @@
 - 2026-11-05 M2（補 M1 27b，使用者決定）：符號頁 `：；！？（）［］` 照 Gboard 實測標全形、打全形，推翻票面的「ASCII 標點半形」；英文直通時觸控打不出半形是已知限制（brief §4.4）。
 - 2026-11-05 M2（補 M1 27b）：臨時英文中觸控的 `text`（標點、數字、表情、常用語）接在英文後，推翻票 25b 的先上屏英文（實作決定，brief §4.3、plan §2.1）。
 - 2026-11-05 M2（補 M1 27b）：開一次的觸控 Shift 照 Gboard 實測被任何別的鍵解除，推翻票 27 的只有字母鍵解除（brief §4.4、plan §2.6、GLOSSARY）。
+- 2026-11-07 M2（M1 review，使用者決定）：M2 加一張 FFI 前的清理票與一張 CI 小票（plan §7.3）；記憶體上限只在 iPhone 18 Pro Max 量並註明。
