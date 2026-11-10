@@ -82,7 +82,7 @@ test("匯出、清空、匯入後讀回相同", async ({ page }, testInfo) => {
 	await page.getByRole("button", { name: "匯出學習資料" }).click();
 	const file = await (await download).path();
 	const exported = await readFile(file, "utf8");
-	expect(exported.split("\n")[0]).toBe("# qim-userdict v1");
+	expect(exported.split("\n")[0]).toBe("# qim-userdict v2");
 	expect(exported).toContain("\t雲口\tmir\t1\t");
 
 	await page.getByRole("button", { name: "清空學習資料" }).click();
@@ -103,7 +103,7 @@ test("匯出、清空、匯入後讀回相同", async ({ page }, testInfo) => {
 	expect(await readFile(await (await again).path(), "utf8")).toBe(exported);
 });
 
-test("匯入不是 qim-userdict v1 的檔時報錯，學習資料不動", async ({ page }) => {
+test("匯入不是 qim-userdict 的檔時報錯，學習資料不動", async ({ page }) => {
 	await learnYunHau(page);
 	const { status } = await ready(page);
 	await page.getByLabel("匯入學習資料（取代目前的）").setInputFiles({
@@ -116,7 +116,7 @@ test("匯入不是 qim-userdict v1 的檔時報錯，學習資料不動", async 
 	expect(await secondOfMir(page)).toBe("雲口");
 });
 
-/** 只有一個手動詞的 v1 檔：匯入後「雲口」就不在了。 */
+/** 只有一個手動詞的 v1 檔（v2 起仍收）：匯入後「雲口」就不在了。 */
 const OTHER_DICT = [
 	"# qim-userdict v1",
 	"#@/tick/quick\t0",
@@ -164,7 +164,7 @@ test("手動加的詞打觸發詞時是首選，重新整理後還在", async ({
 	await page
 		.getByRole("textbox", { name: "詞", exact: true })
 		.fill("速成輸入法");
-	await page.getByRole("textbox", { name: "觸發詞" }).fill("qim");
+	await page.getByRole("textbox", { name: "觸發詞", exact: true }).fill("qim");
 	await page.getByRole("button", { name: "加詞" }).click();
 	await expect(status).toHaveText("已加入「速成輸入法」");
 	await expect(text).toBeFocused();
@@ -184,7 +184,7 @@ test("手動加的詞打觸發詞時是首選，重新整理後還在", async ({
 test("觸發詞有方案以外的鍵時加不進去", async ({ page }) => {
 	const { status } = await ready(page);
 	await page.getByRole("textbox", { name: "詞", exact: true }).fill("QIM");
-	await page.getByRole("textbox", { name: "觸發詞" }).fill("q1");
+	await page.getByRole("textbox", { name: "觸發詞", exact: true }).fill("q1");
 	await page.getByRole("button", { name: "加詞" }).click();
 	await expect(status).toHaveText(/加不進去/);
 });

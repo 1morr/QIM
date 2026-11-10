@@ -1,6 +1,6 @@
 # 14: 常用語
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 讀: plan §2.4（使用者詞、觸發詞、匯出格式）；brief §1.5、§4.5；spec〈範圍〉〈共同規則〉
 
@@ -14,9 +14,20 @@ Blocked by: 01
 
 ## 驗收
 
-- [ ] 單元測試：加一條含換行的常用語，打它的觸發詞時是首選、上屏整段原文。
-- [ ] Playwright：在設定區新增一條、打觸發詞上屏讀回、刪除後打不出；截圖。
-- [ ] 匯出再匯入後常用語還在。
-- [ ] 實際操作亂按一輪；`cargo xtask check` 綠燈。
+- [x] 單元測試：加一條含換行的常用語，打它的觸發詞時是首選、上屏整段原文。
+- [x] Playwright：在設定區新增一條、打觸發詞上屏讀回、刪除後打不出；截圖。
+- [x] 匯出再匯入後常用語還在。
+- [x] 實際操作亂按一輪；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-11 實作：常用語是來源 `phrase` 的使用者詞，碼是空字串，所以不進 lattice、不出現在連打裡，只靠觸發詞（排位規則 1，沿用手動加詞的路）或從清單選；文字可含換行與 Tab。核心加 `UserModel::add_phrase` / `phrases` / `remove_phrase` 與 `Phrase`，綁定加 `addPhrase` / `removePhrase` / `phrases` / `commitText`。同文字只存一條，再存一次是換觸發詞；換觸發詞與刪除時一起刪舊觸發詞學到的計數，匯出檔不留刪掉的字。寫進 plan §2.4、名詞表。
+- 採用的慣例：和手動加詞的分工照 Gboard 個人字典（字詞，進連打）對 iOS／macOS 文字替代（短語 + 可不填的快捷鍵）；沒觸發詞從清單選，照搜狗、微信輸入法的常用語面板（點了上屏、可含換行）；清單依文字排，照 iOS 文字替代。
+- 觸控入口（票內定）：要。候選列右側在沒有組字時有「常用語」鍵，叫出清單點一條就上屏，組字中藏起；觸控與桌面共用，照 Gboard 工具列在沒有候選時給功能鍵。佈局的「常用」頁（brief §4.4）是寫死的 `text` 鍵，和使用者常用語分開，brief §4.4 與名詞表已註明。寫進 plan §3.1。
+- 簡體模式照樣轉簡體（清單選走 `Session::text`，觸發詞走候選的後處理），和 M1 票 23「`text` 也轉簡體」一致；驗收的「上屏整段原文」以預設的繁體模式驗。記在 progress〈偏差與決定〉。
+- 匯出格式升 `# qim-userdict v2`（原定由票 12 升，這張票先用到）：詞欄跳脫 `\\`、`\n`、`\t`，照 PostgreSQL `COPY` 文字格式與 Linear TSV；常用語那列碼空、計數 0；v1 照字面讀、沒有 `phrase`。性質測試加了含換行、Tab、反斜線的常用語。票 12 的 Comments 已留交接。
+- `cargo xtask bench --check`：和 baseline（開工 `4908839`）完全相同，fixed 84／84；yue-wiki 答錯 1131、修正 4467；zh-wiki 1126、4505；common-voice-yue 1032、4043；hkcancor 663、2588；依長度分組不變，四個集合都沒有翻盤。`--learning` 在 `4908839` 與改後各跑一次，四個集合學習關／開都相同（yue-wiki 4467／4406、zh-wiki 4505／4523、common-voice-yue 4043／3983、hkcancor 2588／2186）。本機沒有個人集。
+- 亂按一輪：一次性的固定種子腳本（4 個種子 × 300 步，桌面與手機尺寸），亂打各種鍵、Shift、快速連打觸發詞、點「常用語」選一條、增刪改常用語、切簡體／無痕／英文候選／觸控鍵盤，每步檢查沒有頁面錯誤、組字中藏起「常用語」鍵與清單、上屏的字等於點的那條取代選取範圍。沒找到 bug（兩次「失敗」是腳本沒算到選取範圍與簡體轉換）；腳本沒進 repo。截圖 `.scratch/m3/evidence/14-*.png`。
+- code-review 已處理：編輯或新增成已有的文字時，網頁擋下而不是靜默換掉那條的觸發詞（e2e 守）；`add_word` 與 `add_phrase` 的檢查抽成 `check_user_word`；`message()` 搬到 `dom.ts`；`Row::parse` 收 `Version`；`show` 改名 `setComposing`；plan §0 對照表加「常用語 → `Phrase`」。
+- code-review 未處理（判斷題）：觸發詞剛好是常用語自己的碼時，刪除會連平常打字學到的同一組計數一起刪（同一個鍵分不出來，寧可少一筆學習也不留刪掉的字，寫在 `remove_phrase` 的註解）；`WordSource::Phrase` 與 `AutoPhrase` 並列，有人建議改名 `CommonPhrase`，維持 `Phrase`（名詞表與 plan §0 已對上，匯出的來源字串也是 `phrase`）。
+

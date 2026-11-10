@@ -1,5 +1,6 @@
 //! 個人模型（plan §2.4）：使用者詞與學習計數。
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -49,13 +50,20 @@ enum WordSource {
     Manual,
     /// 自動造詞：分段選字上屏學到的。
     AutoPhrase,
+    /// 常用語：使用者存的句子或段落，碼是 [`PHRASE_CODE`]。
+    Phrase,
 }
 
+/// 常用語的碼：空字串。常用語不是由字的碼打出來的，lattice 查的碼都不是空的，所以它不進連打，
+/// 只靠觸發詞（排位規則 1）或從清單選（[`crate::Session::text`]）上屏。
+const PHRASE_CODE: &str = "";
+
 /// 匯出檔「來源」欄的值：只有學習計數的是 `learned`，使用者詞照它的來源。
-const SOURCE_NAMES: [(Option<WordSource>, &str); 3] = [
+const SOURCE_NAMES: [(Option<WordSource>, &str); 4] = [
     (None, "learned"),
     (Some(WordSource::Manual), "manual"),
     (Some(WordSource::AutoPhrase), "auto"),
+    (Some(WordSource::Phrase), "phrase"),
 ];
 
 /// 一個（輸入碼, 候選文字）的計數；方案由所在的 [`SchemeModel`] 決定。兩種上屏分開記（plan §2.4）：
@@ -99,18 +107,8 @@ impl UserModel {
         text: &str,
         trigger: Option<&str>,
     ) -> Result<(), UserWordError> {
-        if text.is_empty() {
-            return Err(UserWordError::EmptyWord);
-        }
-        if text.chars().any(char::is_control) {
-            return Err(UserWordError::ControlCharacter);
-        }
+        check_user_word(engine, text, trigger, |_| false)?;
         let scheme = engine.scheme();
-        if let Some(trigger) = trigger
-            && (trigger.is_empty() || !scheme.spells(trigger))
-        {
-            return Err(UserWordError::InvalidTrigger(trigger.to_string()));
-        }
         let code = engine
             .code_of(text)
             .or_else(|| trigger.map(String::from))
@@ -124,9 +122,111 @@ impl UserModel {
         );
         Ok(())
     }
+
+    /// 存一條常用語（plan §2.4）：可以長、可以含換行與 Tab；`trigger` 是打它就讓它成首選的
+    /// 輸入碼，只能用方案的鍵，沒有時只能從清單選。同一個方案裡同樣的文字只存一條：再存一次
+    /// 換上新的觸發詞，舊觸發詞學到的計數一起刪掉。
+    pub fn add_phrase(
+        &mut self,
+        engine: &Engine,
+        text: &str,
+        trigger: Option<&str>,
+    ) -> Result<(), UserWordError> {
+        check_user_word(engine, text, trigger, |c| c == '\n' || c == '\t')?;
+        let scheme = engine.scheme();
+        let model = self.for_scheme_mut(&scheme.id);
+        let old = model.words_at(PHRASE_CODE).insert(
+            text.to_string(),
+            UserWord {
+                source: WordSource::Phrase,
+                trigger: trigger.map(String::from),
+            },
+        );
+        if let Some(old) = old.and_then(|w| w.trigger)
+            && Some(old.as_str()) != trigger
+        {
+            model.forget(&old, text);
+        }
+        Ok(())
+    }
+
+    /// 這個方案的常用語，依文字排（同 iOS 文字替代的清單依字母排）。
+    pub fn phrases(&self, engine: &Engine) -> Vec<Phrase> {
+        let model = self.for_scheme(&engine.scheme().id);
+        model
+            .words
+            .get(PHRASE_CODE)
+            .into_iter()
+            .flatten()
+            .map(|(text, word)| Phrase {
+                text: text.clone(),
+                trigger: word.trigger.clone(),
+            })
+            .collect()
+    }
+
+    /// 刪掉文字是 `text` 的常用語，連同它的觸發詞學到的計數，匯出檔裡不再有它；沒有這條時回傳
+    /// `false`。觸發詞剛好是這段文字自己的碼時，平常打字學到的同一組計數也一起刪：兩者是同一個鍵、
+    /// 分不出來，寧可少一筆學習，也不留使用者刪掉的字。
+    pub fn remove_phrase(&mut self, engine: &Engine, text: &str) -> bool {
+        let model = self.for_scheme_mut(&engine.scheme().id);
+        let Some(phrases) = model.words.get_mut(PHRASE_CODE) else {
+            return false;
+        };
+        let Some(word) = phrases.remove(text) else {
+            return false;
+        };
+        if phrases.is_empty() {
+            model.words.remove(PHRASE_CODE);
+        }
+        if let Some(trigger) = word.trigger {
+            model.forget(&trigger, text);
+        }
+        true
+    }
+}
+
+/// 一條常用語（[`UserModel::phrases`]）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Phrase {
+    pub text: String,
+    /// 打它就讓這條常用語成首選的輸入碼；沒有時只能從清單選。
+    pub trigger: Option<String>,
+}
+
+/// 使用者詞與常用語共同的檢查：文字不能空、不能含控制字元（`allowed` 放行的除外），觸發詞只能用
+/// 方案的鍵。
+fn check_user_word(
+    engine: &Engine,
+    text: &str,
+    trigger: Option<&str>,
+    allowed: impl Fn(char) -> bool,
+) -> Result<(), UserWordError> {
+    if text.is_empty() {
+        return Err(UserWordError::EmptyWord);
+    }
+    if text.chars().any(|c| c.is_control() && !allowed(c)) {
+        return Err(UserWordError::ControlCharacter);
+    }
+    if let Some(trigger) = trigger
+        && (trigger.is_empty() || !engine.scheme().spells(trigger))
+    {
+        return Err(UserWordError::InvalidTrigger(trigger.to_string()));
+    }
+    Ok(())
 }
 
 impl SchemeModel {
+    /// 刪掉（`code`, `text`）學到的計數。
+    fn forget(&mut self, code: &str, text: &str) {
+        if let Some(texts) = self.entries.get_mut(code) {
+            texts.remove(text);
+            if texts.is_empty() {
+                self.entries.remove(code);
+            }
+        }
+    }
+
     /// 碼 `code` 的使用者詞，沒有就建一個空的。
     fn words_at(&mut self, code: &str) -> &mut BTreeMap<String, UserWord> {
         self.words.entry(code.to_string()).or_default()
@@ -249,8 +349,17 @@ impl SchemeModel {
     }
 }
 
-/// 匯出檔的第一行（plan §2.4）；格式改了要升版本（brief §5.3）。
-const HEADER: &str = "# qim-userdict v1";
+/// 匯出檔的第一行（plan §2.4）；格式改了要升版本（brief §5.3）。v2 的詞欄有跳脫，可以有常用語。
+const HEADER: &str = "# qim-userdict v2";
+/// 舊版的第一行；v1 的詞欄照字面讀、沒有常用語，匯入一直要收（M3 spec〈共同規則〉）。
+const HEADER_V1: &str = "# qim-userdict v1";
+
+/// 匯入的檔是哪一版，由第一行決定。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Version {
+    V1,
+    V2,
+}
 /// 方案 tick 的 metadata 行開頭，後接方案 id、Tab、tick；照 librime userdb 文字檔的
 /// `#@/tick`（`docs/research/userdict-text-formats.md`）。
 const TICK_KEY: &str = "#@/tick/";
@@ -259,8 +368,8 @@ const COLUMNS: &str =
     "# scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger";
 
 impl UserModel {
-    /// 匯出成 `# qim-userdict v1` 的 TSV（plan §2.4），給殼存檔、換機或備份。
-    /// 每個（方案, 輸入碼, 詞）一列，依方案、輸入碼、詞的順序。
+    /// 匯出成 `# qim-userdict v2` 的 TSV（plan §2.4），給殼存檔、換機或備份。
+    /// 每個（方案, 輸入碼, 詞）一列，依方案、輸入碼、詞的順序；詞欄經 [`escape`]。
     pub fn export(&self) -> String {
         let mut out = format!("{HEADER}\n");
         for (scheme, model) in &self.schemes {
@@ -292,6 +401,7 @@ impl UserModel {
                     .find(|&(s, _)| s == source)
                     .expect("每種來源都有名字");
                 let trigger = word.and_then(|w| w.trigger.as_deref()).unwrap_or("");
+                let text = escape(text);
                 out.push_str(&format!(
                     "{scheme}\t{text}\t{code}\t{}\t{}\t{}\t{}\t{source}\t{trigger}\n",
                     count.commits, count.last_commit_tick, count.decayed, count.last_tick,
@@ -301,19 +411,26 @@ impl UserModel {
         out
     }
 
-    /// 讀 [`UserModel::export`] 的檔，取代整個個人模型。第一行不是 `# qim-userdict v1`、
+    /// 讀 [`UserModel::export`] 的檔（v2，也收 v1），取代整個個人模型。第一行不是兩者之一、
     /// 或有一列不合格式時整份不收，錯誤帶行號。
     pub fn import(text: &str) -> Result<UserModel, ImportError> {
         let mut lines = text
             .lines()
             .map(|l| l.strip_suffix('\r').unwrap_or(l))
             .zip(1..);
-        if lines.next().map(|(l, _)| l) != Some(HEADER) {
-            return Err(ImportError::at(1, format!("第一行要是「{HEADER}」")));
-        }
+        let version = match lines.next().map(|(l, _)| l) {
+            Some(HEADER) => Version::V2,
+            Some(HEADER_V1) => Version::V1,
+            _ => {
+                return Err(ImportError::at(
+                    1,
+                    format!("第一行要是「{HEADER}」或「{HEADER_V1}」"),
+                ));
+            }
+        };
         let mut user = UserModel::default();
         let mut ticks: BTreeMap<&str, u64> = BTreeMap::new();
-        let mut seen: BTreeSet<(&str, &str, &str)> = BTreeSet::new();
+        let mut seen: BTreeSet<(&str, &str, Cow<str>)> = BTreeSet::new();
         for (line, number) in lines {
             let error = |reason: &str| ImportError::at(number, reason.to_string());
             if let Some(tick) = line.strip_prefix(TICK_KEY) {
@@ -327,12 +444,12 @@ impl UserModel {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            let row = Row::parse(line).map_err(error)?;
+            let row = Row::parse(line, version).map_err(error)?;
             let tick = ticks.get(row.scheme).copied();
             if tick.is_some_and(|t| row.count.last_tick.max(row.count.last_commit_tick) > t) {
                 return Err(error("最後 tick 比方案的 tick 大"));
             }
-            if !seen.insert((row.scheme, row.code, row.text)) {
+            if !seen.insert((row.scheme, row.code, row.text.clone())) {
                 return Err(error("同方案、同輸入碼、同詞的列重複"));
             }
             let model = user.for_scheme_mut(row.scheme);
@@ -362,14 +479,17 @@ impl UserModel {
 /// 匯出檔的一列。
 struct Row<'a> {
     scheme: &'a str,
-    text: &'a str,
+    /// 已還原跳脫。
+    text: Cow<'a, str>,
     code: &'a str,
     count: Count,
     word: Option<UserWord>,
 }
 
 impl<'a> Row<'a> {
-    fn parse(line: &'a str) -> Result<Self, &'static str> {
+    /// v1 的詞欄照字面讀，沒有常用語。
+    fn parse(line: &'a str, version: Version) -> Result<Self, &'static str> {
+        let v1 = version == Version::V1;
         let fields: Vec<&str> = line.split('\t').collect();
         let [
             scheme,
@@ -385,9 +505,14 @@ impl<'a> Row<'a> {
         else {
             return Err("要有 9 欄，以 Tab 分隔");
         };
-        if scheme.is_empty() || text.is_empty() || code.is_empty() {
-            return Err("方案、詞、輸入碼不能是空的");
+        if scheme.is_empty() || text.is_empty() {
+            return Err("方案、詞不能是空的");
         }
+        let text = if v1 {
+            Cow::Borrowed(text)
+        } else {
+            unescape(text)?
+        };
         let integer = |s: &str| s.parse::<u64>().map_err(|_| "次數與 tick 要是非負整數");
         let decayed: f64 = decayed.parse().map_err(|_| "衰減值要是數字")?;
         if !decayed.is_finite() || decayed < 0.0 {
@@ -402,8 +527,20 @@ impl<'a> Row<'a> {
         let trigger = (!trigger.is_empty()).then(|| trigger.to_string());
         let (source, _) = SOURCE_NAMES
             .into_iter()
+            .filter(|&(s, _)| !(v1 && s == Some(WordSource::Phrase)))
             .find(|&(_, name)| name == source)
-            .ok_or("來源要是 manual、learned 或 auto")?;
+            .ok_or(if v1 {
+                "來源要是 manual、learned 或 auto"
+            } else {
+                "來源要是 manual、learned、auto 或 phrase"
+            })?;
+        let phrase = source == Some(WordSource::Phrase);
+        if phrase != (code == PHRASE_CODE) {
+            return Err("常用語（phrase）的輸入碼是空的，其他列不能是空的");
+        }
+        if phrase && count != Count::default() {
+            return Err("常用語（phrase）沒有計數，觸發詞學到的另是一列 learned");
+        }
         let word = match source {
             None if trigger.is_some() => return Err("學到的（learned）不是使用者詞，沒有觸發詞"),
             None if count.decayed == 0.0 => return Err("學到的（learned）要有衰減值"),
@@ -421,6 +558,46 @@ impl<'a> Row<'a> {
             word,
         })
     }
+}
+
+/// 詞欄的跳脫（v2）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，照 PostgreSQL `COPY` 的文字格式與
+/// Linear TSV；常用語可以含換行與 Tab，TSV 放不下原字。
+fn escape(text: &str) -> Cow<'_, str> {
+    if !text.contains(['\\', '\n', '\t']) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 2);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c => out.push(c),
+        }
+    }
+    Cow::Owned(out)
+}
+
+/// [`escape`] 的反向；反斜線後不是 `\\`、`n`、`t` 時是錯的。
+fn unescape(field: &str) -> Result<Cow<'_, str>, &'static str> {
+    if !field.contains('\\') {
+        return Ok(Cow::Borrowed(field));
+    }
+    let mut out = String::with_capacity(field.len());
+    let mut chars = field.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        out.push(match chars.next() {
+            Some('\\') => '\\',
+            Some('n') => '\n',
+            Some('t') => '\t',
+            _ => return Err("詞欄的反斜線後面要是 \\、n 或 t"),
+        });
+    }
+    Ok(Cow::Owned(out))
 }
 
 /// [`UserModel::import`] 不收的檔：第幾行（從 1 起）、為什麼。

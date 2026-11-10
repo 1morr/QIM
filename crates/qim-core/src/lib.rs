@@ -32,4 +32,4 @@ pub use session::{
     Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
-pub use user::{ImportError, UserModel, UserWordError};
+pub use user::{ImportError, Phrase, UserModel, UserWordError};
