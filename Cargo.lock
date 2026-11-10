@@ -1186,7 +1186,10 @@ version = "0.0.0"
 dependencies = [
  "postcard",
  "proptest",
+ "semver",
  "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

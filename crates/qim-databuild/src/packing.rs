@@ -283,6 +283,17 @@ fn check_statement(source: &Source, file: &str, quote: &str, upstream: &str) -> 
     }
 }
 
+/// manifest 的 `license`（plan §4.6）：各來源的 SPDX 識別碼依來源順序以 ` AND ` 接起，重複的只寫一次。
+pub(crate) fn license_expression(packed: &[Packed]) -> String {
+    let mut ids: Vec<&str> = Vec::new();
+    for p in packed {
+        if !ids.contains(&p.license_id.as_str()) {
+            ids.push(&p.license_id);
+        }
+    }
+    ids.join(" AND ")
+}
+
 /// 在 `dir` 寫 `<id>.pack`、`LICENSE`、`NOTICE`；`about` 是 NOTICE 最後說明怎麼用來源的一段。
 pub(crate) fn write(
     dir: &Path,

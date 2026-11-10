@@ -3,10 +3,11 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack,
-    RadicalHintPack, SchemePack, SimplifierPack,
+    CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, MANIFEST_FILE,
+    Manifest, Pack, PackKind, RadicalHintPack, SchemePack, SimplifierPack,
 };
 use qim_databuild::sources::{Fetch, sha256_hex};
+use qim_databuild::verify::{self, CheckId};
 use qim_databuild::{Error, Outcome, WrittenPack, lexicon};
 
 const TABLE: &str = "\
@@ -471,7 +472,7 @@ fn repo(root: &Path, statement: &str) {
 [source.libcangjie]
 repository = "https://example.invalid/libcangjie"
 version = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
-license = "Public Domain"
+license = "LicenseRef-Public-Domain"
 
 [source.libcangjie.license_text.statement]
 file = "data/README.table.md"
@@ -684,6 +685,84 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
     assert_eq!((report.continuous, report.extension), (34, 1));
+}
+
+/// 每份資料包旁有 manifest（plan §4.6）：描述旁邊的資料包檔，授權是各來源的 SPDX 識別碼以 AND 接起、
+/// 不重複；`--verify` 讀回來核對。
+#[test]
+fn every_pack_has_a_manifest_next_to_it() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), true).unwrap();
+    assert_eq!(outcome.packs.len(), 7);
+    let manifest_of = |name: &str| {
+        let pack = written(&outcome, name);
+        let dir = pack.path.parent().unwrap();
+        let manifest =
+            Manifest::from_json(&std::fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap())
+                .unwrap();
+        let bytes = std::fs::read(&pack.path).unwrap();
+        assert_eq!(manifest.id, pack.id, "{name}");
+        assert_eq!(manifest.file_name(), format!("{}.pack", pack.id), "{name}");
+        assert_eq!(manifest.sha256, pack.sha256, "{name}");
+        assert_eq!(manifest.size, bytes.len() as u64, "{name}");
+        assert_eq!(manifest.version, "1.0.0", "{name}");
+        (manifest, bytes)
+    };
+    for name in [
+        "速成",
+        "詞庫",
+        "語言模型",
+        "字根提示",
+        "簡繁",
+        "英文",
+        "emoji",
+    ] {
+        manifest_of(name);
+    }
+    let (quick, _) = manifest_of("速成");
+    assert_eq!(quick.kind, PackKind::Scheme);
+    assert_eq!(
+        quick.license,
+        "LicenseRef-Public-Domain AND Unicode-3.0 AND Apache-2.0"
+    );
+    let (lexicon, bytes) = manifest_of("詞庫");
+    assert_eq!(lexicon.kind, PackKind::Lexicon);
+    // 兩份維基都是 CC-BY-SA-4.0，口語詞表與 Common Voice 都是 CC0-1.0：各只寫一次。
+    assert_eq!(
+        lexicon.license,
+        "LGPL-3.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND CC0-1.0"
+    );
+    assert_eq!(
+        LexiconPack::open(&lexicon, &bytes).unwrap().id,
+        "quick-lexicon"
+    );
+    assert_eq!(manifest_of("emoji").0.kind, PackKind::Emoji);
+
+    let report = outcome.report.unwrap();
+    let check = report
+        .checks
+        .iter()
+        .find(|c| c.id == CheckId::Manifests)
+        .expect("verify 核對 manifest");
+    assert!(check.passed, "{report}");
+}
+
+/// manifest 和旁邊的資料包對不上時 `--verify` 失敗。
+#[test]
+fn manifest_not_matching_its_pack_fails_the_check() {
+    let pack = LexiconPack {
+        id: "l".into(),
+        lexicon: qim_core::Lexicon::default(),
+    };
+    let bytes = pack.to_bytes().unwrap();
+    let good = Manifest::new(PackKind::Lexicon, "l", &bytes, "1.0.0", "CC0-1.0");
+    assert!(verify::manifests(&[(good.to_json(), bytes.clone())]).passed);
+    let mut bad = good.clone();
+    bad.sha256 = "0".repeat(64);
+    let check = verify::manifests(&[(good.to_json(), bytes.clone()), (bad.to_json(), bytes)]);
+    assert!(!check.passed);
+    assert!(check.detail.contains("sha256"), "{}", check.detail);
 }
 
 #[test]

@@ -2,11 +2,12 @@
 # qim-databuild 下載到 repo 外的快取（docs/development.md〈資料建置〉），sha256 不符就失敗；換版本時改 version、url 與 sha256。
 # 資料進資料包的來源要寫 license_text，三選一：statement（照抄上游檔裡的聲明）、upstream_file（上游釘住的授權檔整份）、
 # repo_file（repo 裡存的全文）。
+# license 寫 SPDX 識別碼，SPDX 沒有的用 LicenseRef-<名>；資料包 manifest 的 license 由它接成（plan §4.6）。
 
 [source.libcangjie]
 repository = "https://gitlab.freedesktop.org/cangjie/libcangjie"
 version = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
-license = "Public Domain"
+license = "LicenseRef-Public-Domain"
 
 # 授權聲明所在的檔（files 之一），與照抄的聲明原文；建置時核對原文確實在檔內，再寫進資料包的 LICENSE。
 [source.libcangjie.license_text.statement]

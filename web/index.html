@@ -62,6 +62,18 @@
 					<ul id="word-list-skipped" aria-label="略過的列"></ul>
 					<ul id="word-list-unused" aria-label="不能設成觸發詞的快捷鍵"></ul>
 				</section>
+				<section id="packs" aria-label="資料包">
+					<h2>資料包</h2>
+					<table aria-label="資料包清單">
+						<thead>
+							<tr><th>使用</th><th>種類</th><th>名稱</th><th>版本</th><th>大小</th><th>授權</th><th>來源</th><th></th></tr>
+						</thead>
+						<tbody id="pack-rows"></tbody>
+					</table>
+					<label>從檔案匯入資料包 <input id="import-pack" type="file" multiple accept=".json,.pack,application/json" aria-describedby="import-pack-note" /></label>
+					<p id="import-pack-note" class="note">一起選資料包目錄裡的 manifest.json 與 .pack 檔；核對過大小、sha256 與核心版本才收，匯入後那一種改用它。</p>
+					<p id="pack-status" role="status" aria-label="資料包狀態"></p>
+				</section>
 			</section>
 			<section id="user-dict" aria-label="使用者詞">
 				<form id="add-word">

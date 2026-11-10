@@ -9,6 +9,7 @@ mod english;
 mod language_model;
 mod lattice;
 mod lexicon;
+mod manifest;
 mod pack;
 mod punctuation;
 mod radical_hint;
@@ -24,6 +25,7 @@ pub use engine::Engine;
 pub use english::EnglishWords;
 pub use language_model::{CLAUSE_START, CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
+pub use manifest::{CORE_VERSION, MANIFEST_FILE, MANIFEST_VERSION, Manifest, PackKind};
 pub use pack::{
     EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError,
     RadicalHintPack, SchemePack, SimplifierPack,

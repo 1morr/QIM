@@ -133,18 +133,13 @@ fn other_kinds_of_pack_are_not_language_model_packs() {
     );
 }
 
+/// 方案指名的是預設的語言模型，可以換成另一份（plan §4.6）；方案要時不能不給、不要時不能給。
 #[test]
-fn engine_rejects_a_language_model_the_scheme_does_not_name() {
+fn engine_takes_any_language_model_but_only_when_the_scheme_wants_one() {
     let lexicon = lexicon().to_bytes().unwrap();
     let named = pack(Some("bigram")).to_bytes().unwrap();
     let other = bigram("other").to_bytes().unwrap();
-    assert_eq!(
-        Engine::from_pack_bytes(&named, Some(&lexicon), Some(&other)).err(),
-        Some(PackError::LanguageModelMismatch {
-            expected: Some("bigram".into()),
-            found: Some("other".into()),
-        })
-    );
+    assert!(Engine::from_pack_bytes(&named, Some(&lexicon), Some(&other)).is_ok());
     assert_eq!(
         Engine::from_pack_bytes(&named, Some(&lexicon), None).err(),
         Some(PackError::LanguageModelMismatch {

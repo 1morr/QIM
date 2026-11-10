@@ -1,13 +1,15 @@
-// 網頁的組裝：載入資料包、建核心，接上各區的模組與輸入框的鍵盤事件。畫面與互動各在自己的模組，
+// 網頁的組裝：載入資料包（`packs.ts`）、建核心，接上各區的模組與輸入框的鍵盤事件。畫面與互動各在自己的模組，
 // 核心的排序與組字一律經綁定（plan §1.3）。
 
 import { mountCandidateBar } from "./candidate-bar.ts";
 import { mountComposition } from "./composition.ts";
 import { mountContext } from "./context.ts";
 import { mountTheme, mountTouch } from "./display.ts";
-import { element } from "./dom.ts";
+import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
 import { LoneShift, toKey } from "./keys.ts";
+import { mountPackSettings } from "./pack-settings.ts";
+import { PackLibrary } from "./packs.ts";
 import { mountPanel } from "./panel.ts";
 import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
@@ -25,19 +27,6 @@ import init, {
 } from "./wasm/qim_wasm.js";
 import { mountWordList } from "./word-list.ts";
 
-const PACK_URL = "/packs/quick/quick.pack";
-/** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
-const LEXICON_URL = "/packs/quick-lexicon/quick-lexicon.pack";
-/** 速成方案檔 `[packs]` 指名的語言模型資料包（字級 bigram）。 */
-const LANGUAGE_MODEL_URL = "/packs/zh-hant-bigram/zh-hant-bigram.pack";
-/** 速成方案檔 `[packs]` 指名的字根提示資料包（倉頡三代 / 五代碼）。 */
-const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
-/** 簡繁資料包（OpenCC `hk2s`），簡體模式用。 */
-const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
-/** 英文資料包（ESDB），中文狀態的英文候選用。 */
-const ENGLISH_URL = "/packs/scowl-en-us/scowl-en-us.pack";
-/** emoji 候選的 emoji 資料包（CLDR 粵語與繁中標註），各方案共用。 */
-const EMOJI_URL = "/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 /** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief §4.4）。 */
@@ -58,10 +47,6 @@ async function load(url: string): Promise<Response> {
 	return response;
 }
 
-async function loadPack(url: string): Promise<Uint8Array> {
-	return new Uint8Array(await (await load(url)).arrayBuffer());
-}
-
 /** 畫面上的組字狀態；鍵盤事件靠它決定哪些鍵由網頁自己攔下。 */
 const shown = {
 	composing: false,
@@ -76,37 +61,33 @@ function composingChinese(): boolean {
 }
 
 async function start(): Promise<void> {
-	const [
-		,
-		pack,
-		lexicon,
-		languageModel,
-		radicalHint,
-		simplifier,
-		english,
-		emoji,
-		layoutJson,
-		numberRowLayoutJson,
-	] = await Promise.all([
+	const [, library, layoutJson, numberRowLayoutJson] = await Promise.all([
 		init(),
-		loadPack(PACK_URL),
-		loadPack(LEXICON_URL),
-		loadPack(LANGUAGE_MODEL_URL),
-		loadPack(RADICAL_HINT_URL),
-		loadPack(SIMPLIFIER_URL),
-		loadPack(ENGLISH_URL),
-		loadPack(EMOJI_URL),
+		PackLibrary.open(),
 		load(LAYOUT_URL).then((response) => response.text()),
 		load(NUMBER_ROW_LAYOUT_URL).then((response) => response.text()),
 	]);
-	const session = new Session(
-		pack,
-		lexicon,
-		languageModel,
-		simplifier,
-		english,
-		emoji,
-	);
+	let session: Session;
+	/** 載入時就有要說的事（改用內建的資料包），載入完不清掉狀態列。 */
+	let notice = false;
+	try {
+		session = new Session(library.sessionPacks());
+	} catch (error) {
+		// 選的或匯入的資料包載入不了（例如 IndexedDB 裡的檔壞了）：這次只用內建的，說明原因。
+		library.fallBackToBuiltin();
+		session = new Session(library.sessionPacks());
+		status.textContent = `匯入的資料包載入不了，這次只用內建的：${message(error)}`;
+		notice = true;
+	}
+	/** 正在用的字根提示資料包，查完提示就釋放。 */
+	const radicalHints = (): RadicalHints => {
+		const pack = library.radicalHintPack();
+		try {
+			return new RadicalHints(pack, session);
+		} finally {
+			pack.free();
+		}
+	};
 	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
 	let phrases: Phrases | undefined;
 	// 匯入、清空換掉整份使用者詞，常用語的清單跟著重畫。
@@ -162,10 +143,8 @@ async function start(): Promise<void> {
 	const composition = mountComposition((index) =>
 		applyHandled(session.focusSegment(index), false),
 	);
-	const candidateBar = mountCandidateBar(
-		new RadicalHints(radicalHint, session),
-		(index) =>
-			applyHandled(session.select(shown.page * pageSize() + index), true),
+	const candidateBar = mountCandidateBar(radicalHints(), (index) =>
+		applyHandled(session.select(shown.page * pageSize() + index), true),
 	);
 	const panel = mountPanel(
 		() => session.allCandidates(),
@@ -195,6 +174,20 @@ async function start(): Promise<void> {
 		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
 		(snapshot) => apply(snapshot, snapshot.action === "space"),
 		(snapshot) => hostDefault(text, snapshot),
+	);
+	// 換資料包：核心換上新的那組（學習資料與開關留著），組字重列，字根提示跟著換。
+	mountPackSettings(
+		library,
+		() => {
+			const snapshot = session.setPacks(library.sessionPacks());
+			candidateBar.setRadicalHints(radicalHints());
+			try {
+				render(snapshot);
+			} finally {
+				snapshot.free();
+			}
+		},
+		focusText,
 	);
 	mountTheme();
 
@@ -264,7 +257,9 @@ async function start(): Promise<void> {
 
 	text.readOnly = false;
 	text.dataset.ready = "true";
-	status.textContent = "";
+	if (!notice) {
+		status.textContent = "";
+	}
 	// 載入中已經點進輸入框時 `focus()` 不會再觸發 focus 事件。
 	syncContext();
 	text.focus();
