@@ -60,6 +60,12 @@ impl WebSession {
         self.set_options(|options| options.incognito = on);
     }
 
+    /// 學習（brief §4.5、§7）：關掉時不寫任何學習資料，已學的照用、前文照用。預設開。
+    #[wasm_bindgen(js_name = setLearning)]
+    pub fn set_learning(&mut self, on: bool) {
+        self.set_options(|options| options.learning = on);
+    }
+
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
     #[wasm_bindgen(js_name = addWord)]
     pub fn add_word(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {

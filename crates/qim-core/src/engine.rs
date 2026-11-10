@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::HashSet;
 
-use crate::lattice::{self, Lattice, Listing};
+use crate::lattice::{self, Lattice, Listing, Preceding};
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
@@ -178,7 +178,7 @@ impl Engine {
     /// 順序見 [`lattice::candidates`]。不含英文候選與 emoji：它們是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
-        let lattice = Lattice::from_input(self, user, None, input);
+        let lattice = Lattice::from_input(self, user, Preceding::default(), input);
         let listing = Listing {
             english_candidates: false,
             emoji_candidates: false,
@@ -275,10 +275,11 @@ impl Engine {
     }
 
     /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
-    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）。
-    pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge) -> f64 {
+    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）；`bigram` 是這條邊接在
+    /// 前一個字詞後面的個人 bigram（[`crate::user::Following::probability`]），沒有是 0。
+    pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge, bigram: f64) -> f64 {
         let first = self.language_model.log_prob(prev, edge.first);
-        first + edge.inner + personal_bonus(first + edge.rest, edge.personal)
+        first + edge.inner + personal_bonus(first + edge.rest, edge.personal, bigram)
     }
 
     /// 組字接在前文 `before` 後面時，開頭的字要接的前一字（plan §2.3）。bigram 只在句內訓練
@@ -418,16 +419,20 @@ impl Engine {
             .collect()
     }
 
-    /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面（`None` 是組字開頭沒有
-    /// 前一字）的分數，依分數由高到低（同分照碼表、詞庫的順序）；`input` 中間的分隔記號見
-    /// [`Engine::exact`]。
-    pub(crate) fn span(&self, user: &UserModel, before: Option<char>, input: &str) -> Vec<Spanned> {
-        let user = user.for_scheme(&self.scheme.id);
+    /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面的分數，依分數由高到低
+    /// （同分照碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
+    pub(crate) fn span(&self, user: &UserModel, before: &Preceding, input: &str) -> Vec<Spanned> {
+        let following = before.word.as_deref().and_then(|w| user.bigrams_after(w));
+        let scheme_user = user.for_scheme(&self.scheme.id);
         let mut edges: Vec<Spanned> = self
-            .exact(user, input, 0, usize::MAX)
+            .exact(scheme_user, input, 0, usize::MAX)
             .into_iter()
             .map(|e| Spanned {
-                score: self.edge_score(before, &e),
+                score: self.edge_score(
+                    before.character,
+                    &e,
+                    following.map_or(0.0, |f| f.probability(&e.text)),
+                ),
                 simplified: e.simplified,
                 text: e.text,
             })

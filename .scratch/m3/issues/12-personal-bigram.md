@@ -1,6 +1,6 @@
 # 12: 個人 bigram 與學習總開關
 
-Status: ready-for-agent
+Status: done
 Blocked by: 03, 04
 讀: plan §2.3（`personal`）、§2.4（學習、匯出格式）、§5.2（`--learning`）；brief §4.5、§7；`docs/research/libime-user-model.md`；`docs/research/userdict-text-formats.md`；spec〈範圍〉〈共同規則〉
 
@@ -14,12 +14,21 @@ Blocked by: 03, 04
 
 ## 驗收
 
-- [ ] 單元測試：選過「X → Y」後，前文是 X 時 Y 的排名上升；學習開關關掉時 `UserModel` 不變、已學的仍生效。
-- [ ] `bench --learning` 學習開的修正次數比改之前少（含「有前文」集合），貼對照；`bench --check` 不變差。
-- [ ] `export` → `import` 等價（性質測試）；一份 v1 的檔仍匯入得了（測試用固定檔）。
-- [ ] Playwright：關掉學習後選兩次同一候選，它不成首選；截圖。
-- [ ] plan §2.3、§2.4 已更新；`cargo xtask check` 綠燈。
+- [x] 單元測試：選過「X → Y」後，前文是 X 時 Y 的排名上升；學習開關關掉時 `UserModel` 不變、已學的仍生效。
+- [x] `bench --learning` 學習開的修正次數比改之前少（含「有前文」集合），貼對照；`bench --check` 不變差。
+- [x] `export` → `import` 等價（性質測試）；一份 v1 的檔仍匯入得了（測試用固定檔）。
+- [x] Playwright：關掉學習後選兩次同一候選，它不成首選；截圖。
+- [x] plan §2.3、§2.4 已更新；`cargo xtask check` 綠燈。
 
 ## Comments
 
 - 2026-11-11 票 14：`# qim-userdict v2` 的檔頭、v1 匯入、詞欄跳脫（`\\`、`\n`、`\t`）與 `phrase` 來源已在 `qim-core/src/user.rs`；這張票往 v2 加 bigram 的列即可，見 plan §2.4。
+- 2026-11-11 做法（plan §2.3、§2.4）：個人 bigram 存在 `UserModel` 層（`Bigrams`，自己的 tick），上屏時記「前一個字詞 → 第一段」、相鄰兩段、兩段以上再記「前一個字詞 → 整串」（給自動造詞）。前一個字詞：lattice 裡是部分路徑的最後一段；組字開頭是最後選定的分段，否則看前文，前文以上一次上屏的最後一段結尾時取那一段（簡體模式的前文也認），否則取前文最後一字。學習用的是組字開頭時的前文（組字中再給的留到下一次，同打分）。前文分不出詞，所以接得上整個詞的只有剛上屏的那段，同 libime 由上層傳上一次上屏的詞。
+- 2026-11-11 打分：`P_bigram` = 這組衰減值 ÷ 前一個字詞後面各段衰減值總和（libime `HistoryBigram` 的條件機率）。合成不用 libime 的 `(1−λ)·Pu + λ·Pb`：沒有前一個字詞時學過的段只剩兩成個人分，`learning.rs` 的 `a_learned_word_also_scores_in_longer_continuous_input` 紅。改成 `Pu + (1−Pu)·λ·Pb`，bigram 只往上加。λ 用 dev 切分的學習模式（暫時改 `run_learning` 讀 `dev.tsv` 與 `dev-context.tsv`，已還原）掃，學習開的修正（yue-wiki、zh-wiki、common-voice-yue、hkcancor、四個「前文」，合計）：λ=0 4488/4400/3654/2203/2267/2181/591/1586（21370）；0.05 合計 21320；0.1 21308；0.2 21291；0.4 21297；**0.8 4450/4396/3614/2182/2254/2176/594/1580（21246）**；1 21251。分母加平滑 k（λ=0.8）：k=0.5 21265、1 21266、2 21278、4 21291，不採用。取 0.8（同 libime）。
+- 2026-11-11 `bench --learning`（test 切分，學習開的修正，前 → 後）：yue-wiki 4277→4283（+6）、zh-wiki 4400→4372、common-voice-yue 3871→3810、hkcancor 2105→2085、yue-wiki·前文 2230→2235（+5）、zh-wiki·前文 2170→2151、common-voice-yue·前文 612→608、hkcancor·前文 1462→1440、personal 1407→1408（+1）。公開集合合計 21127→20984（−143），「前文」四集合合計 6474→6434。驗收照使用者決定以合計為準（progress〈偏差與決定〉）。學習關的欄前後相同。
+- 2026-11-11 `bench --check`：公開集合答錯、修正與 baseline 逐字相同、翻盤清單都是「沒有翻盤」（基準用空白的 `UserModel`，個人 bigram 不起作用）；個人集前後都是答錯 1081、修正 1468，`bench 通過`。session 中途主 checkout 的本機個人集 baseline 被別的 worktree 改過兩次（1081/1468 → 1082/1467 → 1082/1469），本票沒有 `--update-baseline`。每鍵延遲（單獨跑，µs，p50/p95）：原生 34.17/53.17 → 32.46/44.62；WebAssembly 40.75/57.96 → 39.71/54.38，選開頭一段 282/931 → 274/897。沒學過個人 bigram 時 `Lattice::push` 不查（第一版每鍵都建查表，WebAssembly p95 到 65）。
+- 2026-11-11 匯出 v2 加個人 bigram（照協調者：沿用票 14 的 v2，只加列）：`#@/tick\t<tick>` 一行（不帶方案）與方案欄空的 5 欄列 `（空）  前一個字詞  這一段  衰減值  最後 tick`，前兩欄照詞欄跳脫；慣例照 librime userdb 的 `#@/` metadata，方案欄空表示各方案共用。v1 有固定檔測試（`user_dict.rs` 的 `V1_FILE`），v1 裡方案欄空的列照舊不收、`#@/tick` 行是註解。
+- 2026-11-11 學習總開關 `Options.learning`（預設開）：不寫計數、個人 bigram、自動造詞；手動加詞與常用語照收（使用者確認，同無痕）。性質測試 `learning_off_leaves_the_user_model_unchanged`；網頁設定區加「學習」，Playwright 兩例，截圖 `.scratch/m3/evidence/12-learning-off-top.png`、`12-settings-learning.png`。亂按一輪（400 鍵，組字中切學習、無痕、簡體）沒有 console 錯誤。
+- 2026-11-11 測試的取捨：原本的性質測試「兩個方案共用 `UserModel` 互不影響」在個人 bigram 跨方案共用後不再成立，改成 `one_scheme_neither_writes_nor_reads_the_other_schemes_learning`：一個方案的動作不改另一個方案的匯出列，候選也不讀它們（拿掉另一方案的列再匯入，候選相同）。
+- 2026-11-11 code-review（`24c53cd` 起）已處理：組字中再給前文時學錯前一個字詞（先紅再修，`composition_word`）；tick 行寫在列之後、比列的最後 tick 小時匯入後相減下溢（個人 bigram 與方案都修，方案沒有 tick 行時也取最後整串上屏 tick）；v1 的 `#@/tick` 行改回註解；無痕不記上一次上屏的段；`LastWord` 具名、`Preceding.character` 改名、測試去重；plan §0 名詞表補兩列。沒處理：無。
+- 2026-11-11 驗證：`cargo xtask check` 全綠（e2e 166 passed、`check 通過`），`cargo test --workspace` 767 passed。

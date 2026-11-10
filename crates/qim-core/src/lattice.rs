@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::engine::Spanned;
 use crate::scheme::{SEPARATOR, without_separators};
-use crate::user::SchemeModel;
+use crate::user::{Following, SchemeModel};
 use crate::{EMOJI_LIMIT, Engine, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
@@ -13,9 +13,18 @@ use crate::{EMOJI_LIMIT, Engine, Segment, UserModel};
 #[derive(Debug, Clone)]
 pub(crate) struct Lattice {
     input: String,
-    /// 組字前面的一個字（plan §2.3）：開頭的字接它的 bigram；`None` 是用 unigram。
-    before: Option<char>,
+    /// 組字前面是什麼：開頭的字接它。
+    before: Preceding,
     columns: Vec<Vec<Node>>,
+}
+
+/// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（plan §2.3）。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Preceding {
+    /// 前一個字：開頭的字接它的字級 bigram；`None` 是用 unigram。
+    pub character: Option<char>,
+    /// 前一個字詞：開頭的一段接它的個人 bigram；`None` 是沒有。
+    pub word: Option<String>,
 }
 
 /// 一條部分路徑：從位置 0 到這一欄的字詞接起來。
@@ -91,7 +100,7 @@ impl Default for Lattice {
     fn default() -> Self {
         Self {
             input: String::new(),
-            before: None,
+            before: Preceding::default(),
             columns: vec![vec![Node {
                 score: 0.0,
                 text: String::new(),
@@ -103,7 +112,7 @@ impl Default for Lattice {
 
 impl Lattice {
     /// 還沒有輸入碼、接在 `before` 後面的 lattice。
-    pub fn starting_after(before: Option<char>) -> Self {
+    pub fn starting_after(before: Preceding) -> Self {
         Self {
             before,
             ..Self::default()
@@ -111,12 +120,7 @@ impl Lattice {
     }
 
     /// 從頭建一串接在 `before` 後面的輸入碼的 lattice，和逐鍵 [`Lattice::push`] 相同。
-    pub fn from_input(
-        engine: &Engine,
-        user: &UserModel,
-        before: Option<char>,
-        input: &str,
-    ) -> Self {
+    pub fn from_input(engine: &Engine, user: &UserModel, before: Preceding, input: &str) -> Self {
         let mut lattice = Self::starting_after(before);
         for c in input.chars() {
             lattice.push(engine, user, c);
@@ -139,11 +143,28 @@ impl Lattice {
             return;
         }
         let edges = engine.edges_ending(user, &self.input);
+        // 起點欄 → 那一欄每條部分路徑的最後一段後面的個人 bigram；每條部分路徑只查一次。
+        // 沒學過個人 bigram 時不查（每鍵都走這裡）。
+        let has_bigrams = user.has_bigrams();
+        let mut following: BTreeMap<usize, Vec<Option<Following>>> = BTreeMap::new();
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
         for (e, edge) in edges.iter().enumerate() {
+            let after = has_bigrams.then(|| {
+                &*following.entry(edge.start).or_insert_with(|| {
+                    (0..self.columns[edge.start].len())
+                        .map(|k| {
+                            self.last_word(edge.start, k)
+                                .and_then(|word| user.bigrams_after(word))
+                        })
+                        .collect()
+                })
+            });
             for (k, node) in self.columns[edge.start].iter().enumerate() {
-                let prev = node.text.chars().next_back().or(self.before);
-                extended.push((node.score + engine.edge_score(prev, edge), e, k));
+                let prev = node.text.chars().next_back().or(self.before.character);
+                let bigram = after
+                    .and_then(|after| after[k])
+                    .map_or(0.0, |f| f.probability(&edge.text));
+                extended.push((node.score + engine.edge_score(prev, edge, bigram), e, k));
             }
         }
         // 同分時照邊的順序（起點由前到後、字在詞前）與前一欄的名次，結果才固定。
@@ -164,6 +185,15 @@ impl Lattice {
             }
         }
         self.columns.push(column);
+    }
+
+    /// 結束在第 `j` 欄、在那一欄第 `k` 名的部分路徑的最後一段的字詞；空路徑是組字前面的字詞。
+    fn last_word(&self, j: usize, k: usize) -> Option<&str> {
+        let node = &self.columns[j][k];
+        match node.prev {
+            Some((i, prev)) => Some(&node.text[self.columns[i][prev].text.len()..]),
+            None => self.before.word.as_deref(),
+        }
     }
 
     /// 刪掉最後一個字母和它的一欄。
@@ -222,7 +252,7 @@ pub(crate) fn candidates(
     }
     // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間的分隔記號由 `Engine::span` 處理。
     let lookup_code = input.trim_end_matches(SEPARATOR);
-    let before = lattice.before;
+    let before = &lattice.before;
     let mut full: Vec<(f64, bool, CandidateSpan)> = engine
         .span(user, before, lookup_code)
         .into_iter()
@@ -366,8 +396,8 @@ struct Ranked<'a> {
     user: &'a SchemeModel,
     /// 這列候選的輸入碼，含分隔記號。
     input: &'a str,
-    /// 輸入碼前面的一個字（[`Lattice::before`]）。
-    before: Option<char>,
+    /// 輸入碼前面是什麼（[`Lattice::before`]）。
+    before: &'a Preceding,
     /// 查碼表、詞庫與觸發詞的碼：`input` 去掉結尾的分隔記號。
     lookup_code: &'a str,
     /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（plan §2.4）。
@@ -491,7 +521,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
     let unlearned_top = candidates(
         engine,
         &blank,
-        &Lattice::from_input(engine, &blank, ranked.before, input),
+        &Lattice::from_input(engine, &blank, ranked.before.clone(), input),
         Listing {
             english_candidates: false,
             emoji_candidates: false,
