@@ -146,6 +146,9 @@ pub enum PackError {
     },
     /// manifest 不是合格的 JSON、少了欄位或欄位的值不合格式。
     InvalidManifest(String),
+    /// 更新索引（`index.json`）不是合格的 JSON、格式版本不對、有一項的 manifest 欄位不合格式或
+    /// id 重複。
+    InvalidIndex(String),
     /// manifest 要求比這個核心新的版本。
     CoreTooOld {
         required: String,
@@ -207,6 +210,7 @@ impl fmt::Display for PackError {
                 name(found)
             ),
             Self::InvalidManifest(reason) => write!(f, "manifest 不合格式：{reason}"),
+            Self::InvalidIndex(reason) => write!(f, "更新索引不合格式：{reason}"),
             Self::CoreTooOld { required, current } => write!(
                 f,
                 "資料包要核心 {required} 以上，這個核心是 {current}：先更新 App"

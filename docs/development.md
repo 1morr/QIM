@@ -36,9 +36,10 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `cargo xtask ffi [--ios]` | 編 `qim-ffi` 的靜態函式庫並產生 Swift 綁定；`--ios` 另包 iPhone 的 xcframework，見〈Swift 綁定〉 |
 | `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
 | `npm test --prefix web` | 網頁的單元測試（`web/test/` 下的 `*.test.ts`，不必先跑 `cargo xtask web`） |
-| `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
+| `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器與扮演 release 的本機靜態伺服器（〈網頁〉）；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`、預設佈局到 `build/layouts/`，見〈資料建置〉 |
+| `cargo xtask pack-release [--previous <index.json>]` | 把 `build/packs/` 整理成線上更新的 release 目錄 `build/pack-release/`，見〈線上更新的 release〉 |
 | `cargo xtask bench [--check \| --update-baseline \| --learning \| --dev [--set <鍵>=<值>]…]` | 首選字基準，見〈首選字基準〉；`--dev` 調參用，見〈dev 切分調參〉 |
 
 ## 資料建置
@@ -104,6 +105,19 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，brief §12.2 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
 
 `bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數。邏輯在 `crates/qim-databuild/src/personal.rs`。個人集的路徑與檔頭、基準目錄與「有前文」的目錄、`build/corpus/<名>/dev.tsv` 與 `dev-context.tsv` 在 `qim-databuild`（寫）與 `qim-bench`（讀）各有一份（plan §1.3 不讓 `qim-bench` 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
+
+### 線上更新的 release
+
+`cargo xtask pack-release` 讀 `build/packs/` 的每份資料包（先跑 `cargo xtask data`），核對 manifest 對得上資料包檔、有 `LICENSE` 與 `NOTICE`，清空後寫出 `build/pack-release/`：`<id>.pack`、`<id>.manifest.json`、`<id>.LICENSE`、`<id>.NOTICE` 與更新索引 `index.json`（格式見 plan §4.7）。邏輯在 `crates/qim-databuild/src/release.rs`。
+
+發新版前用 `--previous` 給上一版 release 的 `index.json`：同一份資料包內容（sha256）變了、版本卻沒加大，或版本變小時失敗並列出是哪幾份，`build/pack-release/` 不動。版本在 `crates/qim-databuild/src/pipeline.rs` 的 `build_packs` 每份各寫一個。
+
+```sh
+gh release download packs --repo 1morr/QIM --pattern index.json --dir /tmp/prev   # 上一版的索引
+cargo xtask pack-release --previous /tmp/prev/index.json
+```
+
+資料包固定放在 tag `packs` 的 release（不用 `latest`，App 的 release 也在同一個 repo；plan §4.7），網頁與之後的平台殼讀 `releases/download/packs/index.json`。第一次 `gh release create packs build/pack-release/*`；之後換 asset 時先傳資料包、最後傳索引：`gh release upload packs build/pack-release/*.pack build/pack-release/*.manifest.json build/pack-release/*.LICENSE build/pack-release/*.NOTICE --clobber`，再 `gh release upload packs build/pack-release/index.json --clobber`。在 GitHub 建 release 會公開資料包，先問使用者（M3 還沒建過）。
 
 ## 首選字基準
 
@@ -210,7 +224,17 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 網頁把學習資料（`# qim-userdict v2`，plan §2.4；仍讀得進 v1）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
 
-e2e 匯入的小詞庫 `web/e2e/fixtures/e2e-lexicon/`（`manifest.json` 與 `e2e-lexicon.pack`）進 git，Biome 不碰它；`cargo test` 的 `crates/qim-core/tests/web_fixture.rs` 比對它和現在的資料包格式一致，改了資料包或 manifest 格式時那個測試會紅，照訊息用 `QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test web_fixture` 重產。手動試匯入時，一起選 `build/packs/<id>/` 裡的 `manifest.json` 與 `.pack` 也行。
+線上更新（plan §4.7）：網頁向開發伺服器的 `/pack-updates/<檔名>` 要更新索引與資料包，`web/vite.config.ts` 轉給更新來源，預設 `https://github.com/1morr/QIM/releases/download/packs/`（瀏覽器直接讀不了 GitHub 的 release，沒有 CORS 標頭）；環境變數 `QIM_PACK_UPDATE_URL`（結尾要有 `/`）換成別的來源，例如在本機試：
+
+```sh
+cargo xtask pack-release
+(cd build/pack-release && python3 -m http.server 8787)
+QIM_PACK_UPDATE_URL=http://localhost:8787/ npm run --prefix web dev
+```
+
+還沒建 release 時，預設來源回 404，設定區的狀態列會寫「檢查更新失敗」，打字不受影響。開關存在 `localStorage` 的 `qim.packs.update`（關掉是 `off`）；`vite build` 出的靜態頁沒有轉發，也就沒有線上更新。
+
+e2e 的小詞庫在 `web/e2e/fixtures/` 並進 git，Biome 不碰它們：`e2e-lexicon/`（從檔案匯入用）、`e2e-update-lexicon/`（線上更新前先匯入的舊版）、`quick-lexicon-1.0.1/` 與 `quick-lexicon-1.0.2/`（和內建詞庫同 id 的兩版，驗下載版與內建版取較高的）、`pack-release/`（扮演 GitHub release 的 `index.json` 與新版）。`cargo test` 比對它們和現在的格式一致，格式改了會紅，照訊息重產：`pack-release/` 以外的由 `crates/qim-core/tests/web_fixture.rs` 產生（`QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test web_fixture`），`pack-release/` 由 `crates/qim-databuild/tests/release.rs` 照 `cargo xtask pack-release` 的路寫出（`QIM_UPDATE_FIXTURES=1 cargo test -p qim-databuild --test release`）。Playwright 另起一個本機靜態伺服器（`web/e2e/static-server.ts`）放 `pack-release/`，埠是 e2e 的埠加 10000，開發伺服器的 `QIM_PACK_UPDATE_URL` 指向它；被佔用時同樣直接失敗。手動試匯入時，一起選 `build/packs/<id>/` 裡的 `manifest.json` 與 `.pack` 也行。
 
 Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 

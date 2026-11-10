@@ -21,6 +21,7 @@ pub mod personal;
 mod pipeline;
 pub mod quick;
 pub mod radical_hint;
+pub mod release;
 pub mod scheme;
 pub mod simplified;
 pub mod sources;
@@ -31,7 +32,7 @@ pub mod wiki;
 pub mod wikitext;
 
 pub use error::Error;
-pub use pipeline::{Outcome, WrittenPack, run};
+pub use pipeline::{Outcome, PACKS_DIR, WrittenPack, run};
 
 use std::collections::{BTreeMap, BTreeSet};
 

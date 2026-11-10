@@ -273,3 +273,19 @@ fn verify_checks_the_pack_of_the_kind_the_manifest_names() {
         Err(PackError::ChecksumMismatch { .. })
     ));
 }
+
+#[test]
+fn newer_compares_versions_as_semver() {
+    let at =
+        |version: &str| Manifest::new(PackKind::Lexicon, "test-lexicon", b"x", version, "CC0-1.0");
+    assert!(at("1.0.2").is_newer_than(&at("1.0.1")));
+    assert!(!at("1.0.1").is_newer_than(&at("1.0.2")));
+    // 同版不算較新（殼在同版時用內建的）。
+    assert!(!at("1.0.1").is_newer_than(&at("1.0.1")));
+    // semver，不是字串："1.10.0" > "1.9.0"；預發佈版比正式版舊。
+    assert!(at("1.10.0").is_newer_than(&at("1.9.0")));
+    assert!(at("1.0.0").is_newer_than(&at("1.0.0-beta.1")));
+    // 讀不懂的版本兩邊都不算較新。
+    assert!(!at("one").is_newer_than(&at("1.0.0")));
+    assert!(!at("1.0.0").is_newer_than(&at("one")));
+}

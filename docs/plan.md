@@ -29,7 +29,8 @@
 | 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
 | 簡體模式 / 簡體字排後 | `Options::simplified` / `simplified_after_traditional` | 簡體字（碼表的標記） | `CodeEntry::simplified` |
 | emoji 候選 | `emoji_candidates`（對照表 `EmojiTable`） | manifest / 資料包種類 | `Manifest` / `PackKind` |
-| 使用中的資料包 | `active`（網頁 `activeIds`） | | |
+| 使用中的資料包 | `active`（網頁 `activeIds`） | 更新索引 | `PackIndex`（一項 `IndexEntry`） |
+| 線上更新 | `update`（網頁 `updatePacks`） | 資料包的來源（內建、匯入、線上更新） | `PackOrigin`（`builtin`、`imported`、`downloaded`） |
 
 ## 1. 架構總覽
 
@@ -438,7 +439,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 觸控模擬：行動裝置尺寸的觸控鍵盤，照 brief §4.4。按鍵幾何由 `qim-layout` 算，網頁只畫。
 - 候選列、展開面板、無痕開關、簡繁開關；按鍵放大預覽、深色模式、直向與橫向的佈局版本。
   - 改候選與組字行為的開關（核心選項與重排）集中在頁面下方的設定區，由 `web/src/settings.ts` 的一張表產生，新開關在表裡加一列；之後的設定（常用語、詞庫匯入、資料包管理）也放在這一區。畫面與觸控鍵盤的開關（觸控鍵盤、深色、數字列、字根提示版本）留在候選列下方（M3 票 01）。
-  - 資料包（M3 票 20，§4.6）：設定區的「資料包」一段列出種類、名稱、版本、大小、授權與來源，每種有兩份以上時可切換，匯入的可刪，從檔案匯入（一起選 `manifest.json` 與 `.pack`）；`web/src/packs.ts` 管儲存，`pack-settings.ts` 管畫面。
+  - 資料包（M3 票 20，§4.6）：設定區的「資料包」一段列出種類、名稱、版本、大小、授權與來源，每種有兩份以上時可切換，匯入與下載的可刪，從檔案匯入（一起選 `manifest.json` 與 `.pack`）；「線上更新」開關與「檢查更新」鍵（M3 票 21，§4.7）。`web/src/packs.ts` 管儲存，`pack-update.ts` 管線上更新，`pack-settings.ts` 管畫面。
   - 展開面板：候選列右側的展開鍵，桌面組字中 ↓ 打開、↑ 收起；Microsoft 速成的 ↓ 進候選窗、Tab 與 → 展開成表格，Tab 與 → 這裡已給字根提示與分段。選了字就收起（M1 票 23）。
   - 匯入詞庫（M3 票 17）：設定區的「匯入詞庫」一段選詞表檔（`web/src/word-list.ts`），先在頁面上列出格式、會加幾個詞、略過的列與原因，確認後才加；沒有可加的詞時不問。
   - 常用語（M3 票 14）：設定區的「常用語」一段新增、編輯、刪除（`web/src/phrases.ts`）；候選列右側在沒有組字時有「常用語」鍵，叫出清單點一條就上屏，組字中藏起（和展開鍵不同時出現）。觸控與桌面共用，照 Gboard 工具列在沒有候選時給功能鍵、微信輸入法的常用語面板。
@@ -554,10 +555,44 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 
 - 不認得的欄位略過（給之後加欄位）；少欄位、`manifest_version` 不是 1、`id`、`version` 或 `sha256` 不合格式時拒絕（`InvalidManifest`，不報成檔案損壞）。
 - 載入：殼交一組 manifest 加位元組給 `Engine::open`（依各自的種類放好，同種兩份、給了字根提示或沒有方案資料包時拒絕），字根提示經 `RadicalHintPack::open`，不知道種類時用 `Manifest::verify`（匯入前檢查）；底下都是 `Pack::open(manifest, bytes)`，依序核對欄位格式、`min_core_version ≤ CORE_VERSION`、種類、大小、sha256，解開後再核對 id；不合時回 `PackError`（`CoreTooOld`、`ChecksumMismatch`…），訊息說明原因。`Pack::from_bytes` 不核對，給建置端與測試讀剛建好的檔。網頁經 `qim-wasm` 的 `Pack`；`qim-ffi` 還是只收位元組，M6 起的平台殼接資料包管理時改成同一條路。
-- 不照研究建議把 manifest 塞進 `.pack` 檔頭：那要改資料包格式、每份 sha256 都換，而且檔內放不了自己的 sha256；匯入改成 manifest 與 `.pack` 一起選。目錄裡多個檔怎麼放上 GitHub Releases（打包成一個檔、或改名成不撞名的 asset）由線上更新（票 21）定，安裝都走 manifest 加位元組這條路（brief §5.3）。
+- 不照研究建議把 manifest 塞進 `.pack` 檔頭：那要改資料包格式、每份 sha256 都換，而且檔內放不了自己的 sha256；匯入改成 manifest 與 `.pack` 一起選。放上 GitHub Releases 時改名成不撞名的 asset（§4.7），安裝都走 manifest 加位元組這條路（brief §5.3）。
 - 使用中的資料包：方案 `[packs]` 指名的是預設；同一種可以裝好幾份，殼選一份交給核心（設定頁的切換）。所以 `Engine::new` 與 `RadicalHints::for_scheme` 只核對方案要不要那種資料包、不核對 id（推翻 M1 的「要剛好是指名的那份」）；建出的預設那份是不是指名的由 `--verify` 擋（§4.5）。
 - 網頁（plan §3.1）：內建的從 `/packs/<id>/` fetch，匯入的存 IndexedDB（`idb-keyval`，庫 `qim-packs`、表 `packs`、鍵是 id），每種用哪份存 `localStorage` 的 `qim.packs.active`。`localStorage` 每個網域約 5 MB、只能存字串，詞庫一份就 5 MB，所以用 IndexedDB。和內建同 id 的匯入取代內建那份，刪掉就回到內建的；內建的不能刪。匯入後那一種改用它（同 Firefox 裝字典後即可用）。換資料包時核心換掉 `Engine`，學習資料、選項與組字留著。匯入、刪除先在記憶體換、核心收下了才寫進 IndexedDB，切換也是核心收下才算，不收就退回原本的樣子；和已有的資料包同 id 但種類不同的匯入直接拒絕。載入時選的或匯入的資料包核心不收（例如 IndexedDB 裡的檔壞了），這次只用內建的、在狀態列說明，IndexedDB 裡的不刪。
 - e2e 匯入的小詞庫 `web/e2e/fixtures/e2e-lexicon/` 進 git，`crates/qim-core/tests/web_fixture.rs` 比對它和現在的格式一致；格式改了照測試訊息重產。
+
+### 4.7 線上更新（M3 票 21）
+
+資料包不等 App 發版就能換新版（brief §5.3）。來源是 GitHub Releases（`1morr/QIM`，使用者 2026-11-11 決定）的 tag `packs` 那個 release：上面放每份資料包的檔與一份更新索引 `index.json`，殼讀索引、比出裝著的資料包有沒有新版、下載、照 manifest 核對後換上。格式與規則在核心（`crates/qim-core/src/pack_index.rs` 的 `PackIndex`），殼只做 HTTP 與儲存。照研究（`docs/research/pack-manifest.md` 第 6、7 點）：外部索引記每個檔的 sha256，同 Cargo index、Homebrew、Flatpak；檔案本身不帶索引資訊。
+
+release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `build/pack-release/`）：
+
+| asset | 內容 |
+| --- | --- |
+| `index.json` | 更新索引，見下 |
+| `<id>.pack` | 資料包檔 |
+| `<id>.manifest.json` | 同目錄的 `manifest.json`；網頁的「從檔案匯入」也認這個檔名 |
+| `<id>.LICENSE`、`<id>.NOTICE` | 同目錄的 `LICENSE`、`NOTICE`（asset 名字不能重複，七份的 `LICENSE` 會撞名，所以加 id 前綴；不打包成 zip：`.pack` 本來就是單檔，殼也不必多一個解壓縮依賴） |
+
+```json
+{
+  "index_version": 1,
+  "packs": [
+    { "manifest_version": 1, "id": "quick-lexicon", "kind": "lexicon", "version": "1.1.0", "min_core_version": "0.0.0",
+      "size": 5201789, "sha256": "25d53b1d…", "license": "LGPL-3.0 AND …", "url": "quick-lexicon.pack" }
+  ]
+}
+```
+
+- `index_version`：索引格式的版本，規則同 `manifest_version`（§4.6）。`packs` 每項是一份 manifest 的欄位攤平、多一個 `url`，所以一項原樣就是一份合格的 manifest（核心略過不認得的欄位）。`url` 是相對於 `index.json` 網址的相對參照（RFC 3986），release 上就是 `<id>.pack`；同一份索引放本機伺服器或 GitHub 都能用。
+- 讀索引（`PackIndex::from_json`）時核對：`index_version` 是 1、每項的 manifest 欄位合格式（同 §4.6）、id 不重複；不合回 `PackError::InvalidIndex`。
+- 要下載的（`PackIndex::updates`）：裝著的每份資料包，索引裡同 id、同種類、版本（semver）較大、`min_core_version` 不比這個核心新的那項。沒裝的不裝：線上更新只換新版（同 Firefox 的字典更新）。下載後照 §4.6 經 `Pack::open` 核對大小與 sha256，不合就不換、照用舊版。GitHub asset 的 `digest` 不用：索引自己有 sha256。
+- 發新版要加 `version`：`cargo xtask pack-release --previous <上一版的 index.json>` 拿上一版索引比（`PackIndex::check_successor`），同 id 的 sha256 變了而版本沒變大、或版本變小時失敗，release 目錄不動。這補上 §4.6「`version` 靠人加」沒有的檢查；不給 `--previous` 時不比（第一次發佈），發佈步驟見 `docs/development.md`〈線上更新的 release〉。
+- 固定用 tag `packs` 的 release、換新版時換掉它的 asset（同 Neovim 在 GitHub 上的 `nightly` 滾動 tag），不用 `releases/latest`：App 也會在同一個 repo 發 release（brief §10 的 APK），`latest` 會指到 App 的那個。換 asset 時先傳資料包、最後傳 `index.json`；中間讀到舊索引的殼下載的檔核對不過、這次不換，下次再試。
+- 網頁（§3.1）：設定區「資料包」一段的「線上更新」開關（預設開，存 `localStorage` 的 `qim.packs.update`，關掉存 `off`）與「檢查更新」鍵。開著時每次開網頁在背景檢查一次（`web/src/pack-update.ts`），不擋載入與打字；失敗、斷網或來源不回應時照用現有的，狀態列說明（brief §8）。索引 15 秒、每份資料包 120 秒讀不完算失敗，「檢查更新」鍵才能再按。關掉就不送任何請求，「檢查更新」也停用。下載的新版經 `PackLibrary.install` 存 IndexedDB（同匯入那條路），來源欄寫「線上更新」；它取代同 id 的那份，但不改每種用哪份。下載期間那份被刪掉或換掉的不裝回來。
+- 網頁讀不了 GitHub 的 release：github.com 的轉址與 release-assets.githubusercontent.com 都不帶 `Access-Control-Allow-Origin`（2026-11-11 用 curl 帶 `Origin` 標頭實測）。所以網頁一律向自己的 `/pack-updates/<檔名>` 要，由 Vite 開發伺服器轉發（`web/vite.config.ts`，同雲端 API 的做法，§3.1），來源預設 `https://github.com/1morr/QIM/releases/download/packs/`，環境變數 `QIM_PACK_UPDATE_URL` 可換。`vite build` 出的靜態頁沒有轉發，也就沒有線上更新。平台殼（M6 起）沒有 CORS，直接讀 release。
+- e2e 用 Playwright 起的本機靜態伺服器（`web/e2e/static-server.ts`）扮演 release，放 `web/e2e/fixtures/pack-release/`：`qim-databuild` 的 `tests/release.rs` 照 `cargo xtask pack-release` 的路（`release::write`）寫出，不手寫索引。
+- 還沒在 GitHub 建 release：票 21 時使用者不在、只授權推 `main`，M3 只驗本機流程；真的建 release 前先問使用者。
+- 同一個 id 的內建版與下載版：每次列出時取版本（semver，核心的 `Manifest::is_newer_than`）較高的那份；同版用內建的：內建的隨 App 發佈、已知可用，同版號照理內容相同，不同就是發佈出錯，以 App 帶的為準。比下去的下載版不刪、只是不列也不交給核心；之後 App 內建版又比它舊（例如回退）時它會回來。所以 App 內建了更新的版本時，使用者不會卡在舊的下載版（`web/src/pack-choice.ts` 的 `listPacks`）。從檔案匯入的不比版本，照 §4.6 一律取代內建的：那是使用者自己選的。
 
 ## 5. 測試策略
 

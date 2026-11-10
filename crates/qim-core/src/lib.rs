@@ -12,6 +12,7 @@ mod lattice;
 mod lexicon;
 mod manifest;
 mod pack;
+mod pack_index;
 mod punctuation;
 mod radical_hint;
 mod scheme;
@@ -31,6 +32,7 @@ pub use pack::{
     EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError,
     RadicalHintPack, SchemePack, SimplifierPack,
 };
+pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex};
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{

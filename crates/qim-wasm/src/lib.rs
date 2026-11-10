@@ -1,8 +1,8 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, Key, Manifest, Options, Pack, RadicalHintPack, RadicalHints, Scheme,
-    Session, ShiftKey, Shortcuts, Snapshot, UserModel, WordListReport,
+    CangjieVersion, Engine, IndexEntry, Key, Manifest, Options, Pack, PackIndex, RadicalHintPack,
+    RadicalHints, Scheme, Session, ShiftKey, Shortcuts, Snapshot, UserModel, WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -74,6 +74,60 @@ impl WebPack {
     fn open<P: Pack>(&self) -> Result<P, JsError> {
         P::open(&self.manifest, &self.bytes).map_err(js_error)
     }
+}
+
+/// 更新索引裡要下載的一項（plan §4.7）：新版的 manifest 與資料包檔的位置。
+#[wasm_bindgen]
+pub struct PackUpdate(IndexEntry);
+
+#[wasm_bindgen]
+impl PackUpdate {
+    /// 新版的 `manifest.json`（不含 `url`），下載後和位元組一起交給 `Pack`。
+    #[wasm_bindgen(getter)]
+    pub fn manifest(&self) -> String {
+        self.0.manifest.to_json()
+    }
+
+    /// 資料包檔的位置，相對於索引的網址。
+    #[wasm_bindgen(getter)]
+    pub fn url(&self) -> String {
+        self.0.url.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn id(&self) -> String {
+        self.0.manifest.id.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn version(&self) -> String {
+        self.0.manifest.version.clone()
+    }
+}
+
+/// `manifest` 的版本比 `than` 的大（兩個都是 `manifest.json` 的內容；核心的 [`Manifest::is_newer_than`]）。
+#[wasm_bindgen(js_name = manifestIsNewer)]
+pub fn manifest_is_newer(manifest: &str, than: &str) -> Result<bool, JsError> {
+    let manifest = Manifest::from_json(manifest).map_err(js_error)?;
+    let than = Manifest::from_json(than).map_err(js_error)?;
+    Ok(manifest.is_newer_than(&than))
+}
+
+/// 更新索引 `index`（`index.json` 的內容）裡，`installed`（裝著的資料包的 `manifest.json`）有新版的
+/// 那些（核心的 [`PackIndex::updates`]）。
+#[wasm_bindgen(js_name = packUpdates)]
+pub fn pack_updates(index: &str, installed: Vec<String>) -> Result<Vec<PackUpdate>, JsError> {
+    let index = PackIndex::from_json(index).map_err(js_error)?;
+    let installed = installed
+        .iter()
+        .map(|json| Manifest::from_json(json))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(js_error)?;
+    Ok(index
+        .updates(&installed)
+        .into_iter()
+        .map(|entry| PackUpdate(entry.clone()))
+        .collect())
 }
 
 /// 由一組資料包建 `Engine`（核心的 [`Engine::open`]）。
