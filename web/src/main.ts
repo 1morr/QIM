@@ -1,4 +1,4 @@
-import { type Key, LoneShift, shiftSwitch, toKey } from "./keys.ts";
+import { LoneShift, shiftSwitch, toKey } from "./keys.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
 import { fakeOrder, RERANK_DELAY_MS, rerankMode } from "./rerank.ts";
 import "./style.css";
@@ -72,39 +72,6 @@ async function load(url: string): Promise<Response> {
 
 async function loadPack(url: string): Promise<Uint8Array> {
 	return new Uint8Array(await (await load(url)).arrayBuffer());
-}
-
-function press(session: Session, key: Key): Snapshot {
-	switch (key.kind) {
-		case "letter":
-			return session.letter(key.char);
-		case "punct":
-			return session.punct(key.char);
-		case "digit":
-			return session.digit(key.digit);
-		case "space":
-			return session.space();
-		case "enter":
-			return session.enter();
-		case "backspace":
-			return session.backspace();
-		case "escape":
-			return session.escape();
-		case "pageUp":
-			return session.pageUp();
-		case "pageDown":
-			return session.pageDown();
-		case "left":
-			return session.left();
-		case "right":
-			return session.right();
-		case "toggleAscii":
-			return session.toggleAscii(key.shift);
-		case "other":
-			return session.other();
-		case "modifier":
-			return session.modifier();
-	}
 }
 
 /** 候選列目前頁，點候選時換算成全部候選的位置。 */
@@ -624,7 +591,7 @@ async function start(): Promise<void> {
 	text.addEventListener("keyup", (event) => {
 		const side = loneShift.up(event.code, event.timeStamp);
 		if (side && !event.isComposing) {
-			const snapshot = session.toggleAscii(side);
+			const snapshot = session.press("toggleAscii", side);
 			try {
 				apply(snapshot, false);
 			} finally {
@@ -653,7 +620,7 @@ async function start(): Promise<void> {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心，數字後半形才
 			// 知道前一個字不一定是數字了（brief §4.7）。沒有組字時核心不吃、不動作。
 			if (!shown.composing) {
-				session.other().free();
+				session.press("other").free();
 			}
 			return;
 		}
@@ -665,7 +632,7 @@ async function start(): Promise<void> {
 		}
 		// 臨時英文中空白與數字是字元，不會上屏，所以不必另外排除。
 		const chosen = key.kind === "space" || key.kind === "digit";
-		const snapshot = press(session, key);
+		const snapshot = session.press(key.kind, key.value);
 		try {
 			if (!snapshot.handled) {
 				return;

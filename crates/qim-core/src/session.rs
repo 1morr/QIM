@@ -57,6 +57,22 @@ pub enum ShiftSwitch {
     InlineAscii,
 }
 
+impl std::str::FromStr for ShiftSwitch {
+    type Err = String;
+
+    /// 殼的選單用的名字：`rime`、`commit-text`、`inline-ascii`。
+    fn from_str(name: &str) -> Result<Self, String> {
+        match name {
+            "rime" => Ok(Self::Rime),
+            "commit-text" => Ok(Self::CommitText),
+            "inline-ascii" => Ok(Self::InlineAscii),
+            _ => Err(format!(
+                "不認得的 Shift 處理：{name}（只有 rime、commit-text、inline-ascii）"
+            )),
+        }
+    }
+}
+
 impl ShiftSwitch {
     /// 按了 `shift` 時要不要留碼接英文；否則先上屏組字。
     fn keeps_code(self, shift: ShiftKey) -> bool {
@@ -121,6 +137,44 @@ pub enum Key {
 }
 
 impl Key {
+    /// 由「種類 + 值」讀出按鍵，綁定收不了帶資料的列舉時用（網頁）；同 librime 能從字串讀按鍵。
+    /// 種類是 `letter`、`punct`、`digit`、`space`、`enter`、`backspace`、`escape`、`pageUp`、`pageDown`、
+    /// `left`、`right`、`toggleAscii`、`other`、`modifier`；`letter`、`punct` 的值是一個字元，`digit` 是 `0`–`9`，
+    /// `toggleAscii` 是 `left` 或 `right`，其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
+    pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError> {
+        let error = || KeyError {
+            kind: kind.to_owned(),
+            value: value.map(str::to_owned),
+        };
+        let single = || {
+            let mut chars = value?.chars();
+            let c = chars.next()?;
+            chars.next().is_none().then_some(c)
+        };
+        let key = match (kind, value) {
+            ("letter", _) => Key::Letter(single().ok_or_else(error)?),
+            ("punct", _) => Key::Punct(single().ok_or_else(error)?),
+            ("digit", _) => {
+                let digit = single().and_then(|c| c.to_digit(10)).ok_or_else(error)?;
+                Key::Digit(digit as u8)
+            }
+            ("toggleAscii", Some("left")) => Key::ToggleAscii(ShiftKey::Left),
+            ("toggleAscii", Some("right")) => Key::ToggleAscii(ShiftKey::Right),
+            ("space", None) => Key::Space,
+            ("enter", None) => Key::Enter,
+            ("backspace", None) => Key::Backspace,
+            ("escape", None) => Key::Escape,
+            ("pageUp", None) => Key::PageUp,
+            ("pageDown", None) => Key::PageDown,
+            ("left", None) => Key::Left,
+            ("right", None) => Key::Right,
+            ("other", None) => Key::Other,
+            ("modifier", None) => Key::Modifier,
+            _ => return Err(error()),
+        };
+        Ok(key)
+    }
+
     /// 打出輸入碼裡的字元 `c` 要按的鍵（實體鍵盤）：分隔記號是 `Punct`，其餘是 `Letter`。
     /// 照輸入碼重打一次組字時用（基準、測試）。
     pub fn for_input(c: char) -> Key {
@@ -131,6 +185,24 @@ impl Key {
         }
     }
 }
+
+/// [`Key::parse`] 讀不懂的種類或值。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyError {
+    kind: String,
+    value: Option<String>,
+}
+
+impl std::fmt::Display for KeyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.value {
+            Some(value) => write!(f, "不認得的按鍵：{} {value:?}", self.kind),
+            None => write!(f, "不認得的按鍵：{}（沒有值）", self.kind),
+        }
+    }
+}
+
+impl std::error::Error for KeyError {}
 
 /// 組字狀態。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -304,6 +376,11 @@ impl Session {
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
+    }
+
+    /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
+    pub fn options(&self) -> Options {
+        self.options
     }
 
     /// 依目前的選項重列候選、回到第一頁，組字不變；殼換了選項後呼叫（librime 換選項後也
@@ -664,7 +741,9 @@ impl Session {
         self.inline.is_none() && self.composing()
     }
 
-    fn composing(&self) -> bool {
+    /// 在組字：有還沒上屏的輸入碼（臨時英文也算）。觸控鍵盤依它選按鍵的 `composing` 標籤與動作，
+    /// 殼不必自己從快照記。
+    pub fn composing(&self) -> bool {
         // 剩下的輸入碼選完就上屏，所以組字中它一定不是空的。
         !self.lattice.input().is_empty()
     }

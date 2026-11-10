@@ -3,9 +3,11 @@
 //! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
 
 mod geometry;
+mod keyboard;
 mod model;
 mod validate;
 
+pub use keyboard::{Keyboard, KeyboardError, Output};
 pub use model::{
     Action, Composing, Device, FORMAT, Frame, Grid, Insets, Key, KeyState, Layout, LayoutVariant,
     Orientation, Page, Shape, Shift, Size, Style, Swipe, ThemeColor, When,

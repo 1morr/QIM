@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Packs, Ranking, Scheme, SchemePack, Session, ShiftKey,
-    Snapshot, UserModel,
+    CodeEntry, CodeTable, Engine, Key, Options, Packs, Ranking, Scheme, SchemePack, Session,
+    ShiftKey, ShiftSwitch, Snapshot, UserModel,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -346,4 +346,38 @@ fn all_candidates_lists_every_page_and_select_takes_its_position() {
     );
     let chosen = ime.session.select(&ime.engine, &mut ime.user, 9);
     assert_eq!(chosen.commit.as_deref(), Some("旬"));
+}
+
+#[test]
+fn composing_follows_the_composition_so_shells_do_not_track_it() {
+    let mut ime = Ime::new();
+    assert!(!ime.session.composing());
+    ime.press(Key::Letter('a'));
+    assert!(ime.session.composing());
+    ime.press(Key::Escape);
+    assert!(!ime.session.composing());
+    ime.press(Key::Letter('b'));
+    ime.press(Key::Space);
+    assert!(!ime.session.composing(), "上屏後不在組字");
+
+    // 臨時英文（預設左 Shift 留碼）也算組字，直到 Enter 上屏。
+    ime.press(Key::Letter('a'));
+    ime.press(Key::ToggleAscii(ShiftKey::Left));
+    assert!(ime.press(Key::Letter('x')).ascii);
+    assert!(ime.session.composing());
+    ime.press(Key::Enter);
+    assert!(!ime.session.composing());
+}
+
+#[test]
+fn options_returns_what_set_options_set_so_shells_do_not_keep_a_copy() {
+    let mut session = Session::default();
+    assert_eq!(session.options(), Options::default());
+    let options = Options {
+        incognito: true,
+        shift_switch: ShiftSwitch::InlineAscii,
+        ..Options::default()
+    };
+    session.set_options(options);
+    assert_eq!(session.options(), options);
 }

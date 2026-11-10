@@ -14,14 +14,14 @@ function press(key: string, modifiers: Partial<KeyEvent> = {}): KeyEvent {
 }
 
 test("小寫與大寫字母都是 letter，大小寫照原樣", () => {
-	assert.deepEqual(toKey(press("a")), { kind: "letter", char: "a" });
-	assert.deepEqual(toKey(press("z")), { kind: "letter", char: "z" });
-	assert.deepEqual(toKey(press("A")), { kind: "letter", char: "A" });
+	assert.deepEqual(toKey(press("a")), { kind: "letter", value: "a" });
+	assert.deepEqual(toKey(press("z")), { kind: "letter", value: "z" });
+	assert.deepEqual(toKey(press("A")), { kind: "letter", value: "A" });
 });
 
 test("數字鍵是 digit", () => {
-	assert.deepEqual(toKey(press("0")), { kind: "digit", digit: 0 });
-	assert.deepEqual(toKey(press("9")), { kind: "digit", digit: 9 });
+	assert.deepEqual(toKey(press("0")), { kind: "digit", value: "0" });
+	assert.deepEqual(toKey(press("9")), { kind: "digit", value: "9" });
 });
 
 test("具名的鍵", () => {
@@ -66,7 +66,7 @@ test("其餘可見 ASCII 字元是 punct", () => {
 		":",
 		";",
 	]) {
-		assert.deepEqual(toKey(press(char)), { kind: "punct", char }, char);
+		assert.deepEqual(toKey(press(char)), { kind: "punct", value: char }, char);
 	}
 });
 
@@ -126,7 +126,7 @@ test("組字中帶 Ctrl、Meta、Alt 的事件是 other，由核心吃下", () =
 			modifier,
 		);
 	}
-	assert.deepEqual(toKey(press("a"), true), { kind: "letter", char: "a" });
+	assert.deepEqual(toKey(press("a"), true), { kind: "letter", value: "a" });
 });
 
 test("在別的輸入法組字中的事件一律留給瀏覽器", () => {
@@ -201,8 +201,14 @@ test("帶 Ctrl、Meta、Alt 按下的 Shift 不算單按", () => {
 });
 
 test("臨時英文中 - 與 = 是字元，不是翻頁", () => {
-	assert.deepEqual(toKey(press("-"), true, true), { kind: "punct", char: "-" });
-	assert.deepEqual(toKey(press("="), true, true), { kind: "punct", char: "=" });
+	assert.deepEqual(toKey(press("-"), true, true), {
+		kind: "punct",
+		value: "-",
+	});
+	assert.deepEqual(toKey(press("="), true, true), {
+		kind: "punct",
+		value: "=",
+	});
 	assert.deepEqual(toKey(press("-"), true), { kind: "pageUp" });
 	assert.deepEqual(toKey(press("PageDown"), true, true), { kind: "pageDown" });
 });
