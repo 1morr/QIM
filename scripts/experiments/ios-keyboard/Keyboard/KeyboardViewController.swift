@@ -1,6 +1,7 @@
 import UIKit
 
-/// 實驗鍵盤：送出「日」、量常駐記憶體與 App Group（票 06）、讀游標前後文長度與試 Foundation Models（票 10）。
+/// 實驗鍵盤：送出「日」、量常駐記憶體與 App Group（票 06）、讀游標前後文長度與試 Foundation Models（票 10）、
+/// 跑小型神經模型的開銷量測（票 11）。
 /// 結果顯示在鍵盤上方並寫 log。
 final class KeyboardViewController: UIInputViewController {
     /// 這個程序裡各鍵被按的次數與 view controller 載入次數，診斷用。
@@ -43,8 +44,15 @@ final class KeyboardViewController: UIInputViewController {
             // 往前移 before 的長度：連按就一句一句往前走，可走到段首。
             key("⇤", id: "qim-key-back-context") { $0.move(by: -($0.textDocumentProxy.documentContextBeforeInput?.count ?? 0)) },
         ])
+        let neuralRow = row(NeuralProbe.models.map { name, file in
+            key(name, id: "qim-key-nc-\(name)") { _ in NeuralProbe.run(file) }
+        } + [
+            // 每個模型要在新程序量（釋放的頁會留在 footprint、被下一個模型重用）：量完按這個結束程序，
+            // 收起再叫出鍵盤就是新程序。
+            key("結束", id: "qim-key-exit") { _ in exit(0) },
+        ])
 
-        let stack = UIStackView(arrangedSubviews: [status, keyRow, moveRow])
+        let stack = UIStackView(arrangedSubviews: [status, keyRow, moveRow, neuralRow])
         stack.axis = .vertical
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -56,7 +64,8 @@ final class KeyboardViewController: UIInputViewController {
             stack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
             keyRow.heightAnchor.constraint(equalToConstant: 44),
             moveRow.heightAnchor.constraint(equalToConstant: 44),
-            view.heightAnchor.constraint(equalToConstant: 300),
+            neuralRow.heightAnchor.constraint(equalToConstant: 44),
+            view.heightAnchor.constraint(equalToConstant: 340),
         ])
     }
 
@@ -70,6 +79,7 @@ final class KeyboardViewController: UIInputViewController {
             "group-write=\(Probe.write(Probe.keyboardFile, "keyboard \(Probe.timestamp())"))",
         ])
         ModelProbe.onUpdate = { [weak self] in self?.render() }
+        NeuralProbe.onUpdate = { [weak self] in self?.render() }
         log(ModelProbe.displayLines + [ModelProbe.languagesLine()])
         readContext()
     }
@@ -98,7 +108,9 @@ final class KeyboardViewController: UIInputViewController {
 
     private func render() {
         let taps = "taps=" + Self.taps.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
-        status.text = (memoryLines + [taps] + contextLines + ModelProbe.displayLines).joined(separator: "\n")
+        // 跑過神經模型就只顯示它的結果，螢幕放不下全部。
+        let detail = NeuralProbe.latest.isEmpty ? contextLines + ModelProbe.displayLines : NeuralProbe.latest
+        status.text = (memoryLines + [taps] + detail).joined(separator: "\n")
     }
 
     private func log(_ lines: [String]) {

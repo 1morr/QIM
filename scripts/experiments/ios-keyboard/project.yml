@@ -39,7 +39,13 @@ targets:
   QIMKeyboard:
     type: app-extension
     platform: iOS
-    sources: [Keyboard, Shared]
+    sources:
+      - Keyboard
+      - Shared
+      # 票 11：neural-cost 的四個模型檔，整個資料夾放進擴充的 bundle（../neural-cost/build-ios.sh 產生）。
+      - path: ../neural-cost/models
+        type: folder
+        buildPhase: resources
     info:
       path: Keyboard/Info.plist
       properties:
@@ -60,3 +66,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(QIM_BUNDLE_PREFIX).exp.keyboard
+        # 票 11：連結 neural-cost 的 Rust 靜態庫（只編了實機的 aarch64-apple-ios）。
+        SWIFT_OBJC_BRIDGING_HEADER: Keyboard/Keyboard-Bridging-Header.h
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/../neural-cost/target/aarch64-apple-ios/release
+        OTHER_LDFLAGS: -lneural_cost
