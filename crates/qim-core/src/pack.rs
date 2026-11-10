@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{CodeTable, EnglishWords, LanguageModel, Lexicon, RadicalHints, Scheme, Simplifier};
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 
 /// 各種資料包共用的位元組格式：魔數 [`Pack::MAGIC`]、postcard 的 [`FORMAT_VERSION`]、
 /// postcard 的本體。

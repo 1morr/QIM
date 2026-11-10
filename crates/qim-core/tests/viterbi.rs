@@ -96,6 +96,7 @@ fn engine(data: &Data) -> Engine {
             .map(|&text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect();
         (code.clone(), entries)

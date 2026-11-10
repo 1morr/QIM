@@ -21,6 +21,7 @@ mod pipeline;
 pub mod quick;
 pub mod radical_hint;
 pub mod scheme;
+pub mod simplified;
 pub mod sources;
 pub mod transcode;
 pub mod unihan;
@@ -31,18 +32,19 @@ pub mod wikitext;
 pub use error::Error;
 pub use pipeline::{Outcome, WrittenPack, run};
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{Scheme, SchemePack};
 
-/// 由 libcangjie 的列、Unihan `kGradeLevel` 與方案建速成資料包。
+/// 由 libcangjie 的列、Unihan `kGradeLevel`、簡體字（[`simplified::characters`]）與方案建速成資料包。
 pub fn build_scheme_pack(
     rows: &[libcangjie::Row],
     grades: &BTreeMap<char, u8>,
+    simplified: &BTreeSet<char>,
     scheme: Scheme,
 ) -> SchemePack {
     SchemePack {
         scheme,
-        code_table: quick::code_table(rows, grades),
+        code_table: quick::code_table(rows, grades, simplified),
     }
 }

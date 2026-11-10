@@ -119,6 +119,7 @@ fn engine_for(
             .map(|&text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect();
         (code.clone(), entries)

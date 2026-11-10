@@ -24,8 +24,8 @@ pub(crate) struct UpstreamSource {
     pub used: &'static str,
 }
 
-/// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序（plan §4.1）。
-pub(crate) const QUICK: [PackSource; 2] = [
+/// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序，OpenCC 判定簡體字（plan §4.1）。
+pub(crate) const QUICK: [PackSource; 3] = [
     PackSource::Upstream(UpstreamSource {
         name: "libcangjie",
         source_id: LIBCANGJIE,
@@ -34,7 +34,13 @@ pub(crate) const QUICK: [PackSource; 2] = [
     PackSource::Upstream(UpstreamSource {
         name: "Unihan",
         source_id: UNIHAN,
-        used: "field kGradeLevel of Unihan_DictionaryLikeData.txt",
+        used: "fields kGradeLevel and kHKGlyph of Unihan_DictionaryLikeData.txt",
+    }),
+    PackSource::Upstream(UpstreamSource {
+        name: "OpenCC",
+        source_id: OPENCC,
+        used: "data/dictionary/STCharacters.txt, TSCharacters.txt and HKVariants.txt: which \
+               characters are marked as simplified",
     }),
 ];
 

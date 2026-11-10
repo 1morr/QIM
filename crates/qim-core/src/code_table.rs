@@ -14,6 +14,9 @@ pub struct CodeEntry {
     pub text: char,
     /// 擴展區的字：只在單字查詢時出現，排在連打字集之後（brief §4.1）。
     pub extension: bool,
+    /// 簡體字：HKSCS 收的「门」「农」這類，只在連打字集；繁體模式排在同碼的繁體字之後，
+    /// 簡體模式不管它（brief §4.1，判定在建置端，plan §4.1）。
+    pub simplified: bool,
 }
 
 impl CodeTable {

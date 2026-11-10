@@ -22,10 +22,12 @@ fn sample() -> SchemePack {
                 CodeEntry {
                     text: '日',
                     extension: false,
+                    simplified: false,
                 },
                 CodeEntry {
                     text: '𠀀',
                     extension: true,
+                    simplified: false,
                 },
             ],
         ),
@@ -34,6 +36,7 @@ fn sample() -> SchemePack {
             vec![CodeEntry {
                 text: '明',
                 extension: false,
+                simplified: false,
             }],
         ),
     ]);

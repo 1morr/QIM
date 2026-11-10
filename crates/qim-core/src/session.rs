@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::lattice::{self, CandidateSpan, Lattice};
+use crate::lattice::{self, CandidateSpan, Lattice, Listing};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
@@ -827,7 +827,7 @@ impl Session {
                 engine,
                 user,
                 &Lattice::from_input(engine, user, &rest),
-                false,
+                self.listing(false),
             )
             .into_iter()
             .next();
@@ -870,6 +870,14 @@ impl Session {
         if !engine.has_entry(&code, &text) {
             user.for_scheme_mut(&engine.scheme().id)
                 .add_auto_phrase(&code, &text);
+        }
+    }
+
+    /// 列候選的選項：簡體模式照選項，英文候選只給剩下的整串輸入碼，由呼叫端決定。
+    fn listing(&self, english_candidates: bool) -> Listing {
+        Listing {
+            english_candidates,
+            simplified_mode: self.options.simplified,
         }
     }
 
@@ -998,12 +1006,15 @@ impl Session {
                     engine,
                     user,
                     &Lattice::from_input(engine, user, code),
-                    false,
+                    self.listing(false),
                 )
             }
-            None => {
-                lattice::candidates(engine, user, &self.lattice, self.options.english_candidates)
-            }
+            None => lattice::candidates(
+                engine,
+                user,
+                &self.lattice,
+                self.listing(self.options.english_candidates),
+            ),
         };
         // 排序時已去掉原文重複的，沒轉換的不必再比。
         let mut seen = HashSet::new();
