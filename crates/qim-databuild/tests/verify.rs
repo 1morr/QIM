@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
     CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, EmojiPack, EmojiTable,
@@ -13,8 +13,12 @@ use qim_databuild::verify::{self, CheckId, Report};
 use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字；
-/// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）；笑（`hk`）給 emoji 候選的抽查。
+/// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）；笑（`hk`）給 emoji 候選的抽查；门（HKSCS 收的簡體字）
+/// 與蚱同是 `ls`。
 const TABLE: &str = "\
+门 门 1 0 1 0 1 0 0 0 0 ls lis NA 0
+蚱 蚱 1 1 0 0 1 0 0 0 0 lihs lios NA 19379
+蚱 蚱 1 1 0 0 1 0 0 0 0 lios NA NA 0
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
 曰 曰 1 1 0 0 1 0 0 0 0 a a NA 23060
 問 问 1 1 0 0 1 0 0 0 0 anr anr NA 20001
@@ -34,7 +38,7 @@ const SCHEME: &str = r#"
 id = "t"
 name = "測試"
 version = "1"
-alphabet = "abehknrt"
+alphabet = "abehklnrst"
 max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
@@ -46,8 +50,10 @@ b = "月"
 e = "水"
 h = "竹"
 k = "大"
+l = "中"
 n = "弓"
 r = "口"
+s = "尸"
 t = "廿"
 [ranking]
 word_bonus = 0.0
@@ -104,11 +110,16 @@ fn rows() -> Vec<Row> {
     libcangjie::parse(TABLE).unwrap()
 }
 
-/// 日有年級，排在 Big5 排序值較小的曰前面。
+/// 日有年級，排在 Big5 排序值較小的曰前面；门是簡體字。
 fn pack() -> SchemePack {
+    pack_with_simplified(&BTreeSet::from(['门']))
+}
+
+fn pack_with_simplified(simplified: &BTreeSet<char>) -> SchemePack {
     build_scheme_pack(
         &rows(),
         &BTreeMap::from([('日', 1)]),
+        simplified,
         scheme::parse(SCHEME).unwrap(),
     )
 }
@@ -137,9 +148,9 @@ fn lexicon() -> LexiconPack {
     lexicon_with(BTreeMap::from([('日', 10), ('曰', 3)]))
 }
 
-/// 日比曰常見，`a` 的首選才是日。
+/// 日比曰常見，`a` 的首選才是日；门比蚱常見，不標簡體字時是 `ls` 的首選。
 fn language_model() -> LanguageModelPack {
-    language_model_from("日曰日\n門口\n")
+    language_model_from("日曰日\n門口\n门门\n")
 }
 
 /// 由一行一句的語料訓練；單字的分數來自這裡的字次數，和詞庫的字頻同源。
@@ -281,6 +292,7 @@ const fn entry(text: char) -> CodeEntry {
     CodeEntry {
         text,
         extension: false,
+        simplified: false,
     }
 }
 
@@ -296,7 +308,7 @@ fn packs_built_from_the_source_pass_every_check() {
     let report = run(&pack());
     assert_eq!(failed(&report), []);
     assert!(report.passed());
-    assert_eq!((report.continuous, report.extension), (11, 1));
+    assert_eq!((report.continuous, report.extension), (13, 1));
 }
 
 #[test]
@@ -318,6 +330,8 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::RadicalHintByVersion,
             CheckId::SimplifiedMenKou,
             CheckId::EnglishThe,
+            CheckId::NotSimplified,
+            CheckId::MenAfterTraditional,
             CheckId::EmojiAfterLaugh,
             CheckId::LanguageModelSize,
             CheckId::Deterministic,
@@ -331,9 +345,14 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     let table =
         format!("{TABLE}㐀 㐀 1 0 0 0 0 0 0 0 0 a NA NA 0\n㐀 㐀 1 0 1 0 0 0 0 0 0 NA NA NA 0\n");
     let rows = libcangjie::parse(&table).unwrap();
-    let bytes = build_scheme_pack(&rows, &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
-        .to_bytes()
-        .unwrap();
+    let bytes = build_scheme_pack(
+        &rows,
+        &BTreeMap::new(),
+        &BTreeSet::from(['门']),
+        scheme::parse(SCHEME).unwrap(),
+    )
+    .to_bytes()
+    .unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
     let language_model = language_model().to_bytes().unwrap();
     let radical_hint = radical_hint_from(radical_hint::hints(&rows))
@@ -351,7 +370,7 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     ]);
     let report = verify::run(&rows, &both, &both);
     assert_eq!(failed(&report), []);
-    assert_eq!((report.continuous, report.extension), (12, 1));
+    assert_eq!((report.continuous, report.extension), (14, 1));
 }
 
 #[test]
@@ -425,6 +444,22 @@ fn a_higher_frequency_for_another_character_fails_the_top_candidate_check() {
         )),
         [CheckId::RiIsTopForA]
     );
+}
+
+#[test]
+fn men_not_marked_as_simplified_fails_the_order_check() {
+    // 门的分數比蚱高，沒標成簡體字就是 `ls` 的首選。
+    assert_eq!(
+        failed(&run(&pack_with_simplified(&BTreeSet::new()))),
+        [CheckId::MenAfterTraditional]
+    );
+}
+
+#[test]
+fn a_traditional_character_marked_as_simplified_fails() {
+    let pack = pack_with_simplified(&BTreeSet::from(['门', '日']));
+    let failed = failed(&run(&pack));
+    assert!(failed.contains(&CheckId::NotSimplified), "{failed:?}");
 }
 
 #[test]
@@ -916,6 +951,7 @@ mod common_forms {
         let entry = |text| CodeEntry {
             text,
             extension: false,
+            simplified: false,
         };
         let table = CodeTable::from_entries([
             ("et".to_string(), vec![entry('溫'), entry('温')]),
@@ -955,6 +991,7 @@ mod common_forms {
         let entry = |text| CodeEntry {
             text,
             extension: false,
+            simplified: false,
         };
         let table = CodeTable::from_entries([
             ("et".to_string(), vec![entry('溫'), entry('温')]),

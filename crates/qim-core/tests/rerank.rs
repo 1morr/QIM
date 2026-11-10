@@ -26,6 +26,7 @@ fn engine() -> Engine {
             .map(|text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect()
     };

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use qim_databuild::{libcangjie, quick};
 
@@ -27,7 +27,7 @@ fn table() -> qim_core::CodeTable {
 
 /// `grades` 是 Unihan `kGradeLevel`：字到香港小學的年級。
 fn table_with(grades: &BTreeMap<char, u8>) -> qim_core::CodeTable {
-    quick::code_table(&libcangjie::parse(TABLE).unwrap(), grades)
+    quick::code_table(&libcangjie::parse(TABLE).unwrap(), grades, &BTreeSet::new())
 }
 
 fn texts(table: &qim_core::CodeTable, code: &str) -> String {
@@ -94,6 +94,17 @@ fn characters_with_a_grade_level_come_first_by_grade_then_the_rest_by_big5_order
 fn lower_grade_comes_first_and_same_grade_falls_back_to_big5_order() {
     let table = table_with(&BTreeMap::from([('日', 2), ('曰', 2), ('㐃', 1)]));
     assert_eq!(texts(&table, "a"), "㐃曰日㗎𠀀𠀉");
+}
+
+/// 簡體字（`qim_databuild::simplified`）只標在連打字集的字上，建置端的字序不變：繁體模式
+/// 排在後面是核心的事（plan §2.3）。
+#[test]
+fn simplified_characters_are_marked_in_the_continuous_set_only() {
+    let rows = libcangjie::parse(TABLE).unwrap();
+    let table = quick::code_table(&rows, &BTreeMap::new(), &BTreeSet::from(['㗎', '𠀀']));
+    assert_eq!(texts(&table, "a"), "曰日㐃㗎𠀀𠀉");
+    let simplified: Vec<bool> = table.lookup("a").iter().map(|e| e.simplified).collect();
+    assert_eq!(simplified, [false, false, false, true, false, false]);
 }
 
 #[test]

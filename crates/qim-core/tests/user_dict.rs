@@ -24,6 +24,7 @@ fn engine() -> Engine {
             let entry = CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             };
             (code.to_string(), vec![entry])
         },

@@ -78,8 +78,10 @@ U+3400\tkFourCornerCode\t5000.7
 U+554F\tkGradeLevel\t1
 U+65E5\tkCangjie\tA
 U+65E5\tkGradeLevel\t1
+U+65E5\tkHKGlyph\t1399
 U+20000\tkCangjie\tMV
 U+95CA\tkGradeLevel\t6
+U+591F\tkHKGlyph\t0832
 ";
 
 #[test]
@@ -147,4 +149,23 @@ fn tsv_has_a_header_and_one_line_per_difference() {
          U+4E4D\t乍\tx\ths,ohs\tos\n\
          U+65E5\t日\tb\ta\ta\n"
     );
+}
+
+#[test]
+fn hk_glyphs_take_the_index_in_the_list_of_graphemes() {
+    assert_eq!(
+        unihan::hk_glyphs(DICTIONARY_LIKE_DATA).unwrap(),
+        BTreeMap::from([('够', 832), ('日', 1399)])
+    );
+}
+
+#[test]
+fn hk_glyphs_reject_values_that_are_not_four_digits() {
+    for line in [
+        "U+591F\tkHKGlyph\t832",
+        "U+591F\tkHKGlyph\t08a2",
+        "U+591F\tkHKGlyph",
+    ] {
+        assert!(unihan::hk_glyphs(line).is_err(), "{line:?}");
+    }
 }
