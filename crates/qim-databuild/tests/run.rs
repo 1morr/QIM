@@ -3,8 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack,
-    SimplifierPack,
+    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, RadicalHintPack,
+    SchemePack, SimplifierPack,
 };
 use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
@@ -556,7 +556,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
 
     let dir = root.path().join("build/packs/quick");
     assert_eq!(outcome.pack_path, dir.join("quick.pack"));
-    let pack = Pack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
+    let pack = SchemePack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
     assert_eq!(pack.scheme.id, "quick");
     assert_eq!(pack.code_table.lookup("ar")[0].text, '問');
 
@@ -900,7 +900,7 @@ fn build_puts_characters_with_a_grade_level_before_big5_order() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), false).unwrap();
-    let pack = Pack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
+    let pack = SchemePack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
     let a: String = pack.code_table.lookup("a").iter().map(|e| e.text).collect();
     // Big5 排序值曰 23060 < 日 23061，日有年級所以在前。
     assert_eq!(a, "日曰𠀀");

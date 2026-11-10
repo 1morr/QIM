@@ -4,7 +4,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, Scheme, Session, Snapshot, UserModel,
+    CodeEntry, CodeTable, Engine, Key, Packs, Ranking, Scheme, SchemePack, Session, Snapshot,
+    UserModel,
 };
 
 /// `a` 有 10 個字（比一頁多一個），`b` 有一個字。
@@ -32,7 +33,7 @@ fn engine() -> Engine {
         ("a".to_string(), entries("日曰昌晶昍旦早旭旨旬")),
         ("b".to_string(), entries("月")),
     ]);
-    let bytes = Pack { scheme, code_table }.to_bytes().unwrap();
+    let bytes = SchemePack { scheme, code_table }.to_bytes().unwrap();
     Engine::from_pack_bytes(&bytes, None, None).unwrap()
 }
 

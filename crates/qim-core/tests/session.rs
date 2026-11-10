@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, Scheme, Session, ShiftKey, Snapshot,
-    UserModel,
+    CodeEntry, CodeTable, Engine, Key, Packs, Ranking, Scheme, SchemePack, Session, ShiftKey,
+    Snapshot, UserModel,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -33,7 +33,7 @@ fn pack_bytes() -> Vec<u8> {
         ("b".to_string(), vec![entry('月')]),
         ("aaa".to_string(), vec![entry('品')]),
     ]);
-    Pack { scheme, code_table }.to_bytes().unwrap()
+    SchemePack { scheme, code_table }.to_bytes().unwrap()
 }
 
 struct Ime {

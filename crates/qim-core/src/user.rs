@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::Engine;
+use crate::{Engine, Segment};
 
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
 const DECAY_STEP: f64 = 200.0;
@@ -22,9 +22,10 @@ pub struct UserModel {
     schemes: BTreeMap<String, SchemeModel>,
 }
 
-/// 一個輸入方案的使用者詞與學習計數。
+/// 一個輸入方案的個人模型：使用者詞與學習計數。核心內部經 [`UserModel::for_scheme`] 取用，
+/// 所以查詢與學習的方法不必逐一帶方案。
 #[derive(Debug, Clone, Default, PartialEq)]
-struct SchemeModel {
+pub(crate) struct SchemeModel {
     /// 這個方案學習過的上屏次數；學習計數的時間（plan §2.4），不讀系統時間。
     tick: u64,
     /// 輸入碼 → 候選文字 → 計數。
@@ -57,14 +58,7 @@ const SOURCE_NAMES: [(Option<WordSource>, &str); 3] = [
     (Some(WordSource::AutoPhrase), "auto"),
 ];
 
-impl SchemeModel {
-    /// 碼 `code` 的使用者詞，沒有就建一個空的。
-    fn words_at(&mut self, code: &str) -> &mut BTreeMap<String, UserWord> {
-        self.words.entry(code.to_string()).or_default()
-    }
-}
-
-/// 一個（輸入方案, 輸入碼, 候選文字）的計數。兩種上屏分開記（plan §2.4）：
+/// 一個（輸入碼, 候選文字）的計數；方案由所在的 [`SchemeModel`] 決定。兩種上屏分開記（plan §2.4）：
 /// - 整串上屏：整串輸入碼就是這個碼、上屏的就是這個候選；給排位規則 2 用。
 /// - 句中各段的上屏也算進衰減值，給 `personal` 用。
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -81,40 +75,19 @@ struct Count {
 }
 
 impl UserModel {
-    /// 一次上屏：整串輸入碼和每一段（輸入碼, 字詞）的衰減值各記一次，同一個鍵只記一次；
-    /// 整串另記一次整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串；空的不記。
-    pub(crate) fn learn(&mut self, scheme: &str, segments: &[(&str, &str)]) {
-        if segments.is_empty() {
-            return;
-        }
-        let model = self.scheme_mut(scheme);
-        model.tick += 1;
-        let tick = model.tick;
-        let whole: (String, String) = (
-            segments.iter().map(|s| s.0).collect(),
-            segments.iter().map(|s| s.1).collect(),
-        );
-        let mut keys: Vec<(&str, &str)> = vec![(&whole.0, &whole.1)];
-        for &segment in segments {
-            if !keys.contains(&segment) {
-                keys.push(segment);
-            }
-        }
-        for (i, (code, text)) in keys.into_iter().enumerate() {
-            let count = model
-                .entries
-                .entry(code.to_string())
-                .or_default()
-                .entry(text.to_string())
-                .or_default();
-            count.decayed = 1.0 + count.decayed * decay(tick - count.last_tick);
-            count.last_tick = tick;
-            // `keys` 的第一個是整串。
-            if i == 0 {
-                count.commits += 1;
-                count.last_commit_tick = tick;
-            }
-        }
+    /// 方案 `scheme` 的個人模型；沒記過時是空的。
+    pub(crate) fn for_scheme(&self, scheme: &str) -> &SchemeModel {
+        static EMPTY: SchemeModel = SchemeModel {
+            tick: 0,
+            entries: BTreeMap::new(),
+            words: BTreeMap::new(),
+        };
+        self.schemes.get(scheme).unwrap_or(&EMPTY)
+    }
+
+    /// 方案 `scheme` 的個人模型，沒有就建一個空的。
+    pub(crate) fn for_scheme_mut(&mut self, scheme: &str) -> &mut SchemeModel {
+        self.schemes.entry(scheme.to_string()).or_default()
     }
 
     /// 手動加一個使用者詞（brief §4.5）。輸入碼是各字的碼接起來，所以連打裡也打得出；有字沒有
@@ -142,7 +115,7 @@ impl UserModel {
             .code_of(text)
             .or_else(|| trigger.map(String::from))
             .ok_or(UserWordError::NoCode)?;
-        self.scheme_mut(&scheme.id).words_at(&code).insert(
+        self.for_scheme_mut(&scheme.id).words_at(&code).insert(
             text.to_string(),
             UserWord {
                 source: WordSource::Manual,
@@ -151,22 +124,62 @@ impl UserModel {
         );
         Ok(())
     }
+}
+
+impl SchemeModel {
+    /// 碼 `code` 的使用者詞，沒有就建一個空的。
+    fn words_at(&mut self, code: &str) -> &mut BTreeMap<String, UserWord> {
+        self.words.entry(code.to_string()).or_default()
+    }
+
+    /// 一次上屏：整串輸入碼和每一段的衰減值各記一次，（碼, 字詞）相同的只記一次；整串另記一次
+    /// 整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串，只看碼與字詞；空的不記。
+    pub(crate) fn learn(&mut self, segments: &[Segment]) {
+        if segments.is_empty() {
+            return;
+        }
+        self.tick += 1;
+        let tick = self.tick;
+        let whole = Segment::new(
+            segments.iter().map(|s| s.code.as_str()).collect(),
+            segments.iter().map(|s| s.text.as_str()).collect(),
+        );
+        let mut keys: Vec<&Segment> = vec![&whole];
+        for segment in segments {
+            if !keys
+                .iter()
+                .any(|k| k.code == segment.code && k.text == segment.text)
+            {
+                keys.push(segment);
+            }
+        }
+        for (i, segment) in keys.into_iter().enumerate() {
+            let count = self
+                .entries
+                .entry(segment.code.clone())
+                .or_default()
+                .entry(segment.text.clone())
+                .or_default();
+            count.decayed = 1.0 + count.decayed * decay(tick - count.last_tick);
+            count.last_tick = tick;
+            // `keys` 的第一個是整串。
+            if i == 0 {
+                count.commits += 1;
+                count.last_commit_tick = tick;
+            }
+        }
+    }
 
     /// 觸發詞剛好是 `input` 的使用者詞（排位規則 1）；有幾個時，以 `input` 最近整串上屏的在前，
     /// 其餘依（碼, 詞）的順序。
-    pub(crate) fn triggered<'a>(&'a self, scheme: &str, input: &str) -> Vec<&'a str> {
-        let Some(model) = self.schemes.get(scheme) else {
-            return Vec::new();
-        };
-        let mut found: Vec<(u64, &str)> = model
+    pub(crate) fn triggered(&self, input: &str) -> Vec<&str> {
+        let mut found: Vec<(u64, &str)> = self
             .words
             .values()
             .flatten()
             .filter(|(_, word)| word.trigger.as_deref() == Some(input))
             .map(|(text, _)| {
-                let tick = self
-                    .get(scheme, input, text)
-                    .map_or(0, |(_, c)| c.last_commit_tick);
+                let tick = self.count(input, text).map_or(0, |c| c.last_commit_tick);
                 (tick, text.as_str())
             })
             .collect();
@@ -175,10 +188,9 @@ impl UserModel {
     }
 
     /// 自動造詞（plan §2.4）：把（`code`, `text`）記成使用者詞；已經是使用者詞的不動。
-    /// 上屏次數由同一次上屏的 [`UserModel::learn`] 記。
-    pub(crate) fn add_auto_phrase(&mut self, scheme: &str, code: &str, text: &str) {
-        self.scheme_mut(scheme)
-            .words_at(code)
+    /// 上屏次數由同一次上屏的 [`SchemeModel::learn`] 記。
+    pub(crate) fn add_auto_phrase(&mut self, code: &str, text: &str) {
+        self.words_at(code)
             .entry(text.to_string())
             .or_insert(UserWord {
                 source: WordSource::AutoPhrase,
@@ -186,75 +198,54 @@ impl UserModel {
             });
     }
 
-    fn scheme_mut(&mut self, scheme: &str) -> &mut SchemeModel {
-        self.schemes.entry(scheme.to_string()).or_default()
-    }
-
     /// 碼剛好是 `code` 的使用者詞。
-    pub(crate) fn words<'a>(&'a self, scheme: &str, code: &str) -> impl Iterator<Item = &'a str> {
-        self.schemes
-            .get(scheme)
-            .and_then(|m| m.words.get(code))
+    pub(crate) fn words(&self, code: &str) -> impl Iterator<Item = &str> {
+        self.words
+            .get(code)
             .into_iter()
             .flat_map(|words| words.keys().map(String::as_str))
     }
 
-    /// 方案 `scheme` 最長的使用者詞的碼長；lattice 往回找詞的上限要算進它。
-    pub(crate) fn longest_word_code(&self, scheme: &str) -> usize {
-        self.schemes
-            .get(scheme)
-            .and_then(|m| m.words.keys().map(String::len).max())
-            .unwrap_or(0)
+    /// 最長的使用者詞的碼長；lattice 往回找詞的上限要算進它。
+    pub(crate) fn longest_word_code(&self) -> usize {
+        self.words.keys().map(String::len).max().unwrap_or(0)
     }
 
-    /// （方案, 碼, 字詞）整串上屏的次數；排位規則 2 的「剛好 1 次的不靠分數成首選」用。
-    pub(crate) fn whole_commits(&self, scheme: &str, code: &str, text: &str) -> u64 {
-        self.get(scheme, code, text)
-            .map_or(0, |(_, count)| count.commits)
+    /// （碼, 字詞）整串上屏的次數；排位規則 2 的「剛好 1 次的不靠分數成首選」用。
+    pub(crate) fn whole_commits(&self, code: &str, text: &str) -> u64 {
+        self.count(code, text).map_or(0, |count| count.commits)
     }
 
     /// 排位規則 3（plan §2.4）：（`code`, `text`）是使用者詞且整串上屏過時，回傳最後一次整串
     /// 上屏的 tick，越大越近；否則是 `None`。
-    pub(crate) fn last_tick_if_used_word(
-        &self,
-        scheme: &str,
-        code: &str,
-        text: &str,
-    ) -> Option<u64> {
-        let model = self.schemes.get(scheme)?;
-        model.words.get(code)?.get(text)?;
-        let count = model.entries.get(code)?.get(text)?;
+    pub(crate) fn last_tick_if_used_word(&self, code: &str, text: &str) -> Option<u64> {
+        self.words.get(code)?.get(text)?;
+        let count = self.count(code, text)?;
         (count.commits >= 1).then_some(count.last_commit_tick)
     }
 
-    /// 這組（方案, 碼, 字詞）學過沒有。
-    pub(crate) fn has_learned(&self, scheme: &str, code: &str, text: &str) -> bool {
-        self.get(scheme, code, text).is_some()
+    /// 這組（碼, 字詞）學過沒有。
+    pub(crate) fn has_learned(&self, code: &str, text: &str) -> bool {
+        self.count(code, text).is_some()
     }
 
     /// 排位規則 2（plan §2.4）：整串上屏 ≥ 2 次且距最後一次整串上屏不超過 [`RECENT_COMMITS`]
     /// 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的上屏不算。
-    pub(crate) fn last_tick_if_chosen_twice(
-        &self,
-        scheme: &str,
-        code: &str,
-        text: &str,
-    ) -> Option<u64> {
-        let (model, count) = self.get(scheme, code, text)?;
-        (count.commits >= 2 && model.tick - count.last_commit_tick <= RECENT_COMMITS)
+    pub(crate) fn last_tick_if_chosen_twice(&self, code: &str, text: &str) -> Option<u64> {
+        let count = self.count(code, text)?;
+        (count.commits >= 2 && self.tick - count.last_commit_tick <= RECENT_COMMITS)
             .then_some(count.last_commit_tick)
     }
 
     /// 個人機率（plan §2.3）：衰減值衰減到現在，除以它的上限；沒學過時是 0。
-    pub(crate) fn personal_probability(&self, scheme: &str, code: &str, text: &str) -> f64 {
-        self.get(scheme, code, text).map_or(0.0, |(model, count)| {
-            count.decayed * decay(model.tick - count.last_tick) / max_decayed()
+    pub(crate) fn personal_probability(&self, code: &str, text: &str) -> f64 {
+        self.count(code, text).map_or(0.0, |count| {
+            count.decayed * decay(self.tick - count.last_tick) / max_decayed()
         })
     }
 
-    fn get(&self, scheme: &str, code: &str, text: &str) -> Option<(&SchemeModel, &Count)> {
-        let model = self.schemes.get(scheme)?;
-        Some((model, model.entries.get(code)?.get(text)?))
+    fn count(&self, code: &str, text: &str) -> Option<&Count> {
+        self.entries.get(code)?.get(text)
     }
 }
 
@@ -344,7 +335,7 @@ impl UserModel {
             if !seen.insert((row.scheme, row.code, row.text)) {
                 return Err(error("同方案、同輸入碼、同詞的列重複"));
             }
-            let model = user.scheme_mut(row.scheme);
+            let model = user.for_scheme_mut(row.scheme);
             // 手動加了還沒用過的詞沒有計數，匯出時寫 0；這裡也不建計數。
             if row.count != Count::default() {
                 model

@@ -3,7 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use qim_core::{CodeEntry, CodeTable, Engine, Pack, Packs, Ranking, Scheme, Session, UserModel};
+use qim_core::{
+    CodeEntry, CodeTable, Engine, Packs, Ranking, Scheme, SchemePack, Session, UserModel,
+};
 
 /// `m`「一」、`ir`「台」、`r`「口」，沒有詞庫與語言模型。
 fn engine() -> Engine {
@@ -26,7 +28,7 @@ fn engine() -> Engine {
             (code.to_string(), vec![entry])
         },
     ));
-    Engine::new(Pack { scheme, code_table }, None, None).unwrap()
+    Engine::new(SchemePack { scheme, code_table }, None, None).unwrap()
 }
 
 /// 手寫的檔，列依輸入碼排：`mir` 分段選「一」「台」上屏一次（自動造詞），再手動加「口口」、觸發詞 `kk`。

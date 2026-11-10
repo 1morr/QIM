@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, PackError, Packs, Ranking,
-    Scheme, Session, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, PackError, Packs, Ranking, Scheme,
+    SchemePack, Session, Snapshot, UserModel, Word,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -39,8 +39,8 @@ fn scheme(lexicon: Option<&str>) -> Scheme {
 }
 
 /// 碼表的字序是建置端給的「年級 → Big5」：`a` 是日曰旦，`ar` 是問、擴展區的𠀀。
-fn pack(lexicon: Option<&str>) -> Pack {
-    Pack {
+fn pack(lexicon: Option<&str>) -> SchemePack {
+    SchemePack {
         scheme: scheme(lexicon),
         code_table: CodeTable::from_entries([
             ("a".to_string(), "日曰旦".chars().map(entry).collect()),
@@ -115,7 +115,7 @@ fn lexicon_pack_round_trips_through_bytes() {
 fn scheme_pack_and_lexicon_pack_are_not_mistaken_for_each_other() {
     let lexicon = lexicon_pack("quick-lexicon", &[]).to_bytes().unwrap();
     let scheme = pack(None).to_bytes().unwrap();
-    assert_eq!(Pack::from_bytes(&lexicon), Err(PackError::NotAPack));
+    assert_eq!(SchemePack::from_bytes(&lexicon), Err(PackError::NotAPack));
     assert_eq!(LexiconPack::from_bytes(&scheme), Err(PackError::NotAPack));
 }
 

@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Options, Pack, Packs, Ranking, Scheme, Session, ShiftKey,
-    UserModel,
+    CodeEntry, CodeTable, Engine, Key, Options, Packs, Ranking, Scheme, SchemePack, Session,
+    ShiftKey, UserModel,
 };
 
 fn pack_bytes() -> Vec<u8> {
@@ -27,7 +27,7 @@ fn pack_bytes() -> Vec<u8> {
             extension: false,
         }],
     )]);
-    Pack { scheme, code_table }.to_bytes().unwrap()
+    SchemePack { scheme, code_table }.to_bytes().unwrap()
 }
 
 /// 核心加一個假宿主：上屏的接到輸入框，核心沒吃下的鍵照宿主的預設動作打出來。

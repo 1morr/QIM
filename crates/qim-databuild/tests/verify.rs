@@ -2,14 +2,14 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, EnglishPack, EnglishWords,
-    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, RadicalHintPack, RadicalHints,
-    Simplifier, SimplifierPack, Word,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, RadicalHintPack, RadicalHints,
+    SchemePack, Simplifier, SimplifierPack, Word,
 };
 use qim_databuild::common_forms::BothForms;
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::verify::{self, CheckId, PackBytes, Report};
-use qim_databuild::{bigram, build_pack, lexicon, radical_hint, scheme};
+use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字；
 /// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）。
@@ -60,8 +60,8 @@ fn rows() -> Vec<Row> {
 }
 
 /// 日有年級，排在 Big5 排序值較小的曰前面。
-fn pack() -> Pack {
-    build_pack(
+fn pack() -> SchemePack {
+    build_scheme_pack(
         &rows(),
         &BTreeMap::from([('日', 1)]),
         scheme::parse(SCHEME).unwrap(),
@@ -158,12 +158,12 @@ fn run_with_hint(hint: &RadicalHintPack) -> Report {
     report(&pack(), &lexicon(), &language_model(), hint)
 }
 
-fn run_with(pack: &Pack, lexicon: &LexiconPack) -> Report {
+fn run_with(pack: &SchemePack, lexicon: &LexiconPack) -> Report {
     run_with_language_model(pack, lexicon, &language_model())
 }
 
 fn run_with_language_model(
-    pack: &Pack,
+    pack: &SchemePack,
     lexicon: &LexiconPack,
     language_model: &LanguageModelPack,
 ) -> Report {
@@ -171,7 +171,7 @@ fn run_with_language_model(
 }
 
 fn report(
-    pack: &Pack,
+    pack: &SchemePack,
     lexicon: &LexiconPack,
     language_model: &LanguageModelPack,
     radical_hint: &RadicalHintPack,
@@ -193,12 +193,12 @@ fn report(
     verify::run(&rows(), bytes, bytes)
 }
 
-fn run(pack: &Pack) -> Report {
+fn run(pack: &SchemePack) -> Report {
     run_with(pack, &lexicon())
 }
 
 /// 改動碼表後重建資料包。
-fn edited(edit: impl FnOnce(&mut BTreeMap<String, Vec<CodeEntry>>)) -> Pack {
+fn edited(edit: impl FnOnce(&mut BTreeMap<String, Vec<CodeEntry>>)) -> SchemePack {
     let mut pack = pack();
     let mut entries: BTreeMap<String, Vec<CodeEntry>> = pack
         .code_table
@@ -285,7 +285,7 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     let table =
         format!("{TABLE}㐀 㐀 1 0 0 0 0 0 0 0 0 a NA NA 0\n㐀 㐀 1 0 1 0 0 0 0 0 0 NA NA NA 0\n");
     let rows = libcangjie::parse(&table).unwrap();
-    let bytes = build_pack(&rows, &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
+    let bytes = build_scheme_pack(&rows, &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
         .to_bytes()
         .unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
