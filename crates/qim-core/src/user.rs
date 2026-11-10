@@ -298,6 +298,11 @@ impl SchemeModel {
             });
     }
 
+    /// （`code`, `text`）是不是使用者詞（任何來源）。
+    pub(crate) fn is_word(&self, code: &str, text: &str) -> bool {
+        self.words.get(code).is_some_and(|w| w.contains_key(text))
+    }
+
     /// 碼剛好是 `code` 的使用者詞。
     pub(crate) fn words(&self, code: &str) -> impl Iterator<Item = &str> {
         self.words

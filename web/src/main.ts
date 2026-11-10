@@ -21,6 +21,7 @@ import init, {
 	Session,
 	type Snapshot,
 } from "./wasm/qim_wasm.js";
+import { mountWordList } from "./word-list.ts";
 
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
@@ -174,6 +175,7 @@ async function start(): Promise<void> {
 		userDict.save,
 		focusText,
 	);
+	mountWordList(session, userDict.save, focusText);
 	// 開關改了不是選字。
 	settings.connect(session, (snapshot) => apply(snapshot, false), focusText);
 	touchKeyboard = mountTouch(

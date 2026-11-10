@@ -132,7 +132,8 @@ textarea {
 	font-size: 1rem;
 }
 
-#phrases h2 {
+#phrases h2,
+#word-list h2 {
 	margin: 0.5rem 0 0;
 	font-size: 1rem;
 }
@@ -173,7 +174,8 @@ textarea {
 	max-width: 100%;
 }
 
-#phrases .note {
+#phrases .note,
+#word-list .note {
 	margin: 0;
 	color: gray;
 	font-size: 0.875rem;
@@ -339,4 +341,26 @@ body:has(#keyboard:not([hidden])) {
 
 #confirm-import p {
 	margin: 0 0 0.5rem;
+}
+
+/* 匯入詞庫前的確認：是加進去、不取代，所以不用警告的紅色。 */
+#confirm-word-list {
+	margin: 0;
+	padding: 0.5rem;
+	border: 1px solid gray;
+	border-radius: 0.25rem;
+}
+
+#confirm-word-list[hidden] {
+	display: none;
+}
+
+#confirm-word-list p {
+	margin: 0 0 0.5rem;
+}
+
+#word-list-skipped {
+	margin: 0;
+	padding-left: 1.25rem;
+	font-size: 0.875rem;
 }

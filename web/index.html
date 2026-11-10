@@ -44,6 +44,18 @@
 					<p class="note">打觸發詞時它是首選；沒有觸發詞的從候選列的「常用語」選。</p>
 					<p id="phrase-status" role="status" aria-label="常用語狀態"></p>
 				</section>
+				<section id="word-list" aria-label="匯入詞庫">
+					<h2>匯入詞庫</h2>
+					<label>詞表檔案 <input id="import-word-list" type="file" accept=".txt,.yaml,.tsv,text/plain" aria-describedby="word-list-note" /></label>
+					<p id="word-list-note" class="note">收 Rime 碼表（.dict.yaml）、Gboard 個人字典的 dictionary.txt（先解壓匯出的 zip）、一行一詞的純文字。碼由字推出，Gboard 的快捷鍵是速成的鍵時當觸發詞；詞是加進使用者詞，不動原本的學習資料。</p>
+					<fieldset id="confirm-word-list" aria-label="確認匯入詞庫" hidden>
+						<p id="confirm-word-list-text"></p>
+						<button id="confirm-word-list-ok" type="button">確定匯入</button>
+						<button id="confirm-word-list-cancel" type="button">取消</button>
+					</fieldset>
+					<p id="word-list-status" role="status" aria-label="詞庫匯入狀態"></p>
+					<ul id="word-list-skipped" aria-label="略過的列"></ul>
+				</section>
 			</section>
 			<section id="user-dict" aria-label="使用者詞">
 				<form id="add-word">
