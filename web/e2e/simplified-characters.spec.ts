@@ -89,10 +89,14 @@ test("選兩次「门」後它成 ls 的首選", async ({ page }) => {
 test("關掉「繁體字優先」，「门」回到改前的位置；組字中切換立刻重列", async ({
 	page,
 }, testInfo) => {
-	await ready(page);
+	const { text } = await ready(page);
 	const settings = page.getByRole("region", { name: "設定" });
 	const toggle = settings.getByRole("checkbox", { name: "繁體字優先" });
 	await expect(toggle).toBeChecked();
+	// 改前的名次是不知道前文時量的；空的輸入框有前文（句首，M3 票 05），名次不同，所以在無痕
+	// （不給前文）下比。
+	await settings.getByRole("checkbox", { name: "無痕" }).check();
+	await expect(text).toBeFocused();
 	const on = await openPanel(page, "ls");
 	await page.keyboard.press("ArrowUp");
 
