@@ -6,10 +6,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use qim_core::{
-    CodeEntry, CodeTable, Lexicon, LexiconPack, Packs, Ranking, Scheme, SchemePack, Word,
+    CangjieCodes, CodeEntry, CodeTable, Lexicon, LexiconPack, Packs, RadicalHintPack, RadicalHints,
+    Ranking, Scheme, SchemePack, Word,
 };
 use qim_ffi::{
-    Engine, LexiconPack as FfiLexiconPack, SchemePack as FfiSchemePack, Session, Snapshot,
+    Engine, LexiconPack as FfiLexiconPack, RadicalHintPack as FfiRadicalHintPack,
+    SchemePack as FfiSchemePack, Session, Snapshot,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -178,4 +180,21 @@ fn a_pack_given_to_a_second_engine_is_an_error() {
         .err()
         .unwrap();
     assert!(error.to_string().contains("SchemePack"), "{error}");
+}
+
+#[test]
+fn the_radical_hint_pack_is_read_from_its_bytes() {
+    let pack = RadicalHintPack {
+        id: "cangjie-hint".into(),
+        hints: RadicalHints::new([(
+            '門',
+            CangjieCodes {
+                cangjie3: vec!["an".into()],
+                cangjie5: vec!["an".into()],
+            },
+        )]),
+    };
+    assert!(FfiRadicalHintPack::new(pack.to_bytes().unwrap()).is_ok());
+    let (scheme, _) = packs();
+    assert!(FfiRadicalHintPack::new(scheme).is_err());
 }

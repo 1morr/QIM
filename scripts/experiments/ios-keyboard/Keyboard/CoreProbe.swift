@@ -8,6 +8,8 @@ import Foundation
 @MainActor
 enum CoreProbe {
     private(set) static var session: Session?
+    /// 票 09：字根提示只解開、佔住記憶體，量它在 iPhone 上的 footprint（`Engine` 不用它）。
+    private static var radicalHints: RadicalHintPack?
     private(set) static var busy = false
     private(set) static var snapshot: Snapshot?
     /// 載入各步與延遲的結果，顯示在鍵盤上方。
@@ -38,9 +40,10 @@ enum CoreProbe {
         lines = ["core loading…"]
         onUpdate?()
         Task.detached(priority: .userInitiated) {
-            let (session, lines) = loadSession()
+            let (session, hints, lines) = loadSession()
             await MainActor.run {
                 self.session = session
+                radicalHints = hints
                 self.lines = lines
                 busy = false
                 log(lines)
@@ -90,8 +93,9 @@ enum CoreProbe {
     }
 
     /// 每份資料包「讀檔 → 解開 → 丟掉檔案位元組」前後的 footprint 差，再建 `Engine` 與 `Session`。
-    /// 資料包依票 04 的順序；字根提示只給殼顯示、佈局 `qim-ffi` 還沒有介面，都不放（README〈接上核心〉）。
-    nonisolated private static func loadSession() -> (Session?, [String]) {
+    /// 資料包依票 04 的順序；字根提示（票 09 加）排在 `Session` 之後，前面各步與票 08 可以直接比；
+    /// 佈局 `qim-ffi` 還沒有介面，不放（README〈接上核心〉）。
+    nonisolated private static func loadSession() -> (Session?, RadicalHintPack?, [String]) {
         var lines = [Probe.memoryLine("core-before")]
         let loadStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
         func step<T>(_ name: String, _ body: () throws -> (T, Int?)) throws -> T {
@@ -124,11 +128,12 @@ enum CoreProbe {
                             simplifier: simplifier, english: english), nil as Int?)
             }
             let session = try step("session") { (Session(engine: engine), nil as Int?) }
+            let hints = try pack("cangjie-hint", RadicalHintPack.init)
             lines.append(String(format: "core-loaded %.0fms ", ms(since: loadStart)) + Probe.memoryLine("footprint"))
-            return (session, lines)
+            return (session, hints, lines)
         } catch {
             lines.append("core-failed \(error)")
-            return (nil, lines)
+            return (nil, nil, lines)
         }
     }
 

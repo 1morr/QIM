@@ -1,0 +1,12 @@
+# M2 票 09：載入核心後加壓，第 1 輪（pid 12609）被終止時的系統 log 摘錄。
+# iPhone 18 Pro Max（iPhone19,7），iOS 27.2；iphone-use phone_logs（USB），2026-11-10，篩 "qim"。
+#541561 Nov 10 22:19:00 kernel[0] notice: memorystatus: QIMKeyboard [12609] exceeded mem limit: ActiveHard 177 MB (fatal)
+#541562 Nov 10 22:19:00 kernel[0] notice: memorystatus: killing process 12609 [QIMKeyboard] in high band FOREGROUND (100) - memorystatus_available_pages: 286664
+#541563 Nov 10 22:19:00 kernel[0] notice: QIMKeyboard[12609] Corpse allowed 1 of 5
+#541573 Nov 10 22:19:00 kernel[0] notice: memorystatus: killing_specific_process pid 12609 [QIMKeyboard] (per-process-limit 100 33s rf:- type:app) 181249KB - memorystatus_available_pages: 286430
+#541626 Nov 10 22:19:00 runningboardd[38] (RunningBoard) notice: [xpcservice<com.personal.qim.exp.keyboard(no host)>{vt hash: 0}{definition:com.personal.qim.exp.keyboard[extension][system]}:12609] termination reported by launchd (1, 7, 9)
+#541640 Nov 10 22:19:00 SpringBoard[12505] (FrontBoard) notice: [xpcservice<com.personal.qim.exp.keyboard>:12609] Process exited: <RBSProcessExitContext| specific, status:<RBSProcessExitStatus| domain:jetsam(1) code:per-process-limit(7)>>.
+#542193 Nov 10 22:19:00 ReportSystemMemory[12475] (CoreDiagnostics) notice: Process QIMKeyboard [12609] killed by jetsam reason per-process-limit
+#543017 Nov 10 22:19:00 ReportCrashService[12610] notice: no MetricKit for process QIMKeyboard type 385 bundleId com.personal.qim.exp.keyboard
+#543021 Nov 10 22:19:00 ReportCrash[11639] notice: logGenerationTiming: sending CA event for QIMKeyboard[385] elapsedTime=0.325
+# 手機的 systemCrashLogs 沒有新增 JetsamEvent 或 QIMKeyboard 的 .ips（xcrun devicectl device info files --domain-type systemCrashLogs）。
