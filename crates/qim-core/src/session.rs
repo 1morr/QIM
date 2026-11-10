@@ -39,6 +39,9 @@ pub struct Options {
     pub digit_separators: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
+    /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
+    /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
+    pub simplified_after_traditional: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -92,9 +95,12 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體與英文候選影響候選，無痕、Shift、數字後半形都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選與簡體字排後影響候選，無痕、Shift、數字後半形
+    /// 都不影響。
     fn lists_like(&self, other: &Options) -> bool {
-        self.simplified == other.simplified && self.english_candidates == other.english_candidates
+        self.simplified == other.simplified
+            && self.english_candidates == other.english_candidates
+            && self.simplified_after_traditional == other.simplified_after_traditional
     }
 }
 
@@ -106,6 +112,7 @@ impl Default for Options {
             english_candidates: true,
             digit_separators: true,
             shift_switch: ShiftSwitch::Rime,
+            simplified_after_traditional: true,
         }
     }
 }
@@ -873,11 +880,11 @@ impl Session {
         }
     }
 
-    /// 列候選的選項：簡體模式照選項，英文候選只給剩下的整串輸入碼，由呼叫端決定。
+    /// 列候選的選項：簡體字排後照選項（簡體模式不排），英文候選只給剩下的整串輸入碼，由呼叫端決定。
     fn listing(&self, english_candidates: bool) -> Listing {
         Listing {
             english_candidates,
-            simplified_mode: self.options.simplified,
+            simplified_last: self.options.simplified_after_traditional && !self.options.simplified,
         }
     }
 

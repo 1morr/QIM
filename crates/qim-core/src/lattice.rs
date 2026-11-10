@@ -49,20 +49,20 @@ impl CandidateSpan {
     }
 }
 
-/// 列候選時看的選項：[`crate::Options`] 裡影響候選列的兩項。預設是繁體模式、沒有英文候選。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// 列候選時看的選項，由 [`crate::Options`] 算出。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Listing {
     /// 整串輸入碼是英文單字時加英文候選（排位規則 4）；目前分段的候選列沒有。
     pub english_candidates: bool,
-    /// 簡體模式（[`crate::Options::simplified`]）：碼表標成簡體字的字照分數排，不移到繁體字之後
-    /// （brief §4.1）。
-    pub simplified_mode: bool,
+    /// 碼表標成簡體字的字排到同一段的其他字詞之後（brief §4.1）：繁體模式、
+    /// [`crate::Options::simplified_after_traditional`] 開著時。
+    pub simplified_last: bool,
 }
 
 impl Listing {
-    /// 這個字詞要不要排到同一段的其他字詞之後：繁體模式的簡體字。
+    /// 這個字詞要不要排到同一段的其他字詞之後。
     fn demotes(self, spanned: &Spanned) -> bool {
-        !self.simplified_mode && spanned.simplified
+        self.simplified_last && spanned.simplified
     }
 }
 
@@ -163,9 +163,9 @@ impl Lattice {
 
 /// 候選列（plan §2.3）：
 /// 1. 蓋滿整串輸入碼的：碼表的字、詞庫的詞，與分數最高的幾條多段路徑（方案的
-///    `ranking.sentences`），依分數排；繁體模式（[`Listing::simplified_mode`] 為假）的簡體字排在它們之後；
+///    `ranking.sentences`），依分數排；簡體字排後（[`Listing::simplified_last`]）時簡體字排在它們之後；
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
-/// 3. 只蓋住開頭一段的字詞，蓋得長的在前，同長依分數排，繁體模式的簡體字排在同長的最後。
+/// 3. 只蓋住開頭一段的字詞，蓋得長的在前，同長依分數排，簡體字排後時簡體字排在同長的最後。
 ///
 /// 文字重複的只留第一個。[`Listing::english_candidates`] 為真、整串輸入碼是英文單字
 /// （[`Engine::english_candidate`]）、又有其他候選時，最後加上那個英文字。接著依序套用排位規則

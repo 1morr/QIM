@@ -26,7 +26,7 @@
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
 | 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
 | 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
-| 簡體模式 | `Options::simplified`（核心內部 `simplified_mode`） | 簡體字（碼表的標記） | `CodeEntry::simplified` |
+| 簡體模式 / 簡體字排後 | `Options::simplified` / `simplified_after_traditional` | 簡體字（碼表的標記） | `CodeEntry::simplified` |
 
 ## 1. 架構總覽
 
@@ -144,7 +144,7 @@ pub enum ShiftKey { Left, Right }
 impl Key { pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError>; } // 綁定收「種類 + 值」
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub shift_switch: ShiftSwitch }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub shift_switch: ShiftSwitch, pub simplified_after_traditional: bool }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
@@ -180,6 +180,7 @@ impl Session {
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。殼只呼叫 `set_options` 時，下一個 `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選，重列前 `all_candidates` 是空的、不給重排要求、也不套用重排結果（M2 票 01）。`qim-ffi` 加換選項時，綁定的 `set_options` 同時呼叫 `refresh` 回快照（同網頁的 `setSimplified`），殼就碰不到這個待生效狀態（票 01 的建議，M2 票 07 延後到需要它的票）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
+- 簡體字排後：`Options.simplified_after_traditional`（預設開，brief §4.1、§7）開著、又不是簡體模式時，碼表標成簡體字的字排在同碼的其他候選之後（§2.3）；關掉時照分數混排。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M3 票 19）。
 - 數字後半形：`Options.digit_separators`（預設開，brief §4.7、§7）。沒有組字、前一個上屏的字是半形數字時，`.` `:` 直接上屏半形，不進組字；逗號照舊全形（使用者決定，M1 票 26）；「前一個上屏的字」由 `Session` 記最近送出去的字，M3 有 `set_context` 後改看前文。會上屏的三個方法回傳前都經過同一處記下（`Session::finish`）：`handle`（含交還宿主的鍵，只有數字鍵算數字，`Modifier` 不動它）、`select`（點候選）、`text`（觸控的文字鍵：數字列、符號頁與數字鍵盤的數字、常用頁）；`refresh`、`focus_segment`、`apply_rerank` 不上屏、不改它。觸控的標點鍵是 `text`、照鍵上的字輸出，不套這條（使用者決定，M1 票 27b，推翻票 27 的觸控標點送 `Key::Punct`）。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 按鍵的入口（M2 票 03）：綁定收不了帶資料的列舉時（WebAssembly）用 `Key::parse` 收「種類 + 值」，種類是 `Key` 各種的 camelCase 名字（`letter`、`digit`、`toggleAscii`、`space`…），值是字元、`0`–`9` 或 `left` / `right`；網頁的按鍵都經綁定的同一個 `press`，加一種鍵只改核心與網頁的按鍵對照（`web/src/keys.ts`）。同 librime 能從字串讀按鍵（`KeyEvent` 的文字表示）。`qim-ffi` 也收「種類 + 值」（M2 票 07）：uniffi 沒有 `char` 型別，收不了 `Key::Letter(char)`，另寫一份鏡像列舉又讓加一種鍵多改一處。觸控鍵盤的組字狀態也問 `Session::composing`，綁定不另存。
@@ -243,7 +244,7 @@ P_段內 = 1（單字）
 - 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；下一段的分數看部分路徑的最後一個字，所以 beam 剪掉的路徑可能本來會勝出，beam 夠寬才等於窮舉。每個起點的每個碼只取字頻最高的 beam 個字進 lattice（詞全進），另加使用者學過的字（它們有 `personal`）；前文再支持第 21 名以後沒學過的同碼字也進不來；票 12 量過全收或 beam 40，dev 只差 1 題，不放寬。每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
 - 分隔記號（§2.1）是「這裡一定要斷字」（brief §4.3，M1 票 28b 照 Rime 速成）：它的一欄照抄前一欄，邊不從它開始。邊的碼中間有分隔記號時去掉它再查碼表、詞庫與使用者詞，但沒有字，只留每個分隔記號都落在詞內兩字的碼之間的詞（`Engine::splits_at` 照碼表把詞一字一碼地對齊，字有幾個碼時任一種拆法都算；碼不是由字的碼組成的使用者詞不跨）；往回找邊的上限算字母數。其餘照上面打分（bigram 照樣跨過它接前一字）。結尾的分隔記號算在最後一段裡：候選列查碼時去掉它，`mi'` 的候選同 `mi`、蓋住整串。只蓋住開頭一段的字詞後面緊接分隔記號時連它一起蓋住，選了之後剩下的輸入碼不以分隔記號開頭；觸發詞只比對整串（去掉結尾的分隔記號），中間有分隔記號時沒有。
 - Unicode 擴展區的字不進 lattice；整串輸入碼就是一個字的碼時，排在一般字之後（brief §4.1）。
-- 候選列：蓋滿整串的字、詞與分數最高的幾條多段路徑（方案檔 `ranking.sentences`，速成 3 條）依分數排 → 繁體模式的簡體字（§4.1 的標記）依分數 → 擴展區的字 → 只蓋住開頭一段的字詞，蓋得長的在前、同長依分數（繁體模式的簡體字排在同長的最後）；文字重複的只留第一個。排位規則在這之後套用，簡體字選兩次照樣成首選（brief §4.1，M3 票 19）；簡體模式不分。簡體字照樣進 lattice、在多段路徑裡照分數比，不另扣分：它們在語料裡只有零星殘留，字頻極低。多段路徑放多：維基集修正次數降、口語集升（票 07 Comments）。
+- 候選列：蓋滿整串的字、詞與分數最高的幾條多段路徑（方案檔 `ranking.sentences`，速成 3 條）依分數排 → 繁體模式的簡體字（§4.1 的標記）依分數 → 擴展區的字 → 只蓋住開頭一段的字詞，蓋得長的在前、同長依分數（繁體模式的簡體字排在同長的最後）；文字重複的只留第一個。排位規則在這之後套用，簡體字選兩次照樣成首選（brief §4.1，M3 票 19）；簡體模式或 `Options.simplified_after_traditional` 關掉時不分（§2.1）。簡體字照樣進 lattice、在多段路徑裡照分數比，不另扣分：它們在語料裡只有零星殘留，字頻極低。多段路徑放多：維基集修正次數降、口語集升（票 07 Comments）。
 
 ### 2.4 學習與排位（brief §4.5）
 

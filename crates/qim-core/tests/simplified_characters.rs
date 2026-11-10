@@ -97,11 +97,15 @@ struct Ime {
 
 impl Ime {
     fn new(simplified: bool) -> Self {
-        let mut session = Session::default();
-        session.set_options(Options {
+        Self::with_options(Options {
             simplified,
             ..Options::default()
-        });
+        })
+    }
+
+    fn with_options(options: Options) -> Self {
+        let mut session = Session::default();
+        session.set_options(options);
         Self {
             engine: engine(),
             session,
@@ -171,4 +175,34 @@ fn choosing_a_simplified_character_twice_makes_it_the_top() {
     ime.press(Key::Escape);
     ime.choose("ls", "门");
     assert_eq!(ime.type_code("ls")[0], "门");
+}
+
+/// 開關（spec〈共同規則〉：改變候選位置的新行為都有開關）：預設開，同 macOS 速成。
+#[test]
+fn the_switch_is_on_by_default() {
+    assert!(Options::default().simplified_after_traditional);
+}
+
+/// 關掉時回到改前的排序：「门」照分數排第 1。
+#[test]
+fn switching_off_lists_simplified_characters_by_score() {
+    let mut ime = Ime::with_options(Options {
+        simplified_after_traditional: false,
+        ..Options::default()
+    });
+    assert_eq!(ime.type_code("ls"), ["门", "甲", "申", "𠀀"]);
+}
+
+/// 組字中切換：`refresh` 依新的選項重列候選。
+#[test]
+fn switching_during_composition_relists_the_candidates() {
+    let mut ime = Ime::new(false);
+    assert_eq!(ime.type_code("ls"), ["甲", "申", "门", "𠀀"]);
+    ime.session.set_options(Options {
+        simplified_after_traditional: false,
+        ..Options::default()
+    });
+    let shown = ime.session.refresh(&ime.engine, &ime.user);
+    let texts: Vec<String> = shown.candidates.into_iter().map(|c| c.text).collect();
+    assert_eq!(texts, ["门", "甲", "申", "𠀀"]);
 }

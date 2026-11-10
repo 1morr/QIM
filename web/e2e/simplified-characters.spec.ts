@@ -85,3 +85,33 @@ test("選兩次「门」後它成 ls 的首選", async ({ page }) => {
 	await page.keyboard.type("ls");
 	await expect(items.first()).toHaveText("1门");
 });
+
+test("關掉「繁體字優先」，「门」回到改前的位置；組字中切換立刻重列", async ({
+	page,
+}, testInfo) => {
+	await ready(page);
+	const settings = page.getByRole("region", { name: "設定" });
+	const toggle = settings.getByRole("checkbox", { name: "繁體字優先" });
+	await expect(toggle).toBeChecked();
+	const on = await openPanel(page, "ls");
+	await page.keyboard.press("ArrowUp");
+
+	await toggle.click();
+	await expect(toggle).not.toBeChecked();
+	const all = page
+		.getByRole("list", { name: "全部候選" })
+		.getByRole("listitem");
+	await page.keyboard.press("ArrowDown");
+	await expect(all.first()).toBeVisible();
+	const off = await all.allTextContents();
+	await page.screenshot({ path: testInfo.outputPath("ls-panel-off.png") });
+	// 改前（票 19 之前）是第 9。
+	expect(off.indexOf("门")).toBe(8);
+	expect(off.indexOf("门")).toBeLessThan(on.indexOf("门"));
+
+	await page.keyboard.press("ArrowUp");
+	await toggle.click();
+	await page.keyboard.press("ArrowDown");
+	await expect(all.first()).toBeVisible();
+	expect((await all.allTextContents()).indexOf("门")).toBe(on.indexOf("门"));
+});

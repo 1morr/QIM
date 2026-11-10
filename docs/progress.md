@@ -28,8 +28,8 @@
 | 2026-11-11 | M3 01 | `main.ts` 拆成候選列、面板、設定區等模組，行為不變（亂按腳本前後逐步相同）；設定區移到頁面下方；見票 01 | 新 session 下 `/implement .scratch/m3/issues/02-pack-list-cleanup.md` |
 | 2026-11-11 | M3 06 | 青簡神經重排與 CyIME 模型評估寫成 `docs/research/neural-rerank.md`，摘進 brief §12.4；見票 06 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 | 2026-11-11 | M3 02 | 資料包清單收成 `build_packs` 一處、`Pack` trait、xtask 比對個人集路徑；六份 sha256 與 bench 不變；見票 02 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
-| 2026-11-11 | M3 19 | 繁體模式的簡體字（278 字，建置端判定、碼表標記，格式 v6）排在同碼繁體字之後；選兩次照常成首選；見票 19 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 14 | 常用語：來源 `phrase` 的使用者詞，觸發詞或候選列清單上屏，設定區增刪改；匯出升 v2（詞欄跳脫）、收 v1；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
+| 2026-11-11 | M3 19 | 繁體模式的簡體字（278 字，建置端判定，格式 v6）排在同碼繁體字之後，開關「繁體字優先」預設開；選兩次照常成首選；見票 19 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 
 ## 偏差與決定
 

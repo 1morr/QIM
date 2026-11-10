@@ -71,15 +71,22 @@ Big5 這條是必要的：Big5 裡有 59 字是 `STCharacters` 一律換掉的�
 
 - 網頁沒改程式碼，只加 e2e，沒有另外亂按一輪（spec〈共同規則〉要求動到網頁的票做）。
 
+### 開關（2026-11-11 協調者要求補）
+
+- 核心：`Options::simplified_after_traditional`，預設開（brief §7，同 macOS 速成與使用者 2026-11-11 的決定）；關掉或簡體模式時 `Listing::simplified_last` 為假，照分數混排，等於改前的排序。換這個選項也算「列出的候選不同」（`lists_like`），組字中殼呼叫 `refresh`（plan §2.1）。`Engine::candidates` 照預設選項。
+- 網頁：設定區（`settings.ts` 的 `ROWS`）在「簡體」後加「繁體字優先」，綁 `setSimplifiedAfterTraditional`。標籤不用「簡體字排後」：Playwright 的 `getByRole` 名稱是子字串比對，會和「簡體」撞名。
+- 測試：`simplified_characters.rs` 加三條（預設開、關掉時「门」回第 1、組字中切換重列）；`settings.spec.ts` 驗預設勾選；`simplified-characters.spec.ts` 組字中關掉後 `ls` 的「门」回到第 9（改前的位置），再打開回第 18。截圖 `.scratch/m3/evidence/19-ls-panel-off.png`。
+- 合併 main（票 01、02、06、14）沒有衝突；票 14 的 `crates/qim-core/tests/phrases.rs` 補 `simplified: false` 併進合併 commit。合併沒動到 `qim-databuild` 與 `data/`，資料包沿用，沒重跑 `--verify`。合併後 `cargo xtask check` 全綠（Playwright 160 個），`bench --check` 和更新後的 baseline 相同（yue-wiki 4473、zh-wiki 4505、common-voice-yue 4045、hkcancor 2588，固定題 84/84）。
+
 ### code-review（`3543c83` 起）
 
 已處理：
 - Standards：`simplified` 同時指簡體模式與簡體字標記 → 核心內部的模式欄改名 `Listing::simplified_mode`，plan §0 對照表加一列。
 - Standards：e2e 重複的開面板步驟收成 `openPanel`，第一頁的 9 改成 `PAGE_SIZE`；`unihan::hk_glyphs` 的重複錯誤字串合併。
 - Spec：判定測試補「面」「系」；`--update-baseline` 的理由寫在 commit message。
+- Spec：共同規則「會改寫打出的字或改變候選位置的新行為都有開關」→ 協調者要求在本票補，見下〈開關〉。
 
 沒處理，留給之後：
-- Spec：共同規則「會改寫打出的字或改變候選位置的新行為都有開關」。這張票沒加開關：使用者 2026-11-11 定的是「照 macOS 排在繁體字之後」，沒提開關。要不要加，等使用者決定。
 - Spec：票寫「一律排在同碼的繁體字之後」，但多段路徑與詞庫的詞裡的簡體字照分數比，沒有排後（plan §2.3 已寫明這個取捨）。語料裡簡體字只有零星殘留，bench 沒有首選因此含簡體字的題。
 - Spec：「台、后、里…排序和改之前相同」鎖的是「不標成簡體字」（單元測試用假資料測台后里干面系；真碼表靠 `--verify` 的 `NotSimplified`，它不在 `cargo xtask check` 裡）。沒標的字排序不受影響，是由核心測試 `simplified_characters.rs` 的甲、申相對順序守的。
 - Spec：叙、携、烟、踪、迹、韵和繁體寫法共用字表序號就當異體、照算簡體字，這是從 Unihan 共用序號推論的，字表本身沒標出正字；要使用者確認。
