@@ -6,9 +6,9 @@ use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{
-    CLAUSE_START, CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack, Simplifier,
-    SimplifierPack, UserModel, Word,
+    CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack,
+    Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -29,6 +29,8 @@ pub struct Engine {
     simplifier: Option<Simplifier>,
     /// 英文候選的詞表；沒掛上英文資料包時是空的，沒有英文候選。
     english: EnglishWords,
+    /// emoji 候選的對照表；沒掛上 emoji 資料包時是空的，沒有 emoji 候選。
+    emoji: EmojiTable,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -89,6 +91,7 @@ impl Engine {
             lexicon,
             simplifier: None,
             english: EnglishWords::default(),
+            emoji: EmojiTable::default(),
         })
     }
 
@@ -102,6 +105,17 @@ impl Engine {
     pub fn with_english(mut self, pack: EnglishPack) -> Self {
         self.english = pack.words;
         self
+    }
+
+    /// 掛上 emoji 資料包，emoji 候選（[`crate::Options::emoji_candidates`]）才有作用。
+    pub fn with_emoji(mut self, pack: EmojiPack) -> Self {
+        self.emoji = pack.emoji;
+        self
+    }
+
+    /// 字詞 `word`（繁體原文）的 emoji，好的在前。
+    pub(crate) fn emoji(&self, word: &str) -> &[String] {
+        self.emoji.lookup(word)
     }
 
     /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan §2.4）：剛好是詞表裡的完整單字、又長過
@@ -143,13 +157,14 @@ impl Engine {
     }
 
     /// 整串輸入碼在 `user` 之下的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
-    /// 不含英文候選：它是 [`crate::Session`] 的選項。
+    /// 不含英文候選與 emoji：它們是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
         lattice::candidates(
             self,
             user,
             &Lattice::from_input(self, user, None, input),
+            false,
             false,
         )
         .into_iter()

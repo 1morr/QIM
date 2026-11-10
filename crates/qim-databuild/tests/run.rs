@@ -3,8 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack,
-    SchemePack, SimplifierPack,
+    CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack,
+    RadicalHintPack, SchemePack, SimplifierPack,
 };
 use qim_databuild::sources::{Fetch, sha256_hex};
 use qim_databuild::{Error, Outcome, WrittenPack};
@@ -43,6 +43,7 @@ const TABLE: &str = "\
 顯 显 1 1 0 0 1 0 0 0 0 afmbc afmbc NA 0
 臺 台 1 1 0 0 1 0 0 0 0 grmbg grmbg NA 0
 台 台 1 1 0 0 1 0 0 0 0 ir ir NA 0
+笑 笑 1 1 0 0 1 0 0 0 0 hhhk hhhk NA 0
 ";
 
 /// 聲明原文在上游檔裡換了行，sources.toml 照抄成一行。
@@ -135,6 +136,28 @@ const EN_US_DIC: &str = "4\nthe\nwalk/D\ndamn/D!\nzoo\n";
 const SCOWL_COPYRIGHT: &str = "Copyright 2000-2026 by Kevin Atkinson\n";
 
 const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
+
+/// CLDR 的粵語標註：「笑」是 😂 的關鍵字，「門口」是 🚪 的短名，「臉」打不出（碼表沒有）。
+const CLDR_YUE: &str = r#"<?xml version="1.0" encoding="UTF-8" ?>
+<ldml><annotations>
+<annotation cp="😂">笑 | 臉</annotation>
+<annotation cp="😂" type="tts">有開心眼淚嘅臉</annotation>
+<annotation cp="🚪">門 | 門口</annotation>
+<annotation cp="🚪" type="tts">門口</annotation>
+</annotations></ldml>
+"#;
+/// CLDR 的繁中標註：「笑」另有 🤣，排在粵語的 😂 後面；❤ 的 cp 沒有 U+FE0F。
+const CLDR_ZH_HANT: &str = r#"<?xml version="1.0" encoding="UTF-8" ?>
+<ldml><annotations>
+<annotation cp="🤣">笑 | 大笑</annotation>
+<annotation cp="🤣" type="tts">笑到在地上打滾</annotation>
+<annotation cp="❤">日</annotation>
+<annotation cp="❤" type="tts">紅心</annotation>
+</annotations></ldml>
+"#;
+const CLDR_LICENSE: &str = "COPYRIGHT AND PERMISSION NOTICE\n\nAll other content in this repo is released under UNICODE LICENSE V3\n";
+const EMOJI_TEST: &str =
+    "2764 FE0F ; fully-qualified # ❤️ E0.6 red heart\n2764 ; unqualified # ❤ E0.6 red heart\n";
 
 fn scowl_zip() -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
@@ -383,6 +406,22 @@ fn upstream(readme: &str) -> Files {
                 "https://example.invalid/scowl-Copyright".into(),
                 SCOWL_COPYRIGHT.into(),
             ),
+            (
+                "https://example.invalid/cldr-yue.xml".into(),
+                CLDR_YUE.into(),
+            ),
+            (
+                "https://example.invalid/cldr-zh_Hant.xml".into(),
+                CLDR_ZH_HANT.into(),
+            ),
+            (
+                "https://example.invalid/cldr-LICENSE".into(),
+                CLDR_LICENSE.into(),
+            ),
+            (
+                "https://example.invalid/emoji-test.txt".into(),
+                EMOJI_TEST.into(),
+            ),
         ])
         .into_iter()
         .chain(OPENCC_DICTIONARIES.iter().map(|(path, text)| {
@@ -533,6 +572,38 @@ sha256 = "{scowl}"
 path = "Copyright"
 url = "https://example.invalid/scowl-Copyright"
 sha256 = "{scowl_copyright}"
+
+[source.cldr]
+repository = "https://example.invalid/cldr"
+version = "96e54b273d2da4ec6fbad350ba19ff23fa24a588"
+license = "Unicode-3.0"
+license_text = {{ upstream_file = "LICENSE" }}
+
+[[source.cldr.files]]
+path = "common/annotations/yue.xml"
+url = "https://example.invalid/cldr-yue.xml"
+sha256 = "{cldr_yue}"
+
+[[source.cldr.files]]
+path = "common/annotations/zh_Hant.xml"
+url = "https://example.invalid/cldr-zh_Hant.xml"
+sha256 = "{cldr_zh_hant}"
+
+[[source.cldr.files]]
+path = "LICENSE"
+url = "https://example.invalid/cldr-LICENSE"
+sha256 = "{cldr_license}"
+
+[source.emoji_test]
+repository = "https://example.invalid/emoji/"
+version = "18.0"
+license = "Unicode-3.0"
+license_text = {{ repo_file = "{UNICODE_LICENSE_PATH}" }}
+
+[[source.emoji_test.files]]
+path = "emoji-test.txt"
+url = "https://example.invalid/emoji-test.txt"
+sha256 = "{emoji_test}"
 "#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
@@ -547,6 +618,10 @@ sha256 = "{scowl_copyright}"
         apache = sha256_hex(APACHE.as_bytes()),
         scowl = sha256_hex(&scowl_zip()),
         scowl_copyright = sha256_hex(SCOWL_COPYRIGHT.as_bytes()),
+        cldr_yue = sha256_hex(CLDR_YUE.as_bytes()),
+        cldr_zh_hant = sha256_hex(CLDR_ZH_HANT.as_bytes()),
+        cldr_license = sha256_hex(CLDR_LICENSE.as_bytes()),
+        emoji_test = sha256_hex(EMOJI_TEST.as_bytes()),
         opencc = OPENCC_DICTIONARIES
             .iter()
             .map(|(path, text)| {
@@ -588,7 +663,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (32, 1));
+    assert_eq!((report.continuous, report.extension), (33, 1));
 }
 
 #[test]
@@ -841,6 +916,43 @@ fn builds_the_english_pack_with_its_own_license_and_notice() {
     assert!(notice.contains("rel-2026.02.25"), "{notice}");
     assert!(notice.contains(&sha256_hex(&scowl_zip())), "{notice}");
     assert!(notice.contains("NOSUGGEST"), "{notice}");
+}
+
+#[test]
+fn builds_the_emoji_pack_with_its_own_license_and_notice() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/cldr-emoji-yue-hant");
+    assert_eq!(
+        path(&outcome, "emoji"),
+        dir.join("cldr-emoji-yue-hant.pack")
+    );
+    let bytes = std::fs::read(path(&outcome, "emoji")).unwrap();
+    assert_eq!(written(&outcome, "emoji").sha256, sha256_hex(&bytes));
+    let pack = EmojiPack::from_bytes(&bytes).unwrap();
+    assert_eq!(pack.id, "cldr-emoji-yue-hant");
+    // 粵語在前；短名在關鍵字前；❤ 換回完整寫法；「臉」打不出不收。
+    assert_eq!(pack.emoji.lookup("笑"), ["😂", "🤣"]);
+    assert_eq!(pack.emoji.lookup("門口"), ["🚪"]);
+    assert_eq!(pack.emoji.lookup("日"), ["\u{2764}\u{FE0F}"]);
+    assert!(pack.emoji.lookup("臉").is_empty());
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains(CLDR_LICENSE.trim_end()), "{license}");
+    assert!(license.contains(UNICODE_LICENSE.trim_end()), "{license}");
+    assert!(!license.contains("LicenseRef-SCOWL"), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(
+        notice.contains("96e54b273d2da4ec6fbad350ba19ff23fa24a588"),
+        "{notice}"
+    );
+    assert!(
+        notice.contains(&sha256_hex(EMOJI_TEST.as_bytes())),
+        "{notice}"
+    );
+    assert!(notice.contains("than 6 emoji"), "{notice}");
 }
 
 #[test]

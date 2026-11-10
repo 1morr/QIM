@@ -37,6 +37,9 @@ pub struct Options {
     /// 數字後的 `.` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，同 librime
     /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
     pub digit_separators: bool,
+    /// emoji 候選（plan §2.4）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面；
+    /// 引擎要掛上 emoji 資料包（[`Engine::with_emoji`]）。預設開（brief §7，同 rime-emoji）。
+    pub emoji_candidates: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
 }
@@ -92,9 +95,12 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體與英文候選影響候選，無痕、Shift、數字後半形都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選與 emoji 候選影響候選，無痕、Shift、數字後半形
+    /// 都不影響。
     fn lists_like(&self, other: &Options) -> bool {
-        self.simplified == other.simplified && self.english_candidates == other.english_candidates
+        self.simplified == other.simplified
+            && self.english_candidates == other.english_candidates
+            && self.emoji_candidates == other.emoji_candidates
     }
 }
 
@@ -105,6 +111,7 @@ impl Default for Options {
             incognito: false,
             english_candidates: true,
             digit_separators: true,
+            emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
         }
     }
@@ -843,6 +850,7 @@ impl Session {
                 user,
                 &Lattice::from_input(engine, user, before, &rest),
                 false,
+                false,
             )
             .into_iter()
             .next();
@@ -933,9 +941,9 @@ impl Session {
         let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
             return self.snapshot(engine, true, None);
         };
-        // 英文候選蓋住剩下的整串（分段的候選列沒有它）：和 Enter 一樣，選定的分段上屏字詞、
-        // 其餘上屏英文字，整次不學也不造詞（plan §2.4）。
-        if choice.english_candidate {
+        // 英文候選與 emoji 蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
+        // 上屏字詞、其餘上屏它，整次不學也不造詞（plan §2.4）。
+        if choice.kind.is_literal() {
             let mut commit = self.selected_commit(engine);
             commit.text.push_str(&choice.text);
             commit.original.push_str(&choice.text);
@@ -1025,10 +1033,18 @@ impl Session {
                     user,
                     &Lattice::from_input(engine, user, None, code),
                     false,
+                    false,
                 )
             }
             None => {
-                lattice::candidates(engine, user, &self.lattice, self.options.english_candidates)
+                let options = &self.options;
+                lattice::candidates(
+                    engine,
+                    user,
+                    &self.lattice,
+                    options.english_candidates,
+                    options.emoji_candidates,
+                )
             }
         };
         // 排序時已去掉原文重複的，沒轉換的不必再比。

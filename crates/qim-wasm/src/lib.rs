@@ -1,8 +1,8 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, EnglishPack, Key, Options, Pack, RadicalHintPack, RadicalHints, Scheme,
-    Session, ShiftKey, SimplifierPack, Snapshot, UserModel,
+    CangjieVersion, EmojiPack, Engine, EnglishPack, Key, Options, Pack, RadicalHintPack,
+    RadicalHints, Scheme, Session, ShiftKey, SimplifierPack, Snapshot, UserModel,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -12,7 +12,7 @@ fn js_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
 }
 
-/// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁與英文資料包、一個個人模型、一個 `Session`。
+/// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁、英文與 emoji 資料包、一個個人模型、一個 `Session`。
 /// JS 端叫 `Session`。
 #[wasm_bindgen(js_name = Session)]
 pub struct WebSession {
@@ -24,7 +24,8 @@ pub struct WebSession {
 #[wasm_bindgen(js_class = Session)]
 impl WebSession {
     /// 由速成資料包與方案指名的詞庫、語言模型資料包，加上簡繁資料包（沒有時簡體模式照原樣
-    /// 輸出）、英文資料包（沒有時沒有英文候選）的位元組建立；資料包由網頁 fetch。
+    /// 輸出）、英文資料包（沒有時沒有英文候選）、emoji 資料包（沒有時沒有 emoji 候選）的位元組
+    /// 建立；資料包由網頁 fetch。
     #[wasm_bindgen(constructor)]
     pub fn new(
         scheme_pack: &[u8],
@@ -32,6 +33,7 @@ impl WebSession {
         language_model: Option<Vec<u8>>,
         simplifier: Option<Vec<u8>>,
         english: Option<Vec<u8>>,
+        emoji: Option<Vec<u8>>,
     ) -> Result<WebSession, JsError> {
         let mut engine =
             Engine::from_pack_bytes(scheme_pack, lexicon.as_deref(), language_model.as_deref())
@@ -41,6 +43,9 @@ impl WebSession {
         }
         if let Some(bytes) = english {
             engine = engine.with_english(EnglishPack::from_bytes(&bytes).map_err(js_error)?);
+        }
+        if let Some(bytes) = emoji {
+            engine = engine.with_emoji(EmojiPack::from_bytes(&bytes).map_err(js_error)?);
         }
         Ok(Self {
             engine,
@@ -137,6 +142,14 @@ impl WebSession {
     #[wasm_bindgen(js_name = setEnglishCandidates)]
     pub fn set_english_candidates(&mut self, on: bool) -> WebSnapshot {
         self.set_options(|options| options.english_candidates = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
+    /// emoji 候選（M3 票 16）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面，預設開。
+    /// 組字中切換也立刻重列候選。
+    #[wasm_bindgen(js_name = setEmojiCandidates)]
+    pub fn set_emoji_candidates(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.emoji_candidates = on);
         self.session.refresh(&self.engine, &self.user).into()
     }
 

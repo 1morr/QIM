@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{
-    CharModel, CodeEntry, CodeTable, Engine, EnglishPack, EnglishWords, Key, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, SchemePack, Session,
-    Snapshot, UserModel, Word,
+    CharModel, CodeEntry, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, EnglishWords, Key,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme,
+    SchemePack, Session, Snapshot, UserModel, Word,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -81,6 +81,16 @@ fn english_bytes() -> Vec<u8> {
     .unwrap()
 }
 
+/// emoji 資料包：基準照網頁掛上（預設開 emoji 候選）。「月」有 emoji，沒有題目的正解是它。
+fn emoji_bytes() -> Vec<u8> {
+    EmojiPack {
+        id: "cldr-emoji-yue-hant".into(),
+        emoji: EmojiTable::new([("月", ["🌙"])]),
+    }
+    .to_bytes()
+    .unwrap()
+}
+
 /// 固定題 `a 日`；語料 `toy` 三句，見檔頭。
 fn repo() -> TempDir {
     let dir = TempDir::new().unwrap();
@@ -90,6 +100,7 @@ fn repo() -> TempDir {
         &pack_bytes(TABLE),
     );
     write(dir.path(), qim_bench::ENGLISH_PACK, &english_bytes());
+    write(dir.path(), qim_bench::EMOJI_PACK, &emoji_bytes());
     write(
         dir.path(),
         "bench/fixed.tsv",
@@ -146,8 +157,12 @@ fn engine_from(packs: &[PathBuf]) -> Engine {
     let get = |magic: &[u8]| by_kind.get(magic).map(Vec::as_slice);
     let engine =
         Engine::from_pack_bytes(get(b"QIMP").unwrap(), get(b"QIML"), get(b"QIMB")).unwrap();
-    match get(b"QIME") {
+    let engine = match get(b"QIME") {
         Some(bytes) => engine.with_english(EnglishPack::from_bytes(bytes).unwrap()),
+        None => engine,
+    };
+    match get(b"QIMJ") {
+        Some(bytes) => engine.with_emoji(EmojiPack::from_bytes(bytes).unwrap()),
         None => engine,
     }
 }
@@ -560,6 +575,14 @@ fn a_missing_english_pack_fails_with_its_path() {
     fs::remove_file(repo.path().join(qim_bench::ENGLISH_PACK)).unwrap();
     let error = run(repo.path(), Mode::Report).unwrap_err();
     assert!(error.contains(qim_bench::ENGLISH_PACK), "{error}");
+}
+
+#[test]
+fn a_missing_emoji_pack_fails_with_its_path() {
+    let repo = repo();
+    fs::remove_file(repo.path().join(qim_bench::EMOJI_PACK)).unwrap();
+    let error = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(error.contains(qim_bench::EMOJI_PACK), "{error}");
 }
 
 #[test]

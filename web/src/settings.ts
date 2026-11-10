@@ -72,6 +72,14 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setEnglishCandidates(on),
 	},
 	{
+		// 整串的字詞後面接它的 emoji（M3 票 16）。
+		kind: "checkbox",
+		id: "emoji-candidates",
+		label: "emoji 候選",
+		checked: true,
+		apply: (session, on) => session.setEmojiCandidates(on),
+	},
+	{
 		// 數字後的句點、冒號用半形；逗號照舊全形。
 		kind: "checkbox",
 		id: "digit-separators",
