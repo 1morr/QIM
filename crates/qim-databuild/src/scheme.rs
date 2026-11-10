@@ -18,7 +18,8 @@ struct SchemeFile {
     radicals: BTreeMap<String, String>,
     #[serde(default)]
     packs: PacksTable,
-    ranking: RankingTable,
+    /// `[ranking]`：連打的打分參數（plan §2.3），每個方案自己調，所以必填。
+    ranking: Ranking,
 }
 
 /// 方案檔的 `[packs]`：另外的資料包的 id。
@@ -28,16 +29,6 @@ struct PacksTable {
     lexicon: Option<String>,
     language_model: Option<String>,
     radical_hint: Option<String>,
-}
-
-/// 方案檔的 `[ranking]`：連打的打分參數（plan §2.3），每個方案自己調，所以必填。
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RankingTable {
-    word_bonus: f64,
-    segment_penalty: f64,
-    beam: u16,
-    sentences: u16,
 }
 
 /// 字母表是 ASCII 字母、每個鍵剛好一個字根，字根表沒有字母表以外的鍵。
@@ -52,14 +43,7 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
             file.alphabet
         )));
     }
-    if file.ranking.beam == 0 {
-        return Err(invalid("ranking.beam 至少是 1".into()));
-    }
-    if !(file.ranking.word_bonus.is_finite() && file.ranking.segment_penalty.is_finite()) {
-        return Err(invalid(
-            "ranking.word_bonus、segment_penalty 要是有限的數".into(),
-        ));
-    }
+    file.ranking.check().map_err(|e| invalid(e.to_string()))?;
     let keys: BTreeSet<char> = file.alphabet.chars().collect();
     if keys.len() != file.alphabet.chars().count() {
         return Err(invalid(format!("alphabet 有重複的鍵：{}", file.alphabet)));
@@ -91,11 +75,6 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
             language_model: file.packs.language_model,
             radical_hint: file.packs.radical_hint,
         },
-        ranking: Ranking {
-            word_bonus: file.ranking.word_bonus,
-            segment_penalty: file.ranking.segment_penalty,
-            beam: file.ranking.beam,
-            sentences: file.ranking.sentences,
-        },
+        ranking: file.ranking,
     })
 }

@@ -65,6 +65,14 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setSimplified(on),
 	},
 	{
+		// 繁體模式的簡體字（门、农）排在同碼的繁體字之後，同 macOS 速成。
+		kind: "checkbox",
+		id: "simplified-after-traditional",
+		label: "繁體字優先",
+		checked: true,
+		apply: (session, on) => session.setSimplifiedAfterTraditional(on),
+	},
+	{
 		kind: "checkbox",
 		id: "english-candidates",
 		label: "英文候選",

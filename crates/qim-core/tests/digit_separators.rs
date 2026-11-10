@@ -1,4 +1,4 @@
-//! 數字後的句點、冒號用半形（brief §4.7，M1 票 26）：前一個上屏的字是半形數字時直接上屏半形，
+//! 數字後的句點、冒號用半形（brief §4.7，M1 票 26）：游標前的字是半形數字時直接上屏半形，
 //! 不待定、不出候選；逗號照舊全形（使用者決定，同 librime 預設 `.:` 加 `digit_separator_action:
 //! commit`）。
 
@@ -25,6 +25,7 @@ fn pack_bytes() -> Vec<u8> {
         vec![CodeEntry {
             text: '日',
             extension: false,
+            simplified: false,
         }],
     )]);
     SchemePack { scheme, code_table }.to_bytes().unwrap()
@@ -240,4 +241,57 @@ fn a_modifier_key_while_composing_is_eaten_and_keeps_the_composition() {
     assert_eq!(snapshot.commit, None);
     assert_eq!(snapshot.composition.input, "a");
     assert_eq!(snapshot.candidates.len(), 1);
+}
+
+/// 殼給的前文決定游標前是不是數字（M3 票 05）：游標移到別處、宿主自己改了字，核心都從前文知道。
+#[test]
+fn the_context_from_the_host_decides_whether_a_period_follows_a_digit() {
+    let mut ime = Ime::new();
+    ime.session.set_context("共3");
+    ime.type_keys(".");
+    assert_eq!(ime.text, ".");
+
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    // 游標移到輸入框開頭。
+    ime.session.set_context("");
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3。");
+}
+
+/// 無痕時殼不給前文（brief §8），核心丟掉之前給的，只看自己送出去的字。
+#[test]
+fn turning_incognito_on_forgets_a_digit_in_the_context() {
+    let mut ime = Ime::new();
+    ime.session.set_context("3");
+    ime.session.set_options(Options {
+        incognito: true,
+        ..Options::default()
+    });
+    ime.type_keys(".3.");
+    assert_eq!(ime.text, "。3.");
+}
+
+/// 無痕時前文不記，數字後半形照樣看核心自己送出去的字（只記游標前是不是數字，不記文字）。
+#[test]
+fn in_incognito_digits_typed_still_make_a_period_half_width() {
+    let mut ime = Ime::new();
+    ime.session.set_options(Options {
+        incognito: true,
+        ..Options::default()
+    });
+    let snapshot = ime.session.text(&ime.engine, &mut ime.user, "3");
+    ime.text.push_str(snapshot.commit.as_deref().unwrap());
+    ime.type_keys(".5:0");
+    assert_eq!(ime.text, "3.5:0");
+}
+
+/// 換欄位（`clear_context`）後不再是數字後。
+#[test]
+fn clearing_the_context_ends_the_number() {
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    ime.session.clear_context();
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3。");
 }

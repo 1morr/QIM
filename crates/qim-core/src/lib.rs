@@ -16,6 +16,7 @@ mod scheme;
 mod session;
 mod simplifier;
 mod user;
+mod word_list;
 
 pub use code_table::{CodeEntry, CodeTable};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
@@ -28,10 +29,14 @@ pub use pack::{
     RadicalHintPack, SchemePack, SimplifierPack,
 };
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
-pub use scheme::{Packs, Ranking, SEPARATOR, Scheme};
+pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
-    Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT, RerankRequest,
-    Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
+    CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT,
+    RerankRequest, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{ImportError, Phrase, UserModel, UserWordError};
+pub use word_list::{
+    Shortcuts, SkipReason, SkippedLine, TriggerShortcut, UnusedShortcut, WordListError,
+    WordListFormat, WordListReport,
+};

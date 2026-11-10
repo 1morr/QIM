@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::Lexicon;
 use qim_databuild::common_forms::BothForms;
@@ -73,7 +73,7 @@ fn try_build_with_forms(
     both: &BothForms,
 ) -> Result<(Lexicon, Counts), qim_databuild::Error> {
     let rows = libcangjie::parse(TABLE).unwrap();
-    let code_table = quick::code_table(&rows, &BTreeMap::new());
+    let code_table = quick::code_table(&rows, &BTreeMap::new(), &BTreeSet::new());
     lexicon::build(
         essay,
         colloquial,
@@ -220,7 +220,7 @@ fn character_frequency_from_every_corpus_is_weighted_and_summed_into_the_lexicon
 #[test]
 fn malformed_lines_are_errors() {
     let rows = libcangjie::parse(TABLE).unwrap();
-    let code_table = quick::code_table(&rows, &BTreeMap::new());
+    let code_table = quick::code_table(&rows, &BTreeMap::new(), &BTreeSet::new());
     let transcoder = Transcoder::new(&rows);
     for essay in ["門口\n", "門口\t9435\t1\n", "門口\tmany\n", "\t9\n"] {
         let forms = Forms {

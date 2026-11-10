@@ -43,6 +43,7 @@ const TABLE: &str = "\
 顯 显 1 1 0 0 1 0 0 0 0 afmbc afmbc NA 0
 臺 台 1 1 0 0 1 0 0 0 0 grmbg grmbg NA 0
 台 台 1 1 0 0 1 0 0 0 0 ir ir NA 0
+门 门 1 0 1 0 1 0 0 0 0 ls lis NA 0
 笑 笑 1 1 0 0 1 0 0 0 0 hhhk hhhk NA 0
 ";
 
@@ -107,7 +108,8 @@ const LGPL: &str = "\
 ";
 
 /// OpenCC 的字典（檔名, 內容）：只有「門」「問」有簡體，香港異體「綫」先轉回「線」。
-const OPENCC_DICTIONARIES: [(&str, &str); 5] = [
+/// STCharacters 只給速成碼表判定簡體字，不進簡繁資料包。
+const OPENCC_DICTIONARIES: [(&str, &str); 6] = [
     (
         "data/dictionary/CJK_Compatibility_Ideographs.txt",
         "# File\n",
@@ -119,6 +121,7 @@ const OPENCC_DICTIONARIES: [(&str, &str); 5] = [
     ),
     ("data/dictionary/HKVariants.txt", "線\t綫\n"),
     ("data/dictionary/HKVariantsRevPhrases.txt", ""),
+    ("data/dictionary/STCharacters.txt", "门\t門\n问\t問\n"),
 ];
 
 /// OpenCC 的 `LICENSE`（這裡只取開頭）。
@@ -667,6 +670,8 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     assert!(license.contains(STATEMENT), "{license}");
     assert!(license.contains("Unicode-3.0"), "{license}");
     assert!(license.contains(UNICODE_LICENSE), "{license}");
+    // OpenCC 判定簡體字（plan §4.1）。
+    assert!(license.contains(APACHE.trim_end()), "{license}");
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
     assert!(
         notice.contains("346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"),
@@ -674,10 +679,11 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     );
     assert!(notice.contains(&sha256_hex(TABLE.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&unihan_zip())), "{notice}");
+    assert!(notice.contains("STCharacters.txt"), "{notice}");
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (33, 1));
+    assert_eq!((report.continuous, report.extension), (34, 1));
 }
 
 #[test]
