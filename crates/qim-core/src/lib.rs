@@ -32,7 +32,7 @@ pub use pack::{
     RadicalHintPack, SchemePack, SimplifierPack,
 };
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
-pub use remembered::REMEMBERED_LIMIT;
+pub use remembered::{REMEMBERED_LIMIT, REMEMBERED_STRINGS_MAX};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
     CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT,

@@ -4,7 +4,8 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::{Engine, Segment, remembered};
+use crate::remembered::{self, REMEMBERED_STRINGS_MAX};
+use crate::{Engine, Segment};
 
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
 const DECAY_STEP: f64 = 200.0;
@@ -177,7 +178,8 @@ impl UserModel {
     }
 
     /// 記住一個字串（[`crate::Session`] 從送出去的字裡認出來的 email）：衰減值加一，共用的 tick 加一。
-    /// email 不分大小寫（網域本來就不分，本地部分實務上也不分）：只留一條，換成這次打的寫法。
+    /// email 不分大小寫（網域本來就不分，本地部分實務上也不分）：只留一條，換成這次打的寫法。超過
+    /// [`REMEMBERED_STRINGS_MAX`] 條時淘汰最久沒用的（最後 tick 最小）。
     pub(crate) fn remember_string(&mut self, text: &str) {
         self.bigrams.tick += 1;
         let same = self
@@ -190,6 +192,15 @@ impl UserModel {
             .unwrap_or_default();
         decayed.bump(self.bigrams.tick);
         self.remembered.insert(text.to_string(), decayed);
+        if self.remembered.len() > REMEMBERED_STRINGS_MAX
+            && let Some(oldest) = self
+                .remembered
+                .iter()
+                .min_by_key(|(_, d)| d.last_tick)
+                .map(|(text, _)| text.clone())
+        {
+            self.remembered.remove(&oldest);
+        }
     }
 
     /// 記住的字串，依文字排；殼的清單用，使用者可以逐條刪（[`UserModel::forget_string`]）。
@@ -677,6 +688,12 @@ impl UserModel {
                     }
                     if user.remembered.insert(text.into_owned(), decayed).is_some() {
                         return Err(error("記住的字串重複"));
+                    }
+                    if user.remembered.len() > REMEMBERED_STRINGS_MAX {
+                        return Err(ImportError::at(
+                            number,
+                            format!("記住的字串超過 {REMEMBERED_STRINGS_MAX} 條"),
+                        ));
                     }
                     user.bigrams.tick = user.bigrams.tick.max(decayed.last_tick);
                     continue;

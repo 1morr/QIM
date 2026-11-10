@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CodeEntry, CodeTable, Engine, EnglishPack, EnglishWords, Key, Options, Packs, REMEMBERED_LIMIT,
-    Ranking, Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel,
+    REMEMBERED_STRINGS_MAX, Ranking, Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel,
 };
 
 const EMAIL: &str = "ivan.test@example.com";
@@ -457,4 +457,34 @@ fn the_same_email_in_another_case_replaces_the_old_one() {
     ime.type_in_english("Ivan.Test@Example.com");
     ime.type_in_english(EMAIL);
     assert_eq!(ime.user.remembered_strings(), vec![EMAIL.to_string()]);
+}
+
+/// 最多記 [`REMEMBERED_STRINGS_MAX`] 條：每多記一條，中文打字撞上它開頭的機會就多一份。超過時淘汰最久
+/// 沒用（打或選）的；用過的舊地址留著。
+#[test]
+fn beyond_the_limit_the_least_recently_used_email_is_dropped() {
+    let mut ime = Ime::new();
+    let email = |i: usize| format!("user{i}@example.com");
+    for i in 0..REMEMBERED_STRINGS_MAX {
+        ime.type_in_english(&email(i));
+    }
+    // 再打一次最舊的，它就是最近用過的。
+    ime.type_in_english(&email(0));
+    ime.type_in_english("new@example.com");
+    let kept = ime.user.remembered_strings();
+    assert_eq!(kept.len(), REMEMBERED_STRINGS_MAX);
+    assert!(kept.contains(&email(0)));
+    assert!(kept.contains(&"new@example.com".to_string()));
+    assert!(!kept.contains(&email(1)), "最久沒用的是 user1");
+}
+
+/// 匯入的檔超過上限時整份不收（匯出的檔不會超過），錯誤帶行號。
+#[test]
+fn an_import_with_more_than_the_limit_is_an_error() {
+    let mut text = String::from("# qim-userdict v2\n");
+    for i in 0..=REMEMBERED_STRINGS_MAX {
+        text.push_str(&format!("\t\tuser{i}@example.com\t1\t{}\n", i + 1));
+    }
+    let error = UserModel::import(&text).unwrap_err();
+    assert_eq!(error.line, REMEMBERED_STRINGS_MAX + 2);
 }

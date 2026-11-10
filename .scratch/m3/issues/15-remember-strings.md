@@ -29,3 +29,4 @@ Blocked by: 05, 12
 - 黑箱 T5 在網頁重跑，結果與 T5a–T5f 各項寫進 `docs/research/blackbox-baseline.md`。亂按一輪：固定種子 400 步（夾雜英文直通打 email、組字中各鍵、快速連按、切記住 email／無痕／學習／英文候選／簡體、點設定區刪除），沒有頁面錯誤；找到的 `z` 開頭問題見上。腳本沒進 repo。截圖 `.scratch/m3/evidence/15-*.png`。
 - code-review 已處理：開頭不是使用者打的那串不記（接在輸入框原有的 email 字元後、退格刪到它前面、方向鍵之後、有一段在無痕或學習關掉時打的、長過上限後退格）；同一個 email 不分大小寫只留一條；`Decayed::bump` 收掉重複；改名 `remembered`、`is_email_char`、`forget_remembered_string`；網頁兩處存檔條件合成 `afterHostKey`；plan 補「不設上限、不過期」的理由與重排送雲端的去處（票 22 的 Comments 已留）。
 - code-review 未處理（判斷題）：記住一次讓個人 bigram 共用的 tick 加一（全部個人 bigram 衰減一步，影響可忽略，換來匯出不多一行 tick，寫在 plan §2.4）；網頁在英文直通每個空白、標點都整份存一次學習資料（prototype 先這樣，平台殼存檔方式在 M6 定）；`Listing` 三個「只給整串」的開關照現有寫法並列；網頁前文上限 200 字，201–254 字元的 email 在網頁上記不住（實際不會遇到）。
+- 2026-11-11 協調者回饋：誤觸率每條各算一次、原本不設上限，改成最多記 20 條（`REMEMBERED_STRINGS_MAX`），超過時淘汰最久沒用（最後 tick 最小）的，匯入超過時整份不收；不做時間過期。20 的理由（20 × 0.014% ≈ 0.3%，和一條 2 個字母同級）寫在 plan §2.4 規則 5。單元測試守淘汰與匯入。

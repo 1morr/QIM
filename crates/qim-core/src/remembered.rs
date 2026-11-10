@@ -5,6 +5,11 @@
 /// 一個記住的字串最多幾個位元組：email 地址的上限（RFC 5321 的 path 上限 256 減去角括號）。
 pub(crate) const MAX_LEN: usize = 254;
 
+/// 最多記幾條（plan §2.4）：每多記一條，中文組字撞上它開頭的機會就多一份（3 個字母約每 1 萬次組字
+/// 一次，`scripts/experiments/remembered-prefix/`），20 條合計約 0.3%，和只記一條卻 2 個字母就給時差不多。
+/// 超過時淘汰最久沒用（打或選）的，同百度輸入法清掉最不常用的自造詞、LatinIME 的詞數上限。
+pub const REMEMBERED_STRINGS_MAX: usize = 20;
+
 /// 打它開頭的字母時，候選列最多接幾個記住的字串（同 emoji 的 [`crate::EMOJI_LIMIT`]）。
 pub const REMEMBERED_LIMIT: usize = 3;
 
