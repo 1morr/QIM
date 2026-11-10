@@ -28,7 +28,9 @@ Blocked by: 06
   - 推論固定 2 條執行緒的專屬 rayon pool：用全域 pool 時 gemm 每條執行緒各留一塊 L2 大小的暫存（Mac 共 136 MB）。
   - 記憶體以 `ledger_phys_footprint_peak` 為準：iPhone 會還回釋放的大塊配置，跑完時的 footprint 量不到峰值。
   - 候選路徑每條 8 字是自訂的近似（plan §7.8 沒定）。
-- 給票 08、09：`ios-keyboard` 的 `project.yml` 現在一定連結 `../neural-cost` 的靜態庫、bundle 裡放 118 MB 的模型檔，建置前要先跑 `scripts/experiments/neural-cost/build-ios.sh`，模擬器也建不起來（只編了實機）。擴充的 Debug dylib 因此變成 12.9 MB；`viewDidLoad` 的 footprint 約 7.2 MB、`viewDidAppear` 約 10.9 MB，與票 06 的基線相近。票 09 量終止點時要是嫌它干擾，可以把 `project.yml` 裡票 11 的三行設定與 `models` 資料夾拿掉。
+- 給票 09（合併票 08 時改）：神經模型探針改成可選。`ios-keyboard/project.yml` 只在 `QIM_NEURAL=YES` 時經 xcodegen 的 `include` 併進 `neural.yml`（`Neural/` 的原始碼、模型檔、靜態庫），預設的擴充不連結 candle、不帶模型檔，Debug dylib 3.0 MB。開著建的是 12.9 MB，量基線時兩種別混用。合併後開著建、裝上，備忘錄打 `anr` 仍上屏「門口」（`.scratch/m2/evidence/11-merged-anr.png`）。
+- 合計改用 iPhone 的核心數字（協調者要求）：票 08 量到擴充載入核心後 64.4 MB，加模型峰值後 23M q8 約 111 MB、f32 約 159 MB，都在 177 MB 內；先前用 Mac 的 96 MB 算出「f32 放不進」，已改掉。
+- 前綴快取（協調者轉 Claude Code 的提醒）：iPhone 的延遲是上下文只算一次、6 條路徑共用的寫法。Mac 補量不共用的對照：上下文 200 字慢 4.2–4.7 倍、50 字慢約 3.4 倍。前提寫進 README、ios-feasibility〈前綴快取〉、plan §7.8 與 brief §12.3。
 - 另一個 session（票 08）用同一個 Bundle ID 裝過它的版本，蓋掉本票的擴充；量之前看鍵盤上有沒有 L32 那一列（README 有寫）。
 - code-review 沒處理的發現（都是判斷題）：
   - GPT 的權重名在 `Kind::shapes` 與 `Block::load` 各寫一次。

@@ -16,3 +16,19 @@ fn percentile_of_one_value_is_that_value_and_of_none_is_none() {
     assert_eq!(percentile(&[0.25], 95), Some(0.25));
     assert_eq!(percentile(&[], 50), None);
 }
+
+/// 綁定的計時腳本的輸出：runtime 一行，之後每個輸入一行；` | ` 後是選開頭一段的毫秒數。
+#[test]
+fn timing_output_has_keys_per_input_and_an_optional_select() {
+    let timing = qim_bench::parse_timing("Node v26\n0.1 0.2\n0.3 0.4 0.5 | 0.9\n").unwrap();
+    assert_eq!(timing.runtime, "Node v26");
+    assert_eq!(timing.per_key_ms, vec![vec![0.1, 0.2], vec![0.3, 0.4, 0.5]]);
+    assert_eq!(timing.select_ms, vec![None, Some(0.9)]);
+}
+
+#[test]
+fn timing_output_that_is_not_milliseconds_is_an_error() {
+    let error = qim_bench::parse_timing("Node v26\n0.1 x\n").unwrap_err();
+    assert!(error.contains("第 2 行"), "{error}");
+    assert!(qim_bench::parse_timing("").is_err());
+}

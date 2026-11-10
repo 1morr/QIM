@@ -10,6 +10,7 @@
 | `wasm-bindgen-cli` | 與 `Cargo.lock` 的 `wasm-bindgen` 相同（0.2.130） | 產生網頁的 JS 綁定；版本不同時 `cargo xtask web` 與 `check` 的 `wasm` 步驟會擋下並印安裝指令 |
 | Node.js | 26 LTS（開工時 26.12.0） | 附帶的 `npm` 管理 `web/` 的依賴 |
 | git | 任一近期版本 | hook 用 `core.hooksPath`，Windows 上由 Git for Windows 的 `sh` 執行 |
+| Xcode | 27.1 起（含 `swiftc`） | 只有 Apple 平台的 Swift 綁定要（〈Swift 綁定〉）；`check` 不用 |
 
 ## 安裝
 
@@ -32,6 +33,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | --- | --- |
 | `cargo build` | 建置全部 Rust crate |
 | `cargo xtask web` | 編 WebAssembly 綁定、複製資料包到網頁，見〈網頁〉 |
+| `cargo xtask ffi [--ios]` | 編 `qim-ffi` 的靜態函式庫並產生 Swift 綁定；`--ios` 另包 iPhone 的 xcframework，見〈Swift 綁定〉 |
 | `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
 | `npm test --prefix web` | 網頁的單元測試（`web/test/` 下的 `*.test.ts`，不必先跑 `cargo xtask web`） |
 | `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
@@ -178,12 +180,12 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 ### 每鍵延遲
 
-每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分「全部」與「第 20 碼起」兩組：後者只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋；「輸入數」是長到 20 碼的輸入有幾個。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分三組：「全部」；「第 20 碼起」只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋，「輸入數」是長到 20 碼的輸入有幾個；「選開頭一段」是打完有兩段以上的輸入再按分段數那麼多次 ←（不計時）移到第一段、選它的首選（`select(0)`）的那一次，選定後剩下的輸入碼從頭重建 lattice，是最重的一種鍵（規則在 `qim_bench::lefts_to_first_segment`）。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上、量選開頭一段的輸入和原生不同）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
 
-- 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
-- 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。
-- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，依檔頭魔數分辨種類、順序不拘），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（輸入碼、候選），每題之間按 Esc（不計時）。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
-- 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`。
+- 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字；打完有兩段以上的另量「選開頭一段」那一鍵（見上）。不含載入資料包。
+- 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。
+- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，依檔頭魔數分辨種類、順序不拘），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（分段、輸入碼、候選），每題之間按 Esc（不計時）；輸出格式見 `qim_bench::parse_timing`。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
+- 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`；經 Swift 綁定的同一批輸入：`scripts/experiments/ffi-swift/README.md`。
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
 
 改核心的票貼前後對照時，在同一台機器、不跑其他重負載時跑；差距小於幾成多半是雜訊，重跑兩三次看是否穩定。
@@ -206,6 +208,24 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 網頁把學習資料（`# qim-userdict v1`，plan §2.4）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。回報清單在 `qim.reports`。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」。
 
 Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
+
+## Swift 綁定
+
+`cargo xtask ffi [--ios]` 給 Apple 平台的殼用 `qim-ffi`（uniffi，plan §1.1），邏輯在 `xtask/src/ffi.rs`：
+
+1. `cargo build --release -p qim-ffi`：這台機器架構的靜態函式庫 `target/release/libqim_ffi.a`。
+2. 用 `qim-ffi` 的 `uniffi-bindgen-swift`（只在 `bindgen` feature 編，uniffi 的 CLI 依賴不進函式庫）從它產生 `build/ffi/swift/` 的 `qim.swift`、`qimFFI.h`、`module.modulemap`（library mode：介面讀自函式庫，不必 UDL）。
+
+Swift 程式把 `qim.swift` 一起編、連結靜態函式庫、指到 modulemap，例如：
+
+```sh
+swiftc -O -o build/ffi/bin/qim-swift main.swift build/ffi/swift/qim.swift \
+  -Xcc -fmodule-map-file=build/ffi/swift/module.modulemap -I build/ffi/swift -L target/release -lqim_ffi
+```
+
+`--ios` 再做一步：編 `aarch64-apple-ios`（iPhone 實機，要先 `rustup target add aarch64-apple-ios`；模擬器沒用到、不編）的靜態函式庫，標頭與 modulemap 產生到 `build/ffi/ios-headers/qimFFI/`，用 `xcodebuild -create-xcframework` 包成 `build/ffi/QimFFI.xcframework`。Xcode 專案把它加進 target 的連結（不內嵌），再把同一份 `qim.swift` 加進原始碼。modulemap 放在以模組名命名的子目錄、用一般的 `module`：Xcode 把標頭複製到建置產物的 `include/`，clang 依模組名找到子目錄；uniffi 的 `--xcframework` 產生的 `framework module` 在靜態函式庫的 xcframework 裡找不到（M2 票 08 實測）。
+
+Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`LexiconPack`、`LanguageModelPack`、`SimplifierPack`、`EnglishPack`，交給 `Engine(...)`（每份只能給一個 `Engine`），每個輸入框 `Session(engine:)` 共用同一個 `Engine`（plan §2.1）。範例：Mac 是 `scripts/experiments/ffi-swift/`（打 `anr` 讀回「門口」、量每鍵延遲），iPhone 鍵盤擴充是 `scripts/experiments/ios-keyboard/` 的〈接上核心〉。產物都不進 git。`check` 不跑這一步：CI 是 Ubuntu，`qim-ffi` 的 Rust 測試照常在 `cargo test` 裡跑。
 
 ## 全部檢查
 

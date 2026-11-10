@@ -1,13 +1,14 @@
 import UIKit
 
 /// 實驗鍵盤：送出「日」、量常駐記憶體與 App Group（票 06）、讀游標前後文長度與試 Foundation Models（票 10）、
-/// 跑小型神經模型的開銷量測（票 11）。
+/// 接上核心打 `anr`、量記憶體與每鍵延遲（票 08）、跑小型神經模型的開銷量測（票 11，`QIM_NEURAL` 開時才有）。
 /// 結果顯示在鍵盤上方並寫 log。
 final class KeyboardViewController: UIInputViewController {
     /// 這個程序裡各鍵被按的次數與 view controller 載入次數，診斷用。
     private static var taps: [String: Int] = [:]
     private static var loads = 0
     private let status = UILabel()
+    private let candidates = UILabel()
     private var loadLine = ""
     private var memoryLines: [String] = []
     private var contextLines: [String] = []
@@ -44,28 +45,34 @@ final class KeyboardViewController: UIInputViewController {
             // 往前移 before 的長度：連按就一句一句往前走，可走到段首。
             key("⇤", id: "qim-key-back-context") { $0.move(by: -($0.textDocumentProxy.documentContextBeforeInput?.count ?? 0)) },
         ])
-        let neuralRow = row(NeuralProbe.models.map { name, file in
-            key(name, id: "qim-key-nc-\(name)") { _ in NeuralProbe.run(file) }
+        candidates.font = .systemFont(ofSize: 18)
+        candidates.accessibilityIdentifier = "qim-candidates"
+        let coreRow = row([
+            key("載入", id: "qim-key-load") { _ in CoreProbe.load() },
+        ] + ["a", "n", "r"].map { letter in
+            key(letter, id: "qim-key-\(letter)") { $0.pressCore(letter, kind: "letter", value: letter) }
         } + [
-            // 每個模型要在新程序量（釋放的頁會留在 footprint、被下一個模型重用）：量完按這個結束程序，
-            // 收起再叫出鍵盤就是新程序。
-            key("結束", id: "qim-key-exit") { _ in exit(0) },
+            key("空白", id: "qim-key-space") { $0.pressCore("space", kind: "space", value: nil) },
+            key("延遲", id: "qim-key-latency") { _ in CoreProbe.runLatency() },
         ])
 
-        let stack = UIStackView(arrangedSubviews: [status, keyRow, moveRow, neuralRow])
+        var rows: [UIView] = [coreRow, keyRow, moveRow]
+        #if QIM_NEURAL
+        rows.append(neuralRow())
+        #endif
+        let stack = UIStackView(arrangedSubviews: [status, candidates] + rows)
         stack.axis = .vertical
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
+        NSLayoutConstraint.activate(rows.map { $0.heightAnchor.constraint(equalToConstant: 44) })
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 6),
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
             stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
             stack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
-            keyRow.heightAnchor.constraint(equalToConstant: 44),
-            moveRow.heightAnchor.constraint(equalToConstant: 44),
-            neuralRow.heightAnchor.constraint(equalToConstant: 44),
-            view.heightAnchor.constraint(equalToConstant: 340),
+            // 票 08 的三列是 380 pt；票 11 的列再加 44 pt。
+            view.heightAnchor.constraint(equalToConstant: 248 + 44 * CGFloat(rows.count)),
         ])
     }
 
@@ -79,7 +86,10 @@ final class KeyboardViewController: UIInputViewController {
             "group-write=\(Probe.write(Probe.keyboardFile, "keyboard \(Probe.timestamp())"))",
         ])
         ModelProbe.onUpdate = { [weak self] in self?.render() }
+        CoreProbe.onUpdate = { [weak self] in self?.render() }
+        #if QIM_NEURAL
         NeuralProbe.onUpdate = { [weak self] in self?.render() }
+        #endif
         log(ModelProbe.displayLines + [ModelProbe.languagesLine()])
         readContext()
     }
@@ -106,12 +116,47 @@ final class KeyboardViewController: UIInputViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.readContext() }
     }
 
+    /// 按核心的鍵：上屏快照的 `commit`，記下核心呼叫與含畫面更新的時間。含畫面更新的是從這裡開始到
+    /// 這次畫面的 Core Animation transaction 送出（completion block），不含觸控事件送達前的時間，只當大概值。
+    private func pressCore(_ label: String, kind: String, value: String?) {
+        let start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        guard let (snapshot, coreMs) = CoreProbe.press(kind, value) else { return }
+        if let commit = snapshot.commit {
+            textDocumentProxy.insertText(commit)
+        } else if !snapshot.handled, kind == "space" {
+            textDocumentProxy.insertText(" ")
+        }
+        CATransaction.begin()
+        CATransaction.setCompletionBlock {
+            MainActor.assumeIsolated { CoreProbe.recordKey(label, coreMs: coreMs, screenMs: ms(since: start)) }
+        }
+        render()
+        CATransaction.commit()
+    }
+
     private func render() {
         let taps = "taps=" + Self.taps.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
-        // 跑過神經模型就只顯示它的結果，螢幕放不下全部。
-        let detail = NeuralProbe.latest.isEmpty ? contextLines + ModelProbe.displayLines : NeuralProbe.latest
-        status.text = (memoryLines + [taps] + detail).joined(separator: "\n")
+        // 螢幕放不下全部，只顯示最近在用的探針的行；其他行照樣寫 log。
+        var probes = CoreProbe.active ? CoreProbe.displayLines : contextLines + ModelProbe.displayLines
+        #if QIM_NEURAL
+        if !NeuralProbe.latest.isEmpty { probes = NeuralProbe.latest }
+        #endif
+        status.text = (memoryLines + [taps] + probes).joined(separator: "\n")
+        candidates.text = CoreProbe.candidateLine
     }
+
+    #if QIM_NEURAL
+    /// 票 11 的鍵：四個模型與結束程序。
+    private func neuralRow() -> UIStackView {
+        row(NeuralProbe.models.map { name, file in
+            key(name, id: "qim-key-nc-\(name)") { _ in NeuralProbe.run(file) }
+        } + [
+            // 每個模型要在新程序量（釋放的頁會被下一個模型重用）：量完按這個結束程序，
+            // 收起再叫出鍵盤就是新程序。
+            key("結束", id: "qim-key-exit") { _ in exit(0) },
+        ])
+    }
+    #endif
 
     private func log(_ lines: [String]) {
         for line in lines { Probe.log.notice("keyboard \(line, privacy: .public)") }

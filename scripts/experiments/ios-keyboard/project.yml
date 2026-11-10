@@ -1,5 +1,10 @@
 # xcodegen 的專案描述；產生的 QIMKeyboardExp.xcodeproj 不進 git（README〈建置與安裝〉）。
 name: QIMKeyboardExp
+# 票 11 的神經模型探針要 candle 的靜態庫與 118 MB 的模型檔，預設不併進來；
+# `QIM_NEURAL=YES xcodegen generate` 才併（README〈小型神經模型（票 11）〉）。
+include:
+  - path: neural.yml
+    enable: ${QIM_NEURAL}
 configFiles:
   Debug: Local.xcconfig
   Release: Local.xcconfig
@@ -39,13 +44,27 @@ targets:
   QIMKeyboard:
     type: app-extension
     platform: iOS
+    # 票 08：核心的 Swift 綁定、每鍵延遲的量法、資料包與延遲的輸入都由 core.sh 備好（README〈接上核心〉）。
     sources:
       - Keyboard
       - Shared
-      # 票 11：neural-cost 的四個模型檔，整個資料夾放進擴充的 bundle（../neural-cost/build-ios.sh 產生）。
-      - path: ../neural-cost/models
-        type: folder
+      - ../ffi-swift/Latency.swift
+      - ../../../build/ffi/swift/qim.swift
+      - path: ../../../build/packs/quick/quick.pack
         buildPhase: resources
+      - path: ../../../build/packs/quick-lexicon/quick-lexicon.pack
+        buildPhase: resources
+      - path: ../../../build/packs/zh-hant-bigram/zh-hant-bigram.pack
+        buildPhase: resources
+      - path: ../../../build/packs/opencc-hk2s/opencc-hk2s.pack
+        buildPhase: resources
+      - path: ../../../build/packs/scowl-en-us/scowl-en-us.pack
+        buildPhase: resources
+      - path: ../../../build/ffi/latency-inputs.txt
+        buildPhase: resources
+    dependencies:
+      - framework: ../../../build/ffi/QimFFI.xcframework
+        embed: false
     info:
       path: Keyboard/Info.plist
       properties:
@@ -66,7 +85,3 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(QIM_BUNDLE_PREFIX).exp.keyboard
-        # 票 11：連結 neural-cost 的 Rust 靜態庫（只編了實機的 aarch64-apple-ios）。
-        SWIFT_OBJC_BRIDGING_HEADER: Keyboard/Keyboard-Bridging-Header.h
-        LIBRARY_SEARCH_PATHS: $(SRCROOT)/../neural-cost/target/aarch64-apple-ios/release
-        OTHER_LDFLAGS: -lneural_cost

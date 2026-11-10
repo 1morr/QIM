@@ -4,12 +4,13 @@ mod check;
 mod commit_msg;
 mod deps;
 mod docs;
+mod ffi;
 mod web;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -33,6 +34,8 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+        ["ffi"] => ffi(false),
+        ["ffi", "--ios"] => ffi(true),
         ["commit-msg", file] => {
             if commit_msg::report(Path::new(file)) {
                 ExitCode::SUCCESS
@@ -44,6 +47,14 @@ fn main() -> ExitCode {
             eprintln!("{USAGE}");
             ExitCode::from(2)
         }
+    }
+}
+
+fn ffi(ios: bool) -> ExitCode {
+    if ffi::swift_bindings(&repo_root(), ios) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
@@ -84,6 +95,16 @@ fn release_run(package: &str, args: &[&str]) -> ExitCode {
             eprintln!("跑不起 {package}：{e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// 跑子行程並等它結束；失敗時回傳說明（程式名與結束狀態）。
+fn run_command(command: &mut std::process::Command) -> Result<(), String> {
+    let program = command.get_program().to_string_lossy().into_owned();
+    match command.status() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("{program} 失敗：{status}")),
+        Err(e) => Err(format!("無法執行 {program}：{e}")),
     }
 }
 

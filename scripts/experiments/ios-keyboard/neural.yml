@@ -1,0 +1,16 @@
+# 票 11：神經模型探針。由 project.yml 在 QIM_NEURAL=YES 時併進來，陣列接在後面、字典合併。
+# 先跑 ../neural-cost/build-ios.sh（靜態庫只編了實機的 aarch64-apple-ios，模擬器建不起來）。
+targets:
+  QIMKeyboard:
+    sources:
+      - Neural
+      # neural-cost 的四個模型檔，整個資料夾放進擴充的 bundle。
+      - path: ../neural-cost/models
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        SWIFT_OBJC_BRIDGING_HEADER: Neural/Neural-Bridging-Header.h
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/../neural-cost/target/aarch64-apple-ios/release
+        OTHER_LDFLAGS: -lneural_cost
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) QIM_NEURAL

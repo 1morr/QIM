@@ -26,6 +26,7 @@ pub unsafe extern "C" fn nc_run(
         Path::new(&path),
         iterations as usize,
         threads.max(1) as usize,
+        bench::Prefix::Shared,
     ) {
         Ok(text) => text,
         Err(e) => format!("error: {e}"),

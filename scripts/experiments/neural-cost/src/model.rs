@@ -291,7 +291,19 @@ impl Module for Linear {
 
 /// 一次重排：同一段上下文後接幾條候選路徑，回每條路徑各字 log 機率的和。
 pub trait Scorer: Send {
+    /// 上下文只算一次，狀態複製給每條路徑（前綴快取），路徑一批算完。
     fn score(&self, context: &[u32], candidates: &[Vec<u32>]) -> Result<Vec<f32>>;
+
+    /// 對照用：不共用前綴，每條路徑各自從句首連上下文算起。分數與 `score` 相同。
+    fn score_unshared(&self, context: &[u32], candidates: &[Vec<u32>]) -> Result<Vec<f32>> {
+        candidates
+            .iter()
+            .map(|c| self.score_one(context, c))
+            .collect()
+    }
+
+    /// 一條路徑從句首算起的分數。
+    fn score_one(&self, context: &[u32], candidate: &[u32]) -> Result<f32>;
 }
 
 pub struct Loaded {
@@ -388,6 +400,22 @@ impl Scorer for Lstm {
             }
         }
         total.to_vec1()
+    }
+
+    fn score_one(&self, context: &[u32], candidate: &[u32]) -> Result<f32> {
+        let mut h = Tensor::zeros((1, LSTM.embed), DType::F32, &Device::Cpu)?;
+        let mut c = Tensor::zeros((1, LSTM.cells), DType::F32, &Device::Cpu)?;
+        for &t in std::iter::once(&BOS).chain(context) {
+            (h, c) = self.step(&ids(&[t])?, &h, &c)?;
+        }
+        let mut sum = 0.0;
+        for (i, &t) in candidate.iter().enumerate() {
+            sum += self.log_probs(&h)?.i((0, t as usize))?.to_scalar::<f32>()?;
+            if i + 1 < candidate.len() {
+                (h, c) = self.step(&ids(&[t])?, &h, &c)?;
+            }
+        }
+        Ok(sum)
     }
 }
 
@@ -548,6 +576,21 @@ impl Scorer for Gpt {
         }
         total.to_vec1()
     }
+
+    fn score_one(&self, context: &[u32], candidate: &[u32]) -> Result<f32> {
+        // 句首 + 上下文 + 候選的前 len − 1 字一次跑完，只在預測候選字的位置算輸出層。
+        let len = candidate.len();
+        let seq: Vec<u32> = std::iter::once(BOS)
+            .chain(context.iter().copied())
+            .chain(candidate[..len - 1].iter().copied())
+            .collect();
+        let (hidden, _) = self.forward(&ids(&seq)?.unsqueeze(0)?, 0, None)?;
+        let lp = self
+            .log_probs(&hidden.narrow(1, context.len(), len)?)?
+            .squeeze(0)?;
+        let targets = Tensor::new(candidate, &Device::Cpu)?.unsqueeze(1)?;
+        lp.gather(&targets, 1)?.sum_all()?.to_scalar::<f32>()
+    }
 }
 
 #[cfg(test)]
@@ -574,47 +617,6 @@ mod tests {
         assert_eq!(total_params(Kind::Gpt), 23_142_400);
     }
 
-    /// 不共用前綴、逐條從頭算的分數：拿來對 `score` 的前綴快取與批次。
-    fn naive_gpt(g: &Gpt, context: &[u32], cand: &[u32]) -> f32 {
-        let seq: Vec<u32> = std::iter::once(BOS)
-            .chain(context.iter().copied())
-            .chain(cand.iter().copied())
-            .collect();
-        let (hidden, _) = g
-            .forward(&ids(&seq).unwrap().unsqueeze(0).unwrap(), 0, None)
-            .unwrap();
-        let lp = g.log_probs(&hidden.squeeze(0).unwrap()).unwrap();
-        let start = context.len();
-        (0..cand.len())
-            .map(|i| {
-                lp.i((start + i, cand[i] as usize))
-                    .unwrap()
-                    .to_scalar::<f32>()
-                    .unwrap()
-            })
-            .sum()
-    }
-
-    fn naive_lstm(m: &Lstm, context: &[u32], cand: &[u32]) -> f32 {
-        let mut h = Tensor::zeros((1, LSTM.embed), DType::F32, &Device::Cpu).unwrap();
-        let mut c = Tensor::zeros((1, LSTM.cells), DType::F32, &Device::Cpu).unwrap();
-        for &t in std::iter::once(&BOS).chain(context) {
-            (h, c) = m.step(&ids(&[t]).unwrap(), &h, &c).unwrap();
-        }
-        let mut sum = 0.0;
-        for &t in cand {
-            sum += m
-                .log_probs(&h)
-                .unwrap()
-                .i((0, t as usize))
-                .unwrap()
-                .to_scalar::<f32>()
-                .unwrap();
-            (h, c) = m.step(&ids(&[t]).unwrap(), &h, &c).unwrap();
-        }
-        sum
-    }
-
     #[test]
     fn batched_scores_match_one_path_at_a_time() {
         let dir = temp_dir();
@@ -631,12 +633,12 @@ mod tests {
                     Kind::Lstm => {
                         let m = Lstm::load(&mut l).unwrap();
                         got = m.score(&context, &cands).unwrap();
-                        want = cands.iter().map(|c| naive_lstm(&m, &context, c)).collect();
+                        want = m.score_unshared(&context, &cands).unwrap();
                     }
                     Kind::Gpt => {
                         let g = Gpt::load(&mut l).unwrap();
                         got = g.score(&context, &cands).unwrap();
-                        want = cands.iter().map(|c| naive_gpt(&g, &context, c)).collect();
+                        want = g.score_unshared(&context, &cands).unwrap();
                     }
                 }
                 assert_eq!(l.params, total_params(kind), "{kind:?} {format:?}");

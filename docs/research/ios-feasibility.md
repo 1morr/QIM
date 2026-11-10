@@ -238,6 +238,118 @@ Safari `<textarea>`：
 
 官方只說鍵盤可經 `UITextDocumentProxy` 讀插入點周圍的文字，用途是 autocomplete 與 autocapitalization，沒有寫長度（`docs/research/platform-frameworks.md` §3.2）。[Handling text interactions in custom keyboards](https://developer.apple.com/documentation/uikit/handling-text-interactions-in-custom-keyboards)、[UITextDocumentProxy](https://developer.apple.com/documentation/uikit/uitextdocumentproxy)。以上長度都是實測。
 
+## 綁定開銷
+
+M2 票 07，2026-11-10。`qim-ffi`（uniffi 0.32.2）產生的 Swift 綁定在 Mac 上接核心，與原生、WebAssembly 量同一批輸入的每鍵延遲。重量步驟：Swift 是 `scripts/experiments/ffi-swift/`，Chromium 是 `scripts/experiments/wasm-latency-browser/`，原生與 Node 是 `cargo xtask bench`。
+
+環境：Apple M6、32 GB、macOS 27.0.1，Xcode 27.1（Swift 6.4），Rust 1.99.1，Node v26.12.0，HeadlessChrome 156.0.8078.4；release 編譯。資料包是基準的四份（速成、詞庫、bigram、英文）。
+
+### 結論
+
+- Swift 經 `qim-ffi` 打 `anr` 讀回首選「門口」、空白上屏「門口」：綁定接得上，iOS 鍵盤擴充（票 08）可以直接用。
+- 每鍵 p95 最慢的是 Chromium 的選開頭一段，0.9 ms；三種路徑都比每鍵 50 ms 的預算小兩個數量級以上。M1 留下的缺口（瀏覽器沒量、選段那一鍵沒算）補上了，Chromium 仍 ≤ 50 ms。
+- Swift 綁定每次呼叫比原生多約 10–20 µs，和組字長短關係不大，像是固定開銷（快照序列化成 uniffi 的 `RustBuffer` 再在 Swift 解開）；WebAssembly 多約 10 µs，選段那一鍵多約 50–150 µs（WebAssembly 本身算得慢，不是呼叫開銷）。
+- 選開頭一段（選定後剩下的輸入碼從頭重建 lattice）量的是「← 移到第一段、選它的首選」這條路；在整串的候選裡直接點只蓋住開頭的候選（例如 `anr` 的「門」）同樣從頭重建剩下的碼，沒有另外量。它比一般按鍵慢約 7 倍，p95 約 0.75 ms（原生）；M3 加神經模型時要看它，這一鍵會乘上模型的次數。
+- Chromium 與 Node 差不到一個 5 µs 的刻度，基準照舊用 Node（`wasm-latency-browser` 的結論沒變）。
+
+### 原始輸出摘要
+
+6,722 個輸入（固定題、`bench/corpus/`、`bench/colloquial/`），123,330 鍵；長到 20 碼的 2,587 個、第 20 碼起 27,142 鍵；打完有兩段以上、量選開頭一段的 6,411 個。各跑兩次，差在 0.5 µs（Chromium 一個刻度）內，列一次。µs。
+
+| 路徑 | 全部 p50 | 全部 p95 | 第 20 碼起 p50 | 第 20 碼起 p95 | 選開頭一段 p50 | 選開頭一段 p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 原生（`cargo xtask bench`） | 30.71 | 41.75 | 34.75 | 44.25 | 222.25 | 737.12 |
+| Swift 經 `qim-ffi` | 42.25 | 58.08 | 51.62 | 64.38 | 235.08 | 759.71 |
+| WebAssembly，Node（`cargo xtask bench`） | 39.67 | 53.13 | 44.79 | 56.46 | 277.04 | 889.33 |
+| WebAssembly，Chromium（`crossOriginIsolated`，5 µs 刻度） | 40.00 | 55.00 | 45.00 | 55.00 | 275.00 | 890.00 |
+
+Swift 程式（含核心）連結後 163 KB。
+
+### 給之後的票
+
+- 票 08：鍵盤擴充用 `cargo xtask ffi` 的綁定；要加 `aarch64-apple-ios` 的靜態函式庫與 xcframework（`docs/development.md`〈Swift 綁定〉）。在 iPhone 上量同一批輸入的每鍵延遲時，可以照 `scripts/experiments/ffi-swift/main.swift` 的 `latency` 迴圈，和這裡的 Mac 數字比。
+- `qim-ffi` 目前只有建立、`press`、`select`；換選項、學習資料存檔、字根提示、佈局由需要的票加。換選項時讓綁定的 `set_options` 同時重列並回快照，殼就碰不到「待生效選項」（票 01 轉入的建議，見票 07 的 Comments）。
+
+## 鍵盤擴充接上核心
+
+M2 票 08，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keyboard/CoreProbe.swift`，量法與重量步驟見該目錄 README〈接上核心〉；每鍵延遲的迴圈與輸入和 Mac 共用（`scripts/experiments/ffi-swift/` 的 `Latency.swift`、`inputs.sh`）。
+
+裝置：iPhone 18 Pro Max（iPhone19,7），iOS 27.2。Xcode 27.1（Swift 6.4），Rust 1.99.1，uniffi 0.32.2；Swift 是 Debug 組態，Rust 靜態函式庫是 release（`cargo xtask ffi --ios`）。擴充沒有完整取用。資料包由 commit `232d528` 建。在兩個新程序裡各量一次（pid 11903、11913）。
+
+### 結論
+
+- **能打字。** 備忘錄裡按擴充的 `a`、`n`、`r`，候選列首選是「門口」；按空白，備忘錄出現「門口」（兩個程序各一次）。截圖：`.scratch/m2/evidence/08-load-memory.png`（載入各步）、`08-notes-anr.png`、`08-notes-commit.png`、`08-notes-latency.png`（第 1 次），`08-notes-anr-run2.png`、`08-notes-latency-run2.png`（第 2 次）。
+- **常駐記憶體：五份資料包加 `Engine` 讓 footprint 多 51.4 MB，載入後總共 64.4 MB。** 兩次分別 +51.49、+51.39 MB。載入前的 footprint 約 13 MB：這個程序 `viewDidAppear` 時 11.7 MB，比票 06 的空擴充（約 10 MB）多，因為擴充連結了核心；加上按「載入」前幾次畫面重建。打字中 63.5–64.1 MB，跑完 12 萬鍵的延遲後 63.8 MB。iPhone 18 Pro Max 給擴充的上限是 177 MB（票 06），載入後用了 36%，還剩約 113 MB（`os_proc_available_memory`）。扣掉票 06 空擴充的 10 MB 基線，核心連同資料包約 54 MB；比 brief §9 暫定的 30 MB 多。
+- **詞庫最大：+41.4 MB**，佔核心增量的 80%，是檔案（4.95 MB）的 8.4 倍。bigram +5.3 MB、英文 +2.5 MB、速成 +0.6–1.4 MB、簡繁 +0.7 MB；`Engine` 與 `Session` 幾乎不加（+0.06–0.14 MB、0）。
+- **比 Mac 少約 27 MB。** 同五份資料包加 `Engine` 在 Mac 上（票 04 那張表的對應各列）合計 78.0 MB。差在 bigram（Mac +12.3 MB）與 `Engine::new`（Mac +12.8 MB），詞庫只差 5 MB。推論 iOS 的 malloc 把前一步釋放的頁（讀檔的緩衝區、uniffi 把位元組複製進 Rust 的那份）重用給後面的配置，所以 `Engine::new` 的暫存 `HashSet` 沒有另外長出 footprint；載入後 footprint 也從 64.4 降到 63.5 MB，Mac 上釋放的頁不會退出 footprint。兩邊載入順序不同（Mac 在 bigram 之後還載入了字根提示），單步的數字不能直接比，總量的差距才有意義。
+- **載入 120–138 ms**（背景執行緒），其中詞庫 70 ms、`Engine` 27–33 ms。
+- **每鍵延遲：p50 45 µs、p95 64 µs；選開頭一段 p50 246 µs、p95 0.79 ms。** 比 Mac 經 Swift 綁定的同一批輸入（p95 58 µs、選段 0.76 ms）慢 3.5–10%。Mac 那次沒載入簡繁資料包；它只在簡體模式用到，預設關，打字的路徑不經過它。brief §9 的目標是每鍵 50 ms，最重的選段那一鍵 p95 也只用了 1.6%。
+- **手按的鍵：** 核心呼叫 0.15–0.77 ms（載入後第一鍵 `a` 0.77 ms，之後 0.15–0.48 ms），比批次量的 p50 慢幾倍；推論是兩鍵之間閒置 1.5 秒，快取變冷、CPU 降頻。含畫面更新的大概值（從按鍵處理開始到這次畫面的 Core Animation transaction 送出）6.8–11.9 ms，不含觸控送達與螢幕刷新。
+- 整個程序只建一個 `Engine` 與一個 `Session`（放在靜態變數）。iphone-use 每次點擊與截圖都讓 view controller 重建（第 1 次的程序重建了 11 次），footprint 沒有翻倍：重建 7 次（含跑一次延遲）共多 3.1 MB，每次約 0.3–0.5 MB，推論來自畫面本身。
+
+### 原始輸出摘要
+
+鍵盤上方顯示的量測（第 2 次，`08-notes-latency-run2.png`）：
+
+```text
+viewDidLoad footprint=7.02MB available=170.0MB pid=11913 loads=1
+viewDidAppear footprint=11.67MB available=165.3MB
+core-before footprint=13.03MB available=164.0MB
+quick file=0.43MB +0.62MB → 14.45MB 7ms
+quick-lexicon file=4.95MB +41.36MB → 55.81MB 70ms
+zh-hant-bigram file=2.87MB +5.28MB → 61.10MB 11ms
+opencc-hk2s file=0.06MB +0.73MB → 61.85MB 2ms
+scowl-en-us file=0.76MB +2.52MB → 64.36MB 12ms
+engine +0.06MB → 64.42MB 33ms
+session +0.00MB → 64.42MB 0ms
+core-loaded 138ms footprint footprint=64.42MB available=112.6MB
+typing footprint=63.49MB available=113.5MB
+keys a=0.768/8.6 n=0.363/8.3 r=0.476/6.8 space=0.164/7.9
+| iPhone | 全部 | 6722 | 123330 | 45.08 | 63.96 |
+| iPhone | 第 20 碼起 | 2587 | 27142 | 55.62 | 70.83 |
+| iPhone | 選開頭一段 | 6411 | 6411 | 245.46 | 786.54 |
+latency done 9.7s footprint footprint=63.75MB available=113.2MB
+```
+
+每份資料包「讀檔 → 解開 → 丟掉檔案位元組」前後的 footprint 差（MB）：
+
+| 步驟 | 檔案 | 第 1 次 | 第 2 次 | Mac（票 04） |
+| --- | ---: | ---: | ---: | ---: |
+| 載入前 | — | 12.95 | 13.03 | — |
+| 速成 `quick` | 0.43 | +1.42 | +0.62 | +1.38 |
+| 詞庫 `quick-lexicon` | 4.95 | +41.36 | +41.36 | +46.69 |
+| bigram `zh-hant-bigram` | 2.87 | +5.28 | +5.28 | +12.34 |
+| 簡繁 `opencc-hk2s` | 0.06 | +0.75 | +0.73 | +0.75 |
+| 英文 `scowl-en-us` | 0.76 | +2.53 | +2.52 | +4.09 |
+| `Engine` | — | +0.14 | +0.06 | +12.78 |
+| `Session` | — | +0.00 | +0.00 | — |
+| 核心合計 | 9.07 | +51.49 | +51.39 | +78.03 |
+| 載入後 | — | 64.44 | 64.42 | — |
+
+每鍵延遲（µs，量法同〈綁定開銷〉；Mac 那列是同一節的 Swift 經 `qim-ffi`）：
+
+| 環境 | 全部 p50 | 全部 p95 | 第 20 碼起 p50 | 第 20 碼起 p95 | 選開頭一段 p50 | 選開頭一段 p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| iPhone 第 1 次 | 45.62 | 64.00 | 56.12 | 70.96 | 246.38 | 789.75 |
+| iPhone 第 2 次 | 45.08 | 63.96 | 55.62 | 70.83 | 245.46 | 786.54 |
+| Mac（Apple M6） | 42.25 | 58.08 | 51.62 | 64.38 | 235.08 | 759.71 |
+
+手按的鍵（ms，核心呼叫／含畫面更新）：第 1 次只讀到 `r` 0.450 / 11.86、空白 0.146 / 8.48（畫面一次只顯示最後一鍵，之後改成顯示最近 4 鍵）；第 2 次見上方原始輸出。
+
+擴充的 bundle 12 MB：五份資料包 9.07 MB、延遲的輸入 0.13 MB，其餘是程式（Debug）。
+
+### 限制
+
+- 只有一台旗艦機、一個 iOS 版本；低階機的上限與 CPU 都可能更低。
+- 沒載入字根提示與佈局：字根提示在 Mac 上解開後 +16.3 MB（heap 14.8 MB），殼要顯示時才需要；佈局 `qim-ffi` 還沒有介面。票 09 加壓時把它們算進去。
+- iPhone 上沒量 heap（malloc 還在用的位元組），所以分不出 footprint 裡多少是還在用的、多少是載入途中的峰值留下的。
+- 擴充的 log 這次讀不到完整的核心行：手機一開始走 Wi-Fi，接上 USB 後的 log 又被系統訊息洗掉。數字都以截圖讀回的畫面為準。
+
+### 給之後的票
+
+- 票 09：從載入後的 64 MB 開始加壓，記下終止點；資料包格式的決定看詞庫（核心增量的 80%）。iOS 上釋放的頁會被重用，票 04 建議的「不改格式也能壓低峰值」兩項在 iPhone 上省得比 Mac 少，`Engine::new` 的暫存這裡幾乎沒長出 footprint。
+- M3：選開頭一段那一鍵 p95 0.79 ms，乘上神經模型的次數再看預算。
+
 ## 小型神經模型
 
 M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`scripts/experiments/neural-cost/`；iPhone 上的操作：`scripts/experiments/ios-keyboard/README.md`〈小型神經模型（票 11）〉。
@@ -254,13 +366,13 @@ M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`
 ### 結論
 
 - **candle 能在 iOS 鍵盤擴充裡跑。** 不用改 candle 就編得過 `aarch64-apple-ios`，連進擴充、沒有完整取用也能載入模型推論。不需要試 Core ML 等替代。
-- **延遲都在停鍵層用得起的範圍。** iPhone 上重排一次的 p95：
+- **延遲都在停鍵層用得起的範圍，前提是前綴快取。** 量的寫法是上下文只算一次、狀態給 6 條路徑共用（見下方〈前綴快取〉）。iPhone 上重排一次的 p95：
   - 1.4M：上下文 200 字 f32 8.2 ms、q8 6.4 ms，短的上下文更快。
   - 23M q8：上下文 0 字 9 ms、50 字 19 ms、200 字 55 ms。
   - 23M f32：上下文 200 字 78 ms。
   - 對照：青簡的停鍵防抖是 macOS 80 ms、Windows 30 ms（`docs/research/qingjian.md` §4.2）。
   - 載入 2–36 ms，可以等第一次停鍵才載入。
-- **記憶體：1.4M 可忽略，23M 只有 q8 放得進。** iPhone 上的峰值增量：
+- **記憶體：1.4M 可忽略，23M 兩種都放得進，f32 只剩約 18 MB。** iPhone 上的峰值增量：
 
   | 模型 | 峰值增量 |
   | --- | ---: |
@@ -269,10 +381,12 @@ M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`
   | 23M q8 | +46.9 MB |
   | 23M f32 | +94.9 MB |
 
-  對 177 MB 的上限（本文〈免費佈建與 App Group〉；票 09 加壓時確認），擴充本身約 10 MB，核心加資料包在 Mac 量到約 96 MB（〈Mac 上的資料包記憶體〉，票 08 在 iPhone 重量）：
-  - 23M f32 合計約 201 MB，超過上限。
-  - 23M q8 合計約 153 MB，在這台旗艦機剩約 24 MB；低階機的上限不知道。
-  - 1.4M 合計不到 111 MB。
+  對 177 MB 的上限（本文〈免費佈建與 App Group〉；票 09 加壓時確認），擴充載入核心與五份資料包後 footprint 約 64.4 MB（〈鍵盤擴充接上核心〉），再加模型的峰值增量：
+  - 23M f32 合計約 159 MB，剩約 18 MB。
+  - 23M q8 合計約 111 MB，剩約 66 MB。
+  - 1.4M 合計約 67–69 MB。
+  - 這是把兩個程序量到的增量相加。模型的峰值是在沒載入核心的擴充裡量的，兩者在同一個程序時 malloc 會互相重用頁，實際合計可能較低；票 09 加壓時以實際終止點為準。低階機的上限不知道。
+  - 改用 Mac 的核心數字（〈Mac 上的資料包記憶體〉約 96 MB，加空擴充 10 MB）則是 f32 約 201 MB 超過上限、q8 約 153 MB；iPhone 上核心比 Mac 少約 27 MB，原因見〈鍵盤擴充接上核心〉。
 - **23M q8 的常駐約是檔案的兩倍。** candle 0.11.1 在 aarch64 第一次做 Q8_0 乘法時另存一份重排過的權重，原本那份也留著，沒有開關：檔案 23.6 MB，iPhone heap +48.3 MB。heap 裡約 22 MB 是重排的副本（Q8_0 那幾個矩陣再一份），其餘約 3 MB 是 gemm、rayon 的暫存；自己寫 int8 矩陣乘法（青簡的做法）可以省掉那份副本。
 - **執行緒數要自己限。** gemm 在每條跑過矩陣乘法的執行緒各留一塊 L2 大小的暫存。Mac 上每塊約 10 MB，用每核一條的全域 pool 時共 136 MB；iPhone 上小得多（1.4M f32 的 heap 只比檔案多 1 MB）。本實驗用 2 條的專屬 pool。
 - **iOS 會還回釋放的大塊配置，macOS 不會。** iPhone 上推論的暫存跑完就退出 footprint，模型丟掉後 footprint 回到開始時的水準；Mac 上停在峰值。上限看的是峰值，所以 iPhone 的數字以 `ledger_phys_footprint_peak` 為準。
@@ -280,7 +394,23 @@ M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`
   - 停鍵層在 iOS 可以用 1.4M 級的模型，成本幾乎是零。
   - 23M 級要 q8，而且和核心加資料包合計逼近上限，要看票 09 的終止點與資料包是否改格式（plan §8 的 mmap 那列）再定。
   - 兩種都還沒有正確率數字，值不值得留給 M3 模型階梯（plan §7.8）。
-  - 依 plan §8，放不進才寫回 brief §1.5；23M q8 在這台放得進，所以本票不改 brief §1.5。
+  - 依 plan §8，放不進才寫回 brief §1.5；兩個大小在這台都放得進，所以本票不改 brief §1.5。
+  - M3 實作停鍵層的神經模型時要做前綴快取，否則延遲會是這裡的 3–5 倍（plan §7.8）。
+
+### 前綴快取
+
+一次重排是上下文後接 6 條候選路徑。上面的數字都是「上下文只算一次、狀態（LSTM 的 h、c，decoder 各層的 K、V）複製給每條路徑」的寫法。青簡的筆記沒寫這種共用：64 字上下文配 8 條候選在 M1 Mac（Metal）上要 133 ms（`docs/research/qingjian.md` 引的 `neural-rescoring.md`），比本實驗同量級的數字慢得多。
+
+Mac 上另量了不共用的對照：每條路徑各自從句首連上下文算起，其餘照舊（`PREFIX=unshared scripts/experiments/neural-cost/run.sh`）。p50 / p95（ms），3 個程序的中位數：
+
+| 模型 | 上下文 0 | 上下文 50 | 上下文 200 | 200 字時慢幾倍（p50） |
+| --- | ---: | ---: | ---: | ---: |
+| 1.4M f32 | 4.4 / 4.9 | 12.7 / 13.0 | 37.8 / 38.1 | 4.4 |
+| 1.4M q8 | 1.6 / 1.6 | 5.1 / 5.3 | 15.8 / 15.9 | 4.2 |
+| 23M f32 | 32.8 / 35.7 | 96.2 / 102.6 | 298.8 / 306.5 | 4.7 |
+| 23M q8 | 7.9 / 9.1 | 41.6 / 46.5 | 158.7 / 172.6 | 4.7 |
+
+上下文 50 字慢約 3.3–3.4 倍（23M），上下文 0 字也慢 1.1–2 倍（共用時 6 條一批算，不共用時逐條算）。iPhone 沒量不共用的版本；照 Mac 的倍數推，23M q8 在上下文 200 字會到約 250 ms。記憶體與共用時相近（23M q8 峰值 +66.6–72.7 MB，對共用的 +73.6 MB）。量的時候機器有別的 session 在跑，23M f32 有一個程序的 p95 偏高（77.5、201.9 ms）。
 
 ### 結果
 
@@ -325,7 +455,7 @@ nc-after footprint=13.63MB available=163.4MB wall=2.7s
 ### 限制
 
 - 一台旗艦機、一個 iOS 版本，每個模型在 iPhone 只量一個程序；量時手機上有一個子母畫面影片在播，會和推論搶 CPU，延遲可能偏高。
-- Mac 的數字會隨負載飄：code-review 時在機器較忙時重跑，23M 的峰值高了 3–10 MB、延遲也較高（`scripts/experiments/neural-cost/README.md`〈上次結果〉）。iPhone 一次樣本的記憶體也可能有同樣幅度的差，「23M q8 剩約 24 MB」要看成大約的數。
+- Mac 的數字會隨負載飄：code-review 時在機器較忙時重跑，23M 的峰值高了 3–10 MB、延遲也較高（`scripts/experiments/neural-cost/README.md`〈上次結果〉）。iPhone 一次樣本的記憶體也可能有同樣幅度的差，「23M f32 剩約 18 MB」要看成大約的數。
 - 權重是隨機的、形狀有近似，正確率與真正的青簡、Gboard 模型無關；開銷只看形狀。
 - 只試了 candle 的 CPU 後端：沒試 `accelerate`、`metal` feature，也沒試 Core ML。青簡在 M1 Mac 上量過 Metal 比 Accelerate 快一倍、Accelerate 比 gemm 快一倍（青簡 `docs/notes/neural-rescoring.md`）。鍵盤擴充能不能用 Metal 沒查。
 - 候選路徑固定 6 條、每條 8 字；8 字是自訂的近似（plan §7.8 沒定路徑長度），真實的路徑長短不一，延遲大致隨字數增加。

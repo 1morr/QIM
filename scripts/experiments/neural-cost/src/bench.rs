@@ -7,7 +7,7 @@ use std::time::Instant;
 use candle_core::Result;
 
 use crate::footprint::{footprint, heap_in_use};
-use crate::model;
+use crate::model::{self, Scorer};
 
 /// 重排前幾條路徑（plan §7.8）。
 pub const PATHS: usize = 6;
@@ -19,6 +19,36 @@ pub const CONTEXTS: [usize; 3] = [0, 50, 200];
 pub const WARMUP: usize = 3;
 
 const MB: f64 = 1024.0 * 1024.0;
+
+/// 上下文要不要讓 6 條路徑共用（README〈前綴快取〉）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Prefix {
+    /// 上下文只算一次（`Scorer::score`）。iPhone 量的是這個。
+    Shared,
+    /// 每條路徑各自從句首連上下文算起（`Scorer::score_unshared`），對照用。
+    Unshared,
+}
+
+impl Prefix {
+    fn score(
+        self,
+        scorer: &dyn Scorer,
+        context: &[u32],
+        candidates: &[Vec<u32>],
+    ) -> Result<Vec<f32>> {
+        match self {
+            Prefix::Shared => scorer.score(context, candidates),
+            Prefix::Unshared => scorer.score_unshared(context, candidates),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Prefix::Shared => "shared",
+            Prefix::Unshared => "unshared",
+        }
+    }
+}
 
 /// 固定種子的假字 id，避開句首記號。
 fn tokens(seed: u64, n: usize, vocab: usize) -> Vec<u32> {
@@ -49,7 +79,7 @@ fn ms(start: Instant) -> f64 {
 /// 載入、先跑一次、再對每個上下文長度跑 `iterations` 次；回幾行可讀的結果。
 /// 推論只用 `threads` 條執行緒：gemm 在每條跑過矩陣乘法的 rayon 執行緒各留一塊 L2 大小的暫存，
 /// 用全域 pool（每個核心一條）時暫存就跟著核心數漲（README〈觀察〉）。
-pub fn run(path: &Path, iterations: usize, threads: usize) -> Result<String> {
+pub fn run(path: &Path, iterations: usize, threads: usize, prefix: Prefix) -> Result<String> {
     // candle 的矩陣乘法照這個環境變數決定切幾份，逐元素運算的 pool 第一次用時也照它開。
     // SAFETY: 在任何 candle 運算之前設；這個程式庫裡沒有別的執行緒同時讀寫環境變數。
     unsafe { std::env::set_var("RAYON_NUM_THREADS", threads.to_string()) };
@@ -57,10 +87,10 @@ pub fn run(path: &Path, iterations: usize, threads: usize) -> Result<String> {
         .num_threads(threads)
         .build()
         .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-    pool.install(|| measure(path, iterations))
+    pool.install(|| measure(path, iterations, prefix))
 }
 
-fn measure(path: &Path, iterations: usize) -> Result<String> {
+fn measure(path: &Path, iterations: usize, prefix: Prefix) -> Result<String> {
     let mut out = String::new();
     let file_bytes = std::fs::metadata(path)?.len();
     let start_fp = footprint();
@@ -77,17 +107,18 @@ fn measure(path: &Path, iterations: usize) -> Result<String> {
         .map(|i| tokens(100 + i as u64, PATH_LEN, vocab))
         .collect();
     let start = Instant::now();
-    loaded.scorer.score(&[], &candidates)?;
+    prefix.score(loaded.scorer.as_ref(), &[], &candidates)?;
     let first_ms = ms(start);
 
     let _ = writeln!(
         out,
-        "{} {} params={:.2}M file={:.2}MB threads={}",
+        "{} {} params={:.2}M file={:.2}MB threads={} prefix={}",
         loaded.kind.stem(),
         loaded.format.label(),
         loaded.params as f64 / 1e6,
         file_bytes as f64 / MB,
         candle_core::utils::get_num_threads(),
+        prefix.label(),
     );
     let _ = writeln!(out, "load={load_ms:.1}ms first(ctx=0)={first_ms:.1}ms");
 
@@ -96,7 +127,7 @@ fn measure(path: &Path, iterations: usize) -> Result<String> {
         let mut times = Vec::with_capacity(iterations);
         for i in 0..WARMUP + iterations {
             let start = Instant::now();
-            let scores = loaded.scorer.score(&context, &candidates)?;
+            let scores = prefix.score(loaded.scorer.as_ref(), &context, &candidates)?;
             let t = ms(start);
             if scores.iter().any(|s| !s.is_finite()) {
                 candle_core::bail!("non-finite scores: {scores:?}");

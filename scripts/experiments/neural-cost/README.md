@@ -10,8 +10,8 @@
 | `src/bench.rs` | 一個模型檔的四項指標 |
 | `src/footprint.rs` | `phys_footprint`、它的峰值、malloc 還在用的量 |
 | `src/lib.rs` | 給 iOS 的 C 介面 `nc_run`、`nc_free`（`include/neural_cost.h`） |
-| `src/main.rs` | Mac 的命令列：`gen <目錄>`、`run <模型檔> [次數] [執行緒]` |
-| `run.sh` | Mac：寫出模型檔，四個模型各開 3 個新程序量 |
+| `src/main.rs` | Mac 的命令列：`gen <目錄>`、`run <模型檔> [次數] [執行緒] [unshared]` |
+| `run.sh` | Mac：寫出模型檔，四個模型各開 3 個新程序量；`PREFIX=unshared` 量不共用上下文的對照 |
 | `build-ios.sh` | iOS：寫出模型檔，編 `aarch64-apple-ios` 的靜態庫給 `../ios-keyboard` 連結 |
 
 這是獨立的 crate（`Cargo.toml` 有空的 `[workspace]`），不在 repo 的 workspace 裡，`cargo xtask check` 不編它。改程式後自己跑 `cargo test --release`、`cargo clippy --release --all-targets -- -D warnings`、`cargo fmt --check`。模型檔（`models/`，共 118 MB）與 `target/` 不進 git，`gen` 隨時重寫。
@@ -49,6 +49,24 @@
 
 每個模型要在新程序量：釋放的頁會被下一個模型重用，混在同一個程序裡增量就不準。Mac 由 `run.sh` 每次開新程序；iPhone 每量完一個按「結束」讓擴充自己 `exit(0)`，收起再叫出鍵盤就是新程序（看 `pid=`）。
 
+## 前綴快取
+
+**這裡的延遲以前綴快取為前提：M3 實作要做到同樣的共用，否則延遲會是幾倍。** 〈量法〉第 4 步的寫法是上下文只跑一次，狀態複製給 6 條路徑（`Scorer::score`）。青簡的筆記沒寫這種共用：64 字上下文配 8 條候選，在 M1 Mac 上就要 133 ms（`docs/research/qingjian.md` 引的 `neural-rescoring.md`）。
+
+對照用的 `Scorer::score_unshared` 讓每條路徑各自從句首連上下文算起，其餘照舊（只在預測候選字的位置算輸出層）；單元測試確認兩種寫法分數相同。只在 Mac 量（`PREFIX=unshared ./run.sh`，2026-11-10，環境同〈上次結果〉），p50 / p95（ms），3 個程序的中位數：
+
+| 模型 | 上下文 0 | 上下文 50 | 上下文 200 | 200 字時對共用慢幾倍（p50） |
+| --- | ---: | ---: | ---: | ---: |
+| 1.4M f32 | 4.4 / 4.9 | 12.7 / 13.0 | 37.8 / 38.1 | 4.4 |
+| 1.4M q8 | 1.6 / 1.6 | 5.1 / 5.3 | 15.8 / 15.9 | 4.2 |
+| 23M f32 | 32.8 / 35.7 | 96.2 / 102.6 | 298.8 / 306.5 | 4.7 |
+| 23M q8 | 7.9 / 9.1 | 41.6 / 46.5 | 158.7 / 172.6 | 4.7 |
+
+- 上下文越長差越多：上下文 50 字慢 3.3–3.4 倍（23M），0 字也慢 1.1–2 倍（共用時 6 條一批算）。
+- 照這個倍數推，iPhone 上 23M q8 在上下文 200 字會到約 250 ms；iPhone 沒量。
+- 記憶體與共用時相近：23M q8 峰值 +66.6–72.7 MB，共用時 +73.6 MB。
+- 量的時候機器有別的 session 在跑：23M f32 有一個程序的 p95 偏高（77.5、201.9 ms），表上取中位數。
+
 ## 指標
 
 - **footprint**：`task_info(TASK_VM_INFO)` 的 `phys_footprint`，同 `../ios-keyboard` 的 `Shared/Probe.swift` 與 `../pack-memory`；iOS 鍵盤擴充的上限看的推定是它（`docs/research/ios-feasibility.md`〈免費佈建與 App Group〉）。
@@ -76,9 +94,10 @@ Mac（約 1 分鐘）：
 scripts/experiments/neural-cost/run.sh                 # 四個模型各 3 個新程序
 RUNS=1 ITER=50 THREADS=4 scripts/experiments/neural-cost/run.sh
 scripts/experiments/neural-cost/target/release/neural-cost run scripts/experiments/neural-cost/models/gpt-23m-q8.gguf 30 1
+PREFIX=unshared scripts/experiments/neural-cost/run.sh  # 不共用上下文的對照（〈前綴快取〉）
 ```
 
-iPhone：先跑 `scripts/experiments/neural-cost/build-ios.sh`，再照 `../ios-keyboard/README.md`〈建置與安裝〉建置、安裝，〈小型神經模型（票 11）〉一節是在鍵盤上的操作步驟。
+iPhone：`../ios-keyboard` 預設不建神經模型探針。照 `../ios-keyboard/README.md`〈小型神經模型（票 11）〉：先跑 `build-ios.sh`，再用 `QIM_NEURAL=YES` 產生專案、建置、安裝，同一節有在鍵盤上的操作步驟。
 
 換 candle、Rust、Xcode 或 iOS 主版本，或改模型形狀、執行緒數時重量。
 
