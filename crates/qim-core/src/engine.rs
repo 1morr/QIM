@@ -68,6 +68,12 @@ impl Engine {
         lexicon: Option<LexiconPack>,
         language_model: Option<LanguageModelPack>,
     ) -> Result<Self, PackError> {
+        // 資料包可以從檔案匯入、不一定經 `qim-databuild`，載入時再驗一次。
+        scheme_pack
+            .scheme
+            .ranking
+            .check()
+            .map_err(|e| PackError::Malformed(e.to_string()))?;
         let found = lexicon.as_ref().map(|l| l.id.clone());
         if scheme_pack.scheme.packs.lexicon.is_some() != found.is_some() {
             return Err(PackError::LexiconMismatch {

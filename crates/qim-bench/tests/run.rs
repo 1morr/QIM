@@ -1215,6 +1215,25 @@ fn dev_mode_rejects_unknown_keys_and_bad_values() {
     }
 }
 
+/// 蓋過的值照方案檔的規則驗（`Ranking::check`）：錯誤指出是哪個值、是 `--set` 給的，
+/// 不說成資料包壞了。
+#[test]
+fn dev_mode_rejects_overrides_that_the_scheme_file_would_reject() {
+    let repo = repo_with_dev();
+    for (bad, field, value) in [
+        ("beam=0", "beam", "0"),
+        ("beam=NaN", "beam", "NaN"),
+        ("word_bonus=NaN", "word_bonus", "NaN"),
+        ("segment_penalty=inf", "segment_penalty", "inf"),
+    ] {
+        let err = dev(&repo, &[bad]).unwrap_err();
+        assert!(
+            err.contains("--set") && err.contains(field) && err.contains(value),
+            "{bad}：{err}"
+        );
+    }
+}
+
 #[test]
 fn dev_mode_needs_the_dev_file_of_every_set() {
     let repo = repo_with_dev();

@@ -84,10 +84,12 @@ path = "zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"
 url = "https://archive.org/download/zhwiki-20220501/zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"
 sha256 = "c7e1b65a7a36092ac35c2f2f2eaa2c12babf07caa223b46217f8ab6db7fea0aa"
 
-# HKCanCor（香港粵語語料庫，plan §4.3 的口語語料）：bench/colloquial/hkcancor.tsv 與訓練語料；只有字頻進詞庫資料包。
+# HKCanCor（香港粵語語料庫，plan §4.3 的口語語料）：bench/colloquial/hkcancor.tsv 與訓練語料；字頻與 train 切分裡的詞
+# （已分詞，plan §4.2，M3 票 18）進詞庫資料包。
 # 原始 repo 的 README 與 data/LICENSE 聲明 CC BY 4.0，引用 Luke & Wong (2015)；PyCantonese 內建的版本有改動，不用。
 # zip 裡 utf8/ 下 58 個轉寫檔：一個話輪一個 <sent>，<sent_tag> 裡一行一詞「詞/詞性/粵拼/」。
 # 抽法：只取詞、照原順序接成話輪（標點也是詞，留給切句），規則在 crates/qim-databuild/src/hkcancor.rs。
+# 詞庫另取 train 切分裡兩字以上的詞（不收人名 nr），規則在同一個檔的 TrainWords。
 # 前處理同 yue_wiki：原文是繁體，只經 t2hk、換回常見寫法；s2hk 會把「晒」「吓」「郁」「喂」換掉（票 17b）。
 [source.hkcancor]
 repository = "https://github.com/fcbond/hkcancor"

@@ -113,10 +113,15 @@ fn ranking_table_is_required_with_finite_scores_and_a_beam_of_at_least_one() {
     let start = MINIMAL.find("[ranking]").unwrap();
     assert!(scheme::parse(&MINIMAL[..start]).is_err());
     assert!(scheme::parse(&MINIMAL.replace("sentences = 2\n", "")).is_err());
-    assert!(scheme::parse(&MINIMAL.replace("1.5", "nan")).is_err());
-    assert!(scheme::parse(&MINIMAL.replace("0.5", "-inf")).is_err());
+    // 驗證在 `Ranking::check`，與 `bench --set` 共用；錯誤指出是哪個欄位。
+    let named = |text: String, field: &str| {
+        let error = scheme::parse(&text).unwrap_err().to_string();
+        assert!(error.contains(&format!("ranking.{field}")), "{error}");
+    };
+    named(MINIMAL.replace("1.5", "nan"), "word_bonus");
+    named(MINIMAL.replace("0.5", "-inf"), "segment_penalty");
     assert!(scheme::parse(&MINIMAL.replace("sentences = 2", "sentences = 0")).is_ok());
-    assert!(scheme::parse(&MINIMAL.replace("beam = 8", "beam = 0")).is_err());
+    named(MINIMAL.replace("beam = 8", "beam = 0"), "beam");
     assert!(scheme::parse(&MINIMAL.replace("beam = 8", "beam = 1")).is_ok());
 }
 

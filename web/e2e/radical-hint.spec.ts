@@ -87,7 +87,8 @@ test("長按候選列出字根提示，點一下選字、不叫出提示", async
 	await expect(hint).toHaveCount(0);
 	await expect(text).toHaveValue("俾");
 
-	await page.keyboard.type("oj");
+	// 逗號後是句首，首選同在空的輸入框時（前文「俾」會換掉首選，M3 票 05）。
+	await page.keyboard.type(",oj");
 
 	const box = await items.first().boundingBox();
 	if (!box) {

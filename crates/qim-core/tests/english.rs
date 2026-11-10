@@ -126,6 +126,18 @@ impl Ime {
         snapshot
     }
 
+    /// `the` 分段選「廿」再選「竹水」上屏：自動造詞 the → 廿竹水，上屏 1 次（規則 3：至少第 2 位）。
+    fn learn_nian_zhu_shui(&mut self) {
+        let mut shown = texts(&self.type_code("the"));
+        let mut done = Snapshot::default();
+        for text in ["廿", "竹水"] {
+            let at = shown.iter().position(|t| t == text).unwrap();
+            done = self.press(Key::Digit(u8::try_from(at + 1).unwrap()));
+            shown = texts(&done);
+        }
+        assert_eq!(done.commit.as_deref(), Some("廿竹水"));
+    }
+
     /// 打 `code`，回傳第一頁的候選文字。
     fn candidates(&mut self, code: &str) -> Vec<String> {
         let shown = texts(&self.type_code(code));
@@ -274,17 +286,23 @@ fn a_focused_segment_lists_no_english_candidate() {
 #[test]
 fn a_used_user_word_keeps_second_and_the_english_word_goes_third() {
     let mut ime = Ime::new();
-    // 選「廿」再選「竹水」上屏：自動造詞 the → 廿竹水，上屏 1 次（規則 3：至少第 2 位）。
-    let shown = texts(&ime.type_code("the"));
-    let nian = shown.iter().position(|t| t == "廿").unwrap();
-    let rest = texts(&ime.press(Key::Digit(u8::try_from(nian).unwrap() + 1)));
-    let zhu_shui = rest.iter().position(|t| t == "竹水").unwrap();
-    let done = ime.press(Key::Digit(u8::try_from(zhu_shui).unwrap() + 1));
-    assert_eq!(done.commit.as_deref(), Some("廿竹水"));
+    ime.learn_nian_zhu_shui();
 
     let shown = ime.candidates("the");
     assert_eq!(shown[1], "廿竹水", "{shown:?}");
     assert_eq!(shown[2], "the", "{shown:?}");
+}
+
+/// 規則 1–4 一起套用：觸發詞是首選、上屏過的使用者詞第 2，英文接在它們後面，不往前搶位。
+#[test]
+fn the_english_word_goes_after_the_trigger_word_and_the_used_user_word() {
+    let mut ime = Ime::new();
+    ime.user.add_word(&ime.engine, "QIM", Some("the")).unwrap();
+    assert_eq!(ime.candidates("the")[..2], ["QIM", "the"]);
+
+    ime.learn_nian_zhu_shui();
+
+    assert_eq!(ime.candidates("the")[..3], ["QIM", "廿竹水", "the"]);
 }
 
 #[test]
