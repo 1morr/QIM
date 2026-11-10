@@ -105,6 +105,8 @@ fn a_gboard_dictionary_keeps_shortcuts_that_are_scheme_keys_as_triggers() {
 #[test]
 fn plain_text_takes_one_word_per_line_and_reports_what_it_skips() {
     let mut user = UserModel::default();
+    // 固定檔要是 `\r\n` 換行（`.gitattributes` 設 `-text`，git 不轉成 `\n`）。
+    assert!(PLAIN.contains("\r\n"));
     let report = import(&mut user, PLAIN);
 
     assert_eq!(report.format, WordListFormat::PlainText);
