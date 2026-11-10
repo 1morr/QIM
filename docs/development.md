@@ -182,7 +182,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle` 那一次呼叫。
-- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，依檔頭魔數分辨種類、順序不拘），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `letter()` 加讀出網頁畫候選要的欄位（輸入碼、候選），每題之間按 Esc（不計時）。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
+- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，依檔頭魔數分辨種類、順序不拘），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（輸入碼、候選），每題之間按 Esc（不計時）。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
 - 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`。
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
 

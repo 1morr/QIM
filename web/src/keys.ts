@@ -1,19 +1,26 @@
-/** 網頁轉給核心的按鍵；對應 `qim_core::Key` 裡網頁用到的部分。 */
+/**
+ * 網頁轉給核心的按鍵：種類與值照 `qim_core::Key::parse`，原樣交給綁定的 `Session.press`（網頁的按鍵都經它）。
+ * 加一種鍵只改這裡與核心。
+ */
 export type Key =
-	| { kind: "letter"; char: string }
-	| { kind: "punct"; char: string }
-	| { kind: "digit"; digit: number }
-	| { kind: "space" }
-	| { kind: "enter" }
-	| { kind: "backspace" }
-	| { kind: "escape" }
-	| { kind: "pageUp" }
-	| { kind: "pageDown" }
-	| { kind: "left" }
-	| { kind: "right" }
-	| { kind: "toggleAscii"; shift: ShiftKey }
-	| { kind: "other" }
-	| { kind: "modifier" };
+	| { kind: "letter"; value: string }
+	| { kind: "punct"; value: string }
+	| { kind: "digit"; value: string }
+	| { kind: "toggleAscii"; value: ShiftKey }
+	| {
+			kind:
+				| "space"
+				| "enter"
+				| "backspace"
+				| "escape"
+				| "pageUp"
+				| "pageDown"
+				| "left"
+				| "right"
+				| "other"
+				| "modifier";
+			value?: undefined;
+	  };
 
 /** 單按的是哪一邊的 Shift；對應 `qim_core::ShiftKey`。 */
 export type ShiftKey = "left" | "right";
@@ -93,20 +100,20 @@ export function toKey(
 		return composing ? { kind: "other" } : null;
 	}
 	if (inlineAscii && (event.key === "-" || event.key === "=")) {
-		return { kind: "punct", char: event.key };
+		return { kind: "punct", value: event.key };
 	}
 	if (Object.hasOwn(NAMED, event.key)) {
 		return NAMED[event.key];
 	}
 	if (/^[a-zA-Z]$/.test(event.key)) {
-		return { kind: "letter", char: event.key };
+		return { kind: "letter", value: event.key };
 	}
 	if (/^[0-9]$/.test(event.key)) {
-		return { kind: "digit", digit: Number(event.key) };
+		return { kind: "digit", value: event.key };
 	}
 	// 其餘的可見 ASCII 字元：標點與符號（Shift 加數字鍵的 `!`、`@` 也是）。
 	if (/^[!-/:-@[-`{-~]$/.test(event.key)) {
-		return { kind: "punct", char: event.key };
+		return { kind: "punct", value: event.key };
 	}
 	return { kind: "other" };
 }

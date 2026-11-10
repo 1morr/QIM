@@ -40,6 +40,7 @@
 | 2026-11-10 | M2 05 | GitHub Actions 跑 `check --fast` 與 `cargo test`；`bench --check` 不進 CI 與 `check`（plan §6）；推送由協調者合併後做，見票 05 | 新 session 下 `/implement .scratch/m2/issues/02-unify-naming.md` |
 | 2026-11-10 | M2 06 | 免費佈建能跑鍵盤擴充，備忘錄打出「日」；App Group 擴充可讀不可寫；空擴充約 10 MB、上限推得 177 MB；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/10-foundation-models-and-context.md` |
 | 2026-11-10 | M2 02 | `Pack` 改 `SchemePack`；分段只留 `Segment`；`UserModel` 的內部方法改經 `for_scheme` 取用、不逐一帶方案；bench 不變；細節見票 02 | 新 session 下 `/implement .scratch/m2/issues/03-bindings-without-logic.md` |
+| 2026-11-10 | M2 03 | `qim-wasm` 只轉型別：按鍵一個入口（`Key::parse`）、組字狀態問 `Session`、切頁與 Shift 收進 `qim_layout::Keyboard`；見票 03 | 新 session 下 `/implement .scratch/m2/issues/07-qim-ffi-minimal.md` |
 
 ## 偏差與決定
 
@@ -64,3 +65,4 @@
 - 2026-11-05 M2（補 M1 27b）：開一次的觸控 Shift 照 Gboard 實測被任何別的鍵解除，推翻票 27 的只有字母鍵解除（brief §4.4、plan §2.6、GLOSSARY）。
 - 2026-11-07 M2（M1 review，使用者決定）：M2 加一張 FFI 前的清理票與一張 CI 小票（plan §7.3）；記憶體上限只在 iPhone 18 Pro Max 量並註明。
 - 2026-11-10 M2 票 01：換選項還沒重列時 `all_candidates` 回空、`rerank_request` 與 `apply_rerank` 回 `None`，票外決定（同類錯）；`set_options` 帶 `Engine` 直接重列留給票 07（plan §2.1）。
+- 2026-11-10 M2 票 03：觸控鍵盤的佈局版本、目前頁與 Shift 改由 `qim_layout::Keyboard` 記，推翻 plan §2.6 的「由殼記著」；載入時照 `initialPage`，修掉舊綁定忽略它的問題（plan §2.1、§2.6）。

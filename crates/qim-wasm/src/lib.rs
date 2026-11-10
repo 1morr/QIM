@@ -2,10 +2,15 @@
 
 use qim_core::{
     CangjieVersion, Engine, EnglishPack, Key, Options, RadicalHintPack, RadicalHints, Scheme,
-    Session, ShiftKey, ShiftSwitch, SimplifierPack, Snapshot, UserModel,
+    Session, ShiftKey, SimplifierPack, Snapshot, UserModel,
 };
-use qim_layout::{Action, KeyState, Shift, Target, When};
+use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
+
+/// 核心與 `qim-layout` 的錯誤轉成 JS 的例外，訊息照原樣。
+fn js_error(error: impl std::fmt::Display) -> JsError {
+    JsError::new(&error.to_string())
+}
 
 /// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁與英文資料包、一個個人模型、一個 `Session`。
 /// JS 端叫 `Session`。
@@ -14,9 +19,6 @@ pub struct WebSession {
     engine: Engine,
     user: UserModel,
     session: Session,
-    options: Options,
-    /// 上一個鍵之後還在組字：觸控鍵盤依它選 `composing` 的標籤與動作。
-    composing: bool,
 }
 
 #[wasm_bindgen(js_class = Session)]
@@ -31,30 +33,26 @@ impl WebSession {
         simplifier: Option<Vec<u8>>,
         english: Option<Vec<u8>>,
     ) -> Result<WebSession, JsError> {
-        let error = |e: qim_core::PackError| JsError::new(&e.to_string());
         let mut engine =
             Engine::from_pack_bytes(scheme_pack, lexicon.as_deref(), language_model.as_deref())
-                .map_err(error)?;
+                .map_err(js_error)?;
         if let Some(bytes) = simplifier {
-            engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(error)?);
+            engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(js_error)?);
         }
         if let Some(bytes) = english {
-            engine = engine.with_english(EnglishPack::from_bytes(&bytes).map_err(error)?);
+            engine = engine.with_english(EnglishPack::from_bytes(&bytes).map_err(js_error)?);
         }
         Ok(Self {
             engine,
             user: UserModel::default(),
             session: Session::default(),
-            options: Options::default(),
-            composing: false,
         })
     }
 
     /// 無痕模式：開著時不學習（plan §2.4）。
     #[wasm_bindgen(js_name = setIncognito)]
     pub fn set_incognito(&mut self, on: bool) {
-        self.options.incognito = on;
-        self.session.set_options(self.options);
+        self.set_options(|options| options.incognito = on);
     }
 
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
@@ -63,7 +61,7 @@ impl WebSession {
         let trigger = (!trigger.is_empty()).then_some(trigger);
         self.user
             .add_word(&self.engine, text, trigger)
-            .map_err(|e| JsError::new(&e.to_string()))
+            .map_err(js_error)
     }
 
     /// 使用者詞與學習計數匯出成 `# qim-userdict v1` 的 TSV（plan §2.4），網頁存 `localStorage`、
@@ -76,15 +74,13 @@ impl WebSession {
     /// 檢查 `text` 是不是匯入得了的檔，不動目前的資料；網頁請使用者確認覆蓋之前先檢查。
     #[wasm_bindgen(js_name = checkUserDict)]
     pub fn check_user_dict(&self, text: &str) -> Result<(), JsError> {
-        UserModel::import(text)
-            .map(|_| ())
-            .map_err(|e| JsError::new(&e.to_string()))
+        UserModel::import(text).map(|_| ()).map_err(js_error)
     }
 
     /// 讀匯出的檔，取代目前的使用者詞與學習計數；不合格式時整份不收、原本的不動。
     #[wasm_bindgen(js_name = importUserDict)]
     pub fn import_user_dict(&mut self, text: &str) -> Result<(), JsError> {
-        self.user = UserModel::import(text).map_err(|e| JsError::new(&e.to_string()))?;
+        self.user = UserModel::import(text).map_err(js_error)?;
         Ok(())
     }
 
@@ -98,8 +94,7 @@ impl WebSession {
     /// 重列候選，回傳新的狀態給網頁畫。
     #[wasm_bindgen(js_name = setSimplified)]
     pub fn set_simplified(&mut self, on: bool) -> WebSnapshot {
-        self.options.simplified = on;
-        self.session.set_options(self.options);
+        self.set_options(|options| options.simplified = on);
         self.session.refresh(&self.engine, &self.user).into()
     }
 
@@ -107,68 +102,37 @@ impl WebSession {
     /// 切換也立刻重列候選。
     #[wasm_bindgen(js_name = setEnglishCandidates)]
     pub fn set_english_candidates(&mut self, on: bool) -> WebSnapshot {
-        self.options.english_candidates = on;
-        self.session.set_options(self.options);
+        self.set_options(|options| options.english_candidates = on);
         self.session.refresh(&self.engine, &self.user).into()
     }
 
     /// 數字後的 `.` `:` 用半形（M1 票 26，brief §4.7），預設開。只影響下一個標點，組字不必重列。
     #[wasm_bindgen(js_name = setDigitSeparators)]
     pub fn set_digit_separators(&mut self, on: bool) {
-        self.options.digit_separators = on;
-        self.session.set_options(self.options);
+        self.set_options(|options| options.digit_separators = on);
     }
 
-    pub fn letter(&mut self, c: char) -> WebSnapshot {
-        self.handle(Key::Letter(c))
+    /// 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`）：`rime`（預設）、`commit-text`、
+    /// `inline-ascii`。不是按鍵，臨時英文中換了也不動組字。
+    #[wasm_bindgen(js_name = setShiftSwitch)]
+    pub fn set_shift_switch(&mut self, value: &str) -> Result<(), JsError> {
+        let shift_switch = value.parse().map_err(js_error)?;
+        self.set_options(|options| options.shift_switch = shift_switch);
+        Ok(())
+    }
+
+    /// 按一個鍵（實體鍵盤）：種類與值照 [`Key::parse`]，例如 `("letter", "a")`、`("digit", "1")`、
+    /// `("toggleAscii", "left")`、`("space")`。網頁的按鍵都經這裡。
+    pub fn press(&mut self, kind: &str, value: Option<String>) -> Result<WebSnapshot, JsError> {
+        let key = Key::parse(kind, value.as_deref()).map_err(js_error)?;
+        Ok(self.handle(key).into())
     }
 
     /// 打出輸入碼裡的字元 `c`（`Key::for_input`：分隔記號送標點鍵，其餘送字母）；照輸入碼
     /// 重打一次組字時用（WebAssembly 的每鍵計時）。
     #[wasm_bindgen(js_name = inputChar)]
     pub fn input_char(&mut self, c: char) -> WebSnapshot {
-        self.handle(Key::for_input(c))
-    }
-
-    /// 數字、字母、空白以外的可見 ASCII 字元。
-    pub fn punct(&mut self, c: char) -> WebSnapshot {
-        self.handle(Key::Punct(c))
-    }
-
-    pub fn enter(&mut self) -> WebSnapshot {
-        self.handle(Key::Enter)
-    }
-
-    pub fn left(&mut self) -> WebSnapshot {
-        self.handle(Key::Left)
-    }
-
-    pub fn right(&mut self) -> WebSnapshot {
-        self.handle(Key::Right)
-    }
-
-    /// 單按 Shift：切中英（brief §4.3）；組字中照 [`WebSession::set_shift_switch`] 先上屏組字
-    /// 或留碼接英文。網頁用 `KeyboardEvent.code` 分辨左右。
-    #[wasm_bindgen(js_name = toggleAscii)]
-    pub fn toggle_ascii(&mut self, shift: WebShiftKey) -> WebSnapshot {
-        let shift = match shift {
-            WebShiftKey::Left => ShiftKey::Left,
-            // 字串 enum 另有一個不合法的值，JS 傳錯字串時落到這裡。
-            _ => ShiftKey::Right,
-        };
-        self.handle(Key::ToggleAscii(shift))
-    }
-
-    /// 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`），預設照 Rime。不是按鍵，臨時英文中
-    /// 換了也不動組字。
-    #[wasm_bindgen(js_name = setShiftSwitch)]
-    pub fn set_shift_switch(&mut self, value: WebShiftSwitch) {
-        self.options.shift_switch = match value {
-            WebShiftSwitch::CommitText => ShiftSwitch::CommitText,
-            WebShiftSwitch::InlineAscii => ShiftSwitch::InlineAscii,
-            _ => ShiftSwitch::Rime,
-        };
-        self.session.set_options(self.options);
+        self.handle(Key::for_input(c)).into()
     }
 
     /// 全部候選，不分頁（候選展開面板用）；選字照位置呼叫 [`WebSession::select`]。
@@ -194,83 +158,42 @@ impl WebSession {
     /// 套用重排結果：`order` 是要求的候選的位置，好的在前；`generation` 過期時是 `undefined`。
     #[wasm_bindgen(js_name = applyRerank)]
     pub fn apply_rerank(&mut self, generation: u64, order: Vec<usize>) -> Option<WebSnapshot> {
-        let snapshot = self
-            .session
-            .apply_rerank(&self.engine, generation, &order)?;
-        Some(self.track_composing(snapshot))
-    }
-
-    /// 網頁不轉成其他鍵的按鍵：組字中吃下，沒有組字時交還瀏覽器。
-    pub fn other(&mut self) -> WebSnapshot {
-        self.handle(Key::Other)
-    }
-
-    /// 單按修飾鍵（Ctrl、Cmd、Alt、CapsLock…）：組字中吃下，沒有組字時交還瀏覽器、不結束數字。
-    pub fn modifier(&mut self) -> WebSnapshot {
-        self.handle(Key::Modifier)
-    }
-
-    pub fn space(&mut self) -> WebSnapshot {
-        self.handle(Key::Space)
-    }
-
-    pub fn backspace(&mut self) -> WebSnapshot {
-        self.handle(Key::Backspace)
-    }
-
-    pub fn escape(&mut self) -> WebSnapshot {
-        self.handle(Key::Escape)
-    }
-
-    pub fn digit(&mut self, digit: u8) -> WebSnapshot {
-        self.handle(Key::Digit(digit))
-    }
-
-    #[wasm_bindgen(js_name = pageUp)]
-    pub fn page_up(&mut self) -> WebSnapshot {
-        self.handle(Key::PageUp)
-    }
-
-    #[wasm_bindgen(js_name = pageDown)]
-    pub fn page_down(&mut self) -> WebSnapshot {
-        self.handle(Key::PageDown)
+        self.session
+            .apply_rerank(&self.engine, generation, &order)
+            .map(Into::into)
     }
 
     /// 選全部候選的第 `index` 個（目前頁第 i 個是 `page × 9 + i`），例如點候選列。
     pub fn select(&mut self, index: usize) -> WebSnapshot {
-        let snapshot = self.session.select(&self.engine, &mut self.user, index);
-        self.track_composing(snapshot)
+        self.session
+            .select(&self.engine, &mut self.user, index)
+            .into()
     }
 
     /// 移到組字的第 `segment` 段，例如點組字裡的那一段；分段數是回到整串。
     #[wasm_bindgen(js_name = focusSegment)]
     pub fn focus_segment(&mut self, segment: usize) -> WebSnapshot {
-        let snapshot = self
-            .session
-            .focus_segment(&self.engine, &mut self.user, segment);
-        self.track_composing(snapshot)
+        self.session
+            .focus_segment(&self.engine, &mut self.user, segment)
+            .into()
     }
 
-    /// 點一下 `layout` 第 `index` 個鍵（[`WebLayout::hit`] 的結果）：做它的 `tap`，組字中照 `composing`、
-    /// Shift 開著時字母鍵輸入大寫字母。`quick_repeat` 是同一個鍵剛點過（網頁量時間），
-    /// 快速點兩下 Shift 鎖定大寫（[`Shift::after_shift_tap`]）。
+    /// 點一下 `layout` 目前頁第 `index` 個鍵（[`WebLayout::hit`] 的結果），見 [`Keyboard::tap`]。
+    /// `quick_repeat` 是同一個鍵剛點過（網頁量時間）。
     pub fn tap(
         &mut self,
         layout: &mut WebLayout,
         index: usize,
         quick_repeat: bool,
     ) -> Result<WebSnapshot, JsError> {
-        let key = layout.key(index)?;
-        let action = key.tap_action(self.key_state(layout));
-        let snapshot = self.perform(layout, action.clone());
-        layout.shift = match action {
-            Action::Shift => layout.shift.after_shift_tap(quick_repeat),
-            _ => layout.shift.after_other_key(),
-        };
-        Ok(snapshot)
+        let output = layout
+            .keyboard
+            .tap(index, self.session.composing(), quick_repeat)
+            .map_err(js_error)?;
+        Ok(self.send(output))
     }
 
-    /// 長按 `layout` 第 `index` 個鍵、選了長按清單第 `choice` 個（0 是預設）。
+    /// 長按 `layout` 目前頁第 `index` 個鍵、選了長按清單第 `choice` 個（0 是預設）。
     #[wasm_bindgen(js_name = longPress)]
     pub fn long_press(
         &mut self,
@@ -278,70 +201,43 @@ impl WebSession {
         index: usize,
         choice: usize,
     ) -> Result<WebSnapshot, JsError> {
-        let key = layout.key(index)?;
-        let action =
-            key.long_press.get(choice).cloned().ok_or_else(|| {
-                JsError::new(&format!("鍵 {} 的長按清單沒有第 {choice} 個", key.id))
-            })?;
-        let snapshot = self.perform(layout, action);
-        layout.shift = layout.shift.after_other_key();
-        Ok(snapshot)
+        let output = layout
+            .keyboard
+            .long_press(index, choice)
+            .map_err(js_error)?;
+        Ok(self.send(output))
+    }
+}
+
+impl WebSession {
+    /// 改目前選項的一項再交給核心。
+    fn set_options(&mut self, change: impl FnOnce(&mut Options)) {
+        let mut options = self.session.options();
+        change(&mut options);
+        self.session.set_options(options);
     }
 
-    /// 做一個佈局動作：文字經 `Session::text`（組字中先上屏組字）；切頁換 `layout` 的目前頁，
-    /// 核心收到 `Key::Modifier`（組字中吃下、組字留著）；⇧、換鍵盤也是。
-    /// 結果帶著做了的動作，核心沒吃下時網頁照它做。
-    fn perform(&mut self, layout: &mut WebLayout, action: Action) -> WebSnapshot {
-        let snapshot = match &action {
-            Action::Text(text) => self.session.text(&self.engine, &mut self.user, text),
-            other => {
-                let key = match other {
-                    Action::Letter(c) => Key::Letter(*c),
-                    // 同實體鍵盤按那個標點鍵：全形、半形、臨時英文由核心決定。
-                    Action::Punct(c) => Key::Punct(*c),
-                    Action::Space => Key::Space,
-                    Action::Backspace => Key::Backspace,
-                    Action::Enter => Key::Enter,
-                    Action::SwitchPage(page) => {
-                        layout.switch_page(page);
-                        Key::Modifier
-                    }
-                    // 觸控鍵盤的中英鍵（`toggleAscii`，預設佈局沒有）當右 Shift（先上屏組字，M1 票 23）。
-                    Action::ToggleAscii => Key::ToggleAscii(ShiftKey::Right),
-                    // 觸控的 ⇧（`shift`，M1 票 27）是大寫鍵，不是單按 Shift 的中英切換：狀態在佈局
-                    // （呼叫端改），核心收到的和切頁一樣（brief §4.7）。網頁沒有下一個鍵盤。
-                    Action::NextKeyboard | Action::Shift => Key::Modifier,
-                    Action::Text(_) => unreachable!("文字動作在上面經 Session::text"),
-                };
-                self.session.handle(&self.engine, &mut self.user, key)
-            }
+    fn handle(&mut self, key: Key) -> Snapshot {
+        self.session.handle(&self.engine, &mut self.user, key)
+    }
+
+    /// 觸控鍵盤的輸入交給核心：`Output` 轉成 `Key`，文字經 `Session::text`。結果帶著輸入的種類與
+    /// 字元，核心沒吃下時網頁照它做。
+    fn send(&mut self, output: Output) -> WebSnapshot {
+        let snapshot = match &output {
+            Output::Text(text) => self.session.text(&self.engine, &mut self.user, text),
+            Output::Letter(c) => self.handle(Key::Letter(*c)),
+            Output::Punct(c) => self.handle(Key::Punct(*c)),
+            Output::Space => self.handle(Key::Space),
+            Output::Backspace => self.handle(Key::Backspace),
+            Output::Enter => self.handle(Key::Enter),
+            Output::ToggleAscii => self.handle(Key::ToggleAscii(ShiftKey::Right)),
+            Output::Modifier => self.handle(Key::Modifier),
         };
-        let mut snapshot = self.track_composing(snapshot);
-        snapshot.action = Some(action.name().into());
-        snapshot.character = match action {
-            Action::Letter(c) | Action::Punct(c) => Some(c.to_string()),
-            _ => None,
-        };
+        let mut snapshot = WebSnapshot::from(snapshot);
+        snapshot.action = Some(output.kind().into());
+        snapshot.character = output.character().map(String::from);
         snapshot
-    }
-
-    /// 觸控鍵盤選標籤與動作用的狀態：上一個鍵之後還在不在組字、`layout` 的 Shift。
-    fn key_state(&self, layout: &WebLayout) -> KeyState {
-        KeyState {
-            composing: self.composing,
-            shift: layout.shift,
-        }
-    }
-
-    fn handle(&mut self, key: Key) -> WebSnapshot {
-        let snapshot = self.session.handle(&self.engine, &mut self.user, key);
-        self.track_composing(snapshot)
-    }
-
-    /// 記下事件之後還在不在組字（[`WebSession::composing`]），再轉成給 JS 的樣子。
-    fn track_composing(&mut self, snapshot: Snapshot) -> WebSnapshot {
-        self.composing = !snapshot.composition.input.is_empty();
-        snapshot.into()
     }
 }
 
@@ -374,11 +270,11 @@ pub struct WebSnapshot {
     pub page: usize,
     #[wasm_bindgen(readonly)]
     pub commit: Option<String>,
-    /// 觸控鍵盤做了的佈局動作（`Action::name`），長按時是選到的那個；核心沒吃下時網頁照它做宿主的預設動作。
-    /// 實體鍵盤的鍵是 `None`。
+    /// 觸控鍵盤交給核心的輸入的種類（`qim_layout::Output::kind`），長按時是選到的那個；核心沒吃下時
+    /// 網頁照它做宿主的預設動作。實體鍵盤的鍵是 `None`。
     #[wasm_bindgen(readonly)]
     pub action: Option<String>,
-    /// `action` 是 `letter` 或 `punct` 時按的字元；核心沒吃下時網頁照打它。
+    /// `action` 是 `letter` 或 `punct` 時的字元；核心沒吃下時網頁照打它。
     #[wasm_bindgen(readonly)]
     pub character: Option<String>,
     /// `commit` 的繁體原文；「回報」用。
@@ -462,22 +358,6 @@ pub struct WebSegment {
     pub raw: bool,
 }
 
-/// 單按的是哪一邊的 Shift（`qim_core::ShiftKey`）。JS 端是字串 `"left" | "right"`。
-#[wasm_bindgen(js_name = ShiftKey)]
-pub enum WebShiftKey {
-    Left = "left",
-    Right = "right",
-}
-
-/// 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`）。JS 端是字串，網頁的選單直接用。
-#[wasm_bindgen(js_name = ShiftSwitch)]
-pub enum WebShiftSwitch {
-    /// 左 Shift 留碼接英文、右 Shift 先上屏組字（rime-prelude 的預設）。
-    Rime = "rime",
-    CommitText = "commit-text",
-    InlineAscii = "inline-ascii",
-}
-
 /// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根（plan §2.5）。JS 端叫 `RadicalHints`。
 #[wasm_bindgen(js_name = RadicalHints)]
 pub struct WebRadicalHints {
@@ -491,16 +371,15 @@ impl WebRadicalHints {
     /// 由字根提示資料包的位元組建立；要是 `session` 的方案指名的那份。
     #[wasm_bindgen(constructor)]
     pub fn new(bytes: &[u8], session: &WebSession) -> Result<WebRadicalHints, JsError> {
-        let error = |e: qim_core::PackError| JsError::new(&e.to_string());
         let scheme = session.engine.scheme().clone();
-        let pack = RadicalHintPack::from_bytes(bytes).map_err(error)?;
-        let hints = RadicalHints::for_scheme(pack, &scheme).map_err(error)?;
+        let pack = RadicalHintPack::from_bytes(bytes).map_err(js_error)?;
+        let hints = RadicalHints::for_scheme(pack, &scheme).map_err(js_error)?;
         Ok(Self { hints, scheme })
     }
 
     /// 候選 `text` 每個字的提示；`version` 是 `cangjie5` 或 `cangjie3`。
     pub fn hint(&self, text: &str, version: &str) -> Result<Vec<WebRadicalHint>, JsError> {
-        let version: CangjieVersion = version.parse().map_err(|e: String| JsError::new(&e))?;
+        let version: CangjieVersion = version.parse().map_err(js_error)?;
         Ok(self
             .hints
             .hint(&self.scheme, text, version)
@@ -527,77 +406,64 @@ pub struct WebRadicalHint {
     pub radicals: Vec<String>,
 }
 
-/// 觸控佈局：網頁 fetch 的佈局檔讀進 `qim-layout`，網頁只照 [`WebLayout::keys`] 畫、
+/// 觸控鍵盤（[`Keyboard`]）：網頁 fetch 的佈局檔讀進 `qim-layout`，網頁只照 [`WebLayout::keys`] 畫、
 /// 把點擊位置交給 [`WebLayout::hit`]。JS 端叫 `Layout`。
 #[wasm_bindgen(js_name = Layout)]
 pub struct WebLayout {
-    layout: qim_layout::Layout,
+    keyboard: Keyboard,
     /// 驗證與選版本的警告，給網頁印在 console。
     warnings: Vec<String>,
-    /// 選到的佈局版本與目前頁在陣列的位置。
-    variant: usize,
-    page: usize,
-    /// Shift 鍵的狀態，由 [`WebSession::tap`] 與 [`WebSession::long_press`] 改。
-    shift: Shift,
+}
+
+/// 網頁傳來的裝置（`phone`、`tablet`）與方向（`portrait`、`landscape`）。
+fn when(device: &str, orientation: &str) -> Result<When, JsError> {
+    Ok(When {
+        device: device.parse().map_err(js_error)?,
+        orientation: orientation.parse().map_err(js_error)?,
+    })
 }
 
 #[wasm_bindgen(js_class = Layout)]
 impl WebLayout {
-    /// 讀佈局檔並依裝置（`phone`、`tablet`）與方向（`portrait`、`landscape`）選版本；
-    /// 有錯誤（plan §2.6）時失敗。
+    /// 讀佈局檔並依裝置與方向選版本；有錯誤（plan §2.6）時失敗。
     #[wasm_bindgen(constructor)]
     pub fn new(json: &str, device: &str, orientation: &str) -> Result<WebLayout, JsError> {
+        let when = when(device, orientation)?;
         let (layout, warnings) = qim_layout::validate(json, Target::default())
             .into_layout()
-            .map_err(|e| JsError::new(&e.to_string()))?;
-        let mut web = Self {
-            layout,
-            warnings: warnings.iter().map(ToString::to_string).collect(),
-            variant: 0,
-            page: 0,
-            shift: Shift::Off,
-        };
-        if let Some(warning) = web.select(device, orientation)? {
-            web.warnings.push(warning);
-        }
-        Ok(web)
+            .map_err(js_error)?;
+        let (keyboard, warning) = Keyboard::new(layout, when);
+        Ok(Self {
+            keyboard,
+            warnings: warnings
+                .iter()
+                .chain(&warning)
+                .map(ToString::to_string)
+                .collect(),
+        })
     }
 
-    /// 依裝置與方向重選佈局版本（轉向時叫）；新版本有同 id 的頁就留在那頁，否則回到一開始的頁。
-    /// 沒有相符的版本時回傳警告（用第一個版本等比例縮放）。
+    /// 依裝置與方向重選佈局版本（轉向時叫），見 [`Keyboard::select`]；沒有相符的版本時回傳警告。
     pub fn select(&mut self, device: &str, orientation: &str) -> Result<Option<String>, JsError> {
-        let wanted = When {
-            device: device.parse().map_err(|e: String| JsError::new(&e))?,
-            orientation: orientation.parse().map_err(|e: String| JsError::new(&e))?,
-        };
-        let current = self
-            .layout
-            .variants
-            .get(self.variant)
-            .and_then(|variant| variant.pages.get(self.page))
-            .map(|page| page.id.clone());
-        let (variant, warning) = self.layout.select(wanted);
-        self.variant = variant;
-        self.show_page_or_initial(current.as_deref());
+        let warning = self.keyboard.select(when(device, orientation)?);
         Ok(warning.map(|w| w.to_string()))
     }
 
-    /// 換成同一個鍵盤的另一份佈局檔（數字列開關）時接手 `old` 的 Shift 與目前頁：有同 id 的頁就留在
-    /// 那頁，否則回到一開始的頁（同轉向，M1 票 27b）。
+    /// 換成同一個鍵盤的另一份佈局檔（數字列開關）時接手 `old` 的 Shift 與目前頁
+    /// （[`Keyboard::keep_state_of`]）。
     #[wasm_bindgen(js_name = keepStateOf)]
     pub fn keep_state_of(&mut self, old: &WebLayout) {
-        self.shift = old.shift;
-        self.show_page_or_initial(Some(&old.page().id));
+        self.keyboard.keep_state_of(&old.keyboard);
     }
 
-    /// Shift 鍵的狀態：`off`、`once`（下一個字母大寫）、`locked`（鎖定大寫）；網頁依它畫 Shift 鍵、
+    /// 觸控 Shift 的狀態：`off`、`once`（下一個字母大寫）、`locked`（鎖定大寫）；網頁依它畫 Shift 鍵、
     /// 狀態變了就重畫標籤。
     #[wasm_bindgen(getter)]
     pub fn shift(&self) -> String {
-        match self.shift {
-            Shift::Off => "off",
-            Shift::Once => "once",
-            Shift::Locked => "locked",
+        match self.keyboard.shift() {
+            qim_layout::Shift::Off => "off",
+            qim_layout::Shift::Once => "once",
+            qim_layout::Shift::Locked => "locked",
         }
         .into()
     }
@@ -605,7 +471,7 @@ impl WebLayout {
     /// 目前頁的 id；切頁鍵按下後網頁比對它決定要不要重畫。
     #[wasm_bindgen(getter, js_name = pageId)]
     pub fn page_id(&self) -> String {
-        self.page().id.clone()
+        self.keyboard.page().id.clone()
     }
 
     #[wasm_bindgen(getter)]
@@ -616,20 +482,21 @@ impl WebLayout {
     /// 設計尺寸的寬，按鍵座標以它為準。
     #[wasm_bindgen(getter, js_name = canvasWidth)]
     pub fn canvas_width(&self) -> f64 {
-        self.variant().canvas.width
+        self.keyboard.variant().canvas.width
     }
 
     #[wasm_bindgen(getter, js_name = canvasHeight)]
     pub fn canvas_height(&self) -> f64 {
-        self.variant().canvas.height
+        self.keyboard.variant().canvas.height
     }
 
     /// 目前頁的按鍵：標籤省略時用 `session` 方案的字根，組字中照 `composing`，Shift 開著時字母鍵
     /// 顯示大寫字母。
     pub fn keys(&self, session: &WebSession) -> Vec<WebLayoutKey> {
         let radicals = &session.engine.scheme().radicals;
-        let state = session.key_state(self);
-        self.page()
+        let state = self.keyboard.key_state(session.session.composing());
+        self.keyboard
+            .page()
             .keys
             .iter()
             .map(|key| {
@@ -666,39 +533,7 @@ impl WebLayout {
 
     /// 點在畫布座標 `(x, y)` 時按到的鍵在 [`WebLayout::keys`] 的位置。
     pub fn hit(&self, x: f64, y: f64) -> Option<usize> {
-        self.page().hit(x, y)
-    }
-}
-
-impl WebLayout {
-    fn key(&self, index: usize) -> Result<&qim_layout::Key, JsError> {
-        self.page()
-            .keys
-            .get(index)
-            .ok_or_else(|| JsError::new(&format!("佈局沒有第 {index} 個鍵")))
-    }
-
-    /// 目前版本有 `id` 這頁就切過去，否則回到一開始的頁。
-    fn show_page_or_initial(&mut self, id: Option<&str>) {
-        self.page = self
-            .variant()
-            .page_index_or_initial(id)
-            .expect("validate 保證 initialPage 存在、每個版本至少一頁");
-    }
-
-    /// 切到目前版本的 `id` 頁；`validate` 保證 `switchPage` 指到的頁存在。
-    fn switch_page(&mut self, id: &str) {
-        if let Some(page) = self.variant().page_index(id) {
-            self.page = page;
-        }
-    }
-
-    fn variant(&self) -> &qim_layout::LayoutVariant {
-        &self.layout.variants[self.variant]
-    }
-
-    fn page(&self) -> &qim_layout::Page {
-        &self.variant().pages[self.page]
+        self.keyboard.page().hit(x, y)
     }
 }
 

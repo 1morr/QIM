@@ -63,6 +63,6 @@ for (const input of inputs) {
 	}
 	lines.push(times.join(" "));
 	// 下一個輸入從空的組字打起；Esc 不計時。
-	session.escape().free();
+	session.press("escape").free();
 }
 process.stdout.write(`${lines.join("\n")}\n`);
