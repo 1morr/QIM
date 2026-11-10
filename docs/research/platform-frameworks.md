@@ -123,7 +123,7 @@
   - 48 MB：React Native GitHub issue 作者稱 iOS 只允許鍵盤 48 MB（RN 0.63.2，約 2021 年，iOS 版本未載明）。<https://github.com/facebook/react-native/issues/31910>
   - 約 77 MB：Medium 文章稱鍵盤到 77 MB 總記憶體會當掉，並在測試鍵盤配置到 70% 時觸發 memory warning（作者以 EmojiTest 實測，裝置與 iOS 版本未載明）。<https://medium.com/@mohasalah/from-2014-to-now-fixing-coretext-emoji-glyphs-memory-retention-on-ios-1c6a227d592d>
   - 30 MB：2014 年部落格稱「up to 30MB, but it's not exactly mentioned in documentation」。<https://medium.com/@inFullMobile/limitations-of-custom-ios-keyboards-3be88dfb694>
-  - 這些數字互不一致，也不保證適用於 iOS 26。**結論：要在目標最低機型上實測**。`os_proc_available_memory()` 可在執行期取得剩餘額度（官方說明為 advisory，且「if the calling process isn't an app」回傳 0，對擴充是否有效未查證）。<https://developer.apple.com/documentation/os/os_proc_available_memory>
+  - 這些數字互不一致，也不保證適用於 iOS 26。**結論：要在目標最低機型上實測**。`os_proc_available_memory()` 可在執行期取得剩餘額度（官方說明為 advisory，且「if the calling process isn't an app」回傳 0，對擴充是否有效寫作時未查證）。<https://developer.apple.com/documentation/os/os_proc_available_memory> 。實測鍵盤擴充裡有值，iPhone 18 Pro Max（iOS 27.2）上限 177 MB（M2 票 06、09）：`docs/research/ios-feasibility.md`〈免費佈建與 App Group〉、〈記憶體上限〉。
 - **Apple Foundation Models framework**：iOS 26.0+、需支援 Apple Intelligence 的裝置與地區，on-device 模型（`SystemLanguageModel`）。<https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel> 。**鍵盤擴充是否可用：寫作時未查證**（官方頁面沒有關於 app extension 的說明）。實測能用（M2 票 10）：`docs/research/ios-feasibility.md`〈Foundation Models〉。
 - **Core ML 在鍵盤擴充內**：未查證。一般 app extension 可用 Core ML，但受上述記憶體上限；需實測模型載入後的 footprint。
 - 鍵盤擴充的 jetsam 優先順序屬「UI Support」（**社群實測**，jailbreak 工具 jetsamctl 文件）：<https://github.com/conradev/jetsamctl>。

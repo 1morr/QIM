@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0、M1 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`）；M2 進行中（`.scratch/m2/spec.md`）；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0、M1、M2 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`、`.scratch/m2/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`、`docs/archive/M2.md`）；M3 進行中、還沒拆票；M3 起只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -542,8 +542,8 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | --- | --- | --- |
 | M0 骨架 | 閘門、資料管線 v0、核心 tracer bullet：在網頁打出第一個字 | 完成 |
 | M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | 完成 |
-| M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | 進行中 |
-| M3 智慧候選 | 模型階梯實驗；個人 bigram、聯想、上下文、LLM、雲端安全、記住常打字串、詞庫擴充 | 未開始 |
+| M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | 完成 |
+| M3 智慧候選 | 模型階梯實驗；個人 bigram、聯想、上下文、LLM、雲端安全、記住常打字串、詞庫擴充 | 進行中 |
 | M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、譯詞、句中英文混輸實驗、欄位類型、智慧標點、滑動輸入、手機編輯手勢、同步的合併規則 | 未開始 |
 | M5 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 未開始 |
 | M6 macOS | 第一個平台殼，一次接上全部已完成的功能 | 未開始 |
@@ -552,7 +552,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | M9 Windows | TSF | 未開始 |
 | M10 Linux | Fcitx5 或 IBus | 未開始 |
 
-M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
+M1、M2 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
 
 排法：功能大多在共用核心裡，先在網頁把它們做完並確認可用（M1、M3、M4、M5），平台殼開工時核心介面已穩定，每個平台一次接上全部功能（M6–M10），不必跟著核心反覆改。平台限制會影響核心設計的部分先量（M2），例如智慧候選要用多大的模型。網頁驗不到的部分（真實 App 內的行為、各平台讀上下文的差異、手機真實延遲）仍可能在平台里程碑修改。brief §1.5「之後」與「待評估」的每一項都落在 M3–M8 其中一個。
 
@@ -566,7 +566,7 @@ M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/iss
 
 ### 7.3 M2 平台可行性實驗
 
-進行中：目標、範圍、共同規則、驗收與票序見 `.scratch/m2/spec.md`（2026-11-07 由本節細化，含 M1 review 的決定）。
+已完成（2026-11-10）：目標、範圍、共同規則、驗收與票序見 `.scratch/m2/spec.md`，session 紀錄與偏差封存在 `docs/archive/M2.md`；量到的數字在 `docs/research/ios-feasibility.md`，留給之後里程碑的發現在 `.scratch/m2/issues/12-m2-close.md` 的 Comments。
 
 ### 7.4 M3 智慧候選
 
@@ -647,7 +647,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 要回答：同步層、停鍵層、雲端層（§2.7）各用哪個模型，修正次數和首選正確率能改善多少，延遲、大小與費用是否可接受。現在的路線從字級 bigram 直接跳到 LLM，中間的選項都要量過。
 
-- 前置：M1 的 `rerank_request` / `apply_rerank` 介面與首選字基準；M2 的記憶體上限、Foundation Models 與小型神經模型開銷。
+- 前置：M1 的 `rerank_request` / `apply_rerank` 介面與首選字基準；M2 量完的記憶體上限、Foundation Models、上下文長度與小型神經模型開銷（都已齊，`docs/research/ios-feasibility.md`、brief §12.3）。
 - 模型大小上限（M2 票 09）：iOS 鍵盤擴充裡，模型的 footprint 峰值增量 ≤ 60 MB，讓核心加資料包（79 MB）加模型留在記憶體警告線（約 142 MB）以下、不靠警告後釋放；23M 級只能用 q8（+47 MB），f32（+95 MB，合計約 174 MB，離 177 MB 上限約 3 MB）不行。數字來自 iPhone 18 Pro Max（旗艦機，低階機的上限可能更低，M7 再量），只限 iOS 鍵盤擴充（`docs/research/ios-feasibility.md`〈記憶體上限〉）。
 - 測試集：維基、口語、個人三個集合，加一個「有前文」的集合：從語料取連續句子，前一兩句當上下文，最後一句轉成速成碼。結論以口語與個人集為主，維基集只防退步。
 - 受測模型：
@@ -685,8 +685,8 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
 | iOS 鍵盤擴充放不下核心與資料包（M2 票 09：iPhone 18 Pro Max 放得下，79 MB／177 MB，格式不改；低階機沒量，§4） | M3 的模型大小、M7 | M2；低階機在 M7 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
 | `jsonschema` 讓程式碼變大（M1 票 19：網頁 WebAssembly 由 0.42 MB 變 4.6 MB，gzip 1.2 MB，多半是它帶的 regex 與大數） | iOS 鍵盤擴充的記憶體（brief §9） | M2 | 鍵盤擴充只讀存檔時驗過的佈局，Schema 驗證留在主 App 與編輯器（`qim-layout` 加 feature 關掉），改 §1.3、§1.4（M2 票 09 已決定、寫回 §1.3；實作在 M7） |
-| 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
-| 延遲超過預算 | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
+| 免費佈建不能跑鍵盤擴充（M2 票 06：能跑，App Group 擴充只能讀；brief §11 已決） | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
+| 延遲超過預算（M2：iPhone 18 Pro Max 鍵盤擴充每鍵 p95 64 µs、選開頭一段 0.79 ms，brief §9；低階機沒量） | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢 | M3 範圍 | §7.8 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |
 | iOS 鍵盤擴充不能用 Foundation Models（M2 票 10：能用，不需完整取用；但停頓後第一個請求偶爾 6–15 s，brief §12.3） | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
 | 瀏覽器呼叫雲端 LLM 被 CORS 擋 | M3 的網頁接入 | M3 開工時 | 用 Vite 開發伺服器轉發，只影響網頁測試頁 |

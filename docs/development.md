@@ -225,7 +225,7 @@ swiftc -O -o build/ffi/bin/qim-swift main.swift build/ffi/swift/qim.swift \
 
 `--ios` 再做一步：編 `aarch64-apple-ios`（iPhone 實機，要先 `rustup target add aarch64-apple-ios`；模擬器沒用到、不編）的靜態函式庫，標頭與 modulemap 產生到 `build/ffi/ios-headers/qimFFI/`，用 `xcodebuild -create-xcframework` 包成 `build/ffi/QimFFI.xcframework`。Xcode 專案把它加進 target 的連結（不內嵌），再把同一份 `qim.swift` 加進原始碼。modulemap 放在以模組名命名的子目錄、用一般的 `module`：Xcode 把標頭複製到建置產物的 `include/`，clang 依模組名找到子目錄；uniffi 的 `--xcframework` 產生的 `framework module` 在靜態函式庫的 xcframework 裡找不到（M2 票 08 實測）。
 
-Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`LexiconPack`、`LanguageModelPack`、`SimplifierPack`、`EnglishPack`，交給 `Engine(...)`（每份只能給一個 `Engine`），每個輸入框 `Session(engine:)` 共用同一個 `Engine`（plan §2.1）。字根提示 `RadicalHintPack` 目前只能解開、不交給 `Engine`（M2 票 09 量記憶體用）。範例：Mac 是 `scripts/experiments/ffi-swift/`（打 `anr` 讀回「門口」、量每鍵延遲），iPhone 鍵盤擴充是 `scripts/experiments/ios-keyboard/` 的〈接上核心〉。產物都不進 git。`check` 不跑這一步：CI 是 Ubuntu，`qim-ffi` 的 Rust 測試照常在 `cargo test` 裡跑。
+Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`LexiconPack`、`LanguageModelPack`、`SimplifierPack`、`EnglishPack`，交給 `Engine(...)`（每份只能給一個 `Engine`），每個輸入框 `Session(engine:)` 共用同一個 `Engine`（plan §2.1）。字根提示 `RadicalHintPack` 目前只能解開、不交給 `Engine`（M2 票 09 量記憶體用）。範例：Mac 是 `scripts/experiments/ffi-swift/`（打 `anr` 讀回「門口」、量每鍵延遲），iPhone 鍵盤擴充是 `scripts/experiments/ios-keyboard/` 的〈接上核心（票 08）〉。產物都不進 git。`check` 不跑這一步：CI 是 Ubuntu，`qim-ffi` 的 Rust 測試照常在 `cargo test` 裡跑。
 
 ## 全部檢查
 

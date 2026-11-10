@@ -44,7 +44,7 @@ targets:
   QIMKeyboard:
     type: app-extension
     platform: iOS
-    # 票 08：核心的 Swift 綁定、每鍵延遲的量法、資料包與延遲的輸入都由 core.sh 備好（README〈接上核心〉）。
+    # 票 08：核心的 Swift 綁定、每鍵延遲的量法、資料包與延遲的輸入都由 core.sh 備好（README〈接上核心（票 08）〉）。
     sources:
       - Keyboard
       - Shared

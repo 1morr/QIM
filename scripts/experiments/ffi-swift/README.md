@@ -12,7 +12,7 @@ scripts/experiments/ffi-swift/run.sh
 
 `run.sh` 依序：`cargo xtask ffi`（靜態函式庫與 Swift 綁定，見 `docs/development.md`〈Swift 綁定〉）、`swiftc -O` 把 `main.swift`、`Latency.swift` 與產生的 `qim.swift` 編成 `build/ffi/bin/qim-swift`、`qim-swift demo` 打 `anr` 再按空白（首選或上屏不是「門口」時 exit 非零）、`inputs.sh` 印出的那批輸入餵給 `qim-swift latency` 量每鍵延遲。
 
-`Latency.swift`（量法）與 `inputs.sh`（輸入）也給 iPhone 鍵盤擴充用（`scripts/experiments/ios-keyboard/`〈接上核心〉，M2 票 08），兩邊的數字可以直接比。
+`Latency.swift`（量法）與 `inputs.sh`（輸入）也給 iPhone 鍵盤擴充用（`scripts/experiments/ios-keyboard/`〈接上核心（票 08）〉，M2 票 08），兩邊的數字可以直接比。
 
 量法同 `cargo xtask bench` 的每鍵延遲（`docs/development.md`〈每鍵延遲〉）：同一批輸入（固定題、`bench/corpus/`、`bench/colloquial/`，依序）、同四份資料包（速成、詞庫、bigram、英文）、同三組（全部、第 20 碼起、選開頭一段）、nearest-rank。每鍵計 `Session.press(kind:value:)` 加讀出畫組字與候選要的欄位，計時用 `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)`。和原生的差別就是綁定的開銷：按鍵種類的字串、`Mutex`、快照序列化成 uniffi 的 `RustBuffer` 再在 Swift 解開。
 

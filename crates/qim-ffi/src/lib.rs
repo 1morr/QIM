@@ -10,7 +10,8 @@ use qim_core::{Key, UserModel};
 
 uniffi::setup_scaffolding!("qim");
 
-/// 核心的錯誤（資料包讀不了、按鍵種類不認得），訊息照原樣；Swift 端是丟出的錯誤。
+/// 核心與綁定的錯誤（資料包讀不了、按鍵種類不認得、一份資料包給了兩個 `Engine`），訊息照原樣；
+/// Swift 端是丟出的錯誤。
 #[derive(Debug, uniffi::Error)]
 pub enum QimError {
     Core { message: String },
@@ -26,8 +27,8 @@ impl std::fmt::Display for QimError {
 
 impl std::error::Error for QimError {}
 
-/// 核心的錯誤都經這裡轉換。
-fn error(error: impl std::fmt::Display) -> QimError {
+/// 錯誤都經這裡轉成 `QimError::Core`（同 `qim-wasm` 的 `js_error`）。
+fn core_error(error: impl std::fmt::Display) -> QimError {
     QimError::Core {
         message: error.to_string(),
     }
@@ -46,7 +47,7 @@ macro_rules! pack {
             /// 由資料包檔的位元組解開；讀檔是殼的事（plan §1.3）。
             #[uniffi::constructor]
             pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, QimError> {
-                let pack = qim_core::$name::from_bytes(&bytes).map_err(error)?;
+                let pack = qim_core::$name::from_bytes(&bytes).map_err(core_error)?;
                 Ok(Arc::new(Self(Mutex::new(Some(pack)))))
             }
         }
@@ -57,7 +58,7 @@ macro_rules! pack {
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .take()
-                    .ok_or_else(|| error(concat!(stringify!($name), " 已經給過一個 Engine")))
+                    .ok_or_else(|| core_error(concat!(stringify!($name), " 已經給過一個 Engine")))
             }
         }
     };
@@ -97,7 +98,7 @@ impl RadicalHintPack {
     /// 由資料包檔的位元組解開；讀檔是殼的事（plan §1.3）。
     #[uniffi::constructor]
     pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, QimError> {
-        let pack = qim_core::RadicalHintPack::from_bytes(&bytes).map_err(error)?;
+        let pack = qim_core::RadicalHintPack::from_bytes(&bytes).map_err(core_error)?;
         Ok(Arc::new(Self(pack)))
     }
 }
@@ -122,7 +123,7 @@ impl Engine {
             lexicon.map(|p| p.take()).transpose()?,
             language_model.map(|p| p.take()).transpose()?,
         )
-        .map_err(error)?;
+        .map_err(core_error)?;
         if let Some(pack) = simplifier {
             engine = engine.with_simplifier(pack.take()?);
         }
@@ -162,7 +163,7 @@ impl Session {
     /// 按一個鍵：種類與值照 `Key::parse`，例如 `("letter", "a")`、`("toggleAscii", "left")`、
     /// `("space", nil)`。
     pub fn press(&self, kind: String, value: Option<String>) -> Result<Snapshot, QimError> {
-        let key = Key::parse(&kind, value.as_deref()).map_err(error)?;
+        let key = Key::parse(&kind, value.as_deref()).map_err(core_error)?;
         let state = &mut *self.lock();
         Ok(state
             .session

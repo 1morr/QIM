@@ -1,5 +1,5 @@
 #!/bin/sh
-# 票 08：備好鍵盤擴充接上核心要的檔，再跑 xcodegen。用法見 README.md〈接上核心〉。
+# 票 08：備好鍵盤擴充接上核心要的檔，再跑 xcodegen。用法見 README.md〈接上核心（票 08）〉。
 set -eu
 cd "$(dirname "$0")/../../.."
 
