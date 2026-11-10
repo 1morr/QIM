@@ -58,6 +58,17 @@ const ROWS: readonly Row[] = [
 		},
 	},
 	{
+		// 關掉時不寫學習資料，已學的照用；和無痕不同，前文照用（brief §4.5）。
+		kind: "checkbox",
+		id: "learning",
+		label: "學習",
+		checked: true,
+		apply: (session, on) => {
+			session.setLearning(on);
+			return undefined;
+		},
+	},
+	{
 		kind: "checkbox",
 		id: "simplified",
 		label: "簡體",
