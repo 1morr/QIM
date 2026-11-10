@@ -1,4 +1,4 @@
-// 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v1`。
+// 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v2`（也讀得進 v1）。
 
 import { element } from "./dom.ts";
 import type { Session } from "./wasm/qim_wasm.js";
@@ -10,7 +10,7 @@ const BROKEN_KEY = "qim.userdict.broken";
 /** 匯出檔名；副檔名照內容是 TSV。 */
 const EXPORT_NAME = "qim-userdict.tsv";
 
-/** `# qim-userdict v1` 檔的資料列數：`#` 開頭的行與空行以外的行。 */
+/** 學習資料檔的資料列數：`#` 開頭的行與空行以外的行。 */
 function rows(tsv: string): number {
 	return tsv
 		.split("\n")
