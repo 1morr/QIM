@@ -30,3 +30,4 @@ Blocked by: 05, 12
 - code-review 已處理：開頭不是使用者打的那串不記（接在輸入框原有的 email 字元後、退格刪到它前面、方向鍵之後、有一段在無痕或學習關掉時打的、長過上限後退格）；同一個 email 不分大小寫只留一條；`Decayed::bump` 收掉重複；改名 `remembered`、`is_email_char`、`forget_remembered_string`；網頁兩處存檔條件合成 `afterHostKey`；plan 補「不設上限、不過期」的理由與重排送雲端的去處（票 22 的 Comments 已留）。
 - code-review 未處理（判斷題）：記住一次讓個人 bigram 共用的 tick 加一（全部個人 bigram 衰減一步，影響可忽略，換來匯出不多一行 tick，寫在 plan §2.4）；網頁在英文直通每個空白、標點都整份存一次學習資料（prototype 先這樣，平台殼存檔方式在 M6 定）；`Listing` 三個「只給整串」的開關照現有寫法並列；網頁前文上限 200 字，201–254 字元的 email 在網頁上記不住（實際不會遇到）。
 - 2026-11-11 協調者回饋：誤觸率每條各算一次、原本不設上限，改成最多記 20 條（`REMEMBERED_STRINGS_MAX`），超過時淘汰最久沒用（最後 tick 最小）的，匯入超過時整份不收；不做時間過期。20 的理由（20 × 0.014% ≈ 0.3%，和一條 2 個字母同級）寫在 plan §2.4 規則 5。單元測試守淘汰與匯入。
+- 2026-11-11 合併 main（票 21）：沒有衝突；progress 的 session 紀錄把票 15 移到票 21 之後。重建資料包後 `cargo xtask check` 全綠（cargo test 869 passed、e2e 200 passed），`bench --check` 與 `--learning` 的數字和上面相同、12 個集合沒有翻盤。
