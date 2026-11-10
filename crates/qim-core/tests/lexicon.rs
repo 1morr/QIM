@@ -168,17 +168,21 @@ fn space_commits_a_word() {
     assert_eq!(snapshot.composition.input, "");
 }
 
+/// 方案指名的是預設的詞庫；殼可以換成另一份（設定頁的切換，plan §4.6），但方案要詞庫時不能不給、
+/// 不要詞庫時不能給。
 #[test]
-fn lexicon_must_be_the_one_the_scheme_names() {
+fn scheme_names_the_default_lexicon_and_another_one_can_replace_it() {
     let scheme_pack = pack(Some("quick-lexicon")).to_bytes().unwrap();
-    let other = lexicon_pack("cangjie-lexicon", &[]).to_bytes().unwrap();
-    assert_eq!(
-        Engine::from_pack_bytes(&scheme_pack, Some(&other), None).err(),
-        Some(PackError::LexiconMismatch {
-            expected: Some("quick-lexicon".into()),
-            found: Some("cangjie-lexicon".into()),
-        })
-    );
+    let other = LexiconPack {
+        id: "other-lexicon".into(),
+        lexicon: Lexicon::new([("anr".to_string(), vec![word("問題", 5)])], []),
+    }
+    .to_bytes()
+    .unwrap();
+    let engine = Engine::from_pack_bytes(&scheme_pack, Some(&other), None).unwrap();
+    let shown = type_input(&engine, "anr");
+    assert_eq!(texts(&shown).first(), Some(&"問題"), "{:?}", texts(&shown));
+
     assert_eq!(
         Engine::from_pack_bytes(&scheme_pack, None, None).err(),
         Some(PackError::LexiconMismatch {

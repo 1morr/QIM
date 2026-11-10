@@ -37,15 +37,18 @@ export interface CandidateBar {
 	setMode(ascii: boolean): void;
 	/** 切換候選旁的字根提示；中文組字中才有候選可查。 */
 	toggleHints(): void;
+	/** 換字根提示資料包（設定頁換了資料包）；舊的由這裡釋放。 */
+	setRadicalHints(next: RadicalHints): void;
 }
 
 /**
  * 接上候選列。`select` 收到點的候選在目前頁的位置。
  */
 export function mountCandidateBar(
-	radicalHints: RadicalHints,
+	initialHints: RadicalHints,
 	select: (index: number) => void,
 ): CandidateBar {
+	let radicalHints = initialHints;
 	const list = element<HTMLOListElement>("#candidates");
 	const mode = element<HTMLElement>("#mode");
 	const hintVersion = element<HTMLSelectElement>("#hint-version");
@@ -134,5 +137,10 @@ export function mountCandidateBar(
 			mode.setAttribute("aria-label", ascii ? "英文" : "中文");
 		},
 		toggleHints,
+		setRadicalHints(next) {
+			radicalHints.free();
+			radicalHints = next;
+			render();
+		},
 	};
 }

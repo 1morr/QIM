@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use qim_core::{
     CangjieVersion, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, Key, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, Options, RadicalHintPack, RadicalHints, SchemePack,
-    Session, SimplifierPack, UserModel,
+    LanguageModelPack, Lexicon, LexiconPack, Manifest, Options, RadicalHintPack, RadicalHints,
+    SchemePack, Session, SimplifierPack, UserModel,
 };
 
 use crate::built::{self, BuiltPack};
@@ -56,6 +56,8 @@ pub enum CheckId {
     LanguageModelSize,
     /// 同樣的來源建兩次，每份資料包的 sha256 都相同、清單一樣。
     Deterministic,
+    /// 每份資料包旁的 manifest 讀得回，核心照它載入得了資料包（plan §4.6）。
+    Manifests,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
     /// 基準句沒有一句原樣出現在任何語料的 train（plan §5.2 的防洩漏；bigram 用所有 train 訓練）。
@@ -95,6 +97,7 @@ impl fmt::Display for CheckId {
             Self::EmojiAfterLaugh => "抽查：hk 的「笑」後面接著它的 emoji",
             Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
+            Self::Manifests => "manifest 核對得過",
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
             Self::CorpusDeterministic => "語料決定性",
@@ -360,8 +363,22 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
     let pack = built::decode::<SchemePack>(packs)?;
     let lexicon = built::decode::<LexiconPack>(packs)?;
     let language_model = built::decode::<LanguageModelPack>(packs)?;
-    let hints = RadicalHints::for_scheme(built::decode::<RadicalHintPack>(packs)?, &pack.scheme)
-        .map_err(|e| e.to_string())?;
+    let radical_hint = built::decode::<RadicalHintPack>(packs)?;
+    // 核心接受方案指名以外的同種資料包（殼的切換，plan §4.6），建出的預設那份要剛好是指名的。
+    let named = &pack.scheme.packs;
+    for (what, expected, found) in [
+        ("詞庫", &named.lexicon, &lexicon.id),
+        ("語言模型", &named.language_model, &language_model.id),
+        ("字根提示", &named.radical_hint, &radical_hint.id),
+    ] {
+        if expected.as_deref() != Some(found.as_str()) {
+            return Err(format!(
+                "方案指名的{what}是 {}，建出的是 {found}",
+                expected.as_deref().unwrap_or("（沒有）")
+            ));
+        }
+    }
+    let hints = RadicalHints::for_scheme(radical_hint, &pack.scheme).map_err(|e| e.to_string())?;
     let simplifier = built::decode::<SimplifierPack>(packs)?;
     let english = built::decode::<EnglishPack>(packs)?;
     let emoji = built::decode::<EmojiPack>(packs)?;
@@ -986,5 +1003,32 @@ fn spot(id: CheckId, passed: bool) -> Check {
         id,
         passed,
         detail: if passed { "符合" } else { "不符" }.into(),
+    }
+}
+
+/// 寫出的每份資料包：`(manifest.json 的內容, 資料包檔的位元組)`，照殼的路經
+/// [`Manifest::verify`] 載入一次（plan §4.6）。
+pub fn manifests(packs: &[(String, Vec<u8>)]) -> Check {
+    let failures: Vec<String> = packs
+        .iter()
+        .filter_map(|(json, bytes)| {
+            let manifest = match Manifest::from_json(json) {
+                Ok(manifest) => manifest,
+                Err(e) => return Some(e.to_string()),
+            };
+            manifest
+                .verify(bytes)
+                .err()
+                .map(|e| format!("{}：{e}", manifest.id))
+        })
+        .collect();
+    Check {
+        id: CheckId::Manifests,
+        passed: failures.is_empty(),
+        detail: if failures.is_empty() {
+            format!("{} 份", packs.len())
+        } else {
+            failures.join("；")
+        },
     }
 }

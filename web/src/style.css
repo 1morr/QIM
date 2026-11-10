@@ -27,6 +27,8 @@ body {
 
 main {
 	display: grid;
+	/* 欄寬不被內容撐開（資料包清單這類寬表格自己橫向捲動），手機上頁面才不會變寬。 */
+	grid-template-columns: minmax(0, 1fr);
 	gap: 0.5rem;
 	max-width: 40rem;
 }
@@ -174,6 +176,36 @@ textarea {
 }
 
 #phrases .note {
+	margin: 0;
+	color: gray;
+	font-size: 0.875rem;
+}
+
+/* 資料包清單（pack-settings.ts）：窄螢幕時整張表橫向捲動。 */
+#packs {
+	display: grid;
+	gap: 0.5rem;
+	overflow-x: auto;
+}
+
+#packs h2 {
+	margin: 0.5rem 0 0;
+	font-size: 1rem;
+}
+
+#packs table {
+	border-collapse: collapse;
+	font-size: 0.875rem;
+}
+
+#packs th,
+#packs td {
+	padding: 0.125rem 0.5rem;
+	text-align: left;
+	white-space: nowrap;
+}
+
+#packs .note {
 	margin: 0;
 	color: gray;
 	font-size: 0.875rem;

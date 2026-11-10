@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::lattice::{self, Lattice, Listing};
 use crate::pack::Pack;
@@ -7,8 +7,8 @@ use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
-    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack,
-    Simplifier, SimplifierPack, UserModel, Word,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
+    SchemePack, Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -61,21 +61,22 @@ pub(crate) struct Spanned {
 }
 
 impl Engine {
-    /// `lexicon`、`language_model` 要剛好是方案 [`crate::Packs`] 指名的那份；方案沒指名時要是 `None`。
+    /// 方案 [`crate::Packs`] 指名詞庫、語言模型時要給，沒指名時要是 `None`。方案指名的是預設的那份，
+    /// 殼可以換成同種的另一份（設定頁的切換，plan §4.6），所以不核對 id。
     pub fn new(
         scheme_pack: SchemePack,
         lexicon: Option<LexiconPack>,
         language_model: Option<LanguageModelPack>,
     ) -> Result<Self, PackError> {
         let found = lexicon.as_ref().map(|l| l.id.clone());
-        if scheme_pack.scheme.packs.lexicon != found {
+        if scheme_pack.scheme.packs.lexicon.is_some() != found.is_some() {
             return Err(PackError::LexiconMismatch {
                 expected: scheme_pack.scheme.packs.lexicon,
                 found,
             });
         }
         let found = language_model.as_ref().map(|m| m.id.clone());
-        if scheme_pack.scheme.packs.language_model != found {
+        if scheme_pack.scheme.packs.language_model.is_some() != found.is_some() {
             return Err(PackError::LanguageModelMismatch {
                 expected: scheme_pack.scheme.packs.language_model,
                 found,
@@ -162,6 +163,42 @@ impl Engine {
             lexicon,
             language_model,
         )
+    }
+
+    /// 殼載入資料包的入口（plan §4.6）：每份照它的 manifest 經 [`Pack::open`] 核對，依種類放到該放
+    /// 的位置，順序不拘。方案資料包一定要有，詞庫、語言模型照方案要不要（[`Engine::new`]），簡繁、
+    /// 英文、emoji 可有可無；同一種兩份、或給了字根提示時拒絕。
+    pub fn open(packs: &[(&Manifest, &[u8])]) -> Result<Self, PackError> {
+        let mut by_kind = BTreeMap::new();
+        for &(manifest, bytes) in packs {
+            if manifest.kind == PackKind::RadicalHint {
+                return Err(PackError::NotForEngine(manifest.kind));
+            }
+            if by_kind.insert(manifest.kind, (manifest, bytes)).is_some() {
+                return Err(PackError::DuplicateKind(manifest.kind));
+            }
+        }
+        fn open<P: Pack>(file: Option<&(&Manifest, &[u8])>) -> Result<Option<P>, PackError> {
+            file.map(|(manifest, bytes)| P::open(manifest, bytes))
+                .transpose()
+        }
+        let scheme =
+            open(by_kind.get(&PackKind::Scheme))?.ok_or(PackError::Missing(PackKind::Scheme))?;
+        let mut engine = Self::new(
+            scheme,
+            open(by_kind.get(&PackKind::Lexicon))?,
+            open(by_kind.get(&PackKind::LanguageModel))?,
+        )?;
+        if let Some(pack) = open(by_kind.get(&PackKind::Simplifier))? {
+            engine = engine.with_simplifier(pack);
+        }
+        if let Some(pack) = open(by_kind.get(&PackKind::English))? {
+            engine = engine.with_english(pack);
+        }
+        if let Some(pack) = open(by_kind.get(&PackKind::Emoji))? {
+            engine = engine.with_emoji(pack);
+        }
+        Ok(engine)
     }
 
     pub fn scheme(&self) -> &Scheme {

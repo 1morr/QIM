@@ -36,7 +36,7 @@ const RULES: &[Rule] = &[
     Rule {
         krate: "qim-core",
         workspace: &[],
-        external: Some(&["serde", "postcard"]),
+        external: Some(&["serde", "postcard", "serde_json", "sha2", "semver"]),
         no_io: true,
     },
     Rule {
@@ -399,9 +399,9 @@ mod tests {
         append(
             dir.path(),
             CORE_TOML,
-            "[dependencies.serde_json]\nversion = \"1\"\n",
+            "[dependencies.toml]\nversion = \"1\"\n",
         );
-        assert_red(dir.path(), &["qim-core", "serde_json"]);
+        assert_red(dir.path(), &["qim-core", "toml"]);
     }
 
     /// 在副本建一個空的函式庫 crate。
@@ -692,7 +692,7 @@ pub const BYTES: &[u8] = b"std::net";
 
     #[test]
     fn drift_between_plan_table_and_rules_is_caught() {
-        let dropped = mutate(PLAN_MD, "| `serde`、`postcard`；", "| `serde`；");
+        let dropped = mutate(PLAN_MD, "| `serde`、`postcard`、", "| `serde`、");
         assert_ne!(documented_rules(&dropped), coded_rules());
 
         let unlimited_removed = mutate(PLAN_MD, "外部 crate 不限", "外部 crate 只限 I/O");

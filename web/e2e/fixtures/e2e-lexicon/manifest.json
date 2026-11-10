@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "id": "e2e-lexicon",
+  "kind": "lexicon",
+  "version": "1.0.0",
+  "min_core_version": "0.0.0",
+  "size": 39,
+  "sha256": "754457ac7194f4a318fc7471cdb6f34ba31ef88d936b33d14145dacda90ddeaf",
+  "license": "CC0-1.0"
+}
