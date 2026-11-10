@@ -390,8 +390,11 @@ fn chosen_twice_first(ranked: &mut Ranked) {
 
 /// 「選兩次才成首選」（brief §4.5）：學過一次的個人分常勝過靜態機率很低的詞與句子；排第一的
 /// 是整串上屏剛好 1 次的候選、而不學習時的首選不是它，就改回不學習時的首選。不學習時的首選
-/// 不是蓋滿整串的候選時不動。
+/// 不是蓋滿整串的候選時不動。首選已由規則 1 排定時，排第一的不是它，也不動。
 fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
+    if ranked.pinned.contains_key(&0) {
+        return;
+    }
     let (user, input) = (ranked.user, ranked.input);
     let top_once = ranked.free.first().is_some_and(|c| {
         c.len == input.len() && user.whole_commits(&ranked.user_code, &c.text) == 1

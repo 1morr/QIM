@@ -329,7 +329,7 @@ fn override_ranking(ranking: &mut Ranking, key: &str, value: &str) -> Result<(),
     fn parse<T: std::str::FromStr>(key: &str, value: &str) -> Result<T, String> {
         value
             .parse()
-            .map_err(|_| format!("{key} 的值不對：{value}"))
+            .map_err(|_| format!("--set {key} 的值不對：{value}"))
     }
     match key {
         "word_bonus" => ranking.word_bonus = parse(key, value)?,
@@ -481,6 +481,13 @@ fn load_engine(
     let mut pack = SchemePack::from_bytes(&bytes).map_err(|e| format!("{QUICK_PACK}：{e}"))?;
     for (key, value) in overrides {
         override_ranking(&mut pack.scheme.ranking, key, value)?;
+    }
+    // 蓋過的值照方案檔的規則驗（`Ranking::check`）；不先驗的話 `Engine::new` 會說成資料包壞了。
+    if !overrides.is_empty() {
+        pack.scheme
+            .ranking
+            .check()
+            .map_err(|e| format!("--set 之後的打分參數不合用：{e}"))?;
     }
     let mut packs = vec![loaded];
     // 方案指名的另一份資料包：`build/packs/<id>/<id>.pack`，解不開時報它的路徑。
