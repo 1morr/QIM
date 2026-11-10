@@ -230,6 +230,8 @@ cargo xtask check
 | `unit` | `web/test/` 的單元測試（`npm test`，Node 內建的 `node --test`，直接跑 TypeScript） | 跑 |
 | `e2e` | 複製資料包（〈網頁〉第 2 步）後跑 Playwright（`npm run e2e`）；要先跑過 `cargo xtask data` | 跳過 |
 
+CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `cargo xtask check --fast` 與 `cargo test --workspace`；`e2e` 與 `bench --check` 要資料包，只在本機跑（plan §6）。
+
 `cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test` 與 `e2e`：測試會隨碼表與性質測試變慢，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。

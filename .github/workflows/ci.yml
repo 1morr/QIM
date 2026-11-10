@@ -1,0 +1,41 @@
+# 跑什麼、為什麼不跑 e2e 與 bench --check：docs/development.md〈全部檢查〉、plan §6。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # 不給 toolchain input：版本、components、targets 都讀 rust-toolchain.toml；內建 cargo 快取。
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      # 版本要與 Cargo.lock 的 wasm-bindgen 相同，不同時 check 的 wasm 步驟會擋下。
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.130
+          fallback: none
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --prefix web
+
+      - run: cargo xtask check --fast
+
+      - run: cargo test --workspace
