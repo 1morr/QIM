@@ -94,7 +94,7 @@ enum CoreProbe {
 
     /// 每份資料包「讀檔 → 解開 → 丟掉檔案位元組」前後的 footprint 差，再建 `Engine` 與 `Session`。
     /// 資料包依票 04 的順序；字根提示（票 09 加）排在 `Session` 之後，前面各步與票 08 可以直接比；
-    /// 佈局 `qim-ffi` 還沒有介面，不放（README〈接上核心〉）。
+    /// 佈局 `qim-ffi` 還沒有介面，不放（README〈接上核心（票 08）〉）。
     nonisolated private static func loadSession() -> (Session?, RadicalHintPack?, [String]) {
         var lines = [Probe.memoryLine("core-before")]
         let loadStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)

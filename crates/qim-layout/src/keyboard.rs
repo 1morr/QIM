@@ -28,7 +28,7 @@ pub enum Output {
     Space,
     Backspace,
     Enter,
-    /// 觸控的中英鍵，同實體鍵盤單按右 Shift（先上屏組字，M1 票 23）。
+    /// 觸控的中英鍵，同實體鍵盤單按右 Shift（組字怎麼處理依核心的 `ShiftSwitch`，預設先上屏）。
     ToggleAscii,
     /// 只改了鍵盤狀態的鍵。
     Modifier,

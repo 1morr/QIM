@@ -137,7 +137,7 @@ pub enum Key {
 }
 
 impl Key {
-    /// 由「種類 + 值」讀出按鍵，綁定收不了帶資料的列舉時用（網頁）；同 librime 能從字串讀按鍵。
+    /// 由「種類 + 值」讀出按鍵，綁定收不了帶資料的列舉時用（網頁、Swift）；同 librime 能從字串讀按鍵。
     /// 種類是 `letter`、`punct`、`digit`、`space`、`enter`、`backspace`、`escape`、`pageUp`、`pageDown`、
     /// `left`、`right`、`toggleAscii`、`other`、`modifier`；`letter`、`punct` 的值是一個字元，`digit` 是 `0`–`9`，
     /// `toggleAscii` 是 `left` 或 `right`，其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
