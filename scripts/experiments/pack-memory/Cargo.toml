@@ -1,0 +1,24 @@
+# 不加進 repo 的 workspace（.scratch/m2/spec.md〈共同規則〉）：空的 [workspace] 讓它自成一個。
+[package]
+name = "pack-memory"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+# 開：佈局走 qim_layout::validate（含 JSON Schema）；關：只用 serde_json 讀進型別。
+schema = []
+
+[dependencies]
+libc = "0.2.191"
+qim-core = { path = "../../../crates/qim-core" }
+qim-layout = { path = "../../../crates/qim-layout" }
+serde_json = "1.0.154"
+
+# 接近上架的組態：執行檔大小才比得出 jsonschema 佔多少。
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
