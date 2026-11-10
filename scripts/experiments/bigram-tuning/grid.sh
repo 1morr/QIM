@@ -8,7 +8,8 @@
 # 口語兩集（common-voice-yue、hkcancor）與維基兩集各自的答錯、修正總和，與兩組的短輸入
 # （dev 句子的單字、句子裡出現的詞庫的詞，依次數加權）首選正確率。
 # 每格是一個 `qim-bench --dev` 行程，同時跑 `JOBS` 個（預設 CPU 數）。
-# 下面的 awk 靠報表的欄號（`$6` 答錯、`$9` 修正，`crates/qim-bench/src/report.rs` 的 `METRICS_HEADER`）解析，報表欄位改時一起改。
+# 下面的 awk 靠 `crates/qim-bench/src/report.rs` 各報表的欄號解析（fixed 列、指標表的答錯與修正、
+# 短輸入表），報表欄位改時一起改。
 set -eu
 bin=target/release/qim-bench
 
