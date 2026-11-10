@@ -35,6 +35,22 @@ UDID 用 `xcrun devicectl list devices` 查。`-allowProvisioningUpdates` 讓 xc
 2. 「設定 → 一般 → 鍵盤 → 鍵盤 → 新增鍵盤」加入「QIM 實驗鍵盤」。不要開「允許完整取用」（`RequestsOpenAccess` 是 `NO`，本來也沒有那個開關）。
 3. 在備忘錄新增一則備忘錄，按地球鍵切到「QIM 實驗鍵盤」，按「日」。
 
+## 注意事項
+
+- **iphone-use 的 runner 也是免費佈建，同樣 7 天過期。** 驗收靠它操作手機，runner 過期時沒辦法在備忘錄打字、截圖。查目前的到期時間（runner 是 `…iphone-use.runner….xctrunner` 那份）：
+
+  ```sh
+  for f in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
+    security cms -D -i "$f" | plutil -extract Name raw -o - - | tr '\n' ' '
+    security cms -D -i "$f" | plutil -extract ExpirationDate raw -o - -
+  done
+  ```
+
+  手機上實際裝的是 `~/.iphone-use/runner-build/Build/Products/Debug-iphoneos/iPhoneUse-Runner.app/embedded.mobileprovision` 那份，同樣用 `security cms -D -i <檔> | plutil -extract ExpirationDate raw -o - -` 查。
+- iphone-use 0.27.7 重新連線（`phone_reconnect`）時，描述檔 48 小時內到期就自動續期並重裝 runner（`~/.iphone-use/runner-agent.log` 會出現 `Renewing the runner provisioning profile`）。2026-11-10 13:36 就這樣續過，到期日從 11/11 15:18 延到 11/17 13:36（CST）。
+- 已經過期、或自動續期沒成功時，手機解鎖後在 Mac 上跑 `iphone-use setup`（另一個 session 握著手機時會拒絕；`--force` 會搶走別人的 runner，由使用者決定）。要強制重建加 `IPU_RUNNER_REBUILD=1`。iOS 若跳出要密碼才能允許 UI 自動化的提示，只能使用者在手機上輸入。之後 `iphone-use status` 回 0（ready）就能操作；卡住時先跑 `iphone-use doctor`。
+- 鍵盤擴充自己也是 7 天過期，照〈建置與安裝〉重跑 `xcodebuild` 與 `install`。兩者到期日不同，跨天的票（08、10、11）開工前兩個都先查。
+
 ## 常駐記憶體
 
 量法：擴充在 `viewDidLoad` 與 `viewDidAppear` 各量一次，兩個數字：
