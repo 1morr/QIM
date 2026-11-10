@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 use qim_core::{
     CangjieVersion, CodeTable, Engine, EnglishPack, Key, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Options, Pack, RadicalHintPack, RadicalHints, Session, SimplifierPack, UserModel,
+    LexiconPack, Options, RadicalHintPack, RadicalHints, SchemePack, Session, SimplifierPack,
+    UserModel,
 };
 
 use crate::common_forms::{BothForms, CommonForms, ONE_WAY_DISTINCT, REVERSED_ONE_WAY};
@@ -347,14 +348,14 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
 /// 解開的資料包；字根提示經殼用的 [`RadicalHints::for_scheme`] 取出，簡繁與英文資料包掛在
 /// `engine` 上。
 struct Decoded {
-    pack: Pack,
+    pack: SchemePack,
     lexicon: Lexicon,
     engine: Engine,
     hints: RadicalHints,
 }
 
 fn decode(bytes: PackBytes) -> Result<Decoded, qim_core::PackError> {
-    let pack = Pack::from_bytes(bytes.quick)?;
+    let pack = SchemePack::from_bytes(bytes.quick)?;
     let lexicon = LexiconPack::from_bytes(bytes.lexicon)?;
     let language_model = LanguageModelPack::from_bytes(bytes.language_model)?;
     let hints = RadicalHints::for_scheme(
@@ -378,7 +379,7 @@ fn decode(bytes: PackBytes) -> Result<Decoded, qim_core::PackError> {
 fn pack_checks(
     report: &mut Report,
     rows: &[Row],
-    pack: &Pack,
+    pack: &SchemePack,
     lexicon: &Lexicon,
     engine: &Engine,
     hints: &RadicalHints,

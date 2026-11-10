@@ -6,8 +6,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, Packs, Ranking, SEPARATOR,
-    Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Packs, Ranking, SEPARATOR, Scheme,
+    SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// `mir`（一戈口）：「一台」是 `m` + `ir`，「歹口」是 `mi` + `r`，「一戈口」是 `m` + `i` + `r`。
@@ -96,7 +96,7 @@ fn engine() -> Engine {
     };
     let language_model = common::unigram("unigram", &chars, chars.len());
     Engine::new(
-        Pack { scheme, code_table },
+        SchemePack { scheme, code_table },
         Some(lexicon),
         Some(language_model),
     )

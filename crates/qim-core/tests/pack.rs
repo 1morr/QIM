@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
-use qim_core::{CodeEntry, CodeTable, FORMAT_VERSION, Pack, PackError, Packs, Ranking, Scheme};
+use qim_core::{
+    CodeEntry, CodeTable, FORMAT_VERSION, PackError, Packs, Ranking, Scheme, SchemePack,
+};
 
-fn sample() -> Pack {
+fn sample() -> SchemePack {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
@@ -35,14 +37,14 @@ fn sample() -> Pack {
             }],
         ),
     ]);
-    Pack { scheme, code_table }
+    SchemePack { scheme, code_table }
 }
 
 #[test]
 fn pack_round_trips_through_bytes() {
     let pack = sample();
     let bytes = pack.to_bytes().unwrap();
-    assert_eq!(Pack::from_bytes(&bytes).unwrap(), pack);
+    assert_eq!(SchemePack::from_bytes(&bytes).unwrap(), pack);
 }
 
 #[test]
@@ -61,7 +63,7 @@ fn other_format_version_is_an_error() {
     assert_eq!(bytes[4], current);
     bytes[4] = current + 1;
     assert_eq!(
-        Pack::from_bytes(&bytes),
+        SchemePack::from_bytes(&bytes),
         Err(PackError::UnsupportedVersion {
             found: FORMAT_VERSION + 1,
             supported: FORMAT_VERSION,
@@ -71,21 +73,24 @@ fn other_format_version_is_an_error() {
 
 #[test]
 fn bytes_that_are_not_a_pack_are_an_error() {
-    assert_eq!(Pack::from_bytes(b""), Err(PackError::NotAPack));
-    assert_eq!(Pack::from_bytes(b"PK\x03\x04zip"), Err(PackError::NotAPack));
+    assert_eq!(SchemePack::from_bytes(b""), Err(PackError::NotAPack));
+    assert_eq!(
+        SchemePack::from_bytes(b"PK\x03\x04zip"),
+        Err(PackError::NotAPack)
+    );
 }
 
 #[test]
 fn truncated_or_padded_pack_is_an_error() {
     let bytes = sample().to_bytes().unwrap();
     assert!(matches!(
-        Pack::from_bytes(&bytes[..bytes.len() - 1]),
+        SchemePack::from_bytes(&bytes[..bytes.len() - 1]),
         Err(PackError::Malformed(_))
     ));
     let mut padded = bytes.clone();
     padded.push(0);
     assert!(matches!(
-        Pack::from_bytes(&padded),
+        SchemePack::from_bytes(&padded),
         Err(PackError::Malformed(_))
     ));
 }

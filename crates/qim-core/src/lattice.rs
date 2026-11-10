@@ -4,7 +4,8 @@
 use std::collections::{BTreeMap, HashSet};
 
 use crate::scheme::{SEPARATOR, without_separators};
-use crate::{Engine, UserModel};
+use crate::user::SchemeModel;
+use crate::{Engine, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -28,34 +29,23 @@ struct Node {
 pub(crate) struct CandidateSpan {
     pub text: String,
     pub len: usize,
-    /// 組成它的各段，依輸入碼的順序、接起來是 `text`；上屏時學習用（plan §2.4）。
-    pub segments: Vec<PathSegment>,
+    /// 組成它的各段（碼與字詞），依輸入碼的順序、碼接起來是它蓋住的輸入碼、字詞接起來是
+    /// `text`；選定與上屏時用（plan §2.4）。
+    pub segments: Vec<Segment>,
     /// 英文候選（排位規則 4）：選了它和 Enter 一樣不學。
     pub english_candidate: bool,
 }
 
 impl CandidateSpan {
-    /// 只有一段的候選：碼表的字或詞庫的詞，蓋住開頭 `len` 碼。
-    fn single(text: String, len: usize) -> Self {
+    /// 只有一段的候選：碼表的字或詞庫的詞，蓋住輸入碼開頭的 `code`。
+    fn single(text: String, code: &str) -> Self {
         Self {
-            segments: vec![PathSegment {
-                start: 0,
-                end: len,
-                text: text.clone(),
-            }],
+            segments: vec![Segment::new(code.to_string(), text.clone())],
             text,
-            len,
+            len: code.len(),
             english_candidate: false,
         }
     }
-}
-
-/// 首選路徑的一段：輸入碼 `[start, end)` 與它的字詞。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PathSegment {
-    pub start: usize,
-    pub end: usize,
-    pub text: String,
 }
 
 impl Default for Lattice {
@@ -130,8 +120,8 @@ impl Lattice {
         }
     }
 
-    /// 首選路徑的各段；沒有路徑蓋滿整串時是空的。
-    pub fn best_segments(&self) -> Vec<PathSegment> {
+    /// 首選路徑的各段（碼與字詞）；沒有路徑蓋滿整串時是空的。
+    pub fn best_segments(&self) -> Vec<Segment> {
         let end = self.input.len();
         if self.columns[end].is_empty() || end == 0 {
             return Vec::new();
@@ -140,16 +130,12 @@ impl Lattice {
     }
 
     /// 結束在位置 `end`、在那一欄第 `k` 名的部分路徑的各段。
-    fn path(&self, end: usize, k: usize) -> Vec<PathSegment> {
+    fn path(&self, end: usize, k: usize) -> Vec<Segment> {
         let mut segments = Vec::new();
         let (mut j, mut k) = (end, k);
         while let Some((i, prev)) = self.columns[j][k].prev {
             let text = &self.columns[j][k].text[self.columns[i][prev].text.len()..];
-            segments.push(PathSegment {
-                start: i,
-                end: j,
-                text: text.to_string(),
-            });
+            segments.push(Segment::new(self.input[i..j].to_string(), text.to_string()));
             (j, k) = (i, prev);
         }
         segments.reverse();
@@ -185,7 +171,7 @@ pub(crate) fn candidates(
     let mut full: Vec<(f64, CandidateSpan)> = engine
         .span(user, lookup_code)
         .into_iter()
-        .map(|(score, text)| (score, CandidateSpan::single(text, n)))
+        .map(|(score, text)| (score, CandidateSpan::single(text, input)))
         .collect();
     full.extend(
         lattice.columns[n]
@@ -208,12 +194,13 @@ pub(crate) fn candidates(
     let full = full.into_iter().map(|(_, span)| span);
     let extension = engine
         .extension(lookup_code)
-        .map(|c| CandidateSpan::single(c.to_string(), n));
+        .map(|c| CandidateSpan::single(c.to_string(), input));
     // 觸發詞是整串的使用者詞，由排位規則 1 移到首選；它的碼多半不是整串，lattice 裡沒有。
-    let triggered = user
-        .triggered(&engine.scheme().id, lookup_code)
+    let scheme_user = user.for_scheme(&engine.scheme().id);
+    let triggered = scheme_user
+        .triggered(lookup_code)
         .into_iter()
-        .map(|text| CandidateSpan::single(text.to_string(), n));
+        .map(|text| CandidateSpan::single(text.to_string(), input));
     let prefixes = (1..n)
         .rev()
         .filter(|&len| !input[..len].ends_with(SEPARATOR))
@@ -226,7 +213,7 @@ pub(crate) fn candidates(
             engine
                 .span(user, &input[..len])
                 .into_iter()
-                .map(move |(_, text)| CandidateSpan::single(text, covered))
+                .map(move |(_, text)| CandidateSpan::single(text, &input[..covered]))
         });
     let mut seen = HashSet::new();
     let mut list: Vec<CandidateSpan> = full
@@ -244,12 +231,12 @@ pub(crate) fn candidates(
     {
         list.push(CandidateSpan {
             english_candidate: true,
-            ..CandidateSpan::single(word.to_string(), n)
+            ..CandidateSpan::single(word.to_string(), input)
         });
     }
     let mut ranked = Ranked {
         engine,
-        user,
+        user: scheme_user,
         input,
         lookup_code,
         user_code: without_separators(input),
@@ -273,7 +260,8 @@ const RULES: [fn(&mut Ranked); 4] = [
 /// 套用排位規則中的候選列：排定的候選釘在它的位置，其餘的依原本的順序填進空著的位置。
 struct Ranked<'a> {
     engine: &'a Engine,
-    user: &'a UserModel,
+    /// 這個方案的個人模型。
+    user: &'a SchemeModel,
     /// 這列候選的輸入碼，含分隔記號。
     input: &'a str,
     /// 查碼表、詞庫與觸發詞的碼：`input` 去掉結尾的分隔記號。
@@ -287,10 +275,6 @@ struct Ranked<'a> {
 }
 
 impl Ranked<'_> {
-    fn scheme(&self) -> &str {
-        &self.engine.scheme().id
-    }
-
     /// 還沒排定、蓋滿整串的候選與它在 `free` 的位置。
     fn free_full(&self) -> impl Iterator<Item = (usize, &CandidateSpan)> {
         let n = self.input.len();
@@ -301,14 +285,9 @@ impl Ranked<'_> {
     }
 
     /// 還沒排定、蓋滿整串的候選裡，`tick` 有值且最大（最近）的一個在 `free` 的位置。
-    fn most_recent(
-        &self,
-        tick: impl Fn(&UserModel, &str, &str, &str) -> Option<u64>,
-    ) -> Option<usize> {
+    fn most_recent(&self, tick: impl Fn(&SchemeModel, &str, &str) -> Option<u64>) -> Option<usize> {
         self.free_full()
-            .filter_map(|(i, c)| {
-                Some((tick(self.user, self.scheme(), &self.user_code, &c.text)?, i))
-            })
+            .filter_map(|(i, c)| Some((tick(self.user, &self.user_code, &c.text)?, i)))
             .max()
             .map(|(_, i)| i)
     }
@@ -370,13 +349,9 @@ impl Ranked<'_> {
     }
 }
 
-/// 規則 1：觸發詞剛好是整串的使用者詞成首選；多個時取 [`UserModel::triggered`] 的第一個。
+/// 規則 1：觸發詞剛好是整串的使用者詞成首選；多個時取 [`SchemeModel::triggered`] 的第一個。
 fn triggered_first(ranked: &mut Ranked) {
-    let first = ranked
-        .user
-        .triggered(ranked.scheme(), ranked.lookup_code)
-        .into_iter()
-        .next();
+    let first = ranked.user.triggered(ranked.lookup_code).into_iter().next();
     let at = first.and_then(|text| ranked.free_full().find(|(_, c)| c.text == text));
     if let Some((i, _)) = at {
         ranked.pin_at_most(i, 0);
@@ -386,7 +361,7 @@ fn triggered_first(ranked: &mut Ranked) {
 /// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。沒有這樣的
 /// 候選時，整串上屏剛好 1 次的不靠學到的分數成首選（[`once_chosen_keeps_the_unlearned_top`]）。
 fn chosen_twice_first(ranked: &mut Ranked) {
-    if let Some(i) = ranked.most_recent(UserModel::last_tick_if_chosen_twice) {
+    if let Some(i) = ranked.most_recent(SchemeModel::last_tick_if_chosen_twice) {
         ranked.pin_at_most(i, 0);
     } else {
         once_chosen_keeps_the_unlearned_top(ranked);
@@ -397,9 +372,9 @@ fn chosen_twice_first(ranked: &mut Ranked) {
 /// 是整串上屏剛好 1 次的候選、而不學習時的首選不是它，就改回不學習時的首選。不學習時的首選
 /// 不是蓋滿整串的候選時不動。
 fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
-    let (user, scheme, input) = (ranked.user, ranked.scheme(), ranked.input);
+    let (user, input) = (ranked.user, ranked.input);
     let top_once = ranked.free.first().is_some_and(|c| {
-        c.len == input.len() && user.whole_commits(scheme, &ranked.user_code, &c.text) == 1
+        c.len == input.len() && user.whole_commits(&ranked.user_code, &c.text) == 1
     });
     if !top_once {
         return;
@@ -417,7 +392,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
 
 /// 規則 3：碼是整串、上屏過的使用者詞（含自動造詞）至少排第 2 位；多個取最近上屏的。
 fn used_word_second(ranked: &mut Ranked) {
-    if let Some(i) = ranked.most_recent(UserModel::last_tick_if_used_word) {
+    if let Some(i) = ranked.most_recent(SchemeModel::last_tick_if_used_word) {
         ranked.pin_at_most(i, 1);
     }
 }

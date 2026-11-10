@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
     CodeEntry, CodeTable, Engine, EnglishPack, EnglishWords, Key, Lexicon, LexiconPack, Options,
-    Pack, Packs, Ranking, Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
+    Packs, Ranking, Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// 碼表的一列：碼、字（依字頻由高到低）。`he` 不是碼，`the` 的路徑只有 `th e` 與 `t h e`。
@@ -75,7 +75,12 @@ fn base_engine() -> Engine {
     };
     let continuous: BTreeSet<char> = TABLE.iter().flat_map(|(_, c)| c.chars()).collect();
     let model = common::unigram("model", &CHARS, continuous.len());
-    Engine::new(Pack { scheme, code_table }, Some(lexicon), Some(model)).unwrap()
+    Engine::new(
+        SchemePack { scheme, code_table },
+        Some(lexicon),
+        Some(model),
+    )
+    .unwrap()
 }
 
 fn engine() -> Engine {

@@ -5,8 +5,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Pack, Packs, Ranking, Scheme,
-    Session, ShiftKey, ShiftSwitch, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Packs, Ranking, Scheme,
+    SchemePack, Session, ShiftKey, ShiftSwitch, Snapshot, UserModel, Word,
 };
 
 /// 碼表的一列：碼、字（依建置時的字序），`+` 之後的字是擴展區。
@@ -62,7 +62,7 @@ fn engine(data: &Data) -> Engine {
         .len();
     let language_model = common::unigram("unigram", &data.chars, continuous);
     Engine::new(
-        Pack { scheme, code_table },
+        SchemePack { scheme, code_table },
         Some(lexicon),
         Some(language_model),
     )

@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Pack, Packs,
-    Ranking, SEPARATOR, Scheme, Session, ShiftKey, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Packs, Ranking,
+    SEPARATOR, Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// 測試方案的最長碼；碼表裡有更長的碼，那些不是字的碼。
@@ -141,7 +141,7 @@ fn engine_for(
         id: "lexicon".into(),
         lexicon,
     };
-    Engine::new(Pack { scheme, code_table }, Some(lexicon), None).unwrap()
+    Engine::new(SchemePack { scheme, code_table }, Some(lexicon), None).unwrap()
 }
 
 /// 同碼不同字的另一個方案：每個碼的字倒過來排、前面多一個「甲」，詞也倒過來；

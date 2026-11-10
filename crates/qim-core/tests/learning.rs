@@ -6,8 +6,8 @@ mod common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Pack, Packs, Ranking, Scheme,
-    Session, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Packs, Ranking, Scheme,
+    SchemePack, Session, Snapshot, UserModel, Word,
 };
 
 /// 碼表的一列：碼、字（依建置時的字序）。
@@ -59,7 +59,12 @@ fn engine(data: &Data) -> Engine {
     // 字的分數由字頻造的 unigram 語言模型給，分母含碼表裡的每個字。
     let continuous: BTreeSet<char> = data.table.iter().flat_map(|(_, c)| c.chars()).collect();
     let model = common::unigram("model", &data.chars, continuous.len());
-    Engine::new(Pack { scheme, code_table }, Some(lexicon), Some(model)).unwrap()
+    Engine::new(
+        SchemePack { scheme, code_table },
+        Some(lexicon),
+        Some(model),
+    )
+    .unwrap()
 }
 
 /// 一個輸入框：方案與 `Session` 各自一份，`UserModel` 由呼叫端給，可以跨方案共用。

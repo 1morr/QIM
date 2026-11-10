@@ -25,7 +25,7 @@ const ENGLISH_MAGIC: &[u8; 4] = b"QIME";
 ///
 /// 位元組格式：魔數 `QIMP`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Pack {
+pub struct SchemePack {
     pub scheme: Scheme,
     pub code_table: CodeTable,
 }
@@ -168,7 +168,7 @@ fn decode<T: DeserializeOwned>(magic: &[u8; 4], bytes: &[u8]) -> Result<T, PackE
     Ok(body)
 }
 
-impl Pack {
+impl SchemePack {
     pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
         encode(SCHEME_MAGIC, self)
     }

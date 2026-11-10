@@ -11,7 +11,7 @@ mod score;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use qim_core::{Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking};
+use qim_core::{Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Ranking, SchemePack};
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
@@ -415,7 +415,7 @@ fn load_engine(
         Ok((bytes, LoadedPack { path: rel, sha256 }))
     };
     let (bytes, loaded) = load(QUICK_PACK.into())?;
-    let mut pack = Pack::from_bytes(&bytes).map_err(|e| format!("{QUICK_PACK}：{e}"))?;
+    let mut pack = SchemePack::from_bytes(&bytes).map_err(|e| format!("{QUICK_PACK}：{e}"))?;
     for (key, value) in overrides {
         override_ranking(&mut pack.scheme.ranking, key, value)?;
     }

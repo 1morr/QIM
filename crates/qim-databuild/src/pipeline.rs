@@ -6,7 +6,7 @@ use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use qim_core::{
-    EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SimplifierPack,
+    EnglishPack, LanguageModelPack, LexiconPack, RadicalHintPack, SchemePack, SimplifierPack,
 };
 
 use crate::common_forms::{
@@ -20,8 +20,8 @@ use crate::verify::{
     self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
 };
 use crate::{
-    Error, bigram, build_pack, english, gboard, lexicon, libcangjie, opencc, packing, personal,
-    radical_hint, scheme, unihan,
+    Error, bigram, build_scheme_pack, english, gboard, lexicon, libcangjie, opencc, packing,
+    personal, radical_hint, scheme, unihan,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -89,7 +89,7 @@ struct QuickBuild {
     rows: Vec<libcangjie::Row>,
     /// `Unihan_DictionaryLikeData.txt` 的內容。
     dictionary_like: String,
-    pack: Pack,
+    pack: SchemePack,
     bytes: Vec<u8>,
     /// 方案指名的字根提示資料包的 id，與由同樣的列建的資料包（[`radical_hint::hints`]）。
     radical_hint_id: String,
@@ -164,7 +164,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let rows = libcangjie::parse(&load_text(LIBCANGJIE, TABLE)?)?;
         let dictionary_like = unihan::read_archive(&load(UNIHAN, UNIHAN_ZIP)?)?;
         let grades = unihan::grade_levels(&dictionary_like)?;
-        let pack = build_pack(&rows, &grades, scheme::parse(&read(QUICK_SCHEME)?)?);
+        let pack = build_scheme_pack(&rows, &grades, scheme::parse(&read(QUICK_SCHEME)?)?);
         let bytes = pack
             .to_bytes()
             .map_err(|e| Error::invalid("資料包", e.to_string()))?;

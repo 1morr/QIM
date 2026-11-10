@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Pack, PackError, Packs, Ranking, Scheme, Session, Snapshot, UserModel,
+    LexiconPack, PackError, Packs, Ranking, Scheme, SchemePack, Session, Snapshot, UserModel,
 };
 
 fn scheme(language_model: Option<&str>) -> Scheme {
@@ -26,7 +26,7 @@ fn scheme(language_model: Option<&str>) -> Scheme {
 }
 
 /// `a` 有甲、乙兩字，甲的字頻高；`b` 是丙、`c` 是丁。
-fn pack(language_model: Option<&str>) -> Pack {
+fn pack(language_model: Option<&str>) -> SchemePack {
     let entries = |chars: &str| {
         chars
             .chars()
@@ -36,7 +36,7 @@ fn pack(language_model: Option<&str>) -> Pack {
             })
             .collect()
     };
-    Pack {
+    SchemePack {
         scheme: scheme(language_model),
         code_table: CodeTable::from_entries([
             ("a".to_string(), entries("甲乙")),

@@ -39,6 +39,7 @@
 | 2026-11-10 | M2 01 | `set_options` 後 `select`、`focus_segment`、`text` 先依新選項重列；重列前展開面板空、不重排；bench 不變；細節見票 01 | 新 session 下 `/implement .scratch/m2/issues/02-unify-naming.md` |
 | 2026-11-10 | M2 05 | GitHub Actions 跑 `check --fast` 與 `cargo test`；`bench --check` 不進 CI 與 `check`（plan §6）；推送由協調者合併後做，見票 05 | 新 session 下 `/implement .scratch/m2/issues/02-unify-naming.md` |
 | 2026-11-10 | M2 06 | 免費佈建能跑鍵盤擴充，備忘錄打出「日」；App Group 擴充可讀不可寫；空擴充約 10 MB、上限推得 177 MB；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/10-foundation-models-and-context.md` |
+| 2026-11-10 | M2 02 | `Pack` 改 `SchemePack`；分段只留 `Segment`；`UserModel` 的內部方法改經 `for_scheme` 取用、不逐一帶方案；bench 不變；細節見票 02 | 新 session 下 `/implement .scratch/m2/issues/03-bindings-without-logic.md` |
 
 ## 偏差與決定
 

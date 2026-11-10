@@ -3,10 +3,10 @@ use std::collections::HashSet;
 
 use crate::lattice::{self, Lattice};
 use crate::scheme::{SEPARATOR, without_separators};
-use crate::user::personal_bonus;
+use crate::user::{SchemeModel, personal_bonus};
 use crate::{
     CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Pack, PackError, Scheme, Simplifier, SimplifierPack, UserModel, Word,
+    LexiconPack, PackError, Scheme, SchemePack, Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -47,21 +47,21 @@ pub(crate) struct Edge {
 impl Engine {
     /// `lexicon`、`language_model` 要剛好是方案 [`crate::Packs`] 指名的那份；方案沒指名時要是 `None`。
     pub fn new(
-        pack: Pack,
+        scheme_pack: SchemePack,
         lexicon: Option<LexiconPack>,
         language_model: Option<LanguageModelPack>,
     ) -> Result<Self, PackError> {
         let found = lexicon.as_ref().map(|l| l.id.clone());
-        if pack.scheme.packs.lexicon != found {
+        if scheme_pack.scheme.packs.lexicon != found {
             return Err(PackError::LexiconMismatch {
-                expected: pack.scheme.packs.lexicon,
+                expected: scheme_pack.scheme.packs.lexicon,
                 found,
             });
         }
         let found = language_model.as_ref().map(|m| m.id.clone());
-        if pack.scheme.packs.language_model != found {
+        if scheme_pack.scheme.packs.language_model != found {
             return Err(PackError::LanguageModelMismatch {
-                expected: pack.scheme.packs.language_model,
+                expected: scheme_pack.scheme.packs.language_model,
                 found,
             });
         }
@@ -80,8 +80,8 @@ impl Engine {
             .sum();
         Ok(Self {
             word_log_total: (word_total.max(1) as f64).ln(),
-            code_table: by_frequency(&pack.code_table, &lexicon),
-            scheme: pack.scheme,
+            code_table: by_frequency(&scheme_pack.code_table, &lexicon),
+            scheme: scheme_pack.scheme,
             language_model: language_model.map(|m| m.model).unwrap_or_default(),
             longest_word_code,
             lexicon,
@@ -121,7 +121,7 @@ impl Engine {
 
     /// 由資料包的位元組建立；讀檔是呼叫端的事（plan §1.3）。
     pub fn from_pack_bytes(
-        pack: &[u8],
+        scheme_pack: &[u8],
         lexicon: Option<&[u8]>,
         language_model: Option<&[u8]>,
     ) -> Result<Self, PackError> {
@@ -129,7 +129,11 @@ impl Engine {
         let language_model = language_model
             .map(LanguageModelPack::from_bytes)
             .transpose()?;
-        Self::new(Pack::from_bytes(pack)?, lexicon, language_model)
+        Self::new(
+            SchemePack::from_bytes(scheme_pack)?,
+            lexicon,
+            language_model,
+        )
     }
 
     pub fn scheme(&self) -> &Scheme {
@@ -151,11 +155,11 @@ impl Engine {
     }
 
     /// 碼 `code` 的一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
-    fn char_edge(&self, user: &UserModel, code: &str, start: usize, c: char) -> Edge {
+    fn char_edge(&self, user: &SchemeModel, code: &str, start: usize, c: char) -> Edge {
         let text = c.to_string();
         Edge {
             start,
-            personal: user.personal_probability(&self.scheme.id, code, &text),
+            personal: user.personal_probability(code, &text),
             text,
             first: c,
             inner: -self.scheme.ranking.segment_penalty,
@@ -165,7 +169,7 @@ impl Engine {
 
     /// 一個詞的邊（plan §2.3）：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，
     /// 第一個字之後由詞頻換算，所以詞頻仍分得出同碼的詞；再加 β − γ。
-    fn word_edge(&self, user: &UserModel, code: &str, start: usize, word: &Word) -> Edge {
+    fn word_edge(&self, user: &SchemeModel, code: &str, start: usize, word: &Word) -> Edge {
         let ranking = &self.scheme.ranking;
         let first = word.text.chars().next().expect("詞不是空的");
         let rest = (word.frequency.max(1) as f64).ln()
@@ -173,7 +177,7 @@ impl Engine {
             - self.language_model.log_prob(None, first);
         Edge {
             start,
-            personal: user.personal_probability(&self.scheme.id, code, &word.text),
+            personal: user.personal_probability(code, &word.text),
             text: word.text.clone(),
             first,
             inner: rest + ranking.word_bonus - ranking.segment_penalty,
@@ -183,7 +187,7 @@ impl Engine {
 
     /// 一個使用者詞的邊（plan §2.4）：沒有詞頻，詞內由字級 bigram 一字接一字估，不加 β；
     /// 只算一段，所以比拆成單字的路徑少扣 γ。
-    fn user_word_edge(&self, user: &UserModel, code: &str, start: usize, text: &str) -> Edge {
+    fn user_word_edge(&self, user: &SchemeModel, code: &str, start: usize, text: &str) -> Edge {
         let mut chars = text.chars();
         let first = chars.next().expect("使用者詞不是空的");
         let (rest, _) = chars.fold((0.0, first), |(sum, prev), c| {
@@ -191,7 +195,7 @@ impl Engine {
         });
         Edge {
             start,
-            personal: user.personal_probability(&self.scheme.id, code, text),
+            personal: user.personal_probability(code, text),
             text: text.to_string(),
             first,
             inner: rest - self.scheme.ranking.segment_penalty,
@@ -254,7 +258,7 @@ impl Engine {
     /// `input` 中間可以有分隔記號（[`SEPARATOR`]，不在頭尾）：這裡一定要斷字，所以沒有字，只有
     /// 每個分隔記號都剛好落在兩字的碼之間的詞與使用者詞（[`Engine::splits_at`]），照 Rime 速成
     /// （M1 票 28b，brief §12.2）。查碼表、詞庫與學習計數的碼都去掉分隔記號。
-    fn exact(&self, user: &UserModel, input: &str, start: usize, limit: usize) -> Vec<Edge> {
+    fn exact(&self, user: &SchemeModel, input: &str, start: usize, limit: usize) -> Vec<Edge> {
         debug_assert!(!input.starts_with(SEPARATOR) && !input.ends_with(SEPARATOR));
         let cuts = separator_cuts(input);
         if cuts.is_empty() {
@@ -268,7 +272,7 @@ impl Engine {
             .filter(|w| self.splits_at(&w.text, &code, &cuts))
             .map(|w| self.word_edge(user, &code, start, w));
         let user_words = user
-            .words(&self.scheme.id, &code)
+            .words(&code)
             .filter(|text| self.splits_at(text, &code, &cuts))
             .map(|text| self.user_word_edge(user, &code, start, text));
         words.chain(user_words).collect()
@@ -277,7 +281,7 @@ impl Engine {
     /// 沒有分隔記號的碼 `code` 的字、詞與使用者詞，見 [`Engine::exact`]。
     fn exact_code<'a>(
         &'a self,
-        user: &'a UserModel,
+        user: &'a SchemeModel,
         code: &'a str,
         start: usize,
         limit: usize,
@@ -288,8 +292,7 @@ impl Engine {
             .filter(|e| !e.extension)
             .enumerate()
             .filter(move |&(i, e)| {
-                i < limit
-                    || user.has_learned(&self.scheme.id, code, e.text.encode_utf8(&mut [0; 4]))
+                i < limit || user.has_learned(code, e.text.encode_utf8(&mut [0; 4]))
             })
             .map(move |(_, e)| self.char_edge(user, code, start, e.text));
         let words = self
@@ -298,7 +301,7 @@ impl Engine {
             .iter()
             .map(move |w| self.word_edge(user, code, start, w));
         let user_words = user
-            .words(&self.scheme.id, code)
+            .words(code)
             .map(move |text| self.user_word_edge(user, code, start, text));
         chars.chain(words).chain(user_words)
     }
@@ -339,10 +342,11 @@ impl Engine {
     /// 加上詞庫的詞與使用者詞。擴展區的字不進 lattice（plan §2.3）。邊不從分隔記號開始；
     /// 往回找的上限算的是字母數，分隔記號不算。
     pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
+        let user = user.for_scheme(&self.scheme.id);
         let longest = self
             .longest_word_code
             .max(usize::from(self.scheme.max_code_length))
-            .max(user.longest_word_code(&self.scheme.id));
+            .max(user.longest_word_code());
         let mut starts: Vec<usize> = input
             .char_indices()
             .rev()
@@ -361,6 +365,7 @@ impl Engine {
     /// 輸入碼 `input` 的全部連打字集的字與詞與它們在組字開頭的分數，依分數由高到低（同分照
     /// 碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
     pub(crate) fn span(&self, user: &UserModel, input: &str) -> Vec<(f64, String)> {
+        let user = user.for_scheme(&self.scheme.id);
         let mut edges: Vec<(f64, String)> = self
             .exact(user, input, 0, usize::MAX)
             .into_iter()

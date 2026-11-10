@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use proptest::prelude::*;
 use qim_core::{
     CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Pack, Packs, Ranking, Scheme, Session, UserModel, Word,
+    LexiconPack, Packs, Ranking, Scheme, SchemePack, Session, UserModel, Word,
 };
 
 /// 夠寬的 beam：5 碼的輸入、每碼最多 3 字加 2 詞，部分路徑數遠小於它。
@@ -119,7 +119,7 @@ fn engine(data: &Data) -> Engine {
         model: language_model(data),
     };
     Engine::new(
-        Pack { scheme, code_table },
+        SchemePack { scheme, code_table },
         Some(lexicon),
         Some(language_model),
     )

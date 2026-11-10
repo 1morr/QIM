@@ -6,8 +6,8 @@ mod common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
-    CodeEntry, CodeTable, ConversionTable, Engine, Key, Lexicon, LexiconPack, Options, Pack, Packs,
-    Ranking, Scheme, Session, Simplifier, SimplifierPack, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, ConversionTable, Engine, Key, Lexicon, LexiconPack, Options, Packs,
+    Ranking, Scheme, SchemePack, Session, Simplifier, SimplifierPack, Snapshot, UserModel, Word,
 };
 
 /// 碼表的一列：碼、字（依字頻由高到低）。
@@ -69,7 +69,12 @@ fn engine() -> Engine {
     };
     let continuous: BTreeSet<char> = TABLE.iter().flat_map(|(_, c)| c.chars()).collect();
     let model = common::unigram("model", &CHARS, continuous.len());
-    Engine::new(Pack { scheme, code_table }, Some(lexicon), Some(model)).unwrap()
+    Engine::new(
+        SchemePack { scheme, code_table },
+        Some(lexicon),
+        Some(model),
+    )
+    .unwrap()
 }
 
 fn simplifier() -> SimplifierPack {

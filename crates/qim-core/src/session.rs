@@ -191,6 +191,18 @@ pub struct Segment {
     pub raw: bool,
 }
 
+impl Segment {
+    /// 核心內部的分段：只有碼與原文的字詞（lattice 的路徑、選定的分段、學習的鍵）。字根、
+    /// 後處理與 `original` 在回傳快照前才補上（`Session::composition`、`with_radicals`）。
+    pub(crate) fn new(code: String, text: String) -> Self {
+        Self {
+            code,
+            text,
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     /// 顯示、上屏的字詞，經過後處理（簡體模式轉成簡體）。
@@ -661,16 +673,7 @@ impl Session {
     /// 剩下的輸入碼沒有路徑蓋得滿時，整段當一個沒有字的分段。
     fn segments(&self) -> Vec<Segment> {
         let rest = self.lattice.input();
-        let mut unselected: Vec<Segment> = self
-            .lattice
-            .best_segments()
-            .into_iter()
-            .map(|s| Segment {
-                code: rest[s.start..s.end].to_string(),
-                text: s.text,
-                ..Segment::default()
-            })
-            .collect();
+        let mut unselected = self.lattice.best_segments();
         if unselected.is_empty() && !rest.is_empty() {
             unselected.push(Segment {
                 code: rest.to_string(),
@@ -727,7 +730,7 @@ impl Session {
     fn commit_all_then(&mut self, engine: &Engine, user: &mut UserModel, tail: Commit) -> Snapshot {
         // 剩下的輸入碼的首選要用它自己的候選，不是目前分段的。
         self.clear_focus(engine, user);
-        let mut segments = self.selected_segments();
+        let mut segments = self.selected.clone();
         let mut commit = self.selected_commit(engine);
         let mut rest = self.lattice.input().to_string();
         let mut top = self.candidates.first().map(|c| c.span.clone());
@@ -739,7 +742,7 @@ impl Session {
             };
             commit.text.push_str(&self.display(engine, &choice));
             commit.original.push_str(&choice.text);
-            segments.extend(owned_segments(&rest, &choice));
+            segments.extend_from_slice(&choice.segments);
             rest.drain(..choice.len);
             top = lattice::candidates(
                 engine,
@@ -760,50 +763,34 @@ impl Session {
         self.commit(engine, commit)
     }
 
-    /// 選定的分段的（輸入碼, 字詞）。
-    fn selected_segments(&self) -> Vec<(String, String)> {
-        self.selected
-            .iter()
-            .map(|s| (s.code.clone(), s.text.clone()))
-            .collect()
-    }
-
     /// 學一次上屏（plan §2.4）；無痕模式不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
     /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。
-    fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[(String, String)]) {
-        if self.options.incognito {
+    fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
+        // 沒有分段時不取方案的個人模型：取了會建出空的一份，匯出多一行 tick。
+        if self.options.incognito || segments.is_empty() {
             return;
         }
-        let codes: Vec<String> = segments
+        let segments: Vec<Segment> = segments
             .iter()
-            .map(|(code, _)| without_separators(code))
+            .map(|s| Segment::new(without_separators(&s.code), s.text.clone()))
             .collect();
-        let segments: Vec<(&str, &str)> = codes
-            .iter()
-            .zip(segments)
-            .map(|(code, (_, text))| (code.as_str(), text.as_str()))
-            .collect();
-        user.learn(&engine.scheme().id, &segments);
+        user.for_scheme_mut(&engine.scheme().id).learn(&segments);
     }
 
     /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
     /// 詞，`docs/research/libime-user-model.md` §5）。無痕模式不記。
-    fn add_auto_phrase(
-        &self,
-        engine: &Engine,
-        user: &mut UserModel,
-        segments: &[(String, String)],
-    ) {
+    fn add_auto_phrase(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
         if self.options.incognito {
             return;
         }
         let code: String = segments
             .iter()
-            .map(|(code, _)| without_separators(code))
+            .map(|s| without_separators(&s.code))
             .collect();
-        let text: String = segments.iter().map(|(_, text)| text.as_str()).collect();
+        let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         if !engine.has_entry(&code, &text) {
-            user.add_auto_phrase(&engine.scheme().id, &code, &text);
+            user.for_scheme_mut(&engine.scheme().id)
+                .add_auto_phrase(&code, &text);
         }
     }
 
@@ -884,16 +871,10 @@ impl Session {
                 selected: true,
                 ..s.clone()
             })
-            .chain(
-                owned_segments(&code, &choice)
-                    .into_iter()
-                    .map(|(code, text)| Segment {
-                        code,
-                        text,
-                        selected: true,
-                        ..Segment::default()
-                    }),
-            )
+            .chain(choice.segments.iter().map(|s| Segment {
+                selected: true,
+                ..s.clone()
+            }))
             .collect();
         let rest = if choice.len == code.len() && at < self.selected.len() {
             fixed.extend_from_slice(&self.selected[at + 1..]);
@@ -904,10 +885,9 @@ impl Session {
         self.selected = fixed;
         self.focus = None;
         if rest.is_empty() {
-            let segments = self.selected_segments();
-            self.learn(engine, user, &segments);
+            self.learn(engine, user, &self.selected);
             if auto_phrase {
-                self.add_auto_phrase(engine, user, &segments);
+                self.add_auto_phrase(engine, user, &self.selected);
             }
             let commit = self.selected_commit(engine);
             return self.commit(engine, commit);
@@ -1040,13 +1020,4 @@ fn with_radicals(engine: &Engine, mut snapshot: Snapshot) -> Snapshot {
         segment.radicals = engine.scheme().radicals_of(&segment.code);
     }
     snapshot
-}
-
-/// 候選 `choice` 的各段的（輸入碼, 字詞）；`input` 是它所在的那串輸入碼。
-fn owned_segments(input: &str, choice: &CandidateSpan) -> Vec<(String, String)> {
-    choice
-        .segments
-        .iter()
-        .map(|s| (input[s.start..s.end].to_string(), s.text.clone()))
-        .collect()
 }

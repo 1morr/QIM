@@ -25,7 +25,7 @@ impl WebSession {
     /// 輸出）、英文資料包（沒有時沒有英文候選）的位元組建立；資料包由網頁 fetch。
     #[wasm_bindgen(constructor)]
     pub fn new(
-        pack: &[u8],
+        scheme_pack: &[u8],
         lexicon: Option<Vec<u8>>,
         language_model: Option<Vec<u8>>,
         simplifier: Option<Vec<u8>>,
@@ -33,7 +33,7 @@ impl WebSession {
     ) -> Result<WebSession, JsError> {
         let error = |e: qim_core::PackError| JsError::new(&e.to_string());
         let mut engine =
-            Engine::from_pack_bytes(pack, lexicon.as_deref(), language_model.as_deref())
+            Engine::from_pack_bytes(scheme_pack, lexicon.as_deref(), language_model.as_deref())
                 .map_err(error)?;
         if let Some(bytes) = simplifier {
             engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(error)?);

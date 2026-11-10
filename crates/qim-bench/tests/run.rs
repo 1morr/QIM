@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{
     CharModel, CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel, LanguageModelPack,
-    Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, Word,
+    Lexicon, LexiconPack, Packs, Ranking, Scheme, SchemePack, Word,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -60,7 +60,7 @@ fn pack_bytes_with(
             .iter()
             .map(|(code, chars)| (code.to_string(), chars.chars().map(entry).collect())),
     );
-    Pack { scheme, code_table }.to_bytes().unwrap()
+    SchemePack { scheme, code_table }.to_bytes().unwrap()
 }
 
 const TABLE: &[(&str, &str)] = &[
