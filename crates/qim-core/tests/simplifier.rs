@@ -1,6 +1,6 @@
 //! 簡繁轉換（plan §4.4）：照 OpenCC `hk2s` 的規則轉換，表由簡繁資料包給。
 
-use qim_core::{ConversionTable, PackError, Simplifier, SimplifierPack};
+use qim_core::{ConversionTable, Pack, PackError, Simplifier, SimplifierPack};
 
 fn table(entries: &[(&str, &str)]) -> ConversionTable {
     ConversionTable::new(entries.iter().map(|&(k, v)| (k.to_string(), v.to_string())))

@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use crate::lattice::{self, Lattice};
+use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{

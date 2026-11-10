@@ -3,11 +3,11 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, RadicalHintPack,
+    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack,
     SchemePack, SimplifierPack,
 };
-use qim_databuild::Error;
 use qim_databuild::sources::{Fetch, sha256_hex};
+use qim_databuild::{Error, Outcome, WrittenPack};
 
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
@@ -153,7 +153,20 @@ const CV_YUE_FILE: &str = "server/data/yue/sentence-collector.txt";
 const CV_ZH_HK_FILE: &str = "server/data/zh-HK/sentence-collector.txt";
 
 /// 下載快取放在暫存 repo 裡的 `cache/`。
-fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<qim_databuild::Outcome, Error> {
+/// `outcome` 裡種類名是 `name` 的那份資料包。
+fn written<'a>(outcome: &'a Outcome, name: &str) -> &'a WrittenPack {
+    outcome
+        .packs
+        .iter()
+        .find(|p| p.name == name)
+        .unwrap_or_else(|| panic!("沒有{name}資料包"))
+}
+
+fn path<'a>(outcome: &'a Outcome, name: &str) -> &'a Path {
+    &written(outcome, name).path
+}
+
+fn run(root: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
     qim_databuild::run(root, &root.join("cache"), fetch, verify)
 }
 
@@ -555,8 +568,8 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     let outcome = run(root.path(), &upstream(README), true).unwrap();
 
     let dir = root.path().join("build/packs/quick");
-    assert_eq!(outcome.pack_path, dir.join("quick.pack"));
-    let pack = SchemePack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
+    assert_eq!(path(&outcome, "速成"), dir.join("quick.pack"));
+    let pack = SchemePack::from_bytes(&std::fs::read(path(&outcome, "速成")).unwrap()).unwrap();
     assert_eq!(pack.scheme.id, "quick");
     assert_eq!(pack.code_table.lookup("ar")[0].text, '問');
 
@@ -585,8 +598,8 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     let outcome = run(root.path(), &upstream(README), false).unwrap();
 
     let dir = root.path().join("build/packs/quick-lexicon");
-    assert_eq!(outcome.lexicon_path, dir.join("quick-lexicon.pack"));
-    let bytes = std::fs::read(&outcome.lexicon_path).unwrap();
+    assert_eq!(path(&outcome, "詞庫"), dir.join("quick-lexicon.pack"));
+    let bytes = std::fs::read(path(&outcome, "詞庫")).unwrap();
     let lexicon = LexiconPack::from_bytes(&bytes).unwrap();
     assert_eq!(lexicon.id, "quick-lexicon");
     let words = |code: &str| -> Vec<String> {
@@ -614,8 +627,8 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
         (14, 1, 1, 1, 11, 1)
     );
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
-    let quick = std::fs::read(&outcome.pack_path).unwrap();
-    let language_model = std::fs::read(&outcome.language_model_path).unwrap();
+    let quick = std::fs::read(path(&outcome, "速成")).unwrap();
+    let language_model = std::fs::read(path(&outcome, "語言模型")).unwrap();
     assert!(Engine::from_pack_bytes(&quick, Some(&bytes), Some(&language_model)).is_ok());
 
     let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
@@ -661,7 +674,7 @@ fn lexicon_and_language_model_are_built_in_the_forms_of_the_corpus() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), false).unwrap();
-    let lexicon = LexiconPack::from_bytes(&std::fs::read(&outcome.lexicon_path).unwrap())
+    let lexicon = LexiconPack::from_bytes(&std::fs::read(path(&outcome, "詞庫")).unwrap())
         .unwrap()
         .lexicon;
     let mut words: BTreeMap<String, u64> = BTreeMap::new();
@@ -694,10 +707,9 @@ fn lexicon_and_language_model_are_built_in_the_forms_of_the_corpus() {
     assert_eq!(lexicon.char_frequency('裡'), lexicon.char_frequency('裏'));
     assert!(lexicon.char_frequency('臺') > 0);
 
-    let model =
-        LanguageModelPack::from_bytes(&std::fs::read(&outcome.language_model_path).unwrap())
-            .unwrap()
-            .model;
+    let model = LanguageModelPack::from_bytes(&std::fs::read(path(&outcome, "語言模型")).unwrap())
+        .unwrap()
+        .model;
     // 雙向的另一種寫法照抄代表寫法的 unigram 與前後字的 bigram。
     for (prev, c) in [(None, '裏'), (Some('裏'), '日'), (Some('日'), '裏')] {
         let other = |ch: char| if ch == '裏' { '裡' } else { ch };
@@ -716,8 +728,8 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
     let outcome = run(root.path(), &upstream(README), false).unwrap();
 
     let dir = root.path().join("build/packs/zh-hant-bigram");
-    assert_eq!(outcome.language_model_path, dir.join("zh-hant-bigram.pack"));
-    let bytes = std::fs::read(&outcome.language_model_path).unwrap();
+    assert_eq!(path(&outcome, "語言模型"), dir.join("zh-hant-bigram.pack"));
+    let bytes = std::fs::read(path(&outcome, "語言模型")).unwrap();
     let pack = LanguageModelPack::from_bytes(&bytes).unwrap();
     assert_eq!(pack.id, "zh-hant-bigram");
     // 由各語料的 train 切分數出來：有字、有相鄰字。
@@ -745,9 +757,9 @@ fn builds_radical_hint_pack_named_by_the_scheme_with_the_libcangjie_license_only
     let outcome = run(root.path(), &upstream(README), false).unwrap();
 
     let dir = root.path().join("build/packs/cangjie-hint");
-    assert_eq!(outcome.radical_hint_path, dir.join("cangjie-hint.pack"));
-    let bytes = std::fs::read(&outcome.radical_hint_path).unwrap();
-    assert_eq!(outcome.radical_hint_sha256, sha256_hex(&bytes));
+    assert_eq!(path(&outcome, "字根提示"), dir.join("cangjie-hint.pack"));
+    let bytes = std::fs::read(path(&outcome, "字根提示")).unwrap();
+    assert_eq!(written(&outcome, "字根提示").sha256, sha256_hex(&bytes));
     let pack = RadicalHintPack::from_bytes(&bytes).unwrap();
     assert_eq!(pack.id, "cangjie-hint");
     assert_eq!(pack.hints.codes('丟', CangjieVersion::Cangjie3), ["hgi"]);
@@ -772,9 +784,9 @@ fn builds_the_simplifier_pack_with_its_own_license_and_notice() {
     let outcome = run(root.path(), &upstream(README), false).unwrap();
 
     let dir = root.path().join("build/packs/opencc-hk2s");
-    assert_eq!(outcome.simplifier_path, dir.join("opencc-hk2s.pack"));
-    let bytes = std::fs::read(&outcome.simplifier_path).unwrap();
-    assert_eq!(outcome.simplifier_sha256, sha256_hex(&bytes));
+    assert_eq!(path(&outcome, "簡繁"), dir.join("opencc-hk2s.pack"));
+    let bytes = std::fs::read(path(&outcome, "簡繁")).unwrap();
+    assert_eq!(written(&outcome, "簡繁").sha256, sha256_hex(&bytes));
     let pack = SimplifierPack::from_bytes(&bytes).unwrap();
     assert_eq!(pack.id, "opencc-hk2s");
     assert_eq!(pack.simplifier.convert("門口綫乾隆"), "门口线乾隆");
@@ -803,9 +815,9 @@ fn builds_the_english_pack_with_its_own_license_and_notice() {
     let outcome = run(root.path(), &upstream(README), false).unwrap();
 
     let dir = root.path().join("build/packs/scowl-en-us");
-    assert_eq!(outcome.english_path, dir.join("scowl-en-us.pack"));
-    let bytes = std::fs::read(&outcome.english_path).unwrap();
-    assert_eq!(outcome.english_sha256, sha256_hex(&bytes));
+    assert_eq!(path(&outcome, "英文"), dir.join("scowl-en-us.pack"));
+    let bytes = std::fs::read(path(&outcome, "英文")).unwrap();
+    assert_eq!(written(&outcome, "英文").sha256, sha256_hex(&bytes));
     let pack = EnglishPack::from_bytes(&bytes).unwrap();
     assert_eq!(pack.id, "scowl-en-us");
     assert_eq!(
@@ -900,7 +912,7 @@ fn build_puts_characters_with_a_grade_level_before_big5_order() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), false).unwrap();
-    let pack = SchemePack::from_bytes(&std::fs::read(&outcome.pack_path).unwrap()).unwrap();
+    let pack = SchemePack::from_bytes(&std::fs::read(path(&outcome, "速成")).unwrap()).unwrap();
     let a: String = pack.code_table.lookup("a").iter().map(|e| e.text).collect();
     // Big5 排序值曰 23060 < 日 23061，日有年級所以在前。
     assert_eq!(a, "日曰𠀀");
@@ -911,22 +923,22 @@ fn second_build_uses_the_cache_and_gives_the_same_bytes() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let first = run(root.path(), &upstream(README), false).unwrap();
-    let first_bytes = std::fs::read(&first.pack_path).unwrap();
-    let first_lexicon = std::fs::read(&first.lexicon_path).unwrap();
-    let first_language_model = std::fs::read(&first.language_model_path).unwrap();
-    let first_radical_hint = std::fs::read(&first.radical_hint_path).unwrap();
+    let first_bytes = std::fs::read(path(&first, "速成")).unwrap();
+    let first_lexicon = std::fs::read(path(&first, "詞庫")).unwrap();
+    let first_language_model = std::fs::read(path(&first, "語言模型")).unwrap();
+    let first_radical_hint = std::fs::read(path(&first, "字根提示")).unwrap();
     let second = run(root.path(), &Offline, false).unwrap();
     assert_eq!(
-        std::fs::read(&second.radical_hint_path).unwrap(),
+        std::fs::read(path(&second, "字根提示")).unwrap(),
         first_radical_hint
     );
-    assert_eq!(std::fs::read(&second.pack_path).unwrap(), first_bytes);
-    assert_eq!(std::fs::read(&second.lexicon_path).unwrap(), first_lexicon);
+    assert_eq!(std::fs::read(path(&second, "速成")).unwrap(), first_bytes);
+    assert_eq!(std::fs::read(path(&second, "詞庫")).unwrap(), first_lexicon);
     assert_eq!(
-        std::fs::read(&second.language_model_path).unwrap(),
+        std::fs::read(path(&second, "語言模型")).unwrap(),
         first_language_model
     );
-    assert_eq!(first.sha256, second.sha256);
+    assert_eq!(first.packs, second.packs);
     assert!(second.report.is_none());
 }
 

@@ -7,7 +7,7 @@
 //! - 句首（[`CLAUSE_START`]）：第一字 甲 3、乙 1，c(句首) = 4、N1+(句首•) = 2，λ(句首) = 1/4；
 //!   不算進上面的字次數與 P_cont。
 
-use qim_core::{CLAUSE_START, LOG_PROB_STEP, LanguageModel};
+use qim_core::{CLAUSE_START, LOG_PROB_STEP, LanguageModel, Pack};
 use qim_databuild::bigram::{Counter, Summary, train};
 use qim_databuild::common_forms::BothForms;
 

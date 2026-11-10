@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Packs, Ranking, Scheme, SchemePack, Session, Snapshot,
+    CodeEntry, CodeTable, Engine, Key, Pack, Packs, Ranking, Scheme, SchemePack, Session, Snapshot,
     UserModel,
 };
 

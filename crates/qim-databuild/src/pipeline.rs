@@ -6,9 +6,10 @@ use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use qim_core::{
-    EnglishPack, LanguageModelPack, LexiconPack, RadicalHintPack, SchemePack, SimplifierPack,
+    EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SchemePack, SimplifierPack,
 };
 
+use crate::built::{self, BuiltPack};
 use crate::common_forms::{
     CommonForms, ONE_WAY_DISTINCT, ONE_WAY_FORMS, REVERSED_ONE_WAY, TWO_WAY_FORMS,
 };
@@ -16,9 +17,7 @@ use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
 use crate::transcode::Transcoder;
-use crate::verify::{
-    self, CorpusDigests, CorpusSummary, LexiconSummary, PackBytes, Report, UnihanSummary,
-};
+use crate::verify::{self, CorpusDigests, CorpusSummary, LexiconSummary, Report, UnihanSummary};
 use crate::{
     Error, bigram, build_scheme_pack, english, gboard, lexicon, libcangjie, opencc, packing,
     personal, radical_hint, scheme, unihan,
@@ -84,35 +83,73 @@ Cangjie 5 codes from every row, in file order without duplicates. QIM shows them
 as a hint of how to type a candidate; they are not input codes of any scheme.
 ";
 
-/// 建一次速成資料包的結果；`--verify` 會再建一次比 `bytes`。
+/// 建一次速成資料包的結果；`--verify` 會再建一次比。
 struct QuickBuild {
     rows: Vec<libcangjie::Row>,
     /// `Unihan_DictionaryLikeData.txt` 的內容。
     dictionary_like: String,
     pack: SchemePack,
-    bytes: Vec<u8>,
-    /// 方案指名的字根提示資料包的 id，與由同樣的列建的資料包（[`radical_hint::hints`]）。
-    radical_hint_id: String,
-    radical_hint: Vec<u8>,
+    /// 方案指名的字根提示資料包，由同樣的列建（[`radical_hint::hints`]）。
+    radical_hint: RadicalHintPack,
+}
+
+/// 建出的一份資料包，與寫出時旁邊放的授權。
+struct LicensedPack {
+    pack: BuiltPack,
+    /// 寫進 `LICENSE`、`NOTICE` 的來源。
+    sources: Vec<packing::PackSource>,
+    /// NOTICE 最後說明怎麼用來源的一段。
+    about: String,
+}
+
+impl LicensedPack {
+    fn new<P: Pack>(
+        name: &'static str,
+        pack: &P,
+        sources: Vec<packing::PackSource>,
+        about: impl Into<String>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            pack: BuiltPack::new(name, pack)
+                .map_err(|e| Error::invalid(format!("{name}資料包"), e.to_string()))?,
+            sources,
+            about: about.into(),
+        })
+    }
+}
+
+/// 一次建出的所有資料包與建置統計；`--verify` 會再建一次比。
+struct PackSet {
+    packs: Vec<LicensedPack>,
+    lexicon: LexiconSummary,
+    language_model: bigram::Summary,
+    english: english::Counts,
+}
+
+impl PackSet {
+    fn built(&self) -> Vec<BuiltPack> {
+        self.packs.iter().map(|p| p.pack.clone()).collect()
+    }
+}
+
+/// 寫出的一份資料包。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenPack {
+    /// 給人看的種類名（`速成`、`詞庫`…）。
+    pub name: &'static str,
+    pub id: String,
+    /// `build/packs/<id>/<id>.pack`。
+    pub path: PathBuf,
+    pub sha256: String,
 }
 
 #[derive(Debug)]
 pub struct Outcome {
-    pub pack_path: PathBuf,
-    pub sha256: String,
-    pub lexicon_path: PathBuf,
-    pub lexicon_sha256: String,
+    /// 寫出的資料包，依建置順序。
+    pub packs: Vec<WrittenPack>,
     pub lexicon: LexiconSummary,
-    pub language_model_path: PathBuf,
-    pub language_model_sha256: String,
     pub language_model: bigram::Summary,
-    pub simplifier_path: PathBuf,
-    pub simplifier_sha256: String,
-    pub english_path: PathBuf,
-    pub english_sha256: String,
     pub english: english::Counts,
-    pub radical_hint_path: PathBuf,
-    pub radical_hint_sha256: String,
     /// 預設 Gboard 速成佈局（[`gboard::layout`]）。
     pub layout_path: PathBuf,
     /// 各語料的句數。
@@ -123,12 +160,8 @@ pub struct Outcome {
     pub report: Option<Report>,
 }
 
-/// 在 repo 根目錄 `root` 建速成資料包到 `build/packs/<方案 id>/`、建各語料，再用語料的字頻
-/// 建方案指名的詞庫資料包到 `build/packs/<詞庫 id>/`、用語料的 train 切分訓練方案指名的語言模型
-/// 資料包到 `build/packs/<語言模型 id>/`、由 libcangjie 建方案指名的字根提示資料包到
-/// `build/packs/<字根提示 id>/`、OpenCC 的字典建簡繁資料包到 `build/packs/opencc-hk2s/`、
-/// ESDB 的 Hunspell 字典建英文資料包到 `build/packs/scowl-en-us/`；
-/// 每個資料包旁邊放 `LICENSE` 與 `NOTICE`。
+/// 在 repo 根目錄 `root` 建速成資料包與各語料，再用語料建其餘資料包（清單在 `build_packs`）：
+/// 每個資料包寫到 `build/packs/<id>/`，旁邊放 `LICENSE` 與 `NOTICE`。
 /// 另把預設 Gboard 速成佈局（數字列關與開兩份）寫到 `build/layouts/`。
 /// 來源下載到 `cache` 下的 `sources/`（[`sources::default_cache_dir`]）。
 pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result<Outcome, Error> {
@@ -149,15 +182,6 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let load_text = |id: &str, path: &str| -> Result<String, Error> {
         String::from_utf8(load(id, path)?).map_err(|e| Error::invalid(path, e.to_string()))
     };
-    let lexicon_sources = packing::lexicon_sources();
-    let language_model_sources = packing::language_model_sources();
-    let quick_packed = packing::resolve(&packing::QUICK, &all, load_text, read)?;
-    let mut lexicon_packed = packing::resolve(&lexicon_sources, &all, load_text, read)?;
-    lexicon_packed.push(packing::repo_data(&packing::COLLOQUIAL, read)?);
-    let language_model_packed = packing::resolve(&language_model_sources, &all, load_text, read)?;
-    let simplifier_packed = packing::resolve(&packing::SIMPLIFIER, &all, load_text, read)?;
-    let english_packed = packing::resolve(&packing::ENGLISH, &all, load_text, read)?;
-    let radical_hint_packed = packing::resolve(&packing::RADICAL_HINT, &all, load_text, read)?;
 
     // 每次都從快取與方案檔重讀，`--verify` 的第二次建置才是真的重建。
     let build_quick = || -> Result<QuickBuild, Error> {
@@ -165,61 +189,18 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let dictionary_like = unihan::read_archive(&load(UNIHAN, UNIHAN_ZIP)?)?;
         let grades = unihan::grade_levels(&dictionary_like)?;
         let pack = build_scheme_pack(&rows, &grades, scheme::parse(&read(QUICK_SCHEME)?)?);
-        let bytes = pack
-            .to_bytes()
-            .map_err(|e| Error::invalid("資料包", e.to_string()))?;
-        let radical_hint_id = pack.scheme.packs.radical_hint.clone().ok_or_else(|| {
-            Error::invalid(
-                QUICK_SCHEME,
-                "要在 [packs] 寫 radical_hint：字根提示資料包的 id",
-            )
-        })?;
         let radical_hint = RadicalHintPack {
-            id: radical_hint_id.clone(),
+            id: named(&pack.scheme.packs.radical_hint, "radical_hint", "字根提示")?,
             hints: radical_hint::hints(&rows),
-        }
-        .to_bytes()
-        .map_err(|e| Error::invalid("字根提示資料包", e.to_string()))?;
+        };
         Ok(QuickBuild {
             rows,
             dictionary_like,
             pack,
-            bytes,
-            radical_hint_id,
             radical_hint,
         })
     };
     let quick = build_quick()?;
-    let id = quick.pack.scheme.id.clone();
-    let lexicon_id =
-        quick.pack.scheme.packs.lexicon.clone().ok_or_else(|| {
-            Error::invalid(QUICK_SCHEME, "要在 [packs] 寫 lexicon：詞庫資料包的 id")
-        })?;
-    let language_model_id = quick
-        .pack
-        .scheme
-        .packs
-        .language_model
-        .clone()
-        .ok_or_else(|| {
-            Error::invalid(
-                QUICK_SCHEME,
-                "要在 [packs] 寫 language_model：語言模型資料包的 id",
-            )
-        })?;
-    let dir = root.join(PACKS).join(&id);
-    packing::write(&dir, &id, &quick.bytes, &quick_packed, QUICK_ABOUT)?;
-    let pack_path = dir.join(format!("{id}.pack"));
-    let radical_hint_id = &quick.radical_hint_id;
-    let radical_hint_dir = root.join(PACKS).join(radical_hint_id);
-    packing::write(
-        &radical_hint_dir,
-        radical_hint_id,
-        &quick.radical_hint,
-        &radical_hint_packed,
-        RADICAL_HINT_ABOUT,
-    )?;
-    let radical_hint_path = radical_hint_dir.join(format!("{radical_hint_id}.pack"));
     let write =
         |path: PathBuf, contents: &[u8]| std::fs::write(&path, contents).map_err(Error::io(path));
 
@@ -243,7 +224,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             .iter()
             .map(|file| sources::cached(&cache, corpus.source_id, file, fetch))
             .collect::<Result<Vec<_>, _>>()?;
-        let dir = corpora::build_dir(root, corpus);
+        let dir = corpora::build_dir(root, corpus.name);
         std::fs::create_dir_all(&dir).map_err(Error::io(&dir))?;
         let (train_path, dev_path) = (dir.join("train.txt"), dir.join("dev.txt"));
         let create = |path: &Path| {
@@ -269,9 +250,12 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let context_rel = format!("{}/{}.tsv", corpus.group.context_dir(), corpus.name);
         write(root.join(&context_rel), first.context_bench.as_bytes())?;
         write(dir.join("chars.tsv"), first.chars.as_bytes())?;
-        write(dir.join("dev.tsv"), first.dev_items.as_bytes())?;
         write(
-            dir.join("dev-context.tsv"),
+            corpora::dev_items_path(root, corpus.name),
+            first.dev_items.as_bytes(),
+        )?;
+        write(
+            corpora::dev_context_items_path(root, corpus.name),
             first.dev_context_items.as_bytes(),
         )?;
         corpora.push(CorpusSummary {
@@ -324,114 +308,116 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     // 詞庫的碼由這次建出的速成碼表展開，字頻由各語料的 train 乘上權重相加；每次從快取重讀 essay.txt。
     // 詞和粵語語料一樣經 `t2hk` 再換回常見寫法（rime-essay 是 OpenCC 標準寫法，brief §4.1）。
     let essay_converter = corpora::Converter::new(corpora::Conversion::T2hk, forms.clone())?;
-    let build_lexicon =
-        |quick: &QuickBuild, chars: &[(String, u64)]| -> Result<(Vec<u8>, LexiconSummary), Error> {
-            let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
-            let frequency = lexicon::char_frequency(&tables)?;
-            let characters = frequency.len();
-            let (lexicon, counts) = lexicon::build(
-                &load_text(RIME_ESSAY, ESSAY)?,
-                &read(lexicon::COLLOQUIAL_PATH)?,
-                &quick.pack.code_table,
-                &Transcoder::new(&quick.rows),
-                frequency,
-                &lexicon::Forms {
-                    normalize: &|word| essay_converter.convert(word),
-                    both: forms.both(),
-                },
-            )?;
-            let bytes = LexiconPack {
-                id: lexicon_id.clone(),
-                lexicon,
-            }
-            .to_bytes()
-            .map_err(|e| Error::invalid("詞庫資料包", e.to_string()))?;
-            Ok((bytes, LexiconSummary { counts, characters }))
+    let build_lexicon = |quick: &QuickBuild,
+                         chars: &[(String, u64)]|
+     -> Result<(LexiconPack, LexiconSummary), Error> {
+        let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
+        let frequency = lexicon::char_frequency(&tables)?;
+        let characters = frequency.len();
+        let (lexicon, counts) = lexicon::build(
+            &load_text(RIME_ESSAY, ESSAY)?,
+            &read(lexicon::COLLOQUIAL_PATH)?,
+            &quick.pack.code_table,
+            &Transcoder::new(&quick.rows),
+            frequency,
+            &lexicon::Forms {
+                normalize: &|word| essay_converter.convert(word),
+                both: forms.both(),
+            },
+        )?;
+        let pack = LexiconPack {
+            id: named(&quick.pack.scheme.packs.lexicon, "lexicon", "詞庫")?,
+            lexicon,
         };
-    let (lexicon_bytes, lexicon_summary) = build_lexicon(&quick, &chars)?;
-    let lexicon_dir = root.join(PACKS).join(&lexicon_id);
-    packing::write(
-        &lexicon_dir,
-        &lexicon_id,
-        &lexicon_bytes,
-        &lexicon_packed,
-        &lexicon_about(&lexicon_id, &id),
-    )?;
-    let lexicon_path = lexicon_dir.join(format!("{lexicon_id}.pack"));
-
-    // bigram 由各語料寫出的 train 切分訓練；每次重讀檔案，`--verify` 的第二次才是真的重訓。
-    let build_language_model = |quick: &QuickBuild| -> Result<(Vec<u8>, bigram::Summary), Error> {
-        let mut counter = bigram::Counter::default();
-        for (path, weight) in &trains {
-            counter.add(open(path)?, *weight).map_err(Error::io(path))?;
-        }
-        let vocabulary = quick
-            .pack
-            .code_table
-            .iter()
-            .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
-            .collect::<BTreeSet<char>>()
-            .len();
-        let (model, summary) = bigram::train(&counter, vocabulary, bigram::MIN_COUNT, forms.both());
-        let bytes = LanguageModelPack {
-            id: language_model_id.clone(),
-            model,
-        }
-        .to_bytes()
-        .map_err(|e| Error::invalid("語言模型資料包", e.to_string()))?;
-        Ok((bytes, summary))
+        Ok((pack, LexiconSummary { counts, characters }))
     };
-    let (language_model_bytes, language_model_summary) = build_language_model(&quick)?;
-    let language_model_dir = root.join(PACKS).join(&language_model_id);
-    packing::write(
-        &language_model_dir,
-        &language_model_id,
-        &language_model_bytes,
-        &language_model_packed,
-        &language_model_about(&language_model_id),
-    )?;
-    let language_model_path = language_model_dir.join(format!("{language_model_id}.pack"));
-    // 每次從快取重讀字典，`--verify` 的第二次才是真的重建。
-    let build_simplifier = || -> Result<Vec<u8>, Error> {
-        SimplifierPack {
+    // bigram 由各語料寫出的 train 切分訓練；每次重讀檔案，`--verify` 的第二次才是真的重訓。
+    let build_language_model =
+        |quick: &QuickBuild| -> Result<(LanguageModelPack, bigram::Summary), Error> {
+            let mut counter = bigram::Counter::default();
+            for (path, weight) in &trains {
+                counter.add(open(path)?, *weight).map_err(Error::io(path))?;
+            }
+            let vocabulary = quick
+                .pack
+                .code_table
+                .iter()
+                .flat_map(|(_, entries)| entries.iter().filter(|e| !e.extension).map(|e| e.text))
+                .collect::<BTreeSet<char>>()
+                .len();
+            let (model, summary) =
+                bigram::train(&counter, vocabulary, bigram::MIN_COUNT, forms.both());
+            let pack = LanguageModelPack {
+                id: named(
+                    &quick.pack.scheme.packs.language_model,
+                    "language_model",
+                    "語言模型",
+                )?,
+                model,
+            };
+            Ok((pack, summary))
+        };
+    // 加一種資料包只在這裡加一項：建法、授權來源與 NOTICE 的說明（plan §4）。
+    // 每次從快取重讀來源，`--verify` 的第二次才是真的重建。
+    let build_packs = |quick: &QuickBuild, chars: &[(String, u64)]| -> Result<PackSet, Error> {
+        let (lexicon, lexicon_summary) = build_lexicon(quick, chars)?;
+        let (language_model, language_model_summary) = build_language_model(quick)?;
+        let simplifier = SimplifierPack {
             id: SIMPLIFIER_ID.into(),
             simplifier: opencc::hk2s(|file| load_text(OPENCC, file))?,
-        }
-        .to_bytes()
-        .map_err(|e| Error::invalid("簡繁資料包", e.to_string()))
-    };
-    let simplifier_bytes = build_simplifier()?;
-    let simplifier_dir = root.join(PACKS).join(SIMPLIFIER_ID);
-    packing::write(
-        &simplifier_dir,
-        SIMPLIFIER_ID,
-        &simplifier_bytes,
-        &simplifier_packed,
-        SIMPLIFIER_ABOUT,
-    )?;
-    let simplifier_path = simplifier_dir.join(format!("{SIMPLIFIER_ID}.pack"));
-    // 只留速成打得出的詞（a–y）；同樣每次從快取重讀。
-    let alphabet = quick.pack.scheme.alphabet.clone();
-    let build_english = || -> Result<(Vec<u8>, english::Counts), Error> {
-        let (words, counts) = english::words(&load(SCOWL, SCOWL_ZIP)?, &alphabet)?;
-        let bytes = EnglishPack {
+        };
+        // 只留速成打得出的詞（a–y）。
+        let (words, english_counts) =
+            english::words(&load(SCOWL, SCOWL_ZIP)?, &quick.pack.scheme.alphabet)?;
+        let english = EnglishPack {
             id: ENGLISH_ID.into(),
             words,
-        }
-        .to_bytes()
-        .map_err(|e| Error::invalid("英文資料包", e.to_string()))?;
-        Ok((bytes, counts))
+        };
+        let scheme = &quick.pack.scheme.id;
+        let packs = vec![
+            LicensedPack::new("速成", &quick.pack, packing::QUICK.into(), QUICK_ABOUT)?,
+            LicensedPack::new(
+                "詞庫",
+                &lexicon,
+                packing::lexicon_sources(),
+                lexicon_about(&lexicon.id, scheme),
+            )?,
+            LicensedPack::new(
+                "語言模型",
+                &language_model,
+                packing::language_model_sources(),
+                language_model_about(&language_model.id),
+            )?,
+            LicensedPack::new(
+                "字根提示",
+                &quick.radical_hint,
+                packing::RADICAL_HINT.into(),
+                RADICAL_HINT_ABOUT,
+            )?,
+            LicensedPack::new(
+                "簡繁",
+                &simplifier,
+                packing::SIMPLIFIER.into(),
+                SIMPLIFIER_ABOUT,
+            )?,
+            LicensedPack::new("英文", &english, packing::ENGLISH.into(), ENGLISH_ABOUT)?,
+        ];
+        Ok(PackSet {
+            packs,
+            lexicon: lexicon_summary,
+            language_model: language_model_summary,
+            english: english_counts,
+        })
     };
-    let (english_bytes, english_counts) = build_english()?;
-    let english_dir = root.join(PACKS).join(ENGLISH_ID);
-    packing::write(
-        &english_dir,
-        ENGLISH_ID,
-        &english_bytes,
-        &english_packed,
-        ENGLISH_ABOUT,
-    )?;
-    let english_path = english_dir.join(format!("{ENGLISH_ID}.pack"));
+    let first = build_packs(&quick, &chars)?;
+    let packs = first
+        .packs
+        .iter()
+        .map(|licensed| {
+            let packed = packing::resolve(&licensed.sources, &all, load_text, read)?;
+            write_pack(root, licensed, &packed)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
 
     let layouts = root.join(LAYOUTS);
     std::fs::create_dir_all(&layouts).map_err(Error::io(&layouts))?;
@@ -443,7 +429,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     )?;
 
     let personal = build_personal(root, &transcoder)?;
-    if verify {
+    let report = if verify {
+        let built = first.built();
         let benches: Vec<(&str, &str)> = benches
             .iter()
             .map(|(n, b)| (n.as_str(), b.as_str()))
@@ -462,40 +449,16 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             &corpora::CANTONESE_KEPT,
         ));
         corpus_checks.push(verify::common_forms(&frequency, &forms));
-        let built = LexiconPack::from_bytes(&lexicon_bytes)
-            .map_err(|e| Error::invalid("詞庫資料包", e.to_string()))?;
-        let model = LanguageModelPack::from_bytes(&language_model_bytes)
-            .map_err(|e| Error::invalid("語言模型資料包", e.to_string()))?
+        let decoded = |e: String| Error::invalid("資料包", e);
+        let lexicon = built::decode::<LexiconPack>(&built).map_err(decoded)?;
+        let model = built::decode::<LanguageModelPack>(&built)
+            .map_err(decoded)?
             .model;
-        corpus_checks.push(verify::lexicon_forms(&built.lexicon, &model, &forms));
-    }
+        corpus_checks.push(verify::lexicon_forms(&lexicon.lexicon, &model, &forms));
 
-    let report = if verify {
-        // 第二次從來源重建速成碼表，詞庫也由它重建，整條鏈都比到。
-        let second_quick = build_quick()?;
-        let (second_lexicon, _) = build_lexicon(&second_quick, &second_chars)?;
-        let (second_language_model, _) = build_language_model(&second_quick)?;
-        let second_simplifier = build_simplifier()?;
-        let (second_english, _) = build_english()?;
-        let mut report = verify::run(
-            &quick.rows,
-            PackBytes {
-                quick: &quick.bytes,
-                lexicon: &lexicon_bytes,
-                language_model: &language_model_bytes,
-                simplifier: &simplifier_bytes,
-                radical_hint: &quick.radical_hint,
-                english: &english_bytes,
-            },
-            PackBytes {
-                quick: &second_quick.bytes,
-                lexicon: &second_lexicon,
-                language_model: &second_language_model,
-                simplifier: &second_simplifier,
-                radical_hint: &second_quick.radical_hint,
-                english: &second_english,
-            },
-        );
+        // 第二次從來源重建速成碼表，其餘資料包也由它重建，整條鏈都比到。
+        let second = build_packs(&build_quick()?, &second_chars)?;
+        let mut report = verify::run(&quick.rows, &built, &second.built());
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
         let check = unihan::compare(&quick.rows, &unihan::cangjie_codes(&quick.dictionary_like)?);
         let path = root.join(UNIHAN_REPORT);
@@ -508,9 +471,9 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             matching_cangjie5: check.matching_cangjie5(),
             report: UNIHAN_REPORT.into(),
         });
-        report.lexicon = Some(lexicon_summary);
-        report.language_model = Some(language_model_summary);
-        report.english = Some(english_counts);
+        report.lexicon = Some(first.lexicon);
+        report.language_model = Some(first.language_model);
+        report.english = Some(first.english);
         report.corpora = corpora.clone();
         report.checks.extend(corpus_checks);
         Some(report)
@@ -518,25 +481,43 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         None
     };
     Ok(Outcome {
-        pack_path,
-        sha256: sha256_hex(&quick.bytes),
-        lexicon_path,
-        lexicon_sha256: sha256_hex(&lexicon_bytes),
-        lexicon: lexicon_summary,
-        language_model_path,
-        language_model_sha256: sha256_hex(&language_model_bytes),
-        language_model: language_model_summary,
-        simplifier_path,
-        simplifier_sha256: sha256_hex(&simplifier_bytes),
-        english_path,
-        english_sha256: sha256_hex(&english_bytes),
-        english: english_counts,
-        radical_hint_sha256: sha256_hex(&quick.radical_hint),
-        radical_hint_path,
+        packs,
+        lexicon: first.lexicon,
+        language_model: first.language_model,
+        english: first.english,
         layout_path,
         corpora,
         personal,
         report,
+    })
+}
+
+/// 方案 `[packs]` 指名的資料包 id；`key` 是方案檔的鍵，`what` 是錯誤訊息裡的種類名。
+fn named(id: &Option<String>, key: &str, what: &str) -> Result<String, Error> {
+    id.clone().ok_or_else(|| {
+        Error::invalid(
+            QUICK_SCHEME,
+            format!("要在 [packs] 寫 {key}：{what}資料包的 id"),
+        )
+    })
+}
+
+/// 把資料包寫到 `build/packs/<id>/`，旁邊放 `LICENSE` 與 `NOTICE`；`packed` 是它讀好的授權。
+fn write_pack(
+    root: &Path,
+    licensed: &LicensedPack,
+    packed: &[packing::Packed],
+) -> Result<WrittenPack, Error> {
+    let BuiltPack {
+        name, id, bytes, ..
+    } = &licensed.pack;
+    let dir = root.join(PACKS).join(id);
+    packing::write(&dir, id, bytes, packed, &licensed.about)?;
+    Ok(WrittenPack {
+        name,
+        id: id.clone(),
+        path: dir.join(format!("{id}.pack")),
+        sha256: licensed.pack.sha256(),
     })
 }
 

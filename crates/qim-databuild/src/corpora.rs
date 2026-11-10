@@ -294,7 +294,19 @@ pub fn attribution_file(group: Group, sections: &[String]) -> String {
     )
 }
 
-/// 語料在 `build/corpus/` 下的目錄。
-pub fn build_dir(root: &Path, corpus: &Corpus) -> PathBuf {
-    root.join("build/corpus").join(corpus.name)
+/// 語料 `name` 在 `build/corpus/` 下的目錄。
+pub fn build_dir(root: &Path, name: &str) -> PathBuf {
+    root.join("build/corpus").join(name)
+}
+
+/// 語料 `name` 的 dev 調參題（`build/corpus/<名>/dev.tsv`）；`qim_bench::dev_items` 讀同一個路徑
+/// （plan §1.3 不讓 `qim-bench` 依賴本 crate），`xtask` 的 `shared_paths` 測試比對兩邊。
+pub fn dev_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev.tsv")
+}
+
+/// 語料 `name` 的 dev「有前文」調參題（`build/corpus/<名>/dev-context.tsv`）；`qim_bench::dev_context_items`
+/// 讀同一個路徑，`xtask` 的 `shared_paths` 測試比對兩邊。
+pub fn dev_context_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev-context.tsv")
 }

@@ -12,10 +12,10 @@ use qim_core::{
     UserModel,
 };
 
+use crate::built::{self, BuiltPack};
 use crate::common_forms::{BothForms, CommonForms, ONE_WAY_DISTINCT, REVERSED_ONE_WAY};
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
-use crate::sources::sha256_hex;
 use crate::transcode::Transcoder;
 use crate::{bigram, english, lexicon};
 
@@ -50,7 +50,7 @@ pub enum CheckId {
     EnglishThe,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
-    /// 同樣的來源建兩次，六份資料包的 sha256 都相同。
+    /// 同樣的來源建兩次，每份資料包的 sha256 都相同、清單一樣。
     Deterministic,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
@@ -111,13 +111,6 @@ pub struct Report {
     pub extension: usize,
     /// 資料包裡的速成碼個數。
     pub codes: usize,
-    /// 速成資料包的 sha256。
-    pub sha256: String,
-    pub lexicon_sha256: String,
-    pub language_model_sha256: String,
-    pub radical_hint_sha256: String,
-    pub simplifier_sha256: String,
-    pub english_sha256: String,
     /// 英文詞表的建置統計；[`run`] 不算，由呼叫端填。
     pub english: Option<english::Counts>,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
@@ -227,12 +220,6 @@ impl fmt::Display for Report {
         writeln!(f, "連打字集：{} 字", self.continuous)?;
         writeln!(f, "擴展區：{} 字", self.extension)?;
         writeln!(f, "速成碼：{} 個", self.codes)?;
-        writeln!(f, "sha256：{}", self.sha256)?;
-        writeln!(f, "詞庫 sha256：{}", self.lexicon_sha256)?;
-        writeln!(f, "bigram sha256：{}", self.language_model_sha256)?;
-        writeln!(f, "字根提示 sha256：{}", self.radical_hint_sha256)?;
-        writeln!(f, "簡繁 sha256：{}", self.simplifier_sha256)?;
-        writeln!(f, "英文 sha256：{}", self.english_sha256)?;
         if let Some(lexicon) = &self.lexicon {
             writeln!(f, "{lexicon}")?;
         }
@@ -272,40 +259,12 @@ pub fn english_summary(c: &english::Counts) -> String {
     )
 }
 
-/// 一次建置寫出的六份資料包的位元組。
-#[derive(Debug, Clone, Copy)]
-pub struct PackBytes<'a> {
-    pub quick: &'a [u8],
-    pub lexicon: &'a [u8],
-    pub language_model: &'a [u8],
-    pub radical_hint: &'a [u8],
-    pub simplifier: &'a [u8],
-    pub english: &'a [u8],
-}
-
 /// `first` 是寫出的資料包，`second` 是由同樣的來源再建一次的結果。
-pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
-    let sha256 = |p: PackBytes| {
-        (
-            sha256_hex(p.quick),
-            sha256_hex(p.lexicon),
-            sha256_hex(p.language_model),
-            sha256_hex(p.radical_hint),
-            sha256_hex(p.simplifier),
-            sha256_hex(p.english),
-        )
-    };
-    let (first_sha256, second_sha256) = (sha256(first), sha256(second));
+pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
     let mut report = Report {
         continuous: 0,
         extension: 0,
         codes: 0,
-        sha256: first_sha256.0.clone(),
-        lexicon_sha256: first_sha256.1.clone(),
-        language_model_sha256: first_sha256.2.clone(),
-        radical_hint_sha256: first_sha256.3.clone(),
-        simplifier_sha256: first_sha256.4.clone(),
-        english_sha256: first_sha256.5.clone(),
         english: None,
         lexicon: None,
         language_model: None,
@@ -320,32 +279,43 @@ pub fn run(rows: &[Row], first: PackBytes, second: PackBytes) -> Report {
             engine,
             hints,
         }) => pack_checks(&mut report, rows, &pack, &lexicon, &engine, &hints),
-        Err(e) => report.checks.push(Check {
+        Err(detail) => report.checks.push(Check {
             id: CheckId::Decodes,
             passed: false,
-            detail: e.to_string(),
+            detail,
         }),
     }
-    report.checks.push(Check {
-        id: CheckId::LanguageModelSize,
-        passed: first.language_model.len() <= bigram::MAX_BYTES,
-        detail: format!(
-            "{} 位元組，上限 {}",
-            first.language_model.len(),
-            bigram::MAX_BYTES
-        ),
-    });
+    report
+        .checks
+        .push(match built::find::<LanguageModelPack>(first) {
+            Ok(model) => Check {
+                id: CheckId::LanguageModelSize,
+                passed: model.bytes.len() <= bigram::MAX_BYTES,
+                detail: format!("{} 位元組，上限 {}", model.bytes.len(), bigram::MAX_BYTES),
+            },
+            Err(detail) => Check {
+                id: CheckId::LanguageModelSize,
+                passed: false,
+                detail,
+            },
+        });
+    let digests = |packs: &[BuiltPack]| {
+        packs
+            .iter()
+            .map(|p| (p.name, p.sha256()))
+            .collect::<Vec<_>>()
+    };
+    let second_digests = digests(second);
     report.checks.push(Check {
         id: CheckId::Deterministic,
-        passed: first_sha256 == second_sha256,
+        passed: digests(first) == second_digests,
         detail: format!(
-            "第二次速成 {}、詞庫 {}、bigram {}、字根提示 {}、簡繁 {}、英文 {}",
-            second_sha256.0,
-            second_sha256.1,
-            second_sha256.2,
-            second_sha256.3,
-            second_sha256.4,
-            second_sha256.5
+            "第二次{}",
+            second_digests
+                .iter()
+                .map(|(name, sha256)| format!("{name} {sha256}"))
+                .collect::<Vec<_>>()
+                .join("、")
         ),
     });
     report
@@ -360,17 +330,16 @@ struct Decoded {
     hints: RadicalHints,
 }
 
-fn decode(bytes: PackBytes) -> Result<Decoded, qim_core::PackError> {
-    let pack = SchemePack::from_bytes(bytes.quick)?;
-    let lexicon = LexiconPack::from_bytes(bytes.lexicon)?;
-    let language_model = LanguageModelPack::from_bytes(bytes.language_model)?;
-    let hints = RadicalHints::for_scheme(
-        RadicalHintPack::from_bytes(bytes.radical_hint)?,
-        &pack.scheme,
-    )?;
-    let simplifier = SimplifierPack::from_bytes(bytes.simplifier)?;
-    let english = EnglishPack::from_bytes(bytes.english)?;
-    let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))?
+fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
+    let pack = built::decode::<SchemePack>(packs)?;
+    let lexicon = built::decode::<LexiconPack>(packs)?;
+    let language_model = built::decode::<LanguageModelPack>(packs)?;
+    let hints = RadicalHints::for_scheme(built::decode::<RadicalHintPack>(packs)?, &pack.scheme)
+        .map_err(|e| e.to_string())?;
+    let simplifier = built::decode::<SimplifierPack>(packs)?;
+    let english = built::decode::<EnglishPack>(packs)?;
+    let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))
+        .map_err(|e| e.to_string())?
         .with_simplifier(simplifier)
         .with_english(english);
     Ok(Decoded {

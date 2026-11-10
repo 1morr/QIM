@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CangjieCodes, CangjieVersion, PackError, Packs, RadicalHint, RadicalHintPack, RadicalHints,
-    Ranking, Scheme,
+    CangjieCodes, CangjieVersion, Pack, PackError, Packs, RadicalHint, RadicalHintPack,
+    RadicalHints, Ranking, Scheme,
 };
 
 fn codes(cangjie3: &[&str], cangjie5: &[&str]) -> CangjieCodes {

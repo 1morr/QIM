@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use qim_core::{
-    CangjieCodes, CodeEntry, CodeTable, Lexicon, LexiconPack, Packs, RadicalHintPack, RadicalHints,
-    Ranking, Scheme, SchemePack, Word,
+    CangjieCodes, CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Packs, RadicalHintPack,
+    RadicalHints, Ranking, Scheme, SchemePack, Word,
 };
 use qim_ffi::{
     Engine, LexiconPack as FfiLexiconPack, RadicalHintPack as FfiRadicalHintPack,
