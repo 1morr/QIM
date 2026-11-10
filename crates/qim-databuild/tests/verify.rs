@@ -693,11 +693,24 @@ mod corpus {
     const BENCH: &str = "ar a\t問日\nmi mi\t丟丟\n";
     const TRAIN: &str = "日丟\n問問日\n";
     const DEV: &str = "丟\n";
+    /// 「有前文」的題：前文原樣，可含字集外的字。
+    const CONTEXT: &str = "ATM，𠀀。\tar a\t問日\n";
 
-    fn failed(bench: &str, train: &str, dev: &str, second: [&str; 4]) -> Vec<CheckId> {
+    fn failed(bench: &str, train: &str, dev: &str, second: [&str; 5]) -> Vec<CheckId> {
+        failed_with_context(bench, CONTEXT, train, dev, second)
+    }
+
+    fn failed_with_context(
+        bench: &str,
+        context: &str,
+        train: &str,
+        dev: &str,
+        second: [&str; 5],
+    ) -> Vec<CheckId> {
         let transcoder = Transcoder::new(&libcangjie::parse(TABLE).unwrap());
-        let digests = |[bench, train, dev, chars]: [&str; 4]| CorpusDigests {
+        let digests = |[bench, context_bench, train, dev, chars]: [&str; 5]| CorpusDigests {
             bench: bench.into(),
+            context_bench: context_bench.into(),
             train: train.into(),
             dev: dev.into(),
             chars: chars.into(),
@@ -708,6 +721,7 @@ mod corpus {
             "test",
             &transcoder,
             bench,
+            context,
             train.as_bytes(),
             dev.as_bytes(),
             &first,
@@ -720,7 +734,7 @@ mod corpus {
         .collect()
     }
 
-    const SAME: [&str; 4] = ["b", "t", "d", "c"];
+    const SAME: [&str; 5] = ["b", "x", "t", "d", "c"];
 
     #[test]
     fn clean_corpus_passes_even_with_lines_in_another_order() {
@@ -791,13 +805,36 @@ mod corpus {
     }
 
     #[test]
+    fn context_item_with_a_wrong_code_or_missing_its_context_fails() {
+        let transcodes = |context: &str| failed_with_context(BENCH, context, TRAIN, DEV, SAME);
+        assert_eq!(
+            transcodes(&CONTEXT.replace("ar a", "an a")),
+            [CheckId::CorpusTranscodes]
+        );
+        assert_eq!(transcodes("ar a\t問日\n"), [CheckId::CorpusTranscodes]);
+        assert_eq!(
+            transcodes("前文\t日𠀀\t日𠀀\n"),
+            [CheckId::CorpusTranscodes]
+        );
+        assert_eq!(transcodes(""), []);
+    }
+
+    #[test]
+    fn context_item_sentence_in_a_train_is_a_leak() {
+        assert_eq!(
+            leaks(&[("a 有前文", CONTEXT)], &["問日\n"]),
+            [(false, "a 有前文 test 句原樣出現在 train 1 句".into())]
+        );
+    }
+
+    #[test]
     fn different_second_build_fails() {
         assert_eq!(
-            failed(BENCH, TRAIN, DEV, ["b", "t", "x", "c"]),
+            failed(BENCH, TRAIN, DEV, ["b", "x", "t", "y", "c"]),
             [CheckId::CorpusDeterministic]
         );
         assert_eq!(
-            failed(BENCH, TRAIN, DEV, ["b", "t", "d", "x"]),
+            failed(BENCH, TRAIN, DEV, ["b", "x", "t", "d", "y"]),
             [CheckId::CorpusDeterministic]
         );
     }

@@ -12,6 +12,8 @@ use crate::{Engine, Segment, UserModel};
 #[derive(Debug, Clone)]
 pub(crate) struct Lattice {
     input: String,
+    /// 組字前面的一個字（plan §2.3）：開頭的字接它的 bigram；`None` 是用 unigram。
+    before: Option<char>,
     columns: Vec<Vec<Node>>,
 }
 
@@ -52,6 +54,7 @@ impl Default for Lattice {
     fn default() -> Self {
         Self {
             input: String::new(),
+            before: None,
             columns: vec![vec![Node {
                 score: 0.0,
                 text: String::new(),
@@ -62,9 +65,22 @@ impl Default for Lattice {
 }
 
 impl Lattice {
-    /// 從頭建一串輸入碼的 lattice，和逐鍵 [`Lattice::push`] 相同。
-    pub fn from_input(engine: &Engine, user: &UserModel, input: &str) -> Self {
-        let mut lattice = Self::default();
+    /// 還沒有輸入碼、接在 `before` 後面的 lattice。
+    pub fn starting_after(before: Option<char>) -> Self {
+        Self {
+            before,
+            ..Self::default()
+        }
+    }
+
+    /// 從頭建一串接在 `before` 後面的輸入碼的 lattice，和逐鍵 [`Lattice::push`] 相同。
+    pub fn from_input(
+        engine: &Engine,
+        user: &UserModel,
+        before: Option<char>,
+        input: &str,
+    ) -> Self {
+        let mut lattice = Self::starting_after(before);
         for c in input.chars() {
             lattice.push(engine, user, c);
         }
@@ -89,7 +105,7 @@ impl Lattice {
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
         for (e, edge) in edges.iter().enumerate() {
             for (k, node) in self.columns[edge.start].iter().enumerate() {
-                let prev = node.text.chars().next_back();
+                let prev = node.text.chars().next_back().or(self.before);
                 extended.push((node.score + engine.edge_score(prev, edge), e, k));
             }
         }
@@ -168,8 +184,9 @@ pub(crate) fn candidates(
     }
     // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間的分隔記號由 `Engine::span` 處理。
     let lookup_code = input.trim_end_matches(SEPARATOR);
+    let before = lattice.before;
     let mut full: Vec<(f64, CandidateSpan)> = engine
-        .span(user, lookup_code)
+        .span(user, before, lookup_code)
         .into_iter()
         .map(|(score, text)| (score, CandidateSpan::single(text, input)))
         .collect();
@@ -211,7 +228,7 @@ pub(crate) fn candidates(
         })
         .flat_map(|(len, covered)| {
             engine
-                .span(user, &input[..len])
+                .span(user, before, &input[..len])
                 .into_iter()
                 .map(move |(_, text)| CandidateSpan::single(text, &input[..covered]))
         });
@@ -238,6 +255,7 @@ pub(crate) fn candidates(
         engine,
         user: scheme_user,
         input,
+        before,
         lookup_code,
         user_code: without_separators(input),
         free: list,
@@ -264,6 +282,8 @@ struct Ranked<'a> {
     user: &'a SchemeModel,
     /// 這列候選的輸入碼，含分隔記號。
     input: &'a str,
+    /// 輸入碼前面的一個字（[`Lattice::before`]）。
+    before: Option<char>,
     /// 查碼表、詞庫與觸發詞的碼：`input` 去掉結尾的分隔記號。
     lookup_code: &'a str,
     /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（plan §2.4）。
@@ -380,11 +400,19 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
         return;
     }
     // 空白的個人模型沒有計數，這次呼叫的排位規則什麼都不做，不會再走到這裡。
-    let unlearned = ranked.engine.candidates(&UserModel::default(), input);
+    let (engine, blank) = (ranked.engine, UserModel::default());
+    let unlearned = candidates(
+        engine,
+        &blank,
+        &Lattice::from_input(engine, &blank, ranked.before, input),
+        false,
+    );
     let Some(unlearned_top) = unlearned.first() else {
         return;
     };
-    let at = ranked.free_full().find(|(_, c)| &c.text == unlearned_top);
+    let at = ranked
+        .free_full()
+        .find(|(_, c)| c.text == unlearned_top.text);
     if let Some((i, _)) = at {
         ranked.pin_at_most(i, 0);
     }

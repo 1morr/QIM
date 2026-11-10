@@ -134,6 +134,10 @@ pub struct CorpusSummary {
     pub bench_sentences: usize,
     /// 基準檔，相對 repo 根目錄。
     pub bench: PathBuf,
+    /// 進「有前文」基準檔的題數。
+    pub context_sentences: usize,
+    /// 「有前文」的基準檔，相對 repo 根目錄。
+    pub context_bench: PathBuf,
 }
 
 impl fmt::Display for CorpusSummary {
@@ -141,13 +145,15 @@ impl fmt::Display for CorpusSummary {
         let c = &self.counts;
         write!(
             f,
-            "語料 {}：train {} 句、dev {} 句、test {} 句（不重複），其中 {} 句進 {}；含字集外字元丟掉 {} 句",
+            "語料 {}：train {} 句、dev {} 句、test {} 句（不重複），其中 {} 句進 {}、有前文的 {} 句進 {}；含字集外字元丟掉 {} 句",
             self.name,
             c.train,
             c.dev,
             c.test,
             self.bench_sentences,
             self.bench.display(),
+            self.context_sentences,
+            self.context_bench.display(),
             c.dropped
         )
     }
@@ -584,37 +590,43 @@ fn word_codes(code_table: &CodeTable, lexicon: &Lexicon) -> Check {
     }
 }
 
-/// 一次語料建置寫出的四個檔的 sha256。
+/// 一次語料建置寫出的五個檔的 sha256。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CorpusDigests {
     pub bench: String,
+    pub context_bench: String,
     pub train: String,
     pub dev: String,
     pub chars: String,
 }
 
 /// 一個語料的轉碼與決定性檢查；洩漏要看所有語料的 train，另由 [`leaks`] 檢查。
-/// `bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
+/// `bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`context_bench` 是「有前文」的
+/// 基準檔（一行「前文<TAB>逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
 /// `first`、`second` 是兩次建置的 sha256。
+#[allow(clippy::too_many_arguments)] // 兩份基準、兩份切分與兩次 sha256，拆成結構只為了湊參數數
 pub fn corpus(
     name: &str,
     transcoder: &Transcoder,
     bench: &str,
+    context_bench: &str,
     train: impl BufRead,
     dev: impl BufRead,
     first: &CorpusDigests,
     second: &CorpusDigests,
 ) -> io::Result<Vec<Check>> {
-    let mut failures = bench
-        .lines()
-        .filter(|line| {
-            !line.split_once('\t').is_some_and(|(codes, sentence)| {
-                transcoder
-                    .transcode(sentence)
-                    .is_ok_and(|expected| expected.join(" ") == codes)
-            })
-        })
-        .count();
+    let codes_match = |line: &str, fields: usize| {
+        let fields_of: Vec<&str> = line.split('\t').collect();
+        let [.., codes, sentence] = fields_of.as_slice() else {
+            return false;
+        };
+        fields_of.len() == fields
+            && transcoder
+                .transcode(sentence)
+                .is_ok_and(|expected| expected.join(" ") == *codes)
+    };
+    let mut failures = bench.lines().filter(|l| !codes_match(l, 2)).count()
+        + context_bench.lines().filter(|l| !codes_match(l, 3)).count();
     for line in train.lines().chain(dev.lines()) {
         if transcoder.transcode(&line?).is_err() {
             failures += 1;
@@ -639,6 +651,7 @@ pub fn corpus(
 }
 
 /// 每個基準集（名字與基準檔內容）各一項：有幾個不重複的基準句原樣出現在 `trains` 的任一份。
+/// 句子是每行最後一欄，基準檔與「有前文」的基準檔都適用。
 pub fn leaks(
     benches: &[(&str, &str)],
     trains: impl IntoIterator<Item = impl BufRead>,
@@ -648,7 +661,7 @@ pub fn leaks(
         .map(|(_, bench)| {
             bench
                 .lines()
-                .filter_map(|line| line.split_once('\t').map(|(_, sentence)| sentence))
+                .filter_map(|line| line.rsplit_once('\t').map(|(_, sentence)| sentence))
                 .collect()
         })
         .collect();

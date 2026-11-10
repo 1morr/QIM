@@ -9,7 +9,7 @@ use ferrous_opencc::OpenCC;
 use ferrous_opencc::config::BuiltinConfig;
 
 use crate::common_forms::CommonForms;
-use crate::corpus::BENCH_SENTENCES;
+use crate::corpus::{BENCH_SENTENCES, CONTEXT_CLAUSES, CONTEXT_SENTENCES};
 use crate::sources::Source;
 use crate::{Error, hkcancor, wiki};
 
@@ -28,6 +28,14 @@ impl Group {
         match self {
             Group::Wiki => "bench/corpus",
             Group::Colloquial => "bench/colloquial",
+        }
+    }
+
+    /// 「有前文」的基準題（plan §5.2）：`<目錄>/context/<名>.tsv`，授權同 [`Group::dir`]。
+    pub fn context_dir(self) -> &'static str {
+        match self {
+            Group::Wiki => "bench/corpus/context",
+            Group::Colloquial => "bench/colloquial/context",
         }
     }
 
@@ -275,7 +283,10 @@ pub fn attribution_file(group: Group, sections: &[String]) -> String {
          and clauses containing characters outside the QIM continuous character set were\n\
          dropped. Each file keeps up to {BENCH_SENTENCES} distinct clauses from the held-out test split,\n\
          one per line, preceded by machine-generated Quick codes (one per character, separated\n\
-         by spaces) and a tab.\n\
+         by spaces) and a tab. The files of the same name under context/ keep up to\n\
+         {CONTEXT_SENTENCES} held-out test clauses that follow other text on the same line of the source,\n\
+         one per line: the text before the clause as written (up to {CONTEXT_CLAUSES} clauses and the\n\
+         punctuation between them), a tab, the Quick codes, a tab and the clause.\n\
          \n\
          {}",
         sections.join("\n"),
@@ -292,4 +303,10 @@ pub fn build_dir(root: &Path, name: &str) -> PathBuf {
 /// （plan §1.3 不讓 `qim-bench` 依賴本 crate），`xtask` 的 `shared_paths` 測試比對兩邊。
 pub fn dev_items_path(root: &Path, name: &str) -> PathBuf {
     build_dir(root, name).join("dev.tsv")
+}
+
+/// 語料 `name` 的 dev「有前文」調參題（`build/corpus/<名>/dev-context.tsv`）；`qim_bench::dev_context_items`
+/// 讀同一個路徑，`xtask` 的 `shared_paths` 測試比對兩邊。
+pub fn dev_context_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev-context.tsv")
 }
