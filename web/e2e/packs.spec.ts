@@ -96,6 +96,11 @@ test("手機寬度下資料包清單自己橫向捲動，頁面不變寬", async
 			document.documentElement.clientWidth,
 	);
 	expect(overflow).toBe(0);
+	// 只有表格橫向捲動，說明在畫面寬度內換行（M3 票 21）。
+	for (const note of ["#import-pack-note", "#pack-updates-note"]) {
+		const box = await page.locator(note).boundingBox();
+		expect(box && box.x + box.width, note).toBeLessThanOrEqual(390);
+	}
 });
 
 test("匯入、切換、刪除，每步候選都換", async ({ page }, testInfo) => {

@@ -39,6 +39,7 @@
 | 2026-11-11 | M3 20 | 資料包 manifest（plan §4.6），核心載入時核對；網頁設定區列出、切換、刪除、從檔案匯入（IndexedDB）；bench 不變；見票 20 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 12 | 個人 bigram（λ 0.8，dev 掃出；句中學到的不搶單打首選）、學習總開關（網頁加開關）、匯出 v2 加 bigram 列；合併 main 後 `--learning` 公開集合合計修正 −138；見票 12 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
 | 2026-11-11 | M3 15 | 記住 email：經 QIM 打過一次就記，中文組字打開頭 3 個字母起排第 2 位起（規則 5，開關預設開），設定區可刪，匯出 v2 加列；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
+| 2026-11-11 | M3 21 | 線上更新：核心 `PackIndex`、`pack-release`（擋沒加版本）、網頁背景檢查與開關，本機伺服器驗；內建與下載版取較高的；未建 GitHub release；見票 21 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
 
 ## 偏差與決定
 
@@ -58,3 +59,4 @@
 - 2026-11-11 M3 票 12：個人 bigram 不照 libime 的凸組合，改 `Pu + (1−Pu)·λ·Pb`（bigram 只往上加）；`--learning` 驗收改看合計，合併 main 後只有 yue-wiki·前文 +6，其餘減少（使用者決定）；學習關掉時手動加詞、常用語照收（使用者確認）；改 plan §2.3、§2.4；見票 12。
 - 2026-11-11 M3 票 18：完整粵語詞庫只補 HKCanCor 的詞；粵典 public domain 詞表與詞典本體授權對不上算查不清，留在之後待書面確認（使用者選），改 brief §1.5、§12.1、plan §4.2；見票 18。
 - 2026-11-11 M3 票 15：英文直通的鍵核心看得到（殼先交給 `handle`），記住 email 從送出去的字認；`clear_context` 改收 `UserModel`，記一次 email 讓共用 tick 加一；plan §2.1、§2.4；見票 15。
+- 2026-11-11 M3 票 21：沒建 GitHub release（使用者不在、只授權推 main），只驗本機流程，建前先問；來源用 tag `packs` 不用 `latest`（App 的 release 會搶）；plan §4.7；見票 21。

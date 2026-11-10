@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "id": "quick-lexicon",
+  "kind": "lexicon",
+  "version": "1.0.1",
+  "min_core_version": "0.0.0",
+  "size": 44,
+  "sha256": "9726f5f7f20bb1cd8aff3bee2104d94fedfca23ea43e89b5dac1985b0d52f4e9",
+  "license": "CC0-1.0"
+}

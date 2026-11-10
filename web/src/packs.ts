@@ -7,10 +7,11 @@ import {
 	importConflict,
 	listPacks,
 	type PackEntry,
+	type PackOrigin,
 	parseManifest,
 	RADICAL_HINT,
 } from "./pack-choice.ts";
-import { Pack } from "./wasm/qim_wasm.js";
+import { manifestIsNewer, Pack } from "./wasm/qim_wasm.js";
 
 /** 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。 */
 const BUILTIN_IDS = [
@@ -29,10 +30,11 @@ const ACTIVE_KEY = "qim.packs.active";
 /** 匯入的資料包：IndexedDB `qim-packs` 庫的 `packs` 表，鍵是 id。 */
 const store = createStore("qim-packs", "packs");
 
-/** 一份資料包的原料：manifest 的 JSON 與資料包檔。 */
+/** 一份資料包的原料：manifest 的 JSON 與資料包檔。存進 IndexedDB 的另記從哪來（舊的紀錄沒有，算匯入的）。 */
 interface Stored {
 	manifest: string;
 	bytes: Uint8Array;
+	origin?: PackOrigin;
 }
 
 interface Loaded extends Stored {
@@ -55,7 +57,7 @@ async function fetchBuiltin(id: string): Promise<Loaded> {
 	const bytes = new Uint8Array(
 		await (await fetchOk(`/packs/${id}/${id}.pack`)).arrayBuffer(),
 	);
-	return { manifest, bytes, entry: parseManifest(manifest, true) };
+	return { manifest, bytes, entry: parseManifest(manifest, "builtin") };
 }
 
 function readChosen(): Record<string, string> {
@@ -91,7 +93,7 @@ export class PackLibrary {
 		const imported = new Map<string, Loaded>();
 		for (const [id, value] of await entries<string, Stored>(store)) {
 			try {
-				const entry = parseManifest(value.manifest, false);
+				const entry = parseManifest(value.manifest, value.origin ?? "imported");
 				imported.set(id, { ...value, entry });
 			} catch {
 				// 舊版或壞掉的紀錄：不列出，也不刪，留著查。
@@ -104,6 +106,15 @@ export class PackLibrary {
 		return listPacks(
 			this.builtin.map((p) => p.entry),
 			[...this.imported.values()].map((p) => p.entry),
+			(downloaded, builtin) => {
+				const mine = this.imported.get(downloaded.id);
+				const theirs = this.builtin.find((p) => p.entry.id === builtin.id);
+				return (
+					mine !== undefined &&
+					theirs !== undefined &&
+					manifestIsNewer(mine.manifest, theirs.manifest)
+				);
+			},
 		);
 	}
 
@@ -114,8 +125,20 @@ export class PackLibrary {
 		return listed.map((p) => ({ ...p, active: active.get(p.kind) === p.id }));
 	}
 
+	/** 列出的每份資料包的 `manifest.json`：檢查線上更新時和更新索引比（被取代的內建那份不算）。 */
+	installedManifests(): string[] {
+		return this.listedEntries().flatMap((p) => this.find(p.id)?.manifest ?? []);
+	}
+
+	/** 列出的那份 `id`：被內建的比下去的下載版不算（`listPacks`）。 */
 	private find(id: string): Loaded | undefined {
-		return this.imported.get(id) ?? this.builtin.find((p) => p.entry.id === id);
+		const listed = this.listedEntries().find((p) => p.id === id);
+		if (!listed) {
+			return undefined;
+		}
+		return listed.origin === "builtin"
+			? this.builtin.find((p) => p.entry.id === id)
+			: this.imported.get(id);
 	}
 
 	/** 正在用的 `kind` 那份，做成新的 `Pack`；交出去之後由收的一方負責（`Session` 會拿走）。 */
@@ -158,40 +181,79 @@ export class PackLibrary {
 	}
 
 	/**
-	 * 從檔案匯入：在 `files` 裡找 `manifest.json` 與它說的 `<id>.pack`，經核心核對後換成那一種正在用
-	 * 的那份，`apply` 交給核心收下了才存進 IndexedDB。任一步不過時丟錯，什麼都不動。回傳匯入的資料包。
+	 * 從檔案匯入：在 `files` 裡找 manifest（`manifest.json`，或 release 上的 `<id>.manifest.json`）與它說的
+	 * `<id>.pack`，裝上並換成那一種正在用的那份。任一步不過時丟錯，什麼都不動。回傳匯入的資料包。
 	 */
 	async import(files: readonly File[], apply: () => void): Promise<PackEntry> {
-		const manifestFile = files.find((f) => f.name === MANIFEST_FILE);
+		const manifestFile = files.find(
+			(f) => f.name === MANIFEST_FILE || f.name.endsWith(`.${MANIFEST_FILE}`),
+		);
 		if (!manifestFile) {
 			throw new Error(`要一起選 ${MANIFEST_FILE} 與資料包檔`);
 		}
 		const manifest = await manifestFile.text();
-		const entry = parseManifest(manifest, false);
+		const entry = parseManifest(manifest, "imported");
 		const packFile = files.find((f) => f.name === `${entry.id}.pack`);
 		if (!packFile) {
 			throw new Error(`沒有選 ${entry.id}.pack`);
 		}
+		const bytes = new Uint8Array(await packFile.arrayBuffer());
+		await this.install(entry, manifest, bytes, apply, () => {
+			this.chosen = { ...this.chosen, [entry.kind]: entry.id };
+		});
+		return entry;
+	}
+
+	/**
+	 * 換上線上更新下載的新版（§4.7）：`from` 是開始下載時那份的版本。那份已經刪掉或換了版本（下載時使用者
+	 * 動過）就不裝、回傳 `false`；不改每種用哪份（同 id 的本來在用就照用）。其餘同 `import`。
+	 */
+	async update(
+		manifest: string,
+		bytes: Uint8Array,
+		from: string,
+		apply: () => void,
+	): Promise<boolean> {
+		const entry = parseManifest(manifest, "downloaded");
+		if (
+			!this.listedEntries().some((p) => p.id === entry.id && p.version === from)
+		) {
+			return false;
+		}
+		await this.install(entry, manifest, bytes, apply, () => {});
+		return true;
+	}
+
+	/**
+	 * 裝一份資料包（匯入與線上更新共用，brief §5.3）：經核心核對 manifest 與位元組，和已有的同 id 就取代
+	 * 它，`choose` 改每種用哪份；`apply` 交給核心收下了才存進 IndexedDB。任一步不過時丟錯，什麼都不動。
+	 */
+	private async install(
+		entry: PackEntry,
+		manifest: string,
+		bytes: Uint8Array,
+		apply: () => void,
+		choose: () => void,
+	): Promise<void> {
 		const conflict = importConflict(this.listedEntries(), entry);
 		if (conflict) {
 			throw new Error(conflict);
 		}
-		const bytes = new Uint8Array(await packFile.arrayBuffer());
 		const pack = new Pack(manifest, bytes);
 		try {
 			pack.verify();
 		} finally {
 			pack.free();
 		}
+		const origin = entry.origin;
 		await this.change(
 			() => {
 				this.imported.set(entry.id, { manifest, bytes, entry });
-				this.chosen = { ...this.chosen, [entry.kind]: entry.id };
+				choose();
 			},
 			apply,
-			() => set(entry.id, { manifest, bytes } satisfies Stored, store),
+			() => set(entry.id, { manifest, bytes, origin } satisfies Stored, store),
 		);
-		return entry;
 	}
 
 	/** 刪掉匯入的那份；正在用的話那種回到內建的。`apply` 同 `import`，核心收下了才從 IndexedDB 刪。 */
