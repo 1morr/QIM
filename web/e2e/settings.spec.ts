@@ -26,6 +26,9 @@ test("設定區列出改核心選項的開關，預設值照 brief §7", async (
 		settings.getByRole("checkbox", { name: "英文候選" }),
 	).toBeChecked();
 	await expect(
+		settings.getByRole("checkbox", { name: "emoji 候選" }),
+	).toBeChecked();
+	await expect(
 		settings.getByRole("checkbox", { name: "數字後半形" }),
 	).toBeChecked();
 	await expect(settings.getByRole("combobox", { name: "重排" })).toHaveValue(

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::Error;
 use crate::corpora::CORPORA;
+use crate::emoji::{CLDR, EMOJI_TEST};
 use crate::lexicon;
 use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, SCOWL, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
@@ -59,6 +60,20 @@ pub(crate) const ENGLISH: [PackSource; 1] = [PackSource::Upstream(UpstreamSource
     used: "en_US.dic and en_US.aff in the hunspell-en_US zip: the words of the size 60 \
            American English speller dictionary",
 })];
+
+/// emoji 資料包：CLDR 的標註給字詞與 emoji，emoji-test.txt 給 emoji 的完整寫法（plan §4.4）。
+pub(crate) const EMOJI: [PackSource; 2] = [
+    PackSource::Upstream(UpstreamSource {
+        name: "Unicode CLDR",
+        source_id: CLDR,
+        used: "common/annotations/yue.xml and zh_Hant.xml: emoji keywords and short names",
+    }),
+    PackSource::Upstream(UpstreamSource {
+        name: "Unicode emoji-test.txt",
+        source_id: EMOJI_TEST,
+        used: "emoji-test.txt: the code points of fully-qualified emoji",
+    }),
+];
 
 /// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。
 pub(crate) const RADICAL_HINT: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {

@@ -7,6 +7,7 @@ pub mod built;
 pub mod common_forms;
 pub mod corpora;
 pub mod corpus;
+pub mod emoji;
 pub mod english;
 mod error;
 pub mod gboard;

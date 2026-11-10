@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::engine::Spanned;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::SchemeModel;
-use crate::{Engine, Segment, UserModel};
+use crate::{EMOJI_LIMIT, Engine, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -35,8 +35,25 @@ pub(crate) struct CandidateSpan {
     /// 組成它的各段（碼與字詞），依輸入碼的順序、碼接起來是它蓋住的輸入碼、字詞接起來是
     /// `text`；選定與上屏時用（plan §2.4）。
     pub segments: Vec<Segment>,
-    /// 英文候選（排位規則 4）：選了它和 Enter 一樣不學。
-    pub english_candidate: bool,
+    pub kind: SpanKind,
+}
+
+/// 候選從哪裡來。英文與 emoji 不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、不學。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SpanKind {
+    /// 碼表的字、詞庫的詞、使用者詞或多段路徑。
+    Word,
+    /// 英文候選（排位規則 4）。
+    English,
+    /// 接在字詞後面的 emoji（plan §2.4）。
+    Emoji,
+}
+
+impl SpanKind {
+    /// 選了和 Enter 一樣原樣上屏、整次不學也不造詞。
+    pub(crate) fn is_literal(self) -> bool {
+        self != Self::Word
+    }
 }
 
 impl CandidateSpan {
@@ -46,7 +63,7 @@ impl CandidateSpan {
             segments: vec![Segment::new(code.to_string(), text.clone())],
             text,
             len: code.len(),
-            english_candidate: false,
+            kind: SpanKind::Word,
         }
     }
 }
@@ -56,6 +73,8 @@ impl CandidateSpan {
 pub(crate) struct Listing {
     /// 整串輸入碼是英文單字時加英文候選（排位規則 4）；目前分段的候選列沒有。
     pub english_candidates: bool,
+    /// 整串的候選是 emoji 資料包裡的詞時接上它的 emoji（M3 票 16）；目前分段的候選列沒有。
+    pub emoji_candidates: bool,
     /// 碼表標成簡體字的字排到同一段的其他字詞之後（brief §4.1）：繁體模式、
     /// [`crate::Options::simplified_after_traditional`] 開著時。
     pub simplified_last: bool,
@@ -223,7 +242,7 @@ pub(crate) fn candidates(
                     text: node.text.clone(),
                     len: n,
                     segments: lattice.path(n, k),
-                    english_candidate: false,
+                    kind: SpanKind::Word,
                 };
                 (node.score, false, span)
             }),
@@ -263,6 +282,9 @@ pub(crate) fn candidates(
         .chain(prefixes)
         .filter(|c| seen.insert(c.text.clone()))
         .collect();
+    if listing.emoji_candidates {
+        list = with_emoji(engine, list, input, &mut seen);
+    }
     // 沒有中文候選時不出英文：它不搶首選（brief §4.3）。
     if let Some(word) = listing
         .english_candidates
@@ -272,7 +294,7 @@ pub(crate) fn candidates(
         && seen.insert(word.to_string())
     {
         list.push(CandidateSpan {
-            english_candidate: true,
+            kind: SpanKind::English,
             ..CandidateSpan::single(word.to_string(), input)
         });
     }
@@ -291,6 +313,40 @@ pub(crate) fn candidates(
         rule(&mut ranked);
     }
     ranked.into_list()
+}
+
+/// 蓋滿整串的字詞後面接上它的 emoji（rime-emoji 的做法，plan §2.4），依候選列的順序、整列最多
+/// [`EMOJI_LIMIT`] 個，和前面的候選文字重複的不接。查的是繁體原文，簡體模式也一樣。在排位規則
+/// 之前接上，所以規則排定的位置（英文候選的第 2 位）照舊；emoji 不在 lattice、沒有學習計數，
+/// 規則不會移動它。
+fn with_emoji(
+    engine: &Engine,
+    list: Vec<CandidateSpan>,
+    input: &str,
+    seen: &mut HashSet<String>,
+) -> Vec<CandidateSpan> {
+    let mut left = EMOJI_LIMIT;
+    let mut out = Vec::with_capacity(list.len());
+    for span in list {
+        let emoji: Vec<String> = if left > 0 && span.len == input.len() {
+            engine
+                .emoji(&span.text)
+                .iter()
+                .filter(|e| seen.insert(e.to_string()))
+                .take(left)
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        left -= emoji.len();
+        out.push(span);
+        out.extend(emoji.into_iter().map(|e| CandidateSpan {
+            kind: SpanKind::Emoji,
+            ..CandidateSpan::single(e, input)
+        }));
+    }
+    out
 }
 
 /// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
@@ -435,6 +491,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
         &Lattice::from_input(engine, &blank, ranked.before, input),
         Listing {
             english_candidates: false,
+            emoji_candidates: false,
             ..ranked.listing
         },
     )
@@ -460,7 +517,7 @@ fn used_word_second(ranked: &mut Ranked) {
 
 /// 規則 4：英文候選排第 2 位（brief §4.3）；第 2 位已由前面的規則排定時排在它後面最前的空位。
 fn english_second(ranked: &mut Ranked) {
-    if let Some(i) = ranked.free.iter().position(|c| c.english_candidate) {
+    if let Some(i) = ranked.free.iter().position(|c| c.kind == SpanKind::English) {
         ranked.pin_at_or_after(i, 1);
     }
 }

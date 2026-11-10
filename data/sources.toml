@@ -219,3 +219,44 @@ sha256 = "ac8e73310e951d88c52c2cf2ba54ceaca34f8486a81630ac8a75dc5f931179f9"
 path = "Copyright"
 url = "https://raw.githubusercontent.com/en-wl/wordlist/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/Copyright"
 sha256 = "090575a131b4260926c7a6b30a90aca0f5db5fbb5c46778e0c5855227bf6ebc3"
+
+# emoji 資料包（plan §4.4，M3 票 16）：CLDR 的粵語與繁中標註給「字詞 → emoji」。release-49 是 2026-11-11 最新的
+# stable（lightweight tag，指向下面的 commit；release-49-beta*、-m* 是預發布）。標註檔頭是 SPDX Unicode-3.0；
+# 頂層 LICENSE 第一段講 UTS #35 規格本身，其餘內容（含資料檔）是 Unicode License V3，整份照抄進資料包的 LICENSE。
+# 取用：common/annotations/ 的關鍵字（` | ` 分隔）與短名（type="tts"）；annotationsDerived/（膚色與組合序列）不用，
+# 免得候選塞滿同一個 emoji 的變體。字詞照詞庫的寫法換（t2hk 再換回常見寫法，crates/qim-databuild/src/emoji.rs）。
+[source.cldr]
+repository = "https://github.com/unicode-org/cldr"
+version = "96e54b273d2da4ec6fbad350ba19ff23fa24a588"
+license = "Unicode-3.0"
+license_text = { upstream_file = "LICENSE" }
+
+[[source.cldr.files]]
+path = "common/annotations/yue.xml"
+url = "https://raw.githubusercontent.com/unicode-org/cldr/96e54b273d2da4ec6fbad350ba19ff23fa24a588/common/annotations/yue.xml"
+sha256 = "fb6fcfe4daf3a4dfd3a53f41551a65a84e56f3596f81c5eb5aa6698327d2945f"
+
+[[source.cldr.files]]
+path = "common/annotations/zh_Hant.xml"
+url = "https://raw.githubusercontent.com/unicode-org/cldr/96e54b273d2da4ec6fbad350ba19ff23fa24a588/common/annotations/zh_Hant.xml"
+sha256 = "af3512dfbb82e71d2d4dc2ca2fa42c62d689cc5457639fabca84b4f555e7cda7"
+
+[[source.cldr.files]]
+path = "LICENSE"
+url = "https://raw.githubusercontent.com/unicode-org/cldr/96e54b273d2da4ec6fbad350ba19ff23fa24a588/LICENSE"
+sha256 = "65eb33419e22a297550a811b5b535f5e532f9a7e0114b516c0ea18afd53c3804"
+
+# CLDR 標註的 cp 去掉了 U+FE0F（zh_Hant.xml 檔頭的 Warnings），照 emoji-test.txt 的 fully-qualified 列換回完整寫法，
+# 否則 ❤ 這類字顯示成文字。版本化的網址（Unicode 17 起 emoji 資料放在 /Public/<版本>/emoji/）；檔頭指向
+# https://www.unicode.org/terms_of_use.html，Data Files 適用 Unicode License V3，全文同 Unihan 存在 repo。
+# 只用每列的碼位與狀態欄；資料包裡的 emoji 寫法來自它，所以 emoji 資料包的 LICENSE、NOTICE 也列它。
+[source.emoji_test]
+repository = "https://www.unicode.org/Public/18.0.0/emoji/"
+version = "18.0"
+license = "Unicode-3.0"
+license_text = { repo_file = "data/licenses/Unicode-3.0.txt" }
+
+[[source.emoji_test.files]]
+path = "emoji-test.txt"
+url = "https://www.unicode.org/Public/18.0.0/emoji/emoji-test.txt"
+sha256 = "8f3735cda1f92a779d78af67cf86066bb1f07143dc22f2ac29394d9bc57ab21a"
