@@ -332,6 +332,7 @@ pub(crate) fn candidates(
         engine,
         listing,
         user: scheme_user,
+        following: before.word.as_deref().and_then(|w| user.bigrams_after(w)),
         input,
         before,
         lookup_code,
@@ -394,6 +395,8 @@ struct Ranked<'a> {
     listing: Listing,
     /// 這個方案的個人模型。
     user: &'a SchemeModel,
+    /// 輸入碼前面的字詞後面的個人 bigram；規則 2 看單打的候選有沒有學到的分。
+    following: Option<Following<'a>>,
     /// 這列候選的輸入碼，含分隔記號。
     input: &'a str,
     /// 輸入碼前面是什麼（[`Lattice::before`]）。
@@ -503,17 +506,32 @@ fn chosen_twice_first(ranked: &mut Ranked) {
 }
 
 /// 「選兩次才成首選」（brief §4.5）：學過一次的個人分常勝過靜態機率很低的詞與句子；排第一的
-/// 是整串上屏剛好 1 次的候選、而不學習時的首選不是它，就改回不學習時的首選。不學習時的首選
-/// 不是蓋滿整串的候選時不動。首選已由規則 1 排定時，排第一的不是它，也不動。
+/// 候選整串上屏不到 2 次、靠學到的分排第一，而不學習時的首選不是它，就改回不學習時的首選。
+/// 靠學到的分：整串上屏剛好 1 次；或 0 次但它只有一段（就是單打這串碼）、這段有學習計數或接在
+/// 前一個字詞後的個人 bigram，也就是只在句中用過（句中用過的只在連打裡加分，M3 票 12）。多段的
+/// 候選是連打，學過的段照樣加分。不學習時的首選不是蓋滿整串的候選時不動。首選已由規則 1 排定時，
+/// 排第一的不是它，也不動。
 fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
     if ranked.pinned.contains_key(&0) {
         return;
     }
-    let (user, input) = (ranked.user, ranked.input);
-    let top_once = ranked.free.first().is_some_and(|c| {
-        c.len == input.len() && user.whole_commits(&ranked.user_code, &c.text) == 1
+    let (user, input, code) = (ranked.user, ranked.input, &ranked.user_code);
+    let learned_alone = |c: &CandidateSpan| {
+        c.segments.len() == 1
+            && (user.has_learned(code, &c.text)
+                || ranked
+                    .following
+                    .is_some_and(|f| f.probability(&c.text) > 0.0))
+    };
+    let top_learned = ranked.free.first().is_some_and(|c| {
+        c.len == input.len()
+            && match user.whole_commits(code, &c.text) {
+                0 => learned_alone(c),
+                1 => true,
+                _ => false,
+            }
     });
-    if !top_once {
+    if !top_learned {
         return;
     }
     // 空白的個人模型沒有計數，這次呼叫的排位規則什麼都不做，不會再走到這裡。

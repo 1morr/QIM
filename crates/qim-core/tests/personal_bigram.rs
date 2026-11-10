@@ -12,9 +12,15 @@ use qim_core::{
 };
 
 /// `ab` 是「甲」「乙」「丙」，甲的字頻遠高、乙丙相近；`c`「丁」、`d`「天」、`e`「日」給前文用；
-/// `cd` 是詞「丁天」。
+/// `cd` 是詞「丁天」；`fg` 是「戊」「己」，戊的字頻只比己高三倍。
 fn engine(scheme: &str) -> Engine {
-    let table = [("ab", "甲乙丙"), ("c", "丁"), ("d", "天"), ("e", "日")];
+    let table = [
+        ("ab", "甲乙丙"),
+        ("c", "丁"),
+        ("d", "天"),
+        ("e", "日"),
+        ("fg", "戊己"),
+    ];
     let chars = [
         ('甲', 1000),
         ('乙', 10),
@@ -22,6 +28,8 @@ fn engine(scheme: &str) -> Engine {
         ('丁', 50),
         ('天', 50),
         ('日', 50),
+        ('戊', 30),
+        ('己', 10),
     ];
     let code_table = CodeTable::from_entries(table.iter().map(|(code, chars)| {
         let entries = chars
@@ -274,4 +282,73 @@ fn context_set_while_composing_does_not_change_what_this_composition_learns() {
         rank_of_bing_after(&engine, &mut blank, "日"),
         "學到的是「日 → 丙」"
     );
+}
+
+/// brief §4.5：「兩次」只算單獨打這串碼時選它，句中用過的只在連打裡加分。連打裡選過一次
+/// 「丁 → 己」（`fg` 整串上屏 0 次），之後前文「丁」單打 `fg`，己不成首選；單打選兩次照常成首選。
+#[test]
+fn a_bigram_learned_mid_sentence_does_not_make_y_the_top_when_its_code_is_typed_alone() {
+    let engine = engine("quick");
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    let shown = type_code(&engine, &mut session, &mut user, "cfg");
+    pick(&engine, &mut session, &mut user, shown, &["丁", "己"]);
+
+    let top_after_ding = |user: &mut UserModel| {
+        let mut session = Session::default();
+        session.set_context("丁");
+        type_code(&engine, &mut session, user, "fg").candidates[0]
+            .text
+            .clone()
+    };
+    assert_eq!(
+        top_after_ding(&mut user),
+        "戊",
+        "句中選過一次的己在單打時成了首選"
+    );
+    for _ in 0..2 {
+        let mut session = Session::default();
+        session.set_context("丁");
+        let shown = type_code(&engine, &mut session, &mut user, "fg");
+        pick(&engine, &mut session, &mut user, shown, &["己"]);
+    }
+    assert_eq!(top_after_ding(&mut user), "己");
+}
+
+/// 同一個學習在連打裡照樣加分：前文「丁」後打 `fgab`，「己」在首選路徑裡。
+#[test]
+fn a_bigram_learned_mid_sentence_still_scores_in_continuous_input() {
+    let engine = engine("quick");
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    let shown = type_code(&engine, &mut session, &mut user, "cfg");
+    pick(&engine, &mut session, &mut user, shown, &["丁", "己"]);
+
+    let top_after_ding = |user: &mut UserModel| {
+        let mut session = Session::default();
+        session.set_context("丁");
+        type_code(&engine, &mut session, user, "fgab").candidates[0]
+            .text
+            .clone()
+    };
+    assert!(top_after_ding(&mut UserModel::default()).starts_with('戊'));
+    let learned = top_after_ding(&mut user);
+    assert!(learned.starts_with('己'), "{learned}");
+}
+
+/// 個人 bigram 跨方案：在速成句中學到「丁 → 己」，倉頡沒有己的學習計數，單打 `fg` 也不成首選。
+#[test]
+fn a_bigram_learned_mid_sentence_in_another_scheme_does_not_make_y_the_top_either() {
+    let quick = engine("quick");
+    let cangjie = engine("cangjie");
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    let shown = type_code(&quick, &mut session, &mut user, "cfg");
+    pick(&quick, &mut session, &mut user, shown, &["丁", "己"]);
+
+    let mut session = Session::default();
+    session.set_context("丁");
+    let shown = type_code(&cangjie, &mut session, &mut user, "fg");
+    assert_eq!(shown.candidates[0].text, "戊");
+    assert_eq!(shown.candidates[1].text, "己", "學到的仍讓己前移");
 }
