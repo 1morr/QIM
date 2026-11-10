@@ -35,6 +35,8 @@ const RADICAL_HINT_URL = "/packs/cangjie-hint/cangjie-hint.pack";
 const SIMPLIFIER_URL = "/packs/opencc-hk2s/opencc-hk2s.pack";
 /** 英文資料包（ESDB），中文狀態的英文候選用。 */
 const ENGLISH_URL = "/packs/scowl-en-us/scowl-en-us.pack";
+/** emoji 候選的 emoji 資料包（CLDR 粵語與繁中標註），各方案共用。 */
+const EMOJI_URL = "/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack";
 /** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 /** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief §4.4）。 */
@@ -81,6 +83,7 @@ async function start(): Promise<void> {
 		radicalHint,
 		simplifier,
 		english,
+		emoji,
 		layoutJson,
 		numberRowLayoutJson,
 	] = await Promise.all([
@@ -91,6 +94,7 @@ async function start(): Promise<void> {
 		loadPack(RADICAL_HINT_URL),
 		loadPack(SIMPLIFIER_URL),
 		loadPack(ENGLISH_URL),
+		loadPack(EMOJI_URL),
 		load(LAYOUT_URL).then((response) => response.text()),
 		load(NUMBER_ROW_LAYOUT_URL).then((response) => response.text()),
 	]);
@@ -100,6 +104,7 @@ async function start(): Promise<void> {
 		languageModel,
 		simplifier,
 		english,
+		emoji,
 	);
 	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
 	let phrases: Phrases | undefined;

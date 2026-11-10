@@ -25,6 +25,7 @@ fn pack_bytes() -> Vec<u8> {
         vec![CodeEntry {
             text: '日',
             extension: false,
+            simplified: false,
         }],
     )]);
     SchemePack { scheme, code_table }.to_bytes().unwrap()

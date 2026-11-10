@@ -7,6 +7,7 @@ fn forms() -> CommonForms {
     let entry = |text| CodeEntry {
         text,
         extension: false,
+        simplified: false,
     };
     let table = CodeTable::from_entries([
         ("qt".to_string(), vec![entry('搵'), entry('揾')]),
@@ -88,6 +89,7 @@ fn forms_with_one_way() -> CommonForms {
     let entry = |text| CodeEntry {
         text,
         extension: false,
+        simplified: false,
     };
     let table = CodeTable::from_entries([
         ("tu".to_string(), vec![entry('着')]),

@@ -40,6 +40,17 @@ pub fn grade_levels(text: &str) -> Result<BTreeMap<char, u8>, Error> {
     })
 }
 
+/// 取出 `kHKGlyph` 欄：字在香港《常用字字形表》（2000 年修訂本）的序號（UAX #38）。同一條列了
+/// 幾個寫法時它們共用一個序號。
+pub fn hk_glyphs(text: &str) -> Result<BTreeMap<char, u16>, Error> {
+    field(text, "kHKGlyph", |v| {
+        (v.len() == 4 && v.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| v.parse().ok())
+            .flatten()
+            .ok_or("應是四位數字")
+    })
+}
+
 /// 取出一個欄位。格式見 UAX #38：`U+XXXX<tab>欄位<tab>值`，`#` 開頭是註解。
 fn field<T>(
     text: &str,

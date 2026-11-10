@@ -28,6 +28,7 @@ fn engine() -> Engine {
     let entry = |text| CodeEntry {
         text,
         extension: false,
+        simplified: false,
     };
     let code_table = CodeTable::from_entries([
         ("a".to_string(), vec![entry('甲'), entry('乙'), entry('丁')]),

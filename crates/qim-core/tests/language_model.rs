@@ -33,6 +33,7 @@ fn pack(language_model: Option<&str>) -> SchemePack {
             .map(|text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect()
     };

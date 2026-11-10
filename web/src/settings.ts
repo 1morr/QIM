@@ -65,11 +65,27 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setSimplified(on),
 	},
 	{
+		// 繁體模式的簡體字（门、农）排在同碼的繁體字之後，同 macOS 速成。
+		kind: "checkbox",
+		id: "simplified-after-traditional",
+		label: "繁體字優先",
+		checked: true,
+		apply: (session, on) => session.setSimplifiedAfterTraditional(on),
+	},
+	{
 		kind: "checkbox",
 		id: "english-candidates",
 		label: "英文候選",
 		checked: true,
 		apply: (session, on) => session.setEnglishCandidates(on),
+	},
+	{
+		// 整串的字詞後面接它的 emoji（M3 票 16）。
+		kind: "checkbox",
+		id: "emoji-candidates",
+		label: "emoji 候選",
+		checked: true,
+		apply: (session, on) => session.setEmojiCandidates(on),
 	},
 	{
 		// 數字後的句點、冒號用半形；逗號照舊全形。

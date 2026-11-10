@@ -41,6 +41,7 @@ fn engine(data: &Data) -> Engine {
             .map(|text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect();
         (code.to_string(), entries)
@@ -101,6 +102,17 @@ impl Ime {
         self.press(user, Key::Digit(u8::try_from(at + 1).unwrap()))
     }
 
+    /// 打 `code`，依序在當下的候選列選文字是 `picks` 各項的候選（分段選字），回傳最後的狀態。
+    fn choose_segments(&mut self, user: &mut UserModel, code: &str, picks: &[&str]) -> Snapshot {
+        let mut shown = self.type_code(user, code);
+        for text in picks {
+            let at = shown.candidates.iter().position(|c| c.text == *text);
+            let at = at.unwrap_or_else(|| panic!("這頁沒有「{text}」：{:?}", texts(&shown)));
+            shown = self.press(user, Key::Digit(u8::try_from(at + 1).unwrap()));
+        }
+        shown
+    }
+
     /// 打 `code`，翻頁找到文字是 `text` 的候選，按數字鍵選它。
     fn choose_on_any_page(&mut self, user: &mut UserModel, code: &str, text: &str) -> Snapshot {
         let mut shown = self.type_code(user, code);
@@ -111,6 +123,13 @@ impl Ime {
             assert!(shown.has_more, "`{code}` 翻完都沒有「{text}」");
             shown = self.press(user, Key::PageDown);
         }
+    }
+
+    /// 打 `code` 第一頁的候選文字，回傳後清掉組字。
+    fn candidates_of(&mut self, user: &mut UserModel, code: &str) -> Vec<String> {
+        let shown = self.type_code(user, code);
+        self.press(user, Key::Escape);
+        texts(&shown)
     }
 
     /// 打 `code` 的首選，回傳後清掉組字。
@@ -373,6 +392,79 @@ fn choosing_segment_by_segment_learns_a_word_that_is_second_then_top_after_one_m
     assert_eq!(ime.top_of(&mut user, "mir"), "一台");
 }
 
+/// 分段選出、詞庫沒有、學之前連候選列都沒有的整串（M1 票 13 Comments 的 `abcd → XY`）：
+/// 自動造詞後像詞一樣蓋滿整串，下次排第 2（規則 3），再選一次成首選（規則 2）。
+#[test]
+fn a_string_chosen_segment_by_segment_that_was_not_listed_is_second_then_top() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰甲乙"), ("b", "月肉丙丁")],
+        words: vec![],
+        chars: vec![
+            ('日', 1000),
+            ('曰', 500),
+            ('甲', 300),
+            ('乙', 1),
+            ('月', 1000),
+            ('肉', 500),
+            ('丙', 300),
+            ('丁', 1),
+        ],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    let shown = ime.candidates_of(&mut user, "ab");
+    assert!(
+        !shown.contains(&"乙丁".to_string()),
+        "學之前「乙丁」就在候選列：{shown:?}"
+    );
+
+    let committed = ime.choose_segments(&mut user, "ab", &["乙", "丁"]);
+    assert_eq!(committed.commit.as_deref(), Some("乙丁"));
+    assert_eq!(ime.candidates_of(&mut user, "ab")[..2], ["日月", "乙丁"]);
+
+    ime.choose(&mut user, "ab", "乙丁");
+    assert_eq!(ime.top_of(&mut user, "ab"), "乙丁");
+}
+
+/// 規則 3：碼是整串、上屏過的使用者詞有幾個時，最近整串上屏的排第 2，其他的不往前移。
+#[test]
+fn of_two_used_user_words_the_most_recently_committed_is_second() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰"), ("b", "月肉")],
+        words: vec![],
+        chars: vec![('日', 1000), ('曰', 500), ('月', 100), ('肉', 1)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    ime.choose_segments(&mut user, "ab", &["日", "肉"]);
+    ime.choose_segments(&mut user, "ab", &["曰", "月"]);
+
+    let shown = ime.candidates_of(&mut user, "ab");
+    assert_eq!(shown[..2], ["日月", "曰月"]);
+    let older = shown.iter().position(|t| t == "日肉");
+    assert!(older.is_some_and(|at| at > 1), "{shown:?}");
+}
+
+/// 規則 3 的「至少第 2 位」：本來就是首選的使用者詞釘在首選，不往後移到第 2。規則 2 不管它：
+/// 上屏過 3 次，但最後一次在 10,000 次上屏之前。
+#[test]
+fn a_used_user_word_that_is_already_the_top_stays_the_top() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日"), ("b", "月")],
+        words: vec![],
+        chars: vec![('日', 1000), ('月', 1000)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::import(
+        "# qim-userdict v2\n#@/tick/quick\t20000\nquick\t日月\tab\t3\t1\t1\t1\tauto\t\n",
+    )
+    .unwrap();
+    assert_eq!(ime.candidates_of(&mut user, "ab"), ["日月", "日"]);
+}
+
 /// 手動加的使用者詞打觸發詞時是首選（排位規則 1，brief §4.5），即使觸發詞本來有更好的候選。
 #[test]
 fn a_manual_user_word_is_the_top_when_its_trigger_is_typed() {
@@ -467,6 +559,46 @@ fn a_candidate_committed_once_is_not_the_top_even_when_its_learned_score_is_high
     assert_eq!(texts(&shown)[..2], ["乙丙", "丙丙"]);
     ime.choose(&mut user, "ab", "丙丙");
     assert_eq!(ime.top_of(&mut user, "ab"), "丙丙");
+}
+
+/// 規則 1 已把觸發詞釘在首選時，整串上屏一次的候選本來就當不了首選，規則 2 不再動它：
+/// 不學習時的首選不會被多移一次、擠到它前面（M1 票 24 Comments 的「多移一次」）。
+#[test]
+fn a_trigger_on_top_leaves_the_once_committed_candidate_where_it_was() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "乙"), ("b", "丙"), ("y", "某")],
+        words: vec![
+            ("ab", "乙丙", 100),
+            ("ab", "丙丙", 10),
+            ("yy", "某某", 100_000_000),
+        ],
+        chars: vec![('乙', 10), ('丙', 5), ('某', 100_000_000)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    ime.choose(&mut user, "ab", "丙丙");
+    user.add_word(&ime.engine, "某乙", Some("ab")).unwrap();
+
+    assert_eq!(
+        ime.candidates_of(&mut user, "ab")[..3],
+        ["某乙", "丙丙", "乙丙"]
+    );
+}
+
+/// 規則 1 已把觸發詞釘在首選時，選兩次的候選照「至少首選」的放法退到第 2 位（plan §2.4 的
+/// 「那些位置都排定了才移到最前面的空位」）：本來排第 3 的「丙」排到「甲」前面。
+#[test]
+fn a_trigger_on_top_puts_the_twice_chosen_candidate_second() {
+    let mut ime = Ime::new(&ab());
+    let mut user = UserModel::default();
+    ime.choose(&mut user, "ab", "丙");
+    ime.choose(&mut user, "ab", "丙");
+    user.add_word(&ime.engine, "丁丁", Some("ab")).unwrap();
+    assert_eq!(
+        ime.candidates_of(&mut user, "ab")[..3],
+        ["丁丁", "丙", "甲"]
+    );
 }
 
 /// 本來就是首選的候選上屏一次後仍是首選：「剛好 1 次的不靠分數成首選」只擋靠學習升上來的。

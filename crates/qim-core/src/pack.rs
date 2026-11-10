@@ -3,10 +3,12 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{CodeTable, EnglishWords, LanguageModel, Lexicon, RadicalHints, Scheme, Simplifier};
+use crate::{
+    CodeTable, EmojiTable, EnglishWords, LanguageModel, Lexicon, RadicalHints, Scheme, Simplifier,
+};
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 
 /// 各種資料包共用的位元組格式：魔數 [`Pack::MAGIC`]、postcard 的 [`FORMAT_VERSION`]、
 /// postcard 的本體。
@@ -89,6 +91,14 @@ pub struct RadicalHintPack {
 pub struct EnglishPack {
     pub id: String,
     pub words: EnglishWords,
+}
+
+/// emoji 資料包：字詞 → emoji（plan §4.4），由 [`crate::Engine::with_emoji`] 掛上，不由方案指名，
+/// 各方案共用。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmojiPack {
+    pub id: String,
+    pub emoji: EmojiTable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,6 +207,14 @@ impl Pack for RadicalHintPack {
 
 impl Pack for EnglishPack {
     const MAGIC: [u8; 4] = *b"QIME";
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl Pack for EmojiPack {
+    const MAGIC: [u8; 4] = *b"QIMJ";
 
     fn id(&self) -> &str {
         &self.id
