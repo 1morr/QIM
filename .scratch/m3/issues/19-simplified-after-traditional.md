@@ -86,6 +86,17 @@ Big5 這條是必要的：Big5 裡有 59 字是 `STCharacters` 一律換掉的�
 - `bench --check` 對 main 的 baseline：答錯數 13 個集合都不變、沒有翻盤，固定題 84/84。修正次數 yue-wiki 4340 → 4346、common-voice-yue 3946 → 3948、yue-wiki·前文 2288 → 2294、yue-wiki·前文·不給 2300 → 2306，其餘相同。前文集合裡答案含簡體字的只有 109「硫黄島」、633「稲荷寿司」，和先前的原因相同，照使用者先前的同意 `--update-baseline`。
 - 合併後 `cargo xtask check` 全綠（Playwright 160 個），`bench --check` 通過。
 
+### 合併票 16（2026-11-11 協調者要求）
+
+- `git merge main`（含票 16 的 emoji 資料包、`Options::emoji_candidates`、設定區一列）。衝突在核心三個檔、`qim-wasm`、`qim-databuild` 的 `pipeline.rs`、`verify.rs` 與兩個測試、brief §7、plan §0 與 §2.1、`development.md`、`baseline.json`。
+- 核心：`Listing` 多一個 `emoji_candidates`；`Session::listing(whole_input)` 改成由「是不是剩下的整串」決定英文候選與 emoji 兩項（目前分段與逐段取首選時都沒有），也順手解掉 code-review 指出的 `listing(false)` 傳旗標問題。
+- 設定區：`ROWS` 兩邊各加的一列都留（「繁體字優先」「emoji 候選」）。verify：`NotSimplified`、`MenAfterTraditional`、`EmojiAfterLaugh` 三項都在。
+- 測試：fixture 兩邊各加一個字（门、笑），`run.rs` 的連打字集字數兩邊都從 32 改 33，git 當成同一改動自動合併；實際是 34，手動改正。`verify.rs` 的字母表與字根合併成 `abehklnrst`。票 16 的 `tests/emoji.rs` 補 `simplified: false`。
+- 資料包格式：emoji 資料包和其他資料包共用 `Pack` 的 `FORMAT_VERSION`，跟著 v6；`--verify` 的 `Decodes` 報「格式版本 6，速成、詞庫、bigram、字根提示、簡繁、英文與 emoji」。
+- `cargo xtask data --verify` 通過：簡體字 278 個，`ls` 的「门」照舊排在繁體字之後，`hk` 的「笑」後面接著 😆，決定性通過。
+- `bench --check` 以 main 的 baseline 為底：13 個集合答錯數不變、沒有翻盤，固定題 84/84；修正次數 yue-wiki 4346 → 4352、common-voice-yue 3964 → 3966、yue-wiki·前文 2292 → 2298、yue-wiki·前文·不給 2304 → 2310，同前面兩次的原因，`--update-baseline`。
+- 合併後 `cargo xtask check` 全綠（Playwright 164 個），`bench --check` 通過。
+
 ### code-review（`3543c83` 起）
 
 已處理：
