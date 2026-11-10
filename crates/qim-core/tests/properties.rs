@@ -347,13 +347,14 @@ proptest! {
         }
     }
 
-    /// 匯出後匯入等價（plan §5.1）：學過的計數、自動造詞、手動加的詞與觸發詞都還在。
+    /// 匯出後匯入等價（plan §5.1）：學過的計數、自動造詞、手動加的詞與觸發詞、常用語都還在。
     #[test]
     fn exporting_then_importing_gives_an_equal_user_model(
         table in random_table(),
         words in random_words(),
         keys in prop::collection::vec((any::<bool>(), key()), 0..100),
         added in prop::collection::vec(("[一-十]{1,3}", prop::option::of("[abc]{1,3}")), 0..5),
+        phrases in prop::collection::vec((r"[一a \\\n\t]{1,6}", prop::option::of("[abc]{1,3}")), 0..5),
     ) {
         let (other_table, other_words) = other_scheme(&table, &words);
         let engines = [
@@ -370,9 +371,12 @@ proptest! {
             // 字沒有碼又沒給觸發詞時加不進去，那就不加。
             let _ = user.add_word(&engines[0], text, trigger.as_deref());
         }
+        for (text, trigger) in &phrases {
+            user.add_phrase(&engines[1], text, trigger.as_deref()).unwrap();
+        }
 
         let exported = user.export();
-        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v1"));
+        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v2"));
         let imported = UserModel::import(&exported);
         prop_assert_eq!(imported, Ok(user));
     }
