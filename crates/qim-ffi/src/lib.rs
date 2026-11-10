@@ -1,11 +1,12 @@
 //! Apple 與 Android 殼用的綁定（uniffi，plan §1.1）：只把呼叫轉給 `qim-core`，不放邏輯（plan §1.3）。
 //!
-//! 介面同網頁的 `qim-wasm`：一個 [`Session`] 帶著 `Engine`、`UserModel` 與核心的 `Session`，按鍵經
+//! 殼先把各資料包的位元組解開成 [`SchemePack`] 等物件、建一個 [`Engine`]，每個輸入框一個
+//! [`Session`] 共用它（plan §2.1）；`Session` 帶著 `UserModel` 與核心的 `Session`。按鍵經
 //! [`Session::press`] 一個入口（`Key::parse`，uniffi 沒有 `char`，收不了核心的 `Key`）。
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use qim_core::{EnglishPack, Key, SimplifierPack, UserModel};
+use qim_core::{Key, UserModel};
 
 uniffi::setup_scaffolding!("qim");
 
@@ -32,50 +33,112 @@ fn error(error: impl std::fmt::Display) -> QimError {
     }
 }
 
-/// 一個輸入框：資料包、一個個人模型、一個核心的 `Session`。uniffi 的物件要能跨執行緒共用，
-/// 可變的狀態放在 `Mutex` 裡。
+/// 一份資料包解開後的內容，交給 [`Engine::new`] 一次：建 `Engine` 時被拿走，不複製（資料包解開後可達
+/// 數十 MB，ios-feasibility〈Mac 上的資料包記憶體〉）。殼能分開讀每份，量各自的記憶體。
+macro_rules! pack {
+    ($(#[$doc:meta])* $name:ident) => {
+        $(#[$doc])*
+        #[derive(uniffi::Object)]
+        pub struct $name(Mutex<Option<qim_core::$name>>);
+
+        #[uniffi::export]
+        impl $name {
+            /// 由資料包檔的位元組解開；讀檔是殼的事（plan §1.3）。
+            #[uniffi::constructor]
+            pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, QimError> {
+                let pack = qim_core::$name::from_bytes(&bytes).map_err(error)?;
+                Ok(Arc::new(Self(Mutex::new(Some(pack)))))
+            }
+        }
+
+        impl $name {
+            fn take(&self) -> Result<qim_core::$name, QimError> {
+                self.0
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take()
+                    .ok_or_else(|| error(concat!(stringify!($name), " 已經給過一個 Engine")))
+            }
+        }
+    };
+}
+
+pack!(
+    /// 速成等方案的資料包（方案與碼表）。
+    SchemePack
+);
+pack!(
+    /// 方案指名的詞庫資料包。
+    LexiconPack
+);
+pack!(
+    /// 方案指名的語言模型資料包（字級 bigram）。
+    LanguageModelPack
+);
+pack!(
+    /// 簡繁資料包，各方案共用。
+    SimplifierPack
+);
+pack!(
+    /// 英文資料包，各方案共用。
+    EnglishPack
+);
+
+/// 核心的 `Engine`：不可變，多個 [`Session`] 共用（plan §2.1）。
+#[derive(uniffi::Object)]
+pub struct Engine(qim_core::Engine);
+
+#[uniffi::export]
+impl Engine {
+    /// 參數同核心的 `Engine::new` 加 `with_simplifier`、`with_english`；每份資料包只能給一個 `Engine`。
+    #[uniffi::constructor]
+    pub fn new(
+        scheme: Arc<SchemePack>,
+        lexicon: Option<Arc<LexiconPack>>,
+        language_model: Option<Arc<LanguageModelPack>>,
+        simplifier: Option<Arc<SimplifierPack>>,
+        english: Option<Arc<EnglishPack>>,
+    ) -> Result<Arc<Self>, QimError> {
+        let mut engine = qim_core::Engine::new(
+            scheme.take()?,
+            lexicon.map(|p| p.take()).transpose()?,
+            language_model.map(|p| p.take()).transpose()?,
+        )
+        .map_err(error)?;
+        if let Some(pack) = simplifier {
+            engine = engine.with_simplifier(pack.take()?);
+        }
+        if let Some(pack) = english {
+            engine = engine.with_english(pack.take()?);
+        }
+        Ok(Arc::new(Self(engine)))
+    }
+}
+
+/// 一個輸入框：共用的 [`Engine`]、一個個人模型、一個核心的 `Session`。uniffi 的物件要能跨執行緒
+/// 共用，可變的狀態放在 `Mutex` 裡。
 #[derive(uniffi::Object)]
 pub struct Session {
+    engine: Arc<Engine>,
     state: Mutex<State>,
 }
 
 struct State {
-    engine: qim_core::Engine,
     user: UserModel,
     session: qim_core::Session,
 }
 
 #[uniffi::export]
 impl Session {
-    /// 由速成資料包與方案指名的詞庫、語言模型資料包，加上簡繁、英文資料包的位元組建立；
-    /// 參數同 `qim-wasm` 的 `Session`。
     #[uniffi::constructor]
-    pub fn new(
-        scheme_pack: Vec<u8>,
-        lexicon: Option<Vec<u8>>,
-        language_model: Option<Vec<u8>>,
-        simplifier: Option<Vec<u8>>,
-        english: Option<Vec<u8>>,
-    ) -> Result<Arc<Self>, QimError> {
-        let mut engine = qim_core::Engine::from_pack_bytes(
-            &scheme_pack,
-            lexicon.as_deref(),
-            language_model.as_deref(),
-        )
-        .map_err(error)?;
-        if let Some(bytes) = simplifier {
-            engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(error)?);
-        }
-        if let Some(bytes) = english {
-            engine = engine.with_english(EnglishPack::from_bytes(&bytes).map_err(error)?);
-        }
-        Ok(Arc::new(Self {
+    pub fn new(engine: Arc<Engine>) -> Arc<Self> {
+        Arc::new(Self {
+            engine,
             state: Mutex::new(State {
-                engine,
                 user: UserModel::default(),
                 session: qim_core::Session::default(),
             }),
-        }))
+        })
     }
 
     /// 按一個鍵：種類與值照 `Key::parse`，例如 `("letter", "a")`、`("toggleAscii", "left")`、
@@ -85,7 +148,7 @@ impl Session {
         let state = &mut *self.lock();
         Ok(state
             .session
-            .handle(&state.engine, &mut state.user, key)
+            .handle(&self.engine.0, &mut state.user, key)
             .into())
     }
 
@@ -94,7 +157,7 @@ impl Session {
         let state = &mut *self.lock();
         state
             .session
-            .select(&state.engine, &mut state.user, index as usize)
+            .select(&self.engine.0, &mut state.user, index as usize)
             .into()
     }
 }

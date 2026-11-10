@@ -33,7 +33,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | --- | --- |
 | `cargo build` | 建置全部 Rust crate |
 | `cargo xtask web` | 編 WebAssembly 綁定、複製資料包到網頁，見〈網頁〉 |
-| `cargo xtask ffi` | 編 `qim-ffi` 的靜態函式庫並產生 Swift 綁定，見〈Swift 綁定〉 |
+| `cargo xtask ffi [--ios]` | 編 `qim-ffi` 的靜態函式庫並產生 Swift 綁定；`--ios` 另包 iPhone 的 xcframework，見〈Swift 綁定〉 |
 | `npm run --prefix web dev` | 網頁開發伺服器；先跑 `cargo xtask web` |
 | `npm test --prefix web` | 網頁的單元測試（`web/test/` 下的 `*.test.ts`，不必先跑 `cargo xtask web`） |
 | `npm run --prefix web e2e` | Playwright 實打網頁，自己起開發伺服器；先跑 `cargo xtask web`。埠由 `web/` 的絕對路徑算出（20000–29999），每個 worktree 固定一個、並行不互搶；環境變數 `QIM_E2E_PORT` 可指定。埠被佔用時直接失敗、不接手別人的伺服器（可能是別的 worktree 的程式碼）：關掉佔用的行程，或兩個 worktree 剛好算到同一個埠時設 `QIM_E2E_PORT` |
@@ -211,7 +211,7 @@ Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次�
 
 ## Swift 綁定
 
-`cargo xtask ffi` 給 Apple 平台的殼用 `qim-ffi`（uniffi，plan §1.1），邏輯在 `xtask/src/ffi.rs`：
+`cargo xtask ffi [--ios]` 給 Apple 平台的殼用 `qim-ffi`（uniffi，plan §1.1），邏輯在 `xtask/src/ffi.rs`：
 
 1. `cargo build --release -p qim-ffi`：這台機器架構的靜態函式庫 `target/release/libqim_ffi.a`。
 2. 用 `qim-ffi` 的 `uniffi-bindgen-swift`（只在 `bindgen` feature 編，uniffi 的 CLI 依賴不進函式庫）從它產生 `build/ffi/swift/` 的 `qim.swift`、`qimFFI.h`、`module.modulemap`（library mode：介面讀自函式庫，不必 UDL）。
@@ -223,7 +223,9 @@ swiftc -O -o build/ffi/bin/qim-swift main.swift build/ffi/swift/qim.swift \
   -Xcc -fmodule-map-file=build/ffi/swift/module.modulemap -I build/ffi/swift -L target/release -lqim_ffi
 ```
 
-用法範例是 `scripts/experiments/ffi-swift/`（打 `anr` 讀回「門口」、量每鍵延遲）。產物都不進 git。只產生 macOS（這台機器）的；iOS 的 `aarch64-apple-ios` 與 xcframework 由接上鍵盤擴充的票（M2 票 08）加。uniffi 手冊的做法：每個 target 各編一份靜態函式庫，`uniffi-bindgen-swift` 加 `--xcframework` 產生 xcframework 用的 modulemap，再用 `xcodebuild -create-xcframework -library <.a> -headers <目錄>`（每個 target 一組）包起來。`check` 不跑這一步：CI 是 Ubuntu，`qim-ffi` 的 Rust 測試照常在 `cargo test` 裡跑。
+`--ios` 再做一步：編 `aarch64-apple-ios`（iPhone 實機，要先 `rustup target add aarch64-apple-ios`；模擬器沒用到、不編）的靜態函式庫，標頭與 modulemap 產生到 `build/ffi/ios-headers/qimFFI/`，用 `xcodebuild -create-xcframework` 包成 `build/ffi/QimFFI.xcframework`。Xcode 專案把它加進 target 的連結（不內嵌），再把同一份 `qim.swift` 加進原始碼。modulemap 放在以模組名命名的子目錄、用一般的 `module`：Xcode 把標頭複製到建置產物的 `include/`，clang 依模組名找到子目錄；uniffi 的 `--xcframework` 產生的 `framework module` 在靜態函式庫的 xcframework 裡找不到（M2 票 08 實測）。
+
+Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`LexiconPack`、`LanguageModelPack`、`SimplifierPack`、`EnglishPack`，交給 `Engine(...)`（每份只能給一個 `Engine`），每個輸入框 `Session(engine:)` 共用同一個 `Engine`（plan §2.1）。範例：Mac 是 `scripts/experiments/ffi-swift/`（打 `anr` 讀回「門口」、量每鍵延遲），iPhone 鍵盤擴充是 `scripts/experiments/ios-keyboard/` 的〈接上核心〉。產物都不進 git。`check` 不跑這一步：CI 是 Ubuntu，`qim-ffi` 的 Rust 測試照常在 `cargo test` 裡跑。
 
 ## 全部檢查
 

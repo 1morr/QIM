@@ -1,12 +1,13 @@
 import UIKit
 
-/// 實驗鍵盤：送出「日」、量常駐記憶體與 App Group（票 06）、讀游標前後文長度與試 Foundation Models（票 10）。
-/// 結果顯示在鍵盤上方並寫 log。
+/// 實驗鍵盤：送出「日」、量常駐記憶體與 App Group（票 06）、讀游標前後文長度與試 Foundation Models（票 10）、
+/// 接上核心打 `anr`、量記憶體與每鍵延遲（票 08）。結果顯示在鍵盤上方並寫 log。
 final class KeyboardViewController: UIInputViewController {
     /// 這個程序裡各鍵被按的次數與 view controller 載入次數，診斷用。
     private static var taps: [String: Int] = [:]
     private static var loads = 0
     private let status = UILabel()
+    private let candidates = UILabel()
     private var loadLine = ""
     private var memoryLines: [String] = []
     private var contextLines: [String] = []
@@ -44,7 +45,18 @@ final class KeyboardViewController: UIInputViewController {
             key("⇤", id: "qim-key-back-context") { $0.move(by: -($0.textDocumentProxy.documentContextBeforeInput?.count ?? 0)) },
         ])
 
-        let stack = UIStackView(arrangedSubviews: [status, keyRow, moveRow])
+        candidates.font = .systemFont(ofSize: 18)
+        candidates.accessibilityIdentifier = "qim-candidates"
+        let coreRow = row([
+            key("載入", id: "qim-key-load") { _ in CoreProbe.load() },
+        ] + ["a", "n", "r"].map { letter in
+            key(letter, id: "qim-key-\(letter)") { $0.pressCore(letter, kind: "letter", value: letter) }
+        } + [
+            key("空白", id: "qim-key-space") { $0.pressCore("space", kind: "space", value: nil) },
+            key("延遲", id: "qim-key-latency") { _ in CoreProbe.runLatency() },
+        ])
+
+        let stack = UIStackView(arrangedSubviews: [status, candidates, coreRow, keyRow, moveRow])
         stack.axis = .vertical
         stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -56,7 +68,8 @@ final class KeyboardViewController: UIInputViewController {
             stack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
             keyRow.heightAnchor.constraint(equalToConstant: 44),
             moveRow.heightAnchor.constraint(equalToConstant: 44),
-            view.heightAnchor.constraint(equalToConstant: 300),
+            coreRow.heightAnchor.constraint(equalToConstant: 44),
+            view.heightAnchor.constraint(equalToConstant: 380),
         ])
     }
 
@@ -70,6 +83,7 @@ final class KeyboardViewController: UIInputViewController {
             "group-write=\(Probe.write(Probe.keyboardFile, "keyboard \(Probe.timestamp())"))",
         ])
         ModelProbe.onUpdate = { [weak self] in self?.render() }
+        CoreProbe.onUpdate = { [weak self] in self?.render() }
         log(ModelProbe.displayLines + [ModelProbe.languagesLine()])
         readContext()
     }
@@ -96,9 +110,30 @@ final class KeyboardViewController: UIInputViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.readContext() }
     }
 
+    /// 按核心的鍵：上屏快照的 `commit`，記下核心呼叫與含畫面更新的時間。含畫面更新的是從這裡開始到
+    /// 這次畫面的 Core Animation transaction 送出（completion block），不含觸控事件送達前的時間，只當大概值。
+    private func pressCore(_ label: String, kind: String, value: String?) {
+        let start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        guard let (snapshot, coreMs) = CoreProbe.press(kind, value) else { return }
+        if let commit = snapshot.commit {
+            textDocumentProxy.insertText(commit)
+        } else if !snapshot.handled, kind == "space" {
+            textDocumentProxy.insertText(" ")
+        }
+        CATransaction.begin()
+        CATransaction.setCompletionBlock {
+            MainActor.assumeIsolated { CoreProbe.recordKey(label, coreMs: coreMs, screenMs: ms(since: start)) }
+        }
+        render()
+        CATransaction.commit()
+    }
+
     private func render() {
         let taps = "taps=" + Self.taps.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
-        status.text = (memoryLines + [taps] + contextLines + ModelProbe.displayLines).joined(separator: "\n")
+        // 接上核心後只顯示核心的行，螢幕放不下全部；其他行照樣寫 log。
+        let probes = CoreProbe.active ? CoreProbe.displayLines : contextLines + ModelProbe.displayLines
+        status.text = (memoryLines + [taps] + probes).joined(separator: "\n")
+        candidates.text = CoreProbe.candidateLine
     }
 
     private func log(_ lines: [String]) {
