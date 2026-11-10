@@ -111,6 +111,18 @@ impl Manifest {
         format!("{}.pack", self.id)
     }
 
+    /// 版本（semver）比 `other` 的大；同版或任一邊讀不懂時不算。更新索引挑新版（[`crate::PackIndex`]）、
+    /// 殼在同一個 id 的內建版與下載版之間挑一份（plan §4.7）都照它。
+    pub fn is_newer_than(&self, other: &Manifest) -> bool {
+        match (
+            semver::Version::parse(&self.version),
+            semver::Version::parse(&other.version),
+        ) {
+            (Ok(mine), Ok(theirs)) => mine > theirs,
+            _ => false,
+        }
+    }
+
     /// 照 manifest 的種類核對並解開 `bytes` 一次，不留結果：不知道種類時用（匯入前檢查、建置端讀回）。
     pub fn verify(&self, bytes: &[u8]) -> Result<(), PackError> {
         fn open<P: Pack>(manifest: &Manifest, bytes: &[u8]) -> Result<(), PackError> {

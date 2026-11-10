@@ -105,6 +105,14 @@ impl PackUpdate {
     }
 }
 
+/// `manifest` 的版本比 `than` 的大（兩個都是 `manifest.json` 的內容；核心的 [`Manifest::is_newer_than`]）。
+#[wasm_bindgen(js_name = manifestIsNewer)]
+pub fn manifest_is_newer(manifest: &str, than: &str) -> Result<bool, JsError> {
+    let manifest = Manifest::from_json(manifest).map_err(js_error)?;
+    let than = Manifest::from_json(than).map_err(js_error)?;
+    Ok(manifest.is_newer_than(&than))
+}
+
 /// 更新索引 `index`（`index.json` 的內容）裡，`installed`（裝著的資料包的 `manifest.json`）有新版的
 /// 那些（核心的 [`PackIndex::updates`]）。
 #[wasm_bindgen(js_name = packUpdates)]

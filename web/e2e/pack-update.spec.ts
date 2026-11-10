@@ -245,3 +245,82 @@ test("下載中刪掉那份資料包，下載完不會裝回來", async ({ page 
 	await ready(page);
 	await expect(row(page, ID)).toHaveCount(0);
 });
+
+/** `e2e/fixtures/<dir>/` 裡的 manifest 與 `quick-lexicon.pack`。 */
+async function quickLexicon(dir: string) {
+	const base = new URL(`fixtures/${dir}/`, import.meta.url);
+	return {
+		manifest: await readFile(new URL("manifest.json", base), "utf8"),
+		pack: await readFile(new URL("quick-lexicon.pack", base)),
+	};
+}
+
+test("下載的 1.0.1 被之後內建的 1.0.2 比下去：重新整理後用內建的，下載的不刪", async ({
+	page,
+}) => {
+	// 更新來源放內建詞庫的 1.0.1（`anr` 是「下載版詞庫」）。
+	const downloaded = await quickLexicon("quick-lexicon-1.0.1");
+	await page.route("**/pack-updates/index.json", (route) =>
+		route.fulfill({
+			json: {
+				index_version: 1,
+				packs: [
+					{ ...JSON.parse(downloaded.manifest), url: "quick-lexicon.pack" },
+				],
+			},
+		}),
+	);
+	await page.route("**/pack-updates/quick-lexicon.pack", (route) =>
+		route.fulfill({ body: downloaded.pack }),
+	);
+	await checkButton(page).click();
+	await expect(status(page)).toContainText(
+		"已更新 quick-lexicon 1.0.0 → 1.0.1",
+	);
+	await expect(row(page, "quick-lexicon")).toContainText("線上更新");
+	expect(await firstOf(page, "anr")).toBe("下載版詞庫");
+
+	// App 之後內建了 1.0.2（`anr` 是「內建新版詞庫」）：攔內建的請求換上。
+	const builtin = await quickLexicon("quick-lexicon-1.0.2");
+	await page.route("**/packs/quick-lexicon/manifest.json", (route) =>
+		route.fulfill({ body: builtin.manifest }),
+	);
+	await page.route("**/packs/quick-lexicon/quick-lexicon.pack", (route) =>
+		route.fulfill({ body: builtin.pack }),
+	);
+	await reloadAndAwaitCheck(page);
+	expect(await firstOf(page, "anr")).toBe("內建新版詞庫");
+	await expect(row(page, "quick-lexicon")).toContainText("1.0.2");
+	await expect(row(page, "quick-lexicon")).toContainText("內建");
+	await expect(
+		page.getByRole("button", { name: "刪除 quick-lexicon" }),
+	).toHaveCount(0);
+	// 索引上的 1.0.1 比內建的舊，不算更新。
+	await expect(status(page)).not.toContainText("已更新");
+
+	// 下載的 1.0.1 還在 IndexedDB，只是不用。
+	const stored = await page.evaluate(
+		() =>
+			new Promise<string>((resolve, reject) => {
+				const open = indexedDB.open("qim-packs");
+				open.onerror = () => reject(open.error);
+				open.onsuccess = () => {
+					const get = open.result
+						.transaction("packs", "readonly")
+						.objectStore("packs")
+						.get("quick-lexicon");
+					get.onsuccess = () =>
+						resolve(JSON.parse(get.result.manifest).version);
+					get.onerror = () => reject(get.error);
+				};
+			}),
+	);
+	expect(stored).toBe("1.0.1");
+
+	// 內建的回到 1.0.0（比下載的舊）：又用下載的 1.0.1。
+	await page.unroute("**/packs/quick-lexicon/manifest.json");
+	await page.unroute("**/packs/quick-lexicon/quick-lexicon.pack");
+	await reloadAndAwaitCheck(page);
+	expect(await firstOf(page, "anr")).toBe("下載版詞庫");
+	await expect(row(page, "quick-lexicon")).toContainText("1.0.1");
+});

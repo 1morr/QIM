@@ -4,6 +4,8 @@
 //!
 //! - `e2e-lexicon/`：從檔案匯入的詞庫。
 //! - `e2e-update-lexicon/`：線上更新前先匯入的舊版（1.0.0）。
+//! - `quick-lexicon-1.0.1/`、`quick-lexicon-1.0.2/`：和內建詞庫同 id 的兩版，e2e 攔請求換上，驗下載版與
+//!   內建版取版本較高的那份（plan §4.7）。
 //!
 //! 扮演 GitHub release 的 `pack-release/` 由 `qim-databuild` 的 `tests/release.rs` 照 `cargo xtask
 //! pack-release` 的路寫出。
@@ -51,9 +53,14 @@ fn check(path: &Path, contents: &[u8]) {
 
 /// 一份匯入用的資料包目錄：`<id>/manifest.json` 與 `<id>/<id>.pack`。
 fn check_pack_dir(id: &str, word: &str, version: &str) {
+    check_pack_in(id, id, word, version);
+}
+
+/// 同上，目錄名是 `dir`。
+fn check_pack_in(dir: &str, id: &str, word: &str, version: &str) {
     let bytes = lexicon(id, word);
     let manifest = Manifest::new(PackKind::Lexicon, id, &bytes, version, "CC0-1.0");
-    let dir = fixtures().join(id);
+    let dir = fixtures().join(dir);
     check(&dir.join(manifest.file_name()), &bytes);
     check(&dir.join(MANIFEST_FILE), manifest.to_json().as_bytes());
 }
@@ -66,4 +73,20 @@ fn e2e_lexicon_fixture_is_current() {
 #[test]
 fn update_lexicon_fixture_is_current() {
     check_pack_dir("e2e-update-lexicon", "舊版詞庫", "1.0.0");
+}
+
+#[test]
+fn builtin_lexicon_versions_are_current() {
+    check_pack_in(
+        "quick-lexicon-1.0.1",
+        "quick-lexicon",
+        "下載版詞庫",
+        "1.0.1",
+    );
+    check_pack_in(
+        "quick-lexicon-1.0.2",
+        "quick-lexicon",
+        "內建新版詞庫",
+        "1.0.2",
+    );
 }

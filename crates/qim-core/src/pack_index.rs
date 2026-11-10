@@ -82,9 +82,7 @@ impl PackIndex {
                     && installed.iter().any(|have| {
                         have.id == entry.manifest.id
                             && have.kind == entry.manifest.kind
-                            && have
-                                .check_format()
-                                .is_ok_and(|current| offered.version > current.version)
+                            && entry.manifest.is_newer_than(have)
                     })
             })
             .collect()

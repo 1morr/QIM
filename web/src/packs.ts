@@ -11,7 +11,7 @@ import {
 	parseManifest,
 	RADICAL_HINT,
 } from "./pack-choice.ts";
-import { Pack } from "./wasm/qim_wasm.js";
+import { manifestIsNewer, Pack } from "./wasm/qim_wasm.js";
 
 /** 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。 */
 const BUILTIN_IDS = [
@@ -106,6 +106,15 @@ export class PackLibrary {
 		return listPacks(
 			this.builtin.map((p) => p.entry),
 			[...this.imported.values()].map((p) => p.entry),
+			(downloaded, builtin) => {
+				const mine = this.imported.get(downloaded.id);
+				const theirs = this.builtin.find((p) => p.entry.id === builtin.id);
+				return (
+					mine !== undefined &&
+					theirs !== undefined &&
+					manifestIsNewer(mine.manifest, theirs.manifest)
+				);
+			},
 		);
 	}
 
@@ -121,8 +130,15 @@ export class PackLibrary {
 		return this.listedEntries().flatMap((p) => this.find(p.id)?.manifest ?? []);
 	}
 
+	/** 列出的那份 `id`：被內建的比下去的下載版不算（`listPacks`）。 */
 	private find(id: string): Loaded | undefined {
-		return this.imported.get(id) ?? this.builtin.find((p) => p.entry.id === id);
+		const listed = this.listedEntries().find((p) => p.id === id);
+		if (!listed) {
+			return undefined;
+		}
+		return listed.origin === "builtin"
+			? this.builtin.find((p) => p.entry.id === id)
+			: this.imported.get(id);
 	}
 
 	/** 正在用的 `kind` 那份，做成新的 `Pack`；交出去之後由收的一方負責（`Session` 會拿走）。 */

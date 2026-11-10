@@ -13,6 +13,9 @@ function entry(id: string, kind: string, builtin: boolean): PackEntry {
 	return { id, kind, version: "1.0.0", size: 10, license: "CC0-1.0", origin };
 }
 
+/** 測試用的「較新」：這裡的版本都是一位數，字串比就對（網頁用核心的 semver 比）。 */
+const newer = (a: PackEntry, b: PackEntry) => a.version > b.version;
+
 const BUILTIN = [
 	entry("quick", "scheme", true),
 	entry("quick-lexicon", "lexicon", true),
@@ -20,7 +23,7 @@ const BUILTIN = [
 ];
 
 test("沒有匯入時列出內建的，每種用內建那份", () => {
-	const listed = listPacks(BUILTIN, []);
+	const listed = listPacks(BUILTIN, [], newer);
 	assert.deepEqual(listed, BUILTIN);
 	assert.deepEqual(
 		activeIds(listed, {}),
@@ -33,7 +36,11 @@ test("沒有匯入時列出內建的，每種用內建那份", () => {
 });
 
 test("匯入的同種資料包排在內建的後面，選了才用它", () => {
-	const listed = listPacks(BUILTIN, [entry("e2e-lexicon", "lexicon", false)]);
+	const listed = listPacks(
+		BUILTIN,
+		[entry("e2e-lexicon", "lexicon", false)],
+		newer,
+	);
 	assert.deepEqual(
 		listed.map((p) => p.id),
 		["quick", "quick-lexicon", "e2e-lexicon", "cldr-emoji-yue-hant"],
@@ -46,11 +53,11 @@ test("匯入的同種資料包排在內建的後面，選了才用它", () => {
 });
 
 test("匯入和內建同 id 的取代內建那份", () => {
-	const newer = {
+	const replacement = {
 		...entry("quick-lexicon", "lexicon", false),
 		version: "1.1.0",
 	};
-	const listed = listPacks(BUILTIN, [newer]);
+	const listed = listPacks(BUILTIN, [replacement], newer);
 	assert.deepEqual(
 		listed.map((p) => [p.id, p.version, p.origin]),
 		[
@@ -62,7 +69,7 @@ test("匯入和內建同 id 的取代內建那份", () => {
 });
 
 test("選的那份不在了（刪掉）或種類不對時用那種的預設", () => {
-	const listed = listPacks(BUILTIN, []);
+	const listed = listPacks(BUILTIN, [], newer);
 	const active = activeIds(listed, {
 		lexicon: "e2e-lexicon",
 		emoji: "quick-lexicon",
@@ -95,7 +102,7 @@ test("manifest 讀出列表要的欄位；不是 manifest 時丟錯", () => {
 });
 
 test("匯入和已有的資料包同 id 但種類不同時拒絕，同種的可以取代", () => {
-	const listed = listPacks(BUILTIN, []);
+	const listed = listPacks(BUILTIN, [], newer);
 	assert.match(
 		importConflict(listed, entry("quick", "lexicon", false)) ?? "",
 		/quick.*方案/,
@@ -107,5 +114,41 @@ test("匯入和已有的資料包同 id 但種類不同時拒絕，同種的可�
 	assert.equal(
 		importConflict(listed, entry("e2e-lexicon", "lexicon", false)),
 		undefined,
+	);
+});
+
+test("線上更新下載的同 id 資料包：版本較高才取代內建的，同版或較舊用內建的（不刪，只是不列）", () => {
+	const downloaded = (version: string): PackEntry => ({
+		...entry("quick-lexicon", "lexicon", false),
+		origin: "downloaded",
+		version,
+	});
+	const lexiconOf = (listed: PackEntry[]) =>
+		listed
+			.filter((p) => p.kind === "lexicon")
+			.map((p) => [p.version, p.origin]);
+	assert.deepEqual(
+		lexiconOf(listPacks(BUILTIN, [downloaded("1.0.1")], newer)),
+		[["1.0.1", "downloaded"]],
+	);
+	// 之後 App 內建了較新的 1.0.2（這裡把內建的改成 1.0.2）：用內建的。
+	const upgraded = BUILTIN.map((p) =>
+		p.id === "quick-lexicon" ? { ...p, version: "1.0.2" } : p,
+	);
+	assert.deepEqual(
+		lexiconOf(listPacks(upgraded, [downloaded("1.0.1")], newer)),
+		[["1.0.2", "builtin"]],
+	);
+	// 同版：內建的隨 App 發佈、已知可用，以它為準。
+	assert.deepEqual(
+		lexiconOf(listPacks(BUILTIN, [downloaded("1.0.0")], newer)),
+		[["1.0.0", "builtin"]],
+	);
+	// 從檔案匯入的是使用者自己選的，照舊一律取代（票 20）。
+	assert.deepEqual(
+		lexiconOf(
+			listPacks(upgraded, [entry("quick-lexicon", "lexicon", false)], newer),
+		),
+		[["1.0.0", "imported"]],
 	);
 });

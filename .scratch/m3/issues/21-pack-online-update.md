@@ -74,7 +74,28 @@ Blocked by: 20
 - `qim-databuild` 的 `main` 改成一個 match。`build/packs` 改用 `pipeline.rs` 公開的 `PACKS_DIR`，不另寫一份。
 - Spec 軸：fixture 改由 `release::write` 寫出；來源改用 tag `packs`；補逾時（不回應時「檢查更新」鍵會一直停用）。
 
-沒處理，留著：
-- 下載的新版存在 IndexedDB、取代同 id 的內建那份；之後內建的版本加大時，舊的下載仍然蓋過它（plan §4.7〈已知限制〉）。網頁的內建版本只在開發者重建資料包時才會變，而「列出時比版本」要在純 TS 的 `pack-choice.ts` 比 semver，或再開一個綁定。留給 M6 平台殼的資料包管理一起定（收尾票確認去處）。
+沒處理，留著（「下載版蓋過內建新版」原本也在這裡，交回後協調者要求補修，見下一節）：
 - 兩份 `fetchOk`（`packs.ts` 叫人先跑 `cargo xtask web`，`pack-update.ts` 改成有逾時的 `fetchWithin`）錯誤訊息不同，不合併。`vite.config.ts` 與 `e2e/static-server.ts` 都有「單一段檔名」的檢查：一個是網頁的轉發，一個是測試用的伺服器，不為一條 regex 讓它們共用模組。`release.rs` 的 `"LICENSE"`、`"NOTICE"` 和 `packing.rs` 各寫一次。
 - `--previous` 要人記得給：發佈步驟寫在 `development.md`。M3 沒有自動發佈的流程，沒地方強制。
+
+### 交回後補修：內建版與下載版取版本較高的（2026-11-11，協調者要求）
+
+原本下載的新版存進 IndexedDB 後，會一直取代同 id 的內建那份。App 之後內建了更新的版本時，使用者會卡在舊的下載版。現在每次列出時取版本較高的那份：
+- 版本比較用核心的 `Manifest::is_newer_than`（semver），`PackIndex::updates` 也改用它。網頁經 `qim-wasm` 的 `manifestIsNewer`。
+- 規則放在純 TS 的 `listPacks`，比較函式由外面傳進去，單元測試不必載入 WebAssembly。
+- 同版時用內建的：內建的隨 App 發佈、已知可用；同版號照理內容相同，不同就是發佈出錯，以 App 帶的為準。
+- 比下去的下載版不刪，只是不列、不交給核心。
+- 從檔案匯入的照票 20 一律取代：那是使用者自己選的。
+
+修的時候發現一個連帶的坑，順手修了：`PackLibrary.find` 原本先找 IndexedDB 那份，被比下去的下載版仍會交給核心。改成照列出的那份找。
+
+測試，先紅後綠：
+- 核心 `newer_compares_versions_as_semver`：同版、`1.10.0` 對 `1.9.0`、預發佈版、讀不懂的版本。
+- TS 單元測試：下載版較高時取代、內建版較高時用內建、同版用內建、匯入的照舊取代。
+- Playwright「下載的 1.0.1 被之後內建的 1.0.2 比下去」：下載 1.0.1 後攔內建的請求換成 1.0.2，重新整理後用內建的、沒有刪除鍵，IndexedDB 裡還是 1.0.1；內建回到 1.0.0 時，又用下載的 1.0.1。
+- 變異驗證：挑選改回「下載的一律取代」，或 `find` 改回舊寫法，這個 e2e 都會紅。
+
+fixture `web/e2e/fixtures/quick-lexicon-1.0.1/`、`quick-lexicon-1.0.2/` 由 `web_fixture.rs` 產生。
+
+
+合併 main（票 12）、接上個人集的軟連結之後重跑：`cargo xtask check` 通過（196 個 e2e）。`cargo xtask bench --check` 通過：各集合含個人集的答錯、修正都和 baseline 相同，全部沒有翻盤（個人集 4517 題，答錯 1082、修正 1469）。merge 與補修都沒動資料管線與 `data/`，沒跑 `data --verify`。

@@ -63,16 +63,25 @@ export function parseManifest(json: string, origin: PackOrigin): PackEntry {
 }
 
 /**
- * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面；和內建同 id 的匯入（含下載的新版）取代
- * 內建那份（刪掉後回到內建的）。
+ * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面。和內建同 id 的匯入取代內建那份（刪掉後回到
+ * 內建的）；線上更新下載的只在版本比內建的高（`newer(下載的, 內建的)`）時取代，同版或較舊時用內建的、
+ * 下載的不列（不刪，plan §4.7）。
  */
 export function listPacks(
 	builtin: readonly PackEntry[],
 	imported: readonly PackEntry[],
+	newer: (downloaded: PackEntry, builtin: PackEntry) => boolean,
 ): PackEntry[] {
-	const replaced = new Map(imported.map((p) => [p.id, p]));
+	const shadowed = (pack: PackEntry): boolean => {
+		const same = builtin.find((p) => p.id === pack.id);
+		return (
+			pack.origin === "downloaded" && same !== undefined && !newer(pack, same)
+		);
+	};
+	const usable = imported.filter((p) => !shadowed(p));
+	const replaced = new Map(usable.map((p) => [p.id, p]));
 	const listed = builtin.map((p) => replaced.get(p.id) ?? p);
-	for (const pack of imported) {
+	for (const pack of usable) {
 		if (listed.includes(pack)) {
 			continue;
 		}
