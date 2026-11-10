@@ -1,0 +1,6 @@
+// 複製成 Local.xcconfig（不進 git）再填。Team ID 在 Xcode → Settings → Accounts，
+// 或 `security find-identity -v -p codesigning` 那張憑證的 OU。
+// Bundle ID 全 Apple 唯一，前綴換成自己的。
+DEVELOPMENT_TEAM = XXXXXXXXXX
+QIM_BUNDLE_PREFIX = com.example.qim
+QIM_APP_GROUP = group.$(QIM_BUNDLE_PREFIX)

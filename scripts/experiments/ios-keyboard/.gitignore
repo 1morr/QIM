@@ -1,0 +1,6 @@
+Local.xcconfig
+*.xcodeproj/
+build/
+App/Info.plist
+Keyboard/Info.plist
+*.entitlements
