@@ -122,3 +122,118 @@ M2 票 04，2026-11-10。實驗程式、量法、指標的定義與完整輸出�
 
 - 票 08：擴充先照現在的格式載入 `Engine`（速成、詞庫、bigram）加英文、簡繁與佈局；字根提示可以先不放。在 iPhone 上量 footprint，跟這裡比，看 iOS 的 malloc 是否同樣不退釋放的頁。
 - 票 09：加壓時記下終止點的 footprint 與上面的組成；決定格式、Schema 驗證，以及兩項「不改格式也能壓低峰值」的改法。
+
+## Foundation Models
+
+M2 票 10，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keyboard/ModelProbe.swift`，量法與重量步驟見該目錄 README〈Foundation Models 與上下文長度〉。
+
+裝置與環境同上一節：iPhone 18 Pro Max（iPhone19,7），iOS 27.2（24B119），Xcode 27.1，Debug 組態。擴充沒有完整取用（`RequestsOpenAccess = NO`，`hasFullAccess = false`）。Apple Intelligence 開著：iOS 27 起預設開啟、不能關（見下方官方說法），`availability` 也回 `available`。系統語言地區 `en_HK@rg=twzzzz`。
+
+### 結論
+
+- **能用。** 鍵盤擴充裡 `SystemLanguageModel.default.availability` 回 `available`，`variant` 是「AFM 3 Core Advanced」，`contextSize` 8192；`supportsLocale()`（目前語言）與 `supportsLocale(zh-Hant-HK)` 都是 `true`。沒有完整取用時鍵盤擴充沒有網路（上一節與 brief §12.3），所以推論在裝置上。27 次請求都成功、都回正解「3」。
+- **連續請求約 190 ms。** 同一串裡緊接著的請求 15 次都在 185–194 ms（中位數 189 ms）。
+- **停頓後的第一個請求不穩：** 12 次裡 8 次在 0.29–0.87 s，4 次要 6–15 s（6.1、9.1、11.0、15.5 s）。慢的那幾次跟閒置長短（2–40 s）沒有明顯關係，送出前 1 秒呼叫 `prewarm()` 也擋不住（40 s 那次 prewarm 後仍 11.0 s）。原因沒查出來，見〈限制〉。
+- **擴充自己的記憶體漲得少。** 程序 11622 從 `viewDidAppear` 到按 FM 前 +2.6 MB（查可用性、載入框架，中間 iphone-use 也讓畫面重建過），每輪 6 個請求再 +0.8–1.2 MB，三輪共 10.27 → 15.31 MB；漲幅裡有多少來自畫面重建分不出來。推論模型不在擴充的程序裡跑（官方沒寫）。對 177 MB 的上限（上一節）可以忽略。
+- 對 QIM：停鍵層（plan §2.7）在 iOS 可以用 Foundation Models 重排，連續請求的延遲夠用；但停頓後第一個請求可能等十幾秒，重排結果一定要能晚到、晚到時丟掉（只認目前的 `generation`，ADR 0005）。
+
+### 量法
+
+擴充上的「FM」鍵每按一次依序送 6 個請求；「間隔」鍵在同一個程序裡隔 0、2、5、10、20、40 秒各送 1 個，再隔 10、20、40 秒各送 1 個「先 `prewarm()`、等 1 秒才送」的請求。每個請求都新開 `LanguageModelSession`（同 IME 每次停鍵送一個獨立請求），提示照 plan §7.8：上下文、輸入碼 `anr`、前 10 個候選，要求只回序號，正解是 3（門口）；`GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 4)`。延遲是 `respond(to:options:)` 前後的 `ContinuousClock` 差，不含建立 session。記憶體同上一節的 `phys_footprint`。
+
+### 結果
+
+| 輪 | 程序 | 停頓後第一個請求 | 之後的請求 | footprint 前 → 後 |
+| --- | --- | ---: | --- | --- |
+| FM 第 1 次（新程序） | 11622 | 655 ms | 191、186、185、189、187 ms | 12.89 → 14.08 MB |
+| FM 第 2 次（約 30 s 後） | 11622 | 15,460 ms | 194、189、191、185、190 ms | 14.02 → 14.92 MB |
+| FM 第 3 次（約 25 s 後） | 11622 | 6,082 ms | 189、186、186、189、186 ms | 14.52 → 15.31 MB |
+
+「間隔」鍵（新程序 11632，每個都是停頓後的單一請求）：
+
+| 停頓 | 0 s | 2 s | 5 s | 10 s | 20 s | 40 s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 直接送 | 739 ms | 286 ms | 373 ms | 9,052 ms | 869 ms | 802 ms |
+| 先 `prewarm()` | | | | 424 ms | 352 ms | 10,961 ms |
+
+整輪 footprint 12.44 → 19.00 MB；這輪 iphone-use 截圖讓鍵盤畫面重建了十幾次（見〈限制〉），漲幅不只來自 Foundation Models。程序 11622 的 `viewDidAppear` 是 10.27 MB，按 FM 時（還沒送請求）12.89 MB。
+
+截圖：`.scratch/m2/evidence/10-fm-notes.png`（第 1 輪）、`10-fm-notes-slow-first.png`（第 2 輪，15.5 s）、`10-fm-gaps.png`（間隔）。
+
+### 限制
+
+- 只有一台旗艦機、一個 iOS 版本；Core Advanced 只在 iPhone 18 Pro 系列與 iPhone Duo，其他支援的機型跑 Core 變體，延遲可能不同。
+- 量不到「系統第一次把模型載入記憶體」：程序 11622 之前別的程序已經用過模型，655 ms 只代表這個擴充程序的第一次。
+- iphone-use 每次點擊或截圖，鍵盤的 view controller 都會重建（同一個程序，`viewDidLoad` 再跑一次）；「間隔」那輪中途鍵盤還被收起一次（10 s 那格可能受影響）。慢的請求是不是因為擴充在那一刻被系統當成背景，沒辦法從這裡分辨。產品要再量時，改用手指操作並在 Console.app 看 `qim.exp` 的 log。
+- 只試了一種提示、一種輸出長度（序號）；正確率留給 M3 模型階梯（plan §7.8）。
+
+### 官方說法（2026-11-10 查）
+
+- 可用條件：「In iOS 27, iPadOS 27, macOS 27, and visionOS 27 or later, Apple Intelligence is on by default and can no longer be turned off.」`appleIntelligenceNotEnabled`「occurs in iOS 26, iPadOS 26, macOS 26, and visionOS 26 or later」。機型表的 iPhone 列：「iPhone 18 Pro models, iPhone Duo」只有 AFM Core Advanced 與 AFM Cloud。「Every device has just one `SystemLanguageModel`, so your app can’t choose which variant or version to use.」[Detecting available Apple foundation models](https://developer.apple.com/documentation/foundationmodels/detecting-available-apple-foundation-models)。
+- `UnavailableReason` 三種：`deviceNotEligible`「The device does not support Apple Intelligence.」、`appleIntelligenceNotEnabled`「Apple Intelligence is not enabled on the system.」、`modelNotReady`「The models aren’t available on the user’s device.」「Models are downloaded automatically based on factors like network status, battery level, and system load.」[SystemLanguageModel](https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel)。SDK 27.1 的介面檔也只有這三種。
+- 語言：「Apple Intelligence is available with support for these languages: … Chinese (simplified), Chinese (traditional), Japanese, and Korean.」「Device language and Siri language set to the same supported language」。[How to get Apple Intelligence](https://support.apple.com/en-us/121115)。
+- `supportsLocale(_:)`：「Use this method over `supportedLanguages` to check whether the given locale qualifies a person for using this model, as this method also takes language fallbacks into consideration.」[SystemLanguageModel](https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel)。
+- `prewarm(promptPrefix:)`：「Use only when you have a window of at least 1 second before the call to a respond method」；「Calling this method doesn’t guarantee that the system loads your assets immediately, particularly if your app is running in the background or the system is under load.」[LanguageModelSession](https://developer.apple.com/documentation/foundationmodels/languagemodelsession)。
+- 頻率限制：iOS 26 的 [`GenerationError.rateLimited`](https://developer.apple.com/documentation/foundationmodels/languagemodelsession/generationerror/ratelimited(_:))「This error will only happen if your app is running in the background and exceeds the system defined rate limit」；iOS 27 另有 `LanguageModelError.rateLimited`（SDK 27.1 介面檔），沒再限定背景。鍵盤擴充算不算背景官方沒寫。本實驗沒遇到任何錯誤。
+- 只有 Private Cloud Compute 要 entitlement `com.apple.developer.private-cloud-compute`；on-device 模型的文件沒提任何 entitlement 或 Info.plist 鍵，本實驗也沒加。[Detecting available Apple foundation models](https://developer.apple.com/documentation/foundationmodels/detecting-available-apple-foundation-models)。
+- **官方沒寫 app extension（含鍵盤擴充）能不能用 Foundation Models**，以上「能用」是實測。
+
+## 上下文長度
+
+M2 票 10，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keyboard/ContextProbe.swift`。裝置同上。
+
+### 結論
+
+- **讀到多少由宿主決定，大致按句子切，不按段落。** 換行本身不截斷：游標在段首時，兩個宿主都會帶出上一段的結尾與換行。句子的界線在「。」之後（測試文字裡「。」後的「[」也被算進前一句，是斷句器的處理，不影響結論）。
+- **備忘錄：游標所在句到句首，加上前一整句（放得下才帶），最多 300 字。** 句中 89 字（前一句 50 + 本句 39）；句首或文末只有前一句（49–50 字）；前一句長達 3000 字時只給本句的 30 字；沒有標點的 3000 字長段裡前後各 300 字。`after` 給到本句句尾，同樣最多 300 字。
+- **Safari（網頁的 `<textarea>`）：句中只有游標所在句，最多 100 字。** 句中只給本句（39 字），句首或文末給前一句（49–50 字）；段首例外，給 35 字、從上一句中間切；長段裡前後各 100 字。
+- **剛 `insertText` 之後讀到的是暫時的值。** 備忘錄文末插入 3000 字後立刻讀是 499 字，游標移開再移回就變回 300 字。量長度時要先讓宿主同步（移一下游標或等 `textDidChange`）。
+- 空白文件的 `before`、`after` 與文末的 `after` 都是 `nil`，沒有遇到空字串。全部測試文字都在 BMP，字數與 UTF-16 長度相同。
+- 對 QIM：brief §8 的「游標前最多 200 字」在 iOS 可能常拿不到。每句 50 字的測試文字只讀到一兩句，Safari 最多 100 字，備忘錄只有長句才到 300；真實文字的句長不同，這是推論。plan §7.8 量「上下文 200 字」的結果在 iOS 上只對沒標點的長句有意義；iOS 要更多上下文得自己記住這次編輯裡上屏過的字，是否值得留給 M3 決定。
+
+### 量法
+
+擴充上的鍵：「長文」插入 9 段、每段 40 個 10 字單元（`[段.序]天地玄` 加「，」，每第 5 個加「。」）、第 4 與第 5 段之間空一行的長文，開頭就看得出從哪個單元起讀；「長段」插入 3000 字、沒有標點與換行的一段（300 個 `[序號]天地玄黃`）；「←1000」到「→100」用 `adjustTextPosition(byCharacterOffset:)` 移游標，0.3 秒後重讀；「⇤」往前移 `before` 的長度，連按就一句一句走到段首；「讀」重讀。每次 `viewDidAppear`、`textDidChange`、`selectionDidChange` 也重讀。顯示 `documentContextBeforeInput` 與 `AfterInput` 的字數（`Character`）、UTF-16 長度、換行數、頭尾各 12 字。
+
+宿主：備忘錄（新增一則備忘錄）；Safari 開這台 Mac 起的本機網頁，裡面一個 `<textarea>`（`python3 -m http.server`，頁面見 README）。
+
+### 結果
+
+備忘錄：
+
+| 游標位置 | `before` | `before` 從哪起 | `after` |
+| --- | ---: | --- | ---: |
+| 文末，前一字是「。」 | 49 | 前一句句首（9.36） | `nil` |
+| 句中（本句已打 39 字，句首的「[」算前一句） | 89 | 前一句句首（9.31） | 10，到句尾 |
+| 句中（另一處） | 89 | 前一句句首（9.21） | 11，到句尾 |
+| 句首 | 50 | 前一句句首（9.16） | 50，整句 |
+| 段首（換行之後） | 50，含 1 個換行 | 上一段最後一句句首（8.36） | 51，整句 |
+| 句中，前一句長 3000 字 | 30 | 本句句首 | 20，到句尾 |
+| 3000 字長段中間 | 300 | 往前 300 字（0171） | 300 |
+| 長段裡，離句尾 120 字 | 300 | 往前 300 字（0261） | 120，到句尾 |
+| 長段在文末 | 300 | 往前 300 字（0271） | `nil` |
+| 長段在文末，剛插入完 | 499 | 往前 499 字（0251 的「[」之後） | `nil` |
+
+Safari `<textarea>`：
+
+| 游標位置 | `before` | `before` 從哪起 | `after` |
+| --- | ---: | --- | ---: |
+| 文末，前一字是「。」 | 49 | 前一句句首（9.36） | `nil` |
+| 句中（本句已打 39 字） | 39 | 本句句首（9.36） | 10，到句尾 |
+| 句首 | 50 | 前一句句首（9.31） | 49，整句 |
+| 段首（換行之後） | 35，含 1 個換行 | 上一句中間（8.37 的「天地玄，」） | 51，整句 |
+| 長句裡，離句尾 51 字 | 100 | 往前 100 字（0291） | 51，到句尾 |
+| 3000 字長段中間 | 100 | 往前 100 字（0191） | 100 |
+
+截圖：`.scratch/m2/evidence/10-context-notes-*.png`（end、mid、paragraph-start、prev-sentence-too-long、long-paragraph-mid、long-paragraph-end）、`10-context-safari-*.png`（end、mid、paragraph-start、long-paragraph-mid）。
+
+### 限制
+
+- 兩個宿主、一台手機、一個 iOS 版本；其他 App（尤其自己畫文字的，如通訊軟體）可能又不一樣。
+- 空一行（連續兩個換行）的位置沒有測到：走到那裡要按太多次，而且單一換行已經不截斷。
+- iphone-use 的點擊偶爾漏掉或點穿到宿主，游標會跳到別處；每筆讀數都附頭尾文字，位置以讀數為準。
+- 沒測 `<input>` 單行欄位與 `contenteditable`。
+
+### 官方說法
+
+官方只說鍵盤可經 `UITextDocumentProxy` 讀插入點周圍的文字，用途是 autocomplete 與 autocapitalization，沒有寫長度（`docs/research/platform-frameworks.md` §3.2）。[Handling text interactions in custom keyboards](https://developer.apple.com/documentation/uikit/handling-text-interactions-in-custom-keyboards)、[UITextDocumentProxy](https://developer.apple.com/documentation/uikit/uitextdocumentproxy)。以上長度都是實測。

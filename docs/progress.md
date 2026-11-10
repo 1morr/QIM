@@ -42,6 +42,7 @@
 | 2026-11-10 | M2 02 | `Pack` 改 `SchemePack`；分段只留 `Segment`；`UserModel` 的內部方法改經 `for_scheme` 取用、不逐一帶方案；bench 不變；細節見票 02 | 新 session 下 `/implement .scratch/m2/issues/03-bindings-without-logic.md` |
 | 2026-11-10 | M2 04 | Mac 上資料包加 `Engine` 載入後 footprint 約 96 MB，詞庫佔還在用的 41 MB；`validate` 讓執行檔多 3.1 MB；建議見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/03-bindings-without-logic.md` |
 | 2026-11-10 | M2 03 | `qim-wasm` 只轉型別：按鍵一個入口（`Key::parse`）、組字狀態問 `Session`、切頁與 Shift 收進 `qim_layout::Keyboard`；見票 03 | 新 session 下 `/implement .scratch/m2/issues/07-qim-ffi-minimal.md` |
+| 2026-11-10 | M2 10 | 擴充內 Foundation Models 可用：連續約 190 ms、停頓後首個偶爾 6–15 s；上下文按句切，備忘錄至多 300 字、Safari 100；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/11-small-neural-model-cost.md` |
 
 ## 偏差與決定
 
