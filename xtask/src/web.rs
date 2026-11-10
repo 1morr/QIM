@@ -50,14 +50,18 @@ fn try_wasm_bindings(root: &Path) -> Result<(), String> {
         Some(_) => {}
     }
 
-    run(Command::new(crate::cargo())
-        .args(["build", "--release", "-p", "qim-wasm", "--target", TARGET])
-        .current_dir(root))?;
+    crate::run_command(
+        Command::new(crate::cargo())
+            .args(["build", "--release", "-p", "qim-wasm", "--target", TARGET])
+            .current_dir(root),
+    )?;
     let wasm = root.join(format!("target/{TARGET}/release/qim_wasm.wasm"));
-    run(Command::new("wasm-bindgen")
-        .args(["--target", "web", "--out-dir"])
-        .arg(root.join(BINDINGS_DIR))
-        .arg(wasm))
+    crate::run_command(
+        Command::new("wasm-bindgen")
+            .args(["--target", "web", "--out-dir"])
+            .arg(root.join(BINDINGS_DIR))
+            .arg(wasm),
+    )
 }
 
 /// 把 [`DATA_OUTPUTS`] 的每個目錄整個複製到網頁，先清掉舊的；回傳是否成功。
@@ -79,15 +83,6 @@ pub fn serve_data_outputs(root: &Path) -> bool {
         }
     }
     true
-}
-
-fn run(command: &mut Command) -> Result<(), String> {
-    let program = command.get_program().to_string_lossy().into_owned();
-    match command.status() {
-        Ok(status) if status.success() => Ok(()),
-        Ok(status) => Err(format!("{program} 失敗：{status}")),
-        Err(e) => Err(format!("無法執行 {program}：{e}")),
-    }
 }
 
 /// `Cargo.lock` 裡 `name` 這個套件的版本；同名有多個版本時取第一個。

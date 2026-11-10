@@ -17,8 +17,8 @@ use sha2::{Digest, Sha256};
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
 pub use items::{Item, Unit, parse_corpus, parse_fixed, parse_personal};
 pub use latency::{
-    LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, node_wasm_timer,
-    percentile,
+    LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, lefts_to_first_segment,
+    node_wasm_timer, parse_timing, percentile,
 };
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};
 

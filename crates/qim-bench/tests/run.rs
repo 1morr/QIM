@@ -17,8 +17,9 @@ use std::path::{Path, PathBuf};
 
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{
-    CharModel, CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel, LanguageModelPack,
-    Lexicon, LexiconPack, Packs, Ranking, Scheme, SchemePack, Word,
+    CharModel, CodeEntry, CodeTable, Engine, EnglishPack, EnglishWords, Key, LanguageModel,
+    LanguageModelPack, Lexicon, LexiconPack, Packs, Ranking, Scheme, SchemePack, Session, Snapshot,
+    UserModel, Word,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -107,7 +108,9 @@ fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
 }
 
 /// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒，遠超每鍵 50 ms 的預算。
-fn slow_wasm(_packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
+/// 選開頭一段花 1000 毫秒，量哪些輸入照原生的規則（[`qim_bench::lefts_to_first_segment`]），用同一份資料包算。
+fn slow_wasm(packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
+    let engine = engine_from(packs);
     Ok(Timing {
         runtime: "假".into(),
         per_key_ms: inputs
@@ -118,7 +121,35 @@ fn slow_wasm(_packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
                     .collect()
             })
             .collect(),
+        select_ms: inputs
+            .iter()
+            .map(|input| {
+                let mut session = Session::default();
+                let mut user = UserModel::default();
+                let mut last = Snapshot::default();
+                for c in input.chars() {
+                    last = session.handle(&engine, &mut user, Key::for_input(c));
+                }
+                qim_bench::lefts_to_first_segment(&last).map(|_| 1000.0)
+            })
+            .collect(),
     })
+}
+
+/// 基準交給計時器的資料包（依檔頭魔數分辨，同 `web/bench/latency.ts`）建出的 `Engine`。
+fn engine_from(packs: &[PathBuf]) -> Engine {
+    let mut by_kind = BTreeMap::new();
+    for path in packs {
+        let bytes = fs::read(path).unwrap();
+        by_kind.insert(bytes[..4].to_vec(), bytes);
+    }
+    let get = |magic: &[u8]| by_kind.get(magic).map(Vec::as_slice);
+    let engine =
+        Engine::from_pack_bytes(get(b"QIMP").unwrap(), get(b"QIML"), get(b"QIMB")).unwrap();
+    match get(b"QIME") {
+        Some(bytes) => engine.with_english(EnglishPack::from_bytes(bytes).unwrap()),
+        None => engine,
+    }
 }
 
 fn write(root: &Path, path: &str, bytes: &[u8]) {
@@ -907,12 +938,17 @@ fn latency_reports_native_and_wasm_percentiles_with_a_long_input_group() {
     let report = outcome.report();
     let rows: Vec<&str> = report
         .lines()
-        .filter(|line| line.contains("| 第 20 碼起 |") || line.contains("| 全部 |"))
+        .filter(|line| {
+            ["| 全部 |", "| 第 20 碼起 |", "| 選開頭一段 |"]
+                .iter()
+                .any(|group| line.contains(group))
+        })
         .collect();
     // 全部：固定題 `a`（1 鍵）、toy `a`、`a`、`ab`（4 鍵）、long（21 鍵），共 5 個輸入 26 鍵。
     // 假計時器的 26 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、21），p50 第 13 個是 8、p95 第 25 個是 20。
     // 第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
-    assert_eq!(rows.len(), 4, "{report}");
+    // 選開頭一段：只有 long 打完有兩段以上，一次。
+    assert_eq!(rows.len(), 6, "{report}");
     let native = if cfg!(debug_assertions) {
         "原生（debug）"
     } else {
@@ -926,13 +962,21 @@ fn latency_reports_native_and_wasm_percentiles_with_a_long_input_group() {
         rows[1].starts_with(&format!("| {native} | 第 20 碼起 | 1 | 2 | ")),
         "{report}"
     );
-    assert_eq!(
-        rows[2],
-        "| WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 |"
+    assert!(
+        rows[2].starts_with(&format!("| {native} | 選開頭一段 | 1 | 1 | ")),
+        "{report}"
     );
     assert_eq!(
         rows[3],
+        "| WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 |"
+    );
+    assert_eq!(
+        rows[4],
         "| WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 |"
+    );
+    assert_eq!(
+        rows[5],
+        "| WebAssembly（假） | 選開頭一段 | 1 | 1 | 1000000.00 | 1000000.00 |"
     );
     assert!(report.contains("只報不擋"), "{report}");
 }
@@ -966,10 +1010,28 @@ fn a_wasm_timer_that_misses_keys_is_an_error() {
         Ok(Timing {
             runtime: "假".into(),
             per_key_ms: vec![vec![1.0]],
+            select_ms: vec![None],
         })
     })
     .unwrap_err();
     assert!(error.contains("WebAssembly"), "{error}");
+}
+
+#[test]
+fn a_wasm_timer_that_selects_on_other_inputs_than_native_is_an_error() {
+    let repo = repo_with_long_input();
+    let error = qim_bench::run(
+        repo.path(),
+        Mode::Report,
+        &|packs: &[PathBuf], inputs: &[String]| {
+            let mut timing = slow_wasm(packs, inputs)?;
+            assert_eq!(timing.select_ms.iter().flatten().count(), 1);
+            timing.select_ms = vec![Some(1.0); inputs.len()];
+            Ok(timing)
+        },
+    )
+    .unwrap_err();
+    assert!(error.contains("選開頭一段"), "{error}");
 }
 
 /// dev 模式（`--dev`）：題目換成 `build/corpus/<名>/dev.tsv`；toy 的 dev 只有一句 `a b 日月`，

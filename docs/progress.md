@@ -42,6 +42,7 @@
 | 2026-11-10 | M2 02 | `Pack` 改 `SchemePack`；分段只留 `Segment`；`UserModel` 的內部方法改經 `for_scheme` 取用、不逐一帶方案；bench 不變；細節見票 02 | 新 session 下 `/implement .scratch/m2/issues/03-bindings-without-logic.md` |
 | 2026-11-10 | M2 04 | Mac 上資料包加 `Engine` 載入後 footprint 約 96 MB，詞庫佔還在用的 41 MB；`validate` 讓執行檔多 3.1 MB；建議見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/03-bindings-without-logic.md` |
 | 2026-11-10 | M2 03 | `qim-wasm` 只轉型別：按鍵一個入口（`Key::parse`）、組字狀態問 `Session`、切頁與 Shift 收進 `qim_layout::Keyboard`；見票 03 | 新 session 下 `/implement .scratch/m2/issues/07-qim-ffi-minimal.md` |
+| 2026-11-10 | M2 07 | `qim-ffi`（uniffi）與 Swift 在 Mac 打出「門口」；三種路徑每鍵 p95 都 ≤ 0.9 ms（含選段），見 ios-feasibility〈綁定開銷〉 | 新 session 下 `/implement .scratch/m2/issues/08-ios-keyboard-with-core.md` |
 
 ## 偏差與決定
 
@@ -67,3 +68,5 @@
 - 2026-11-07 M2（M1 review，使用者決定）：M2 加一張 FFI 前的清理票與一張 CI 小票（plan §7.3）；記憶體上限只在 iPhone 18 Pro Max 量並註明。
 - 2026-11-10 M2 票 01：換選項還沒重列時 `all_candidates` 回空、`rerank_request` 與 `apply_rerank` 回 `None`，票外決定（同類錯）；`set_options` 帶 `Engine` 直接重列留給票 07（plan §2.1）。
 - 2026-11-10 M2 票 03：觸控鍵盤的佈局版本、目前頁與 Shift 改由 `qim_layout::Keyboard` 記，推翻 plan §2.6 的「由殼記著」；載入時照 `initialPage`，修掉舊綁定忽略它的問題（plan §2.1、§2.6）。
+- 2026-11-10 M2 票 07：`qim-ffi` 的按鍵也收「種類 + 值」（`Key::parse`），推翻 plan §2.1 的直接收 `Key`：uniffi 沒有 `char` 型別（plan §2.1）。
+- 2026-11-10 M2 票 07：`qim-bench` 每鍵延遲加「選開頭一段」一組（原生與 WebAssembly），票外擴張，補 M1 票 24 留下的缺口（plan §5.2、development〈每鍵延遲〉）。
