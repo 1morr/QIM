@@ -23,6 +23,7 @@ import init, {
 	Session,
 	type Snapshot,
 } from "./wasm/qim_wasm.js";
+import { mountWordList } from "./word-list.ts";
 
 const PACK_URL = "/packs/quick/quick.pack";
 /** 速成方案檔 `[packs]` 指名的詞庫資料包。 */
@@ -176,6 +177,7 @@ async function start(): Promise<void> {
 		userDict.save,
 		focusText,
 	);
+	mountWordList(session, userDict.save, focusText);
 	const syncContext = mountContext(text, session, contextLimit());
 	// 開關改了不是選字；改完重給前文（關掉無痕之後要立刻給）。
 	settings.connect(

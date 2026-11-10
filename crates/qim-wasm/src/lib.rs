@@ -2,7 +2,8 @@
 
 use qim_core::{
     CangjieVersion, EmojiPack, Engine, EnglishPack, Key, Options, Pack, RadicalHintPack,
-    RadicalHints, Scheme, Session, ShiftKey, SimplifierPack, Snapshot, UserModel,
+    RadicalHints, Scheme, Session, ShiftKey, Shortcuts, SimplifierPack, Snapshot, UserModel,
+    WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -139,6 +140,39 @@ impl WebSession {
     pub fn import_user_dict(&mut self, text: &str) -> Result<(), JsError> {
         self.user = UserModel::import(text).map_err(js_error)?;
         Ok(())
+    }
+
+    /// 先看匯入詞表 `text` 會加幾個詞、略過哪些列（在個人模型的複本上匯入），不動目前的資料；
+    /// 網頁請使用者確認之前呼叫。整份讀不了時丟例外。`shortcuts_as_triggers` 同
+    /// [`WebSession::import_word_list`]。
+    #[wasm_bindgen(js_name = checkWordList)]
+    pub fn check_word_list(
+        &self,
+        text: &str,
+        shortcuts_as_triggers: bool,
+    ) -> Result<WebWordListReport, JsError> {
+        let report = self
+            .user
+            .clone()
+            .import_word_list(&self.engine, text, shortcuts(shortcuts_as_triggers))
+            .map_err(js_error)?;
+        Ok(report.into())
+    }
+
+    /// 把詞表 `text` 的詞加進使用者詞（plan §2.4）：Rime `.dict.yaml`、Gboard 個人字典、一行一詞。
+    /// 是加進去，不取代學習資料；整份讀不了時丟例外、什麼都不加。`shortcuts_as_triggers` 為真時
+    /// Gboard 的快捷鍵設成觸發詞（預設不設，網頁的勾選框）。
+    #[wasm_bindgen(js_name = importWordList)]
+    pub fn import_word_list(
+        &mut self,
+        text: &str,
+        shortcuts_as_triggers: bool,
+    ) -> Result<WebWordListReport, JsError> {
+        let report = self
+            .user
+            .import_word_list(&self.engine, text, shortcuts(shortcuts_as_triggers))
+            .map_err(js_error)?;
+        Ok(report.into())
     }
 
     /// 清掉全部使用者詞與學習計數。
@@ -469,6 +503,64 @@ impl WebRadicalHints {
                 radicals: hint.radicals,
             })
             .collect())
+    }
+}
+
+/// 詞表匯入的結果。JS 端叫 `WordListReport`。
+#[wasm_bindgen(js_name = WordListReport, getter_with_clone)]
+pub struct WebWordListReport {
+    /// 認出的格式，給人看的名字。
+    #[wasm_bindgen(readonly)]
+    pub format: String,
+    /// 加進使用者詞的詞數。
+    #[wasm_bindgen(readonly)]
+    pub added: usize,
+    /// 沒加的列，一列一句（「第 n 行「詞」：原因」）。
+    #[wasm_bindgen(readonly)]
+    pub skipped: Vec<String>,
+    /// 快捷鍵能設成觸發詞的列，一列一句；會搶走首選的寫出搶走誰。
+    #[wasm_bindgen(readonly, js_name = triggerShortcuts)]
+    pub trigger_shortcuts: Vec<String>,
+    /// `trigger_shortcuts` 裡設了會搶走首選的列（同樣的句子），網頁拿來標出。
+    #[wasm_bindgen(readonly, js_name = displacingShortcuts)]
+    pub displacing_shortcuts: Vec<String>,
+    /// 加了、但快捷鍵不是方案的鍵而不能當觸發詞的列，一列一句。
+    #[wasm_bindgen(readonly, js_name = unusedShortcuts)]
+    pub unused_shortcuts: Vec<String>,
+}
+
+/// 網頁勾選框的值轉成核心的選項。
+fn shortcuts(as_triggers: bool) -> Shortcuts {
+    if as_triggers {
+        Shortcuts::AsTriggers
+    } else {
+        Shortcuts::Ignore
+    }
+}
+
+impl From<WordListReport> for WebWordListReport {
+    fn from(report: WordListReport) -> Self {
+        Self {
+            format: report.format.to_string(),
+            added: report.added,
+            skipped: report.skipped.iter().map(ToString::to_string).collect(),
+            trigger_shortcuts: report
+                .trigger_shortcuts
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            displacing_shortcuts: report
+                .trigger_shortcuts
+                .iter()
+                .filter(|t| t.displaces.is_some())
+                .map(ToString::to_string)
+                .collect(),
+            unused_shortcuts: report
+                .unused_shortcuts
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        }
     }
 }
 

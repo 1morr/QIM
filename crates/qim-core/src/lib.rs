@@ -16,6 +16,7 @@ mod scheme;
 mod session;
 mod simplifier;
 mod user;
+mod word_list;
 
 pub use code_table::{CodeEntry, CodeTable};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
@@ -35,3 +36,7 @@ pub use session::{
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{ImportError, Phrase, UserModel, UserWordError};
+pub use word_list::{
+    Shortcuts, SkipReason, SkippedLine, TriggerShortcut, UnusedShortcut, WordListError,
+    WordListFormat, WordListReport,
+};
