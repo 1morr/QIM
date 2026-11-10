@@ -32,13 +32,15 @@ M2 的驗收全部重驗並留下證據，四個問題的結論寫回 brief 與 
   - M3（智慧候選）：
     - brief §8 的「游標前 200 字」在 iOS 常拿不到（備忘錄最多 300 字、Safari 100 字，測試文字只讀到一兩句）；要不要自己記住這次編輯上屏過的字補上下文，M3 定（票 10，plan §7.8）。
     - Foundation Models 停頓後第一個請求 12 次裡 4 次要 6–15 s，`prewarm()` 擋不住、原因沒查出；M3 若用它當停鍵層，模型階梯實驗要量這個尾巴（票 10）。
+    - 神經模型開銷用的「6 條候選路徑、每條 8 字」是票 11 自訂的近似，plan §7.8 沒定；模型階梯實驗定實際的路徑數與長度後重算延遲（票 11）。
   - M6 起（`qim-ffi` 完整版、桌面殼）：
     - FFI 還沒匯出 `set_options`；加的時候讓綁定的 `set_options` 同時重列並回快照，去掉「待生效選項」狀態（票 01 → 07，plan §2.1）。
     - `qim-ffi` 與 `qim-wasm` 各寫一份 `Engine::new` 加 `with_simplifier`、`with_english` 的組裝；加第六種資料包時在核心給收 `Option` 的建構式（票 08）。
     - `qim-ffi` 沒有 `pageSize()`，註解寫死 `page × 9`；Swift 殼要分頁時補上，與 `qim-wasm` 一致（code-review）。
     - `UserModel` 暫時跟著各 `Session`，換輸入框就是新的學習資料；學習資料存檔與共用由需要的票拆（票 08，plan §2.1）。`RadicalHintPack` 只能解開，查詢介面留給要顯示字根提示的票（票 09）。
   - M7（iOS）：
-    - 鍵盤擴充略過 Schema 驗證的實作（`qim-layout` 加 feature，票 09 已決定，plan §1.3）。
+    - 鍵盤擴充略過 Schema 驗證的實作（`qim-layout` 加 feature，票 09 已決定，plan §1.3）；加了之後再量「只留型別與引用檢查」那條路的執行檔與記憶體（票 04 沒量）。
+    - 上下文長度只測了備忘錄與 Safari `<textarea>` 的一般句子；空一行、`<input>`、`contenteditable` 與其他宿主沒測（票 10），iOS 殼讀上下文時補。
     - `qim_layout::Keyboard` 把換鍵盤併成 `Output::Modifier`，殼分不出「這下要換鍵盤」，得自己再查鍵的動作；plan §2.6 認可現狀，寫 iOS 殼時重看要不要讓 `Output` 帶出來（code-review）。
     - 低階機的記憶體上限、每鍵延遲沒量，只有 iPhone 18 Pro Max（brief §9、plan §7.8、§8）。
     - 實驗的 Swift（`KeyboardViewController.render()` 的探針條件、各探針重抄 `onUpdate`／`displayLines`、字串前綴表示結果、`Probe` 職責混合）不沿用到產品殼（票 06、09、10）。
@@ -49,7 +51,7 @@ M2 的驗收全部重驗並留下證據，四個問題的結論寫回 brief 與 
     - `ShiftSwitch::from_str` 的錯誤是 `String`、`Key::parse` 是 `KeyError`：同 `Device`、`CangjieVersion` 的既有慣例（票 03）。
     - `pack-memory`、`neural-cost` 的 README 沒寫 Xcode 版本：純 Rust、只用系統的連結器，Rust 版本與 macOS 版本已寫（code-review）。
     - 同一個數字抄在 ios-feasibility、brief §12.3、plan、README 各處（spec〈共同規則〉要的分工）；`swiftc` 的連結參數在 `docs/development.md` 與 `ffi-swift/run.sh` 各一份（文件給人看、腳本給機器跑）。
-    - 票 01–11 Comments 列的其餘判斷題（`for_scheme` 五處、`refresh` 與 `apply_pending_options` 相似、`options_pending` 命名、`CandidateSpan.len`、中文錯誤訊息、`Output::kind` 與 `Action::name`、JS 的 `Layout` 名、`Timing` 平行陣列、選段規則與模型檔名多處重複、`xtask/src/ffi.rs` 沒測試、`Mutex` 中毒照用、`by_frequency` 峰值沒單獨量、README 不能寫含自己的 commit）照各票的理由不改。
+    - 票 01–11 Comments 列的其餘判斷題照各票的理由不改：`for_scheme` 五處、`refresh` 與 `apply_pending_options` 相似、`options_pending` 命名、`CandidateSpan.len`、方案資料包在 `GLOSSARY.md` 不自成一條（票 01、02）；中文錯誤訊息、`ShiftSwitch` kebab-case 與 `Key` 種類 camelCase、`Output::kind` 與 `Action::name`、JS 的 `Layout` 名（票 03）；`by_frequency` 峰值沒單獨量（票 04）；量測沒記 PID（票 06；票 08 起以新程序的 `viewDidAppear` 當基線、畫面印 `pid=`）；`Timing` 平行陣列、選段規則多處、`xtask/src/ffi.rs` 沒測試、`Mutex` 中毒照用（票 07）；五份資料包清單四處、`Latency.swift` 頂層函式名泛、README 不能寫含自己的 commit（票 08）；`ModelProbe` 的 `run` 與 `runGaps` 相似（票 10）；GPT 權重名兩處、模型檔名與預設 30 次／2 條執行緒多處（票 11）。實驗程式不再抽。
 - 2026-11-10 重驗在乾淨 checkout：`git worktree add --detach` 到 session 暫存目錄（`581b7f7`），`build`、`target`、`web/node_modules`、`bench/personal` 都不存在；照 `docs/development.md`〈安裝〉做 `npm ci`、`playwright install chromium`（wasm-bindgen 0.2.130 已裝）、`cargo xtask data`（共用快取）、`cargo xtask check`；`bench/personal` 用 `ln -s` 接主 checkout 的個人集。spec〈驗收〉逐項：
   - 四個問題：數字都在 `docs/research/ios-feasibility.md`，摘進 brief §9、§11、§12.3（本票寫回 §9、§11，§12.3 由各票寫好、本票核對），都註明 iPhone 18 Pro Max、iOS 27.2。Mac 上能重跑的兩個在乾淨 checkout 重量，和研究文件一致：`pack-memory`（`RUNS=1`）不驗證 footprint 95.80 MB、Schema 驗證 98.36 MB、執行檔 0.67 / 3.76 MB、單獨建 `HashSet` +17.27 MB；`ffi-swift` 與 Chromium 延遲見下。
   - iPhone 打 `anr`：乾淨 checkout 照 ios-keyboard README〈建置與安裝〉建（`Local.xcconfig` 填這台 Mac 的 Personal Team、前綴 `com.personal.qim`，`core.sh`、`xcodebuild` `BUILD SUCCEEDED`、`devicectl` 安裝），備忘錄切到 QIM 實驗鍵盤按「載入」（六份資料包後 footprint 79.28 MB、131 ms），按 a、n、r 讀回候選列「anr 1.門口 2.日名 3.日阿 …」，空白後備忘錄讀回「門口」。截圖 `.scratch/m2/evidence/12-clean-anr.png`、`12-clean-commit.png`（候選列那行被鍵蓋住，首選以讀回的文字為準）。手機上留下一則「門口」的備忘錄，沒刪。
@@ -60,3 +62,5 @@ M2 的驗收全部重驗並留下證據，四個問題的結論寫回 brief 與 
   - GitHub Actions：`gh run list` 最近三次（票 08、11、09 合併後）都 success，最新是 run 42835522049。
   - `cargo xtask check`（乾淨 checkout，`581b7f7`）：`==> fmt` … `==> deps`、`==> docs`、`==> wasm`、`==> tsc`、`==> biome`、`==> unit`、`==> e2e`、`147 passed (31.2s)`、`check 通過`，exit 0。
 - 2026-11-10 封存：M2 的 25 列 session 紀錄與 26 條偏差移到 `docs/archive/M2.md`；里程碑表 M2 連到封存檔、M3 進行中（拆票前讀加上本票 Comments 與 ios-feasibility）；plan 開頭的狀態行、§7 表 M2 完成、M3 進行中，§7.3 指向 spec、封存檔、研究文件與本票。
+- 2026-11-10 封存後的 `cargo xtask check`（本 worktree，含 `39d103a` 的改名與封存內容，`7e25fe6` 提交前）：`==> fmt` … `==> deps`、`==> docs`、`==> wasm`、`==> tsc`、`==> biome`、`==> unit`、`==> e2e`、`147 passed (31.3s)`、`check 通過`。乾淨 checkout 與 iPhone 的擴充是 `581b7f7` 建的；`39d103a` 對程式只改了 doc comment 與 `qim-ffi` 私有函式的名字，不影響行為，由這次的 check（含 `qim-ffi` 的測試）涵蓋。
+- 2026-11-10 本 session 的 code-review（`581b7f7...7e25fe6`，兩軸）：沒有硬性違規。已處理：`QimError` 的 doc comment 補上「一份資料包給了兩個 `Engine`」這種綁定的錯誤；ios-feasibility 另一處「brief §9 暫定的 30 MB」改成「當時暫定」、「（同節）」寫明〈記憶體上限〉；上面清單補上漏列的票 02、03、04、06、08、10、11 各條；bench 改和 M2 開工時比記成偏差。沒處理（判斷題）：plan §8 免費佈建、延遲兩列只在括號補結果、沒改寫整列，照前面各列的寫法；brief §11〈待決〉裡放「已決」照 M1 票 03 的前例；同一組數字抄在五處（spec〈共同規則〉的分工）。

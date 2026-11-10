@@ -10,7 +10,8 @@ use qim_core::{Key, UserModel};
 
 uniffi::setup_scaffolding!("qim");
 
-/// 核心的錯誤（資料包讀不了、按鍵種類不認得），訊息照原樣；Swift 端是丟出的錯誤。
+/// 核心與綁定的錯誤（資料包讀不了、按鍵種類不認得、一份資料包給了兩個 `Engine`），訊息照原樣；
+/// Swift 端是丟出的錯誤。
 #[derive(Debug, uniffi::Error)]
 pub enum QimError {
     Core { message: String },

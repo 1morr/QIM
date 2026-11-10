@@ -279,7 +279,7 @@ M2 票 08，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keybo
 ### 結論
 
 - **能打字。** 備忘錄裡按擴充的 `a`、`n`、`r`，候選列首選是「門口」；按空白，備忘錄出現「門口」（兩個程序各一次）。截圖：`.scratch/m2/evidence/08-load-memory.png`（載入各步）、`08-notes-anr.png`、`08-notes-commit.png`、`08-notes-latency.png`（第 1 次），`08-notes-anr-run2.png`、`08-notes-latency-run2.png`（第 2 次）。
-- **常駐記憶體：五份資料包加 `Engine` 讓 footprint 多 51.4 MB，載入後總共 64.4 MB。** 兩次分別 +51.49、+51.39 MB。載入前的 footprint 約 13 MB：這個程序 `viewDidAppear` 時 11.7 MB，比票 06 的空擴充（約 10 MB）多，因為擴充連結了核心；加上按「載入」前幾次畫面重建。打字中 63.5–64.1 MB，跑完 12 萬鍵的延遲後 63.8 MB。iPhone 18 Pro Max 給擴充的上限是 177 MB（票 06），載入後用了 36%，還剩約 113 MB（`os_proc_available_memory`）。扣掉票 06 空擴充的 10 MB 基線，核心連同資料包約 54 MB；比 brief §9 暫定的 30 MB 多。
+- **常駐記憶體：五份資料包加 `Engine` 讓 footprint 多 51.4 MB，載入後總共 64.4 MB。** 兩次分別 +51.49、+51.39 MB。載入前的 footprint 約 13 MB：這個程序 `viewDidAppear` 時 11.7 MB，比票 06 的空擴充（約 10 MB）多，因為擴充連結了核心；加上按「載入」前幾次畫面重建。打字中 63.5–64.1 MB，跑完 12 萬鍵的延遲後 63.8 MB。iPhone 18 Pro Max 給擴充的上限是 177 MB（票 06），載入後用了 36%，還剩約 113 MB（`os_proc_available_memory`）。扣掉票 06 空擴充的 10 MB 基線，核心連同資料包約 54 MB；比 brief §9 當時暫定的 30 MB 多。
 - **詞庫最大：+41.4 MB**，佔核心增量的 80%，是檔案（4.95 MB）的 8.4 倍。bigram +5.3 MB、英文 +2.5 MB、速成 +0.6–1.4 MB、簡繁 +0.7 MB；`Engine` 與 `Session` 幾乎不加（+0.06–0.14 MB、0）。
 - **比 Mac 少約 27 MB。** 同五份資料包加 `Engine` 在 Mac 上（票 04 那張表的對應各列）合計 78.0 MB。差在 bigram（Mac +12.3 MB）與 `Engine::new`（Mac +12.8 MB），詞庫只差 5 MB。推論 iOS 的 malloc 把前一步釋放的頁（讀檔的緩衝區、uniffi 把位元組複製進 Rust 的那份）重用給後面的配置，所以 `Engine::new` 的暫存 `HashSet` 沒有另外長出 footprint；載入後 footprint 也從 64.4 降到 63.5 MB，Mac 上釋放的頁不會退出 footprint。兩邊載入順序不同（Mac 在 bigram 之後還載入了字根提示），單步的數字不能直接比，總量的差距才有意義。
 - **載入 120–138 ms**（背景執行緒），其中詞庫 70 ms、`Engine` 27–33 ms。
@@ -381,7 +381,7 @@ M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`
   | 23M q8 | +46.9 MB |
   | 23M f32 | +94.9 MB |
 
-  對 177 MB 的上限（票 09 加壓確認，〈記憶體上限〉），擴充載入核心與六份資料包（含字根提示）後 footprint 79 MB（同節），再加模型的峰值增量：
+  對 177 MB 的上限（票 09 加壓確認），擴充載入核心與六份資料包（含字根提示）後 footprint 79 MB（〈記憶體上限〉），再加模型的峰值增量：
   - 23M f32 合計約 174 MB，離上限約 3 MB，等於放不下。
   - 23M q8 合計約 126 MB，在記憶體警告線（約 142 MB）以下。
   - 1.4M 合計約 81–84 MB。
