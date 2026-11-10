@@ -20,7 +20,13 @@ export function kindName(kind: string): string {
 	return KIND_NAMES[kind] ?? kind;
 }
 
-/** 設定頁列出的一份資料包：manifest 裡給人看的欄位，加上它是不是內建的。 */
+/**
+ * 資料包從哪來：隨網頁發佈的（`builtin`）、從檔案匯入的（`imported`）、線上更新下載的（`downloaded`）。
+ * 後兩種存在 IndexedDB，可以刪。
+ */
+export type PackOrigin = "builtin" | "imported" | "downloaded";
+
+/** 設定頁列出的一份資料包：manifest 裡給人看的欄位，加上它從哪來。 */
 export interface PackEntry {
 	id: string;
 	/** manifest 的 `kind`（`lexicon`、`language-model`…）。 */
@@ -30,12 +36,11 @@ export interface PackEntry {
 	size: number;
 	/** SPDX 運算式。 */
 	license: string;
-	/** 隨網頁發佈的那份；匯入的是 `false`，可以刪。 */
-	builtin: boolean;
+	origin: PackOrigin;
 }
 
 /** 讀出 manifest 裡列表要的欄位；不是 JSON 或少了欄位時丟錯（完整的核對在核心）。 */
-export function parseManifest(json: string, builtin: boolean): PackEntry {
+export function parseManifest(json: string, origin: PackOrigin): PackEntry {
 	const value: unknown = JSON.parse(json);
 	const field = (name: string, type: "string" | "number") => {
 		const found =
@@ -53,21 +58,30 @@ export function parseManifest(json: string, builtin: boolean): PackEntry {
 		version: field("version", "string") as string,
 		size: field("size", "number") as number,
 		license: field("license", "string") as string,
-		builtin,
+		origin,
 	};
 }
 
 /**
- * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面；和內建同 id 的匯入取代內建那份
- * （刪掉後回到內建的）。
+ * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面。和內建同 id 的匯入取代內建那份（刪掉後回到
+ * 內建的）；線上更新下載的只在版本比內建的高（`newer(下載的, 內建的)`）時取代，同版或較舊時用內建的、
+ * 下載的不列（不刪，plan §4.7）。
  */
 export function listPacks(
 	builtin: readonly PackEntry[],
 	imported: readonly PackEntry[],
+	newer: (downloaded: PackEntry, builtin: PackEntry) => boolean,
 ): PackEntry[] {
-	const replaced = new Map(imported.map((p) => [p.id, p]));
+	const shadowed = (pack: PackEntry): boolean => {
+		const same = builtin.find((p) => p.id === pack.id);
+		return (
+			pack.origin === "downloaded" && same !== undefined && !newer(pack, same)
+		);
+	};
+	const usable = imported.filter((p) => !shadowed(p));
+	const replaced = new Map(usable.map((p) => [p.id, p]));
 	const listed = builtin.map((p) => replaced.get(p.id) ?? p);
-	for (const pack of imported) {
+	for (const pack of usable) {
 		if (listed.includes(pack)) {
 			continue;
 		}

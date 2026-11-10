@@ -183,10 +183,13 @@ textarea {
 	font-size: 0.875rem;
 }
 
-/* 資料包清單（pack-settings.ts）：窄螢幕時整張表橫向捲動。 */
+/* 資料包清單（pack-settings.ts）：窄螢幕時只有表格橫向捲動，說明照常換行。 */
 #packs {
 	display: grid;
 	gap: 0.5rem;
+}
+
+#packs .pack-table {
 	overflow-x: auto;
 }
 
@@ -205,6 +208,13 @@ textarea {
 	padding: 0.125rem 0.5rem;
 	text-align: left;
 	white-space: nowrap;
+}
+
+#packs .pack-updates {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1rem;
+	align-items: center;
 }
 
 #packs .note {

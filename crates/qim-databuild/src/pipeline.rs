@@ -26,7 +26,8 @@ use crate::{
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
-const PACKS: &str = "build/packs";
+/// 建出的資料包目錄，相對於 repo 根目錄；每份資料包一個 `<id>/`。
+pub const PACKS_DIR: &str = "build/packs";
 /// 由排列算出的預設佈局，網頁載入（plan §2.6）。
 const LAYOUTS: &str = "build/layouts";
 pub(crate) const LIBCANGJIE: &str = "libcangjie";
@@ -643,7 +644,7 @@ fn write_pack(
         bytes,
         ..
     } = &licensed.pack;
-    let dir = root.join(PACKS).join(id);
+    let dir = root.join(PACKS_DIR).join(id);
     packing::write(&dir, id, bytes, packed, &licensed.about)?;
     let manifest = Manifest::new(
         *kind,
