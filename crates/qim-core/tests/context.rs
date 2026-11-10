@@ -146,3 +146,72 @@ fn context_set_while_composing_is_used_by_the_next_composition() {
     let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
     assert_eq!(snapshot.candidates[0].text, "乙");
 }
+
+/// 殼沒給前文時，核心自己上屏的字就是前文（同 librime 的 commit history，plan §2.1）。
+#[test]
+fn without_context_from_the_host_the_next_composition_follows_the_last_commit() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.handle(&engine, &mut user, Key::Letter('b'));
+    let snapshot = session.handle(&engine, &mut user, Key::Space);
+    assert_eq!(snapshot.commit.as_deref(), Some("天"));
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 交還宿主的可見字元與空白接在前文後面：「天」之後打了空白，下一個字是句首。
+#[test]
+fn a_space_passed_to_the_host_extends_the_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_context("天");
+    assert!(!session.handle(&engine, &mut user, Key::Space).handled);
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "丁");
+}
+
+/// 交還宿主的退格、Enter、方向鍵改了游標前的字或移走游標：前文不知道了，照沒有前文打，
+/// 等殼再給。
+#[test]
+fn keys_passed_to_the_host_that_edit_or_move_forget_the_context() {
+    let engine = engine();
+    for key in [Key::Backspace, Key::Enter, Key::Left, Key::Other] {
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        session.set_context("今天");
+        assert!(!session.handle(&engine, &mut user, key).handled);
+        let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+        assert_eq!(snapshot.candidates[0].text, "甲", "{key:?} 後");
+    }
+}
+
+/// 不送字元的修飾鍵沒改輸入框，前文照舊。
+#[test]
+fn a_modifier_key_keeps_the_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_context("今天");
+    session.handle(&engine, &mut user, Key::Modifier);
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 無痕打開時丟掉殼給過的前文（brief §8：不讀上下文），關掉後也不會回來。
+#[test]
+fn turning_incognito_on_forgets_the_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_context("今天");
+    let incognito = Options {
+        incognito: true,
+        ..Options::default()
+    };
+    session.set_options(incognito);
+    session.set_options(Options::default());
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "甲");
+}

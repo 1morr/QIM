@@ -1,4 +1,4 @@
-//! 數字後的句點、冒號用半形（brief §4.7，M1 票 26）：前一個上屏的字是半形數字時直接上屏半形，
+//! 數字後的句點、冒號用半形（brief §4.7，M1 票 26）：游標前的字是半形數字時直接上屏半形，
 //! 不待定、不出候選；逗號照舊全形（使用者決定，同 librime 預設 `.:` 加 `digit_separator_action:
 //! commit`）。
 
@@ -240,4 +240,33 @@ fn a_modifier_key_while_composing_is_eaten_and_keeps_the_composition() {
     assert_eq!(snapshot.commit, None);
     assert_eq!(snapshot.composition.input, "a");
     assert_eq!(snapshot.candidates.len(), 1);
+}
+
+/// 殼給的前文決定游標前是不是數字（M3 票 05）：游標移到別處、宿主自己改了字，核心都從前文知道。
+#[test]
+fn the_context_from_the_host_decides_whether_a_period_follows_a_digit() {
+    let mut ime = Ime::new();
+    ime.session.set_context("共3");
+    ime.type_keys(".");
+    assert_eq!(ime.text, ".");
+
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    // 游標移到輸入框開頭。
+    ime.session.set_context("");
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3。");
+}
+
+/// 無痕時殼不給前文（brief §8），核心丟掉之前給的，只看自己送出去的字。
+#[test]
+fn turning_incognito_on_forgets_a_digit_in_the_context() {
+    let mut ime = Ime::new();
+    ime.session.set_context("3");
+    ime.session.set_options(Options {
+        incognito: true,
+        ..Options::default()
+    });
+    ime.type_keys(".3.");
+    assert_eq!(ime.text, "。3.");
 }

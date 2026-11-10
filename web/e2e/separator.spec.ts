@@ -80,6 +80,9 @@ test.describe("實體鍵盤", () => {
 		page,
 	}) => {
 		const { text, composition, items } = ui(page);
+		// 不給前文（無痕）：在輸入框開頭時句首的 bigram 讓「將樂室」勝過詞「絃樂室」，和分隔記號無關
+		// （M3 票 05）。
+		await page.getByRole("checkbox", { name: "無痕" }).check();
 		await page.keyboard.type("vi'vdjg");
 		await expect(composition).toHaveText("女戈'女木十土");
 		await expect(items.first()).toHaveText("1絃樂室");

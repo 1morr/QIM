@@ -36,14 +36,33 @@ async function recomputedTop(page: Page, single: string): Promise<string> {
 	return top;
 }
 
-/** 單打 `code` 時的候選：在空的組字打完讀回，再按 Esc 清掉。 */
+/**
+ * 不知道前文時（無痕不給前文，M3 票 05）的候選：`read` 在打開無痕時做，做完關掉。目前分段的候選
+ * 和不知道前文時單打那個碼相同，不接前一段（plan §2.1）；空的輸入框有前文（句首），單打的名次不同。
+ */
+async function withoutContext<T>(
+	page: Page,
+	read: () => Promise<T>,
+): Promise<T> {
+	const incognito = page.getByRole("checkbox", { name: "無痕" });
+	await incognito.check();
+	try {
+		return await read();
+	} finally {
+		await incognito.uncheck();
+	}
+}
+
+/** 不知道前文時單打 `code` 的候選：在空的組字打完讀回，再按 Esc 清掉。 */
 async function candidatesOf(page: Page, code: string): Promise<string[]> {
-	await page.keyboard.type(code);
-	await expect(ui(page).composition).toHaveText(RADICALS[code]);
-	const texts = await candidateTexts(page);
-	await page.keyboard.press("Escape");
-	await expect(ui(page).composition).toHaveText("");
-	return texts;
+	return withoutContext(page, async () => {
+		await page.keyboard.type(code);
+		await expect(ui(page).composition).toHaveText(RADICALS[code]);
+		const texts = await candidateTexts(page);
+		await page.keyboard.press("Escape");
+		await expect(ui(page).composition).toHaveText("");
+		return texts;
+	});
 }
 
 test.describe("實體鍵盤", () => {
@@ -68,7 +87,7 @@ test.describe("實體鍵盤", () => {
 		await expect(segments.nth(2)).toHaveAttribute("aria-current", "true");
 		await page.keyboard.press("ArrowLeft");
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
-		// 候選改列中間一段 `kb` 的字詞，和單打 `kb` 相同。
+		// 候選改列中間一段 `kb` 的字詞，和不知道前文時單打 `kb` 相同。
 		expect(await candidateTexts(page)).toEqual(kb);
 		await page.screenshot({ path: testInfo.outputPath("focus-middle.png") });
 
@@ -142,17 +161,18 @@ test.describe("觸控", () => {
 				await page.getByTestId(`key-${id}`).tap();
 			}
 		};
-		/** 單打 `code` 時的候選，讀回後點退格刪光。 */
-		const tappedCandidates = async (code: string) => {
-			await tapKeys(code);
-			await expect(composition).toHaveText(RADICALS[code]);
-			const texts = await candidateTexts(page);
-			for (const _ of code) {
-				await page.getByTestId("key-backspace").tap();
-			}
-			await expect(composition).toHaveText("");
-			return texts;
-		};
+		/** 不知道前文時單打 `code` 的候選，讀回後點退格刪光。 */
+		const tappedCandidates = (code: string) =>
+			withoutContext(page, async () => {
+				await tapKeys(code);
+				await expect(composition).toHaveText(RADICALS[code]);
+				const texts = await candidateTexts(page);
+				for (const _ of code) {
+					await page.getByTestId("key-backspace").tap();
+				}
+				await expect(composition).toHaveText("");
+				return texts;
+			});
 		const kb = await tappedCandidates("kb");
 		const [last] = await tappedCandidates("of");
 
