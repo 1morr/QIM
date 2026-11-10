@@ -25,6 +25,7 @@
 | --- | --- | --- | --- |
 | 2026-11-10 | M3 封存 M2 | 票 12：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉、iPhone 重打「門口」；brief §9、§11 寫回；M2 封存到 `docs/archive/M2.md`；見票 12 | 新 session 下 `/to-tickets docs/plan.md 拆 M3 的票` |
 | 2026-11-11 | M3 拆票 | 寫 `.scratch/m3/spec.md`（含 plan §7.8 搬來的階梯實驗），拆 23 張票；plan §7.4、§7.8 縮成連結 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
+| 2026-11-11 | M3 06 | 青簡神經重排與 CyIME 模型評估寫成 `docs/research/neural-rerank.md`，摘進 brief §12.4；見票 06 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 
 ## 偏差與決定
 
