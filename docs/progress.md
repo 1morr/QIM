@@ -44,6 +44,7 @@
 | 2026-11-10 | M2 03 | `qim-wasm` 只轉型別：按鍵一個入口（`Key::parse`）、組字狀態問 `Session`、切頁與 Shift 收進 `qim_layout::Keyboard`；見票 03 | 新 session 下 `/implement .scratch/m2/issues/07-qim-ffi-minimal.md` |
 | 2026-11-10 | M2 10 | 擴充內 Foundation Models 可用：連續約 190 ms、停頓後首個偶爾 6–15 s；上下文按句切，備忘錄至多 300 字、Safari 100；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/11-small-neural-model-cost.md` |
 | 2026-11-10 | M2 07 | `qim-ffi`（uniffi）與 Swift 在 Mac 打出「門口」；三種路徑每鍵 p95 都 ≤ 0.9 ms（含選段），見 ios-feasibility〈綁定開銷〉 | 新 session 下 `/implement .scratch/m2/issues/08-ios-keyboard-with-core.md` |
+| 2026-11-10 | M2 08 | iPhone 備忘錄打出「門口」；資料包加 `Engine` 後 footprint 64 MB；每鍵 p95 64 µs、選段 0.79 ms；`Engine` 拆成共用物件；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/09-ios-memory-limit.md` |
 
 ## 偏差與決定
 
@@ -71,3 +72,4 @@
 - 2026-11-10 M2 票 03：觸控鍵盤的佈局版本、目前頁與 Shift 改由 `qim_layout::Keyboard` 記，推翻 plan §2.6 的「由殼記著」；載入時照 `initialPage`，修掉舊綁定忽略它的問題（plan §2.1、§2.6）。
 - 2026-11-10 M2 票 07：`qim-ffi` 的按鍵也收「種類 + 值」（`Key::parse`），推翻 plan §2.1 的直接收 `Key`：uniffi 沒有 `char` 型別（plan §2.1）。
 - 2026-11-10 M2 票 07：`qim-bench` 每鍵延遲加「選開頭一段」一組（原生與 WebAssembly），票外擴張，補 M1 票 24 留下的缺口（plan §5.2、development〈每鍵延遲〉）。
+- 2026-11-10 M2 票 08：`qim-ffi` 的 `Engine` 拆成獨立物件、各 `Session` 共用，資料包先解開成物件再移交給它；推翻票 07 的 `Session` 自建 `Engine`（plan §2.1）。

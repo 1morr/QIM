@@ -10,7 +10,7 @@ mod web;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask ffi | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -34,13 +34,8 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
-        ["ffi"] => {
-            if ffi::swift_bindings(&repo_root()) {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+        ["ffi"] => ffi(false),
+        ["ffi", "--ios"] => ffi(true),
         ["commit-msg", file] => {
             if commit_msg::report(Path::new(file)) {
                 ExitCode::SUCCESS
@@ -52,6 +47,14 @@ fn main() -> ExitCode {
             eprintln!("{USAGE}");
             ExitCode::from(2)
         }
+    }
+}
+
+fn ffi(ios: bool) -> ExitCode {
+    if ffi::swift_bindings(&repo_root(), ios) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

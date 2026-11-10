@@ -269,3 +269,83 @@ Swift 程式（含核心）連結後 163 KB。
 
 - 票 08：鍵盤擴充用 `cargo xtask ffi` 的綁定；要加 `aarch64-apple-ios` 的靜態函式庫與 xcframework（`docs/development.md`〈Swift 綁定〉）。在 iPhone 上量同一批輸入的每鍵延遲時，可以照 `scripts/experiments/ffi-swift/main.swift` 的 `latency` 迴圈，和這裡的 Mac 數字比。
 - `qim-ffi` 目前只有建立、`press`、`select`；換選項、學習資料存檔、字根提示、佈局由需要的票加。換選項時讓綁定的 `set_options` 同時重列並回快照，殼就碰不到「待生效選項」（票 01 轉入的建議，見票 07 的 Comments）。
+
+## 鍵盤擴充接上核心
+
+M2 票 08，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keyboard/CoreProbe.swift`，量法與重量步驟見該目錄 README〈接上核心〉；每鍵延遲的迴圈與輸入和 Mac 共用（`scripts/experiments/ffi-swift/` 的 `Latency.swift`、`inputs.sh`）。
+
+裝置：iPhone 18 Pro Max（iPhone19,7），iOS 27.2。Xcode 27.1（Swift 6.4），Rust 1.99.1，uniffi 0.32.2；Swift 是 Debug 組態，Rust 靜態函式庫是 release（`cargo xtask ffi --ios`）。擴充沒有完整取用。資料包由 commit `232d528` 建。在兩個新程序裡各量一次（pid 11903、11913）。
+
+### 結論
+
+- **能打字。** 備忘錄裡按擴充的 `a`、`n`、`r`，候選列首選是「門口」；按空白，備忘錄出現「門口」（兩個程序各一次）。截圖：`.scratch/m2/evidence/08-load-memory.png`（載入各步）、`08-notes-anr.png`、`08-notes-commit.png`、`08-notes-latency.png`（第 1 次），`08-notes-anr-run2.png`、`08-notes-latency-run2.png`（第 2 次）。
+- **常駐記憶體：五份資料包加 `Engine` 讓 footprint 多 51.4 MB，載入後總共 64.4 MB。** 兩次分別 +51.49、+51.39 MB。載入前的 footprint 約 13 MB：這個程序 `viewDidAppear` 時 11.7 MB，比票 06 的空擴充（約 10 MB）多，因為擴充連結了核心；加上按「載入」前幾次畫面重建。打字中 63.5–64.1 MB，跑完 12 萬鍵的延遲後 63.8 MB。iPhone 18 Pro Max 給擴充的上限是 177 MB（票 06），載入後用了 36%，還剩約 113 MB（`os_proc_available_memory`）。扣掉票 06 空擴充的 10 MB 基線，核心連同資料包約 54 MB；比 brief §9 暫定的 30 MB 多。
+- **詞庫最大：+41.4 MB**，佔核心增量的 80%，是檔案（4.95 MB）的 8.4 倍。bigram +5.3 MB、英文 +2.5 MB、速成 +0.6–1.4 MB、簡繁 +0.7 MB；`Engine` 與 `Session` 幾乎不加（+0.06–0.14 MB、0）。
+- **比 Mac 少約 27 MB。** 同五份資料包加 `Engine` 在 Mac 上（票 04 那張表的對應各列）合計 78.0 MB。差在 bigram（Mac +12.3 MB）與 `Engine::new`（Mac +12.8 MB），詞庫只差 5 MB。推論 iOS 的 malloc 把前一步釋放的頁（讀檔的緩衝區、uniffi 把位元組複製進 Rust 的那份）重用給後面的配置，所以 `Engine::new` 的暫存 `HashSet` 沒有另外長出 footprint；載入後 footprint 也從 64.4 降到 63.5 MB，Mac 上釋放的頁不會退出 footprint。兩邊載入順序不同（Mac 在 bigram 之後還載入了字根提示），單步的數字不能直接比，總量的差距才有意義。
+- **載入 120–138 ms**（背景執行緒），其中詞庫 70 ms、`Engine` 27–33 ms。
+- **每鍵延遲：p50 45 µs、p95 64 µs；選開頭一段 p50 246 µs、p95 0.79 ms。** 比 Mac 經 Swift 綁定的同一批輸入（p95 58 µs、選段 0.76 ms）慢 3.5–10%。Mac 那次沒載入簡繁資料包；它只在簡體模式用到，預設關，打字的路徑不經過它。brief §9 的目標是每鍵 50 ms，最重的選段那一鍵 p95 也只用了 1.6%。
+- **手按的鍵：** 核心呼叫 0.15–0.77 ms（載入後第一鍵 `a` 0.77 ms，之後 0.15–0.48 ms），比批次量的 p50 慢幾倍；推論是兩鍵之間閒置 1.5 秒，快取變冷、CPU 降頻。含畫面更新的大概值（從按鍵處理開始到這次畫面的 Core Animation transaction 送出）6.8–11.9 ms，不含觸控送達與螢幕刷新。
+- 整個程序只建一個 `Engine` 與一個 `Session`（放在靜態變數）。iphone-use 每次點擊與截圖都讓 view controller 重建（第 1 次的程序重建了 11 次），footprint 沒有翻倍：重建 7 次（含跑一次延遲）共多 3.1 MB，每次約 0.3–0.5 MB，推論來自畫面本身。
+
+### 原始輸出摘要
+
+鍵盤上方顯示的量測（第 2 次，`08-notes-latency-run2.png`）：
+
+```text
+viewDidLoad footprint=7.02MB available=170.0MB pid=11913 loads=1
+viewDidAppear footprint=11.67MB available=165.3MB
+core-before footprint=13.03MB available=164.0MB
+quick file=0.43MB +0.62MB → 14.45MB 7ms
+quick-lexicon file=4.95MB +41.36MB → 55.81MB 70ms
+zh-hant-bigram file=2.87MB +5.28MB → 61.10MB 11ms
+opencc-hk2s file=0.06MB +0.73MB → 61.85MB 2ms
+scowl-en-us file=0.76MB +2.52MB → 64.36MB 12ms
+engine +0.06MB → 64.42MB 33ms
+session +0.00MB → 64.42MB 0ms
+core-loaded 138ms footprint footprint=64.42MB available=112.6MB
+typing footprint=63.49MB available=113.5MB
+keys a=0.768/8.6 n=0.363/8.3 r=0.476/6.8 space=0.164/7.9
+| iPhone | 全部 | 6722 | 123330 | 45.08 | 63.96 |
+| iPhone | 第 20 碼起 | 2587 | 27142 | 55.62 | 70.83 |
+| iPhone | 選開頭一段 | 6411 | 6411 | 245.46 | 786.54 |
+latency done 9.7s footprint footprint=63.75MB available=113.2MB
+```
+
+每份資料包「讀檔 → 解開 → 丟掉檔案位元組」前後的 footprint 差（MB）：
+
+| 步驟 | 檔案 | 第 1 次 | 第 2 次 | Mac（票 04） |
+| --- | ---: | ---: | ---: | ---: |
+| 載入前 | — | 12.95 | 13.03 | — |
+| 速成 `quick` | 0.43 | +1.42 | +0.62 | +1.38 |
+| 詞庫 `quick-lexicon` | 4.95 | +41.36 | +41.36 | +46.69 |
+| bigram `zh-hant-bigram` | 2.87 | +5.28 | +5.28 | +12.34 |
+| 簡繁 `opencc-hk2s` | 0.06 | +0.75 | +0.73 | +0.75 |
+| 英文 `scowl-en-us` | 0.76 | +2.53 | +2.52 | +4.09 |
+| `Engine` | — | +0.14 | +0.06 | +12.78 |
+| `Session` | — | +0.00 | +0.00 | — |
+| 核心合計 | 9.07 | +51.49 | +51.39 | +78.03 |
+| 載入後 | — | 64.44 | 64.42 | — |
+
+每鍵延遲（µs，量法同〈綁定開銷〉；Mac 那列是同一節的 Swift 經 `qim-ffi`）：
+
+| 環境 | 全部 p50 | 全部 p95 | 第 20 碼起 p50 | 第 20 碼起 p95 | 選開頭一段 p50 | 選開頭一段 p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| iPhone 第 1 次 | 45.62 | 64.00 | 56.12 | 70.96 | 246.38 | 789.75 |
+| iPhone 第 2 次 | 45.08 | 63.96 | 55.62 | 70.83 | 245.46 | 786.54 |
+| Mac（Apple M6） | 42.25 | 58.08 | 51.62 | 64.38 | 235.08 | 759.71 |
+
+手按的鍵（ms，核心呼叫／含畫面更新）：第 1 次只讀到 `r` 0.450 / 11.86、空白 0.146 / 8.48（畫面一次只顯示最後一鍵，之後改成顯示最近 4 鍵）；第 2 次見上方原始輸出。
+
+擴充的 bundle 12 MB：五份資料包 9.07 MB、延遲的輸入 0.13 MB，其餘是程式（Debug）。
+
+### 限制
+
+- 只有一台旗艦機、一個 iOS 版本；低階機的上限與 CPU 都可能更低。
+- 沒載入字根提示與佈局：字根提示在 Mac 上解開後 +16.3 MB（heap 14.8 MB），殼要顯示時才需要；佈局 `qim-ffi` 還沒有介面。票 09 加壓時把它們算進去。
+- iPhone 上沒量 heap（malloc 還在用的位元組），所以分不出 footprint 裡多少是還在用的、多少是載入途中的峰值留下的。
+- 擴充的 log 這次讀不到完整的核心行：手機一開始走 Wi-Fi，接上 USB 後的 log 又被系統訊息洗掉。數字都以截圖讀回的畫面為準。
+
+### 給之後的票
+
+- 票 09：從載入後的 64 MB 開始加壓，記下終止點；資料包格式的決定看詞庫（核心增量的 80%）。iOS 上釋放的頁會被重用，票 04 建議的「不改格式也能壓低峰值」兩項在 iPhone 上省得比 Mac 少，`Engine::new` 的暫存這裡幾乎沒長出 footprint。
+- M3：選開頭一段那一鍵 p95 0.79 ms，乘上神經模型的次數再看預算。
