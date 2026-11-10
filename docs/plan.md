@@ -645,7 +645,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | --- | --- | --- |
 | 同步 | 字級 bigram（基線）、字級 trigram、詞級 n-gram | 同一份預算（≤ 8 MB）比較，再看放寬到 M2 上限時的增益；另量一份不設預算、可選下載的詞級 trigram（CyIME 是 105–203 MB，`docs/research/cyime.md` §3） |
 | 停鍵 | 小型神經模型：Gboard 級（約 1.4M 參數）、青簡級（約 23M 參數） | 自己用 §4.3 的語料訓練，重排前 6 條路徑；放不進 M2 上限就只量桌面 |
-| 停鍵 | Apple Foundation Models | 這台 Mac 上用 Swift 命令列跑（瀏覽器呼叫不了） |
+| 停鍵 | Apple Foundation Models | 這台 Mac 上用 Swift 命令列跑（瀏覽器呼叫不了）；iOS 鍵盤擴充裡的延遲與記憶體 M2 已量（brief §12.3） |
 | 雲端 | DeepSeek `deepseek-flash`（關閉思考模式），`deepseek-v4-pro` 當對照 | 經 OpenAI 相容介面（brief §12.4）；開工時重查模型清單與價格 |
 
 - 提示（LLM）：上下文 + 輸入碼 + 前 10 個候選，要求模型只回序號（afm-ime 做法，`docs/research/open-source-imes.md` §5）。
@@ -653,7 +653,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
   - 修正次數、首選正確率、「最高到第 2 位」規則下的前 2 名命中率，各和基線比。
   - 資料包或模型大小、常駐記憶體、載入時間。
   - 每次請求或推論的延遲 p50 / p95；雲端每千次請求費用。
-  - 上下文長度 0、50、200 字各量一次。
+  - 上下文長度 0、50、200 字各量一次。iOS 實際讀得到的多半只有數十字、最多 100–300 字（brief §12.3）。
 - 採用門檻：拿到基線後寫進 M3 的 spec，再跑實驗，避免看到結果才定標準。
 - API key 只放本機環境變數 `DEEPSEEK_API_KEY`，不進 repo；腳本缺 key 時跳過雲端部分並註明。
 - 訓練出來的模型受語料授權影響，與 bigram 同列 brief §11。
@@ -676,7 +676,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | 免費佈建不能跑鍵盤擴充 | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
 | 延遲超過預算 | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢 | M3 範圍 | §7.8 的實驗 | 改為只做雲端聯想或不做 LLM，寫回 brief §1.5 |
-| iOS 鍵盤擴充不能用 Foundation Models | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
+| iOS 鍵盤擴充不能用 Foundation Models（M2 票 10：能用，不需完整取用；但停頓後第一個請求偶爾 6–15 s，brief §12.3） | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
 | 瀏覽器呼叫雲端 LLM 被 CORS 擋 | M3 的網頁接入 | M3 開工時 | 用 Vite 開發伺服器轉發，只影響網頁測試頁 |
 | 內嵌網頁編輯器在手機主 App 手感不佳 | M7、M8 | M7 開工時 | 只把手機上手感差的操作改原生；要全改原生時記偏差 |
 | iOS 鍵盤擴充收不到實體鍵事件（目前只有 2017 年的第三方說法，未查證） | M7 的實體鍵盤 | M7 開工時 | iOS 不做實體鍵盤模式，設定頁註明，寫回 brief §1.5 |
