@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use crate::association::{self, ASSOCIATION_TAIL};
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
@@ -36,6 +37,16 @@ struct LastWord {
     shown: String,
 }
 
+/// 聯想（plan §2.1，M3 票 13）在接什麼：候選列是聯想時才有。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Association {
+    /// 剛上屏的各段（繁體原文）：這次組字上屏的分段，接著選過的聯想，最多留到蓋住最後
+    /// [`ASSOCIATION_TAIL`] 字。最後一段是個人 bigram 的前一個字詞。
+    segments: Vec<String>,
+    /// 這次上屏顯示的字（簡體模式是轉換後的）：殼之後給的前文不以它結尾，就是游標移走了。
+    shown: String,
+}
+
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
@@ -61,6 +72,9 @@ pub struct Options {
     /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
     /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
     pub simplified_after_traditional: bool,
+    /// 聯想（brief §7，M3 票 13）：上屏組字或選了聯想之後、還沒打下一個字時，候選列給接下來可能要
+    /// 打的字詞（[`Session::select`] 或數字鍵選）。預設開（brief §7）。
+    pub association: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -135,6 +149,7 @@ impl Default for Options {
             emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
             simplified_after_traditional: true,
+            association: true,
         }
     }
 }
@@ -405,6 +420,10 @@ pub struct Session {
     /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
+    /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
+    /// 其他鍵（不送字元的修飾鍵除外）、`text`、[`Session::clear_context`]、不以剛上屏的字結尾的
+    /// [`Session::set_context`] 收起它。
+    association: Option<Association>,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
     /// 中文的組字（選定的分段、lattice）留著，英文沒動過時切回不必重算。
@@ -435,6 +454,14 @@ impl Session {
         }
         self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
         self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
+        // 游標前不是剛上屏的字：殼點了別處、移了游標，聯想接不上了。
+        if self
+            .association
+            .as_ref()
+            .is_some_and(|a| !before.ends_with(&a.shown))
+        {
+            self.end_association();
+        }
     }
 
     /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
@@ -442,6 +469,8 @@ impl Session {
     pub fn clear_context(&mut self) {
         self.context = None;
         self.after_digit = false;
+        // 換了欄位，剛上屏的字不在游標前了。
+        self.end_association();
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -454,6 +483,12 @@ impl Session {
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot {
         if self.composing_chinese() {
             self.refresh_candidates(engine, user);
+        } else if self.association.is_some() {
+            if self.options.association {
+                self.list_association(engine, user);
+            } else {
+                self.end_association();
+            }
         }
         with_radicals(engine, self.snapshot(engine, true, None))
     }
@@ -463,7 +498,11 @@ impl Session {
         self.apply_pending_options(engine, user);
         let snapshot = if self.composing() {
             self.select_at(engine, user, index)
+        } else if self.showing_association() {
+            self.select_association(engine, user, index)
         } else {
+            // 只呼叫 `set_options` 關掉聯想、還沒 `refresh` 時，照沒有聯想收起。
+            self.end_association();
             self.snapshot(engine, false, None)
         };
         self.finish(engine, snapshot)
@@ -501,9 +540,9 @@ impl Session {
     }
 
     /// 給背景模型的重排要求（plan §2.7）：目前的 `generation`、上下文與前 [`RERANK_LIMIT`]
-    /// 個候選。沒有組字、沒有候選，或換了選項還沒重列（候選列馬上會換）時是 `None`。
+    /// 個候選。沒有組字（聯想不重排）、沒有候選，或換了選項還沒重列（候選列馬上會換）時是 `None`。
     pub fn rerank_request(&self) -> Option<RerankRequest> {
-        if self.candidates.is_empty() || self.options_pending() {
+        if !self.composing() || self.candidates.is_empty() || self.options_pending() {
             return None;
         }
         // 上下文是候選所在的碼前面的分段：有目前分段時是它前面的，否則是選定的分段。
@@ -539,7 +578,7 @@ impl Session {
         generation: u64,
         order: &[usize],
     ) -> Option<Snapshot> {
-        if generation != self.generation || self.options_pending() {
+        if generation != self.generation || !self.composing() || self.options_pending() {
             return None;
         }
         let limit = self.rerank_limit();
@@ -624,6 +663,11 @@ impl Session {
     }
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        if self.association.is_some()
+            && let Some(snapshot) = self.handle_association(engine, user, key)
+        {
+            return snapshot;
+        }
         if let Key::ToggleAscii(shift) = key {
             return self.toggle_ascii(engine, user, shift);
         }
@@ -738,6 +782,135 @@ impl Session {
             Key::Letter(_) | Key::ToggleAscii(_) | Key::Other | Key::Modifier => {
                 self.snapshot(engine, true, None)
             }
+        }
+    }
+
+    /// 聯想顯示中的鍵（plan §2.1），照 macOS 速成：數字鍵選這頁的聯想；Esc 與退格只收起聯想
+    /// （librime-predict、Gboard 的第一下退格也是），不交還宿主；不送字元的修飾鍵不動它。其他鍵
+    /// 收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，空白、Enter、方向鍵、沒有
+    /// 那個聯想的數字交還宿主，標點照常上屏。
+    fn handle_association(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        key: Key,
+    ) -> Option<Snapshot> {
+        if !self.showing_association() {
+            self.end_association();
+            return None;
+        }
+        match key {
+            Key::Modifier => Some(self.snapshot(engine, false, None)),
+            Key::Digit(digit) => match usize::from(digit).checked_sub(1) {
+                Some(index) if index < self.page_candidates().len() => {
+                    Some(self.select_association(engine, user, self.page * PAGE_SIZE + index))
+                }
+                _ => {
+                    self.end_association();
+                    None
+                }
+            },
+            Key::Escape | Key::Backspace => {
+                self.end_association();
+                Some(self.snapshot(engine, true, None))
+            }
+            _ => {
+                self.end_association();
+                None
+            }
+        }
+    }
+
+    /// 候選列是聯想、聯想的選項開著（殼只呼叫 `set_options` 關掉、還沒 `refresh` 時不算）。
+    fn showing_association(&self) -> bool {
+        self.association.is_some() && self.options.association
+    }
+
+    /// 選第 `index` 個聯想：上屏它，記個人 bigram「剛上屏的最後一段 → 它」（無痕、學習關掉時
+    /// 不記），接著給下一輪。沒有這個聯想時不動作、鍵照樣吃下。
+    fn select_association(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        index: usize,
+    ) -> Snapshot {
+        let Some(choice) = self.candidates.get(index).cloned() else {
+            return self.snapshot(engine, true, None);
+        };
+        let mut segments = self.association.take().expect("聯想顯示中").segments;
+        let original = choice.span.text.clone();
+        if self.writes_learning()
+            && let Some(previous) = segments.last()
+        {
+            user.learn_association(previous, &original);
+        }
+        self.remember_last_word(engine, Some(&Segment::new(String::new(), original.clone())));
+        let commit = Commit {
+            text: choice.text().to_string(),
+            original: original.clone(),
+        };
+        segments.push(original);
+        self.commit_and_associate(engine, user, commit, segments)
+    }
+
+    /// 上屏 `commit`、清空組字，接著給接在 `segments`（剛上屏的各段，原文）後面的聯想。聯想關掉、
+    /// 切到英文直通或無痕時不給：剛上屏的字是下一個字的前文，無痕不讀前文（brief §8）。
+    fn commit_and_associate(
+        &mut self,
+        engine: &Engine,
+        user: &UserModel,
+        commit: Commit,
+        mut segments: Vec<String>,
+    ) -> Snapshot {
+        self.clear();
+        if self.options.association && !self.ascii && !self.options.incognito {
+            // 留到蓋住最後 ASSOCIATION_TAIL 字的段，最後一段一定留。
+            let mut chars = 0;
+            let keep = segments
+                .iter()
+                .rev()
+                .take_while(|s| {
+                    let fits = chars < ASSOCIATION_TAIL;
+                    chars += s.chars().count();
+                    fits
+                })
+                .count();
+            segments.drain(..segments.len() - keep);
+            self.association = Some(Association {
+                segments,
+                shown: commit.text.clone(),
+            });
+            self.list_association(engine, user);
+        }
+        self.snapshot(engine, true, Some(commit))
+    }
+
+    /// 依目前的聯想與選項列候選；一個都沒有時收起。
+    fn list_association(&mut self, engine: &Engine, user: &UserModel) {
+        let Some(association) = &self.association else {
+            return;
+        };
+        let texts = association::associations(engine, user, &association.segments);
+        if texts.is_empty() {
+            self.end_association();
+            return;
+        }
+        let spans = texts
+            .into_iter()
+            .map(|text| CandidateSpan::single(text, ""))
+            .collect();
+        self.candidates = self.shown_candidates(engine, spans);
+        self.listed_with = self.options;
+        self.page = 0;
+        self.generation += 1;
+    }
+
+    /// 收起聯想；沒有聯想時不動作。
+    fn end_association(&mut self) {
+        if self.association.take().is_some() {
+            self.candidates.clear();
+            self.page = 0;
+            self.generation += 1;
         }
     }
 
@@ -884,6 +1057,7 @@ impl Session {
     /// （M1 票 27b）。文字照原樣、不轉全形，也不套數字後半形；簡體模式轉成簡體，原文留繁體（M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         self.apply_pending_options(engine, user);
+        self.end_association();
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
@@ -935,6 +1109,12 @@ impl Session {
         if raw.is_empty() {
             self.learn(engine, user, &segments);
             self.remember_last_word(engine, segments.last());
+        }
+        // 只上屏組字（目前分段時的空白）才接聯想；接了標點、文字或原樣的碼不接（同 librime-predict
+        // 遇到 `punct`、`raw` 的上屏就停）。
+        if raw.is_empty() && tail.text.is_empty() {
+            let texts = segments.iter().map(|s| s.text.clone()).collect();
+            return self.commit_and_associate(engine, user, commit, texts);
         }
         commit.text.push_str(&raw);
         commit.text.push_str(&tail.text);
@@ -1098,7 +1278,8 @@ impl Session {
                 self.add_auto_phrase(engine, user, &self.selected);
             }
             let commit = self.selected_commit(engine);
-            return self.commit(engine, commit);
+            let texts = self.selected.iter().map(|s| s.text.clone()).collect();
+            return self.commit_and_associate(engine, user, commit, texts);
         }
         self.recompose(engine, user, &rest);
         self.refresh_candidates(engine, user);
@@ -1170,22 +1351,28 @@ impl Session {
             }
             None => lattice::candidates(engine, user, &self.lattice, self.listing(true)),
         };
-        // 排序時已去掉原文重複的，沒轉換的不必再比。
+        self.candidates = self.shown_candidates(engine, spans);
+        self.listed_with = self.options;
+        self.page = 0;
+        self.generation += 1;
+    }
+
+    /// 候選經過後處理（plan §2.2）：簡體模式轉成簡體，轉換後文字重複的只留第一個。排序時已去掉
+    /// 原文重複的，沒轉換的不必再比。
+    fn shown_candidates(&self, engine: &Engine, spans: Vec<CandidateSpan>) -> Vec<ShownCandidate> {
         let mut seen = HashSet::new();
-        self.candidates = spans
+        spans
             .into_iter()
             .map(|span| ShownCandidate {
                 converted: self.options.simplified.then(|| self.display(engine, &span)),
                 span,
             })
             .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
-            .collect();
-        self.listed_with = self.options;
-        self.page = 0;
-        self.generation += 1;
+            .collect()
     }
 
     fn clear(&mut self) {
+        self.association = None;
         self.selected.clear();
         self.lattice = Lattice::default();
         self.focus = None;

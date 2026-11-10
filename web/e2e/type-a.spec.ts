@@ -17,6 +17,7 @@ test("打 a 首選是「日」，按空白上屏「日」", async ({ page }, tes
 	await page.keyboard.type(" ");
 	await expect(text).toHaveValue("日");
 	await expect(composition).toHaveText("");
-	await expect(items).toHaveCount(0);
+	// 候選列換成「日」的聯想（M3 票 13）。
+	await expect(items.first()).not.toHaveText("1日");
 	await page.screenshot({ path: testInfo.outputPath("type-a-space.png") });
 });

@@ -19,22 +19,28 @@ export function textBefore(
 
 /**
  * 接上輸入框，每次給游標前最多 `limit` 個字（綁定的 `contextLimit()`）；回傳的函式立刻給一次
- * （例如關掉無痕之後）。
+ * （例如關掉無痕之後）。`changed` 在每次給前文或失焦忘掉之後呼叫：游標移走、失焦時核心收起聯想
+ * （M3 票 13），網頁要跟著重畫候選列。
  */
 export function mountContext(
 	text: HTMLTextAreaElement,
 	session: Session,
 	limit: number,
+	changed: () => void = () => {},
 ): () => void {
 	// 不比對上次給的：核心在交還宿主的退格、方向鍵後會忘掉前文，重給同一段也要給。
 	const sync = (): void => {
 		if (!session.incognito) {
 			session.setContext(textBefore(text.value, text.selectionStart, limit));
+			changed();
 		}
 	};
 	text.addEventListener("focus", sync);
 	// 失焦等於換欄位：核心忘掉前文，回來時 focus 重給（plan §2.1）。
-	text.addEventListener("blur", () => session.clearContext());
+	text.addEventListener("blur", () => {
+		session.clearContext();
+		changed();
+	});
 	text.addEventListener("input", sync);
 	// 輸入框裡的游標移動在 Chromium 也會在 document 觸發 `selectionchange`。
 	document.addEventListener("selectionchange", () => {

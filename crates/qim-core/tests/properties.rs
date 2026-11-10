@@ -246,6 +246,10 @@ proptest! {
         let mut session = Session::default();
         for action in actions {
             let snapshot = act(&mut session, &engine, &mut user, action);
+            // 沒有組字時的候選是聯想（M3 票 13），不由輸入碼打出。
+            if snapshot.composition.input.is_empty() {
+                continue;
+            }
             let input = listed_input(&snapshot);
             for candidate in &snapshot.candidates {
                 prop_assert!(
@@ -268,6 +272,10 @@ proptest! {
         let mut session = Session::default();
         for action in actions {
             let snapshot = act(&mut session, &engine, &mut user, action);
+            // 沒有組字時的候選是聯想（M3 票 13），不是輸入碼的候選。
+            if snapshot.composition.input.is_empty() {
+                continue;
+            }
             let from_scratch = engine.candidates(&user, listed_input(&snapshot));
             let page: Vec<String> = from_scratch
                 .into_iter()

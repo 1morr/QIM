@@ -2,6 +2,7 @@
 //!
 //! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
 
+mod association;
 mod code_table;
 mod emoji;
 mod engine;
