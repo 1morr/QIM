@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::remembered::{self, REMEMBERED_STRINGS_MAX};
 use crate::{Engine, Segment};
 
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
@@ -27,8 +28,11 @@ pub(crate) const RECENT_COMMITS: u64 = 10_000;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UserModel {
     schemes: BTreeMap<String, SchemeModel>,
-    /// 個人 bigram：只看文字，各方案共用（plan §2.4）。
+    /// 個人 bigram：只看文字，各方案共用（plan §2.4）。它的 tick 也是記住的字串的時間。
     bigrams: Bigrams,
+    /// 記住的字串（plan §2.4，M3 票 15）：使用者打過的 email → 衰減值，各方案共用。每記一次共用的
+    /// tick（`bigrams.tick`）加一，衰減同個人 bigram。
+    remembered: BTreeMap<String, Decayed>,
 }
 
 /// 個人 bigram（plan §2.3）：上屏時記「前一個字詞 → 這一段」的衰減值，算分時給這一段接在
@@ -52,6 +56,12 @@ impl Decayed {
     /// 衰減到 `tick` 的值。
     fn at(self, tick: u64) -> f64 {
         self.value * decay(tick - self.last_tick)
+    }
+
+    /// 在 `tick` 又上屏（或記住）一次：衰減到現在再加一（librime `formula_d`）。
+    fn bump(&mut self, tick: u64) {
+        self.value = 1.0 + self.at(tick);
+        self.last_tick = tick;
     }
 }
 
@@ -181,6 +191,56 @@ impl UserModel {
         let tick = self.bigrams.tick;
         let total = next.values().map(|d| d.at(tick)).sum();
         Some(Following { next, tick, total })
+    }
+
+    /// 記住一個字串（[`crate::Session`] 從送出去的字裡認出來的 email）：衰減值加一，共用的 tick 加一。
+    /// email 不分大小寫（網域本來就不分，本地部分實務上也不分）：只留一條，換成這次打的寫法。超過
+    /// [`REMEMBERED_STRINGS_MAX`] 條時淘汰最久沒用的（最後 tick 最小）。
+    pub(crate) fn remember_string(&mut self, text: &str) {
+        self.bigrams.tick += 1;
+        let same = self
+            .remembered
+            .keys()
+            .find(|old| old.eq_ignore_ascii_case(text))
+            .cloned();
+        let mut decayed = same
+            .and_then(|old| self.remembered.remove(&old))
+            .unwrap_or_default();
+        decayed.bump(self.bigrams.tick);
+        self.remembered.insert(text.to_string(), decayed);
+        if self.remembered.len() > REMEMBERED_STRINGS_MAX
+            && let Some(oldest) = self
+                .remembered
+                .iter()
+                .min_by_key(|(_, d)| d.last_tick)
+                .map(|(text, _)| text.clone())
+        {
+            self.remembered.remove(&oldest);
+        }
+    }
+
+    /// 記住的字串，依文字排；殼的清單用，使用者可以逐條刪（[`UserModel::forget_string`]）。
+    pub fn remembered_strings(&self) -> Vec<String> {
+        self.remembered.keys().cloned().collect()
+    }
+
+    /// 忘掉記住的字串 `text`，匯出檔裡不再有它；沒記過時回傳 `false`。
+    pub fn forget_remembered_string(&mut self, text: &str) -> bool {
+        self.remembered.remove(text).is_some()
+    }
+
+    /// 方案字母表 `alphabet` 裡的字母（小寫，[`crate::remembered::letters`]）以 `prefix` 開頭的記住的
+    /// 字串，衰減值大的在前，同值依文字。
+    pub(crate) fn strings_starting_with(&self, prefix: &str, alphabet: &str) -> Vec<&str> {
+        let tick = self.bigrams.tick;
+        let mut found: Vec<(f64, &str)> = self
+            .remembered
+            .iter()
+            .filter(|(text, _)| remembered::letters(text, alphabet).starts_with(prefix))
+            .map(|(text, d)| (d.at(tick), text.as_str()))
+            .collect();
+        found.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(b.1)));
+        found.into_iter().map(|(_, text)| text).collect()
     }
 
     /// 方案 `scheme` 的個人模型，沒有就建一個空的。
@@ -357,8 +417,7 @@ impl Bigrams {
                 .or_default()
                 .entry(text.to_string())
                 .or_default();
-            decayed.value = 1.0 + decayed.at(tick);
-            decayed.last_tick = tick;
+            decayed.bump(tick);
         }
     }
 }
@@ -519,6 +578,8 @@ const COLUMNS: &str =
     "# scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger";
 /// 個人 bigram 的欄名註解行，有個人 bigram 時寫在它們前面。方案欄是空的：各方案共用。
 const BIGRAM_COLUMNS: &str = "# \tprevious\tword\tdecayed\tlast_tick";
+/// 記住的字串的欄名註解行，有記住的字串時寫在它們前面。方案欄、前一個字詞欄都是空的。
+const STRING_COLUMNS: &str = "# \t\tstring\tdecayed\tlast_tick";
 
 impl UserModel {
     /// 匯出成 `# qim-userdict v2` 的 TSV（plan §2.4），給殼存檔、換機或備份。
@@ -580,6 +641,18 @@ impl UserModel {
                 ));
             }
         }
+        if !self.remembered.is_empty() {
+            out.push_str(STRING_COLUMNS);
+            out.push('\n');
+        }
+        for (text, decayed) in &self.remembered {
+            out.push_str(&format!(
+                "\t\t{}\t{}\t{}\n",
+                escape(text),
+                decayed.value,
+                decayed.last_tick,
+            ));
+        }
         out
     }
 
@@ -618,12 +691,30 @@ impl UserModel {
                 shared_tick = Some(tick);
                 continue;
             }
-            // 方案欄是空的：個人 bigram（v2 起）。
-            if let Some(bigram) = line.strip_prefix('\t') {
+            // 方案欄是空的：個人 bigram 或記住的字串（v2 起）。
+            if let Some(shared) = line.strip_prefix('\t') {
                 if version == Version::V1 {
-                    return Err(error("方案不能是空的（v1 沒有個人 bigram）"));
+                    return Err(error("方案不能是空的（v1 沒有個人 bigram 與記住的字串）"));
                 }
-                let (previous, text, decayed) = parse_bigram(bigram).map_err(error)?;
+                // 前一個字詞欄也是空的：記住的字串。
+                if let Some(string) = shared.strip_prefix('\t') {
+                    let (text, decayed) = parse_string(string).map_err(error)?;
+                    if shared_tick.is_some_and(|t| decayed.last_tick > t) {
+                        return Err(error("最後 tick 比共用的 tick 大"));
+                    }
+                    if user.remembered.insert(text.into_owned(), decayed).is_some() {
+                        return Err(error("記住的字串重複"));
+                    }
+                    if user.remembered.len() > REMEMBERED_STRINGS_MAX {
+                        return Err(ImportError::at(
+                            number,
+                            format!("記住的字串超過 {REMEMBERED_STRINGS_MAX} 條"),
+                        ));
+                    }
+                    user.bigrams.tick = user.bigrams.tick.max(decayed.last_tick);
+                    continue;
+                }
+                let (previous, text, decayed) = parse_bigram(shared).map_err(error)?;
                 if shared_tick.is_some_and(|t| decayed.last_tick > t) {
                     return Err(error("最後 tick 比個人 bigram 的 tick 大"));
                 }
@@ -795,6 +886,25 @@ fn parse_bigram(line: &str) -> Result<(Cow<'_, str>, Cow<'_, str>, Decayed), &'s
         unescape(text)?,
         Decayed { value, last_tick },
     ))
+}
+
+/// 記住的字串的一列去掉開頭兩個 Tab（空的方案欄與前一個字詞欄）之後：字串、衰減值、最後 tick。
+/// 字串要是 email（同打字時記的規則），照詞欄跳脫。
+fn parse_string(line: &str) -> Result<(Cow<'_, str>, Decayed), &'static str> {
+    let fields: Vec<&str> = line.split('\t').collect();
+    let [text, value, last_tick] = fields[..] else {
+        return Err("記住的字串（方案欄、前一個字詞欄空的）要有 5 欄，以 Tab 分隔");
+    };
+    let text = unescape(text)?;
+    if remembered::to_remember(&text) != Some(&text) {
+        return Err("記住的字串要是 email");
+    }
+    let value: f64 = value.parse().map_err(|_| "衰減值要是數字")?;
+    if !value.is_finite() || value <= 0.0 {
+        return Err("記住的字串的衰減值要是正的有限數");
+    }
+    let last_tick = last_tick.parse().map_err(|_| "tick 要是非負整數")?;
+    Ok((text, Decayed { value, last_tick }))
 }
 
 /// 詞欄的跳脫（v2）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，照 PostgreSQL `COPY` 的文字格式與

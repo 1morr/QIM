@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use crate::engine::Spanned;
+use crate::remembered::REMEMBERED_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Following, SchemeModel};
 use crate::{EMOJI_LIMIT, Engine, Segment, UserModel};
@@ -47,7 +48,7 @@ pub(crate) struct CandidateSpan {
     pub kind: SpanKind,
 }
 
-/// 候選從哪裡來。英文與 emoji 不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、不學。
+/// 候選從哪裡來。英文、emoji 與記住的字串不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、不學。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SpanKind {
     /// 碼表的字、詞庫的詞、使用者詞或多段路徑。
@@ -56,6 +57,8 @@ pub(crate) enum SpanKind {
     English,
     /// 接在字詞後面的 emoji（plan §2.4）。
     Emoji,
+    /// 記住的字串（排位規則 5，plan §2.4）。
+    Remembered,
 }
 
 impl SpanKind {
@@ -84,6 +87,8 @@ pub(crate) struct Listing {
     pub english_candidates: bool,
     /// 整串的候選是 emoji 資料包裡的詞時接上它的 emoji（M3 票 16）；目前分段的候選列沒有。
     pub emoji_candidates: bool,
+    /// 整串輸入碼是記住的字串的開頭時加上它（排位規則 5，M3 票 15）；目前分段的候選列沒有。
+    pub remembered_strings: bool,
     /// 碼表標成簡體字的字排到同一段的其他字詞之後（brief §4.1）：繁體模式、
     /// [`crate::Options::simplified_after_traditional`] 開著時。
     pub simplified_last: bool,
@@ -328,6 +333,17 @@ pub(crate) fn candidates(
             ..CandidateSpan::single(word.to_string(), input)
         });
     }
+    if listing.remembered_strings && !list.is_empty() {
+        list.extend(
+            remembered(engine, user, input)
+                .filter(|text| seen.insert(text.to_string()))
+                .take(REMEMBERED_LIMIT)
+                .map(|text| CandidateSpan {
+                    kind: SpanKind::Remembered,
+                    ..CandidateSpan::single(text.to_string(), input)
+                }),
+        );
+    }
     let mut ranked = Ranked {
         engine,
         listing,
@@ -344,6 +360,21 @@ pub(crate) fn candidates(
         rule(&mut ranked);
     }
     ranked.into_list()
+}
+
+/// 輸入碼 `input`（去掉分隔記號）是方案打得出的字母開頭（[`crate::remembered::letters`]）的記住的字串，最近常打的在前；
+/// 輸入碼要長過方案一個字的最長碼（同英文候選，速成 3 碼起），1–2 碼是單字的碼，第 2 位最常用。
+fn remembered<'a>(
+    engine: &Engine,
+    user: &'a UserModel,
+    input: &str,
+) -> impl Iterator<Item = &'a str> {
+    let typed = without_separators(input);
+    let long_enough = typed.len() > usize::from(engine.scheme().max_code_length);
+    long_enough
+        .then(|| user.strings_starting_with(&typed, &engine.scheme().alphabet))
+        .into_iter()
+        .flatten()
 }
 
 /// 蓋滿整串的字詞後面接上它的 emoji（rime-emoji 的做法，plan §2.4），依候選列的順序、整列最多
@@ -381,11 +412,12 @@ fn with_emoji(
 }
 
 /// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
-const RULES: [fn(&mut Ranked); 4] = [
+const RULES: [fn(&mut Ranked); 5] = [
     triggered_first,
     chosen_twice_first,
     used_word_second,
     english_second,
+    remembered_after_english,
 ];
 
 /// 套用排位規則中的候選列：排定的候選釘在它的位置，其餘的依原本的順序填進空著的位置。
@@ -543,6 +575,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
         Listing {
             english_candidates: false,
             emoji_candidates: false,
+            remembered_strings: false,
             ..ranked.listing
         },
     )
@@ -569,6 +602,17 @@ fn used_word_second(ranked: &mut Ranked) {
 /// 規則 4：英文候選排第 2 位（brief §4.3）；第 2 位已由前面的規則排定時排在它後面最前的空位。
 fn english_second(ranked: &mut Ranked) {
     if let Some(i) = ranked.free.iter().position(|c| c.kind == SpanKind::English) {
+        ranked.pin_at_or_after(i, 1);
+    }
+}
+
+/// 規則 5：記住的字串依序排在第 2 位起的空位（M3 票 15）：英文候選在第 2 位時排在它後面，不搶首選。
+fn remembered_after_english(ranked: &mut Ranked) {
+    while let Some(i) = ranked
+        .free
+        .iter()
+        .position(|c| c.kind == SpanKind::Remembered)
+    {
         ranked.pin_at_or_after(i, 1);
     }
 }

@@ -340,7 +340,7 @@ fn incognito_gives_no_association() {
 fn clearing_the_context_closes_the_association() {
     let mut typing = Typing::new();
     typing.commit("an");
-    typing.session.clear_context();
+    typing.session.clear_context(&mut typing.user);
     assert!(typing.session.all_candidates().is_empty());
     assert!(!typing.key(Key::Digit(1)).handled);
 }

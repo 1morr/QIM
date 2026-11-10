@@ -149,7 +149,7 @@ fn a_bad_bigram_row_is_an_error_with_its_line() {
     let bad_rows = [
         "\t一\t台\t1",       // 少一欄
         "\t一\t台\t1\t1\t",  // 多一欄
-        "\t\t台\t1\t1",      // 前一個字詞是空的
+        "\t\t台\t1\t1",      // 前一個字詞是空的是記住的字串，台不是 email
         "\t一\t\t1\t1",      // 這一段是空的
         "\t一\t台\t0\t1",    // 衰減值要是正的
         "\t一\t台\tNaN\t1",  // 衰減值不是有限數
