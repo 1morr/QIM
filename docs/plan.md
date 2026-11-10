@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0、M1 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`）；M2 進行中（`.scratch/m2/spec.md`）；M2 之後只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0、M1、M2 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`、`.scratch/m2/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`、`docs/archive/M2.md`）；M3 進行中、還沒拆票；M3 起只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -542,8 +542,8 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | --- | --- | --- |
 | M0 骨架 | 閘門、資料管線 v0、核心 tracer bullet：在網頁打出第一個字 | 完成 |
 | M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | 完成 |
-| M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | 進行中 |
-| M3 智慧候選 | 模型階梯實驗；個人 bigram、聯想、上下文、LLM、雲端安全、記住常打字串、詞庫擴充 | 未開始 |
+| M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | 完成 |
+| M3 智慧候選 | 模型階梯實驗；個人 bigram、聯想、上下文、LLM、雲端安全、記住常打字串、詞庫擴充 | 進行中 |
 | M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、譯詞、句中英文混輸實驗、欄位類型、智慧標點、滑動輸入、手機編輯手勢、同步的合併規則 | 未開始 |
 | M5 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 未開始 |
 | M6 macOS | 第一個平台殼，一次接上全部已完成的功能 | 未開始 |
@@ -552,7 +552,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | M9 Windows | TSF | 未開始 |
 | M10 Linux | Fcitx5 或 IBus | 未開始 |
 
-M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
+M1、M2 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
 
 排法：功能大多在共用核心裡，先在網頁把它們做完並確認可用（M1、M3、M4、M5），平台殼開工時核心介面已穩定，每個平台一次接上全部功能（M6–M10），不必跟著核心反覆改。平台限制會影響核心設計的部分先量（M2），例如智慧候選要用多大的模型。網頁驗不到的部分（真實 App 內的行為、各平台讀上下文的差異、手機真實延遲）仍可能在平台里程碑修改。brief §1.5「之後」與「待評估」的每一項都落在 M3–M8 其中一個。
 
@@ -566,7 +566,7 @@ M1 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/iss
 
 ### 7.3 M2 平台可行性實驗
 
-進行中：目標、範圍、共同規則、驗收與票序見 `.scratch/m2/spec.md`（2026-11-07 由本節細化，含 M1 review 的決定）。
+已完成（2026-11-10）：目標、範圍、共同規則、驗收與票序見 `.scratch/m2/spec.md`，session 紀錄與偏差封存在 `docs/archive/M2.md`；量到的數字在 `docs/research/ios-feasibility.md`，留給之後里程碑的發現在 `.scratch/m2/issues/12-m2-close.md` 的 Comments。
 
 ### 7.4 M3 智慧候選
 
