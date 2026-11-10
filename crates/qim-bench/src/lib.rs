@@ -16,7 +16,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use qim_core::{
-    Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking, SchemePack,
+    EmojiPack, Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking,
+    SchemePack,
 };
 use sha2::{Digest, Sha256};
 
@@ -34,6 +35,9 @@ pub const PACKS: &str = "build/packs";
 /// 英文資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著英文候選，基準照網頁掛上。
 /// WebAssembly 的延遲腳本依檔頭魔數分辨各資料包，不靠參數的位置。
 pub const ENGLISH_PACK: &str = "build/packs/scowl-en-us/scowl-en-us.pack";
+/// emoji 資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著 emoji 候選，基準照網頁掛上，
+/// 量得到 emoji 把正解擠到下一頁的修正次數。
+pub const EMOJI_PACK: &str = "build/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack";
 pub const FIXED: &str = "bench/fixed.tsv";
 /// 語料目錄，依序跑：每個 `<名>.tsv` 是一個集合，集合名在所有目錄間不能重複。
 /// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
@@ -402,7 +406,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]，建 `Engine`；
+/// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]、[`EMOJI_PACK`]，建 `Engine`；
 /// `overrides` 蓋掉方案的打分參數。
 /// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
 fn load_engine(
@@ -446,9 +450,13 @@ fn load_engine(
     let (bytes, loaded) = load(ENGLISH_PACK.into())?;
     let english = EnglishPack::from_bytes(&bytes).map_err(|e| format!("{ENGLISH_PACK}：{e}"))?;
     packs.push(loaded);
+    let (bytes, loaded) = load(EMOJI_PACK.into())?;
+    let emoji = EmojiPack::from_bytes(&bytes).map_err(|e| format!("{EMOJI_PACK}：{e}"))?;
+    packs.push(loaded);
     let engine = Engine::new(pack, lexicon, language_model)
         .map_err(|e| format!("{QUICK_PACK}：{e}"))?
-        .with_english(english);
+        .with_english(english)
+        .with_emoji(emoji);
     Ok((engine, packs, copy))
 }
 

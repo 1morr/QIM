@@ -69,6 +69,7 @@ fn main() -> ExitCode {
                         "{}",
                         qim_databuild::verify::english_summary(&outcome.english)
                     );
+                    println!("{}", qim_databuild::verify::emoji_summary(&outcome.emoji));
                     for corpus in &outcome.corpora {
                         println!("{corpus}");
                     }

@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | Gboard | 連打（整串解碼，選開頭一段後其餘重算）、容錯（觸控按點擊位置算，原樣讀法優先）、長按出英文、打完符號留在符號頁、預設佈局（[黑箱基線](research/blackbox-baseline.md)） | 候選依使用頻率前移（Gboard 速成選 10 次都不動）；自動造詞（Gboard 不學）；繁體模式的簡體字排在繁體之後、不過濾（同 macOS；Gboard 混排，`ls` 首選「门」；使用者 2026-11-11 決定，M3 票 19）；英文候選放第 2 位（Gboard 速成沒有）；單碼不列鄰鍵的字 |
 | iOS / macOS 內建速成 | 聯想（iOS：看前文、字詞都給、可一直接下去）、中文狀態下的英文候選、字根提示；粵語字序以 iOS 為準（嘢、啲、嘅、佢排第 1）；組字中按標點先上屏首選再出標點（§4.3，[黑箱基線](research/blackbox-baseline.md) T18） | 連打做整串解碼（兩者都不做，iOS 固定 2 碼一段）；選兩次才成首選，不學它們「選一次就到第 1、只記最近一次」；自動造詞（兩者逐字上屏都不學新詞）；繁體模式的簡體字排在繁體之後（iOS 混排）；英文候選放第 2 位（macOS 排第 1）；長按出英文字母（iOS 字根鍵沒有子鍵）；打完符號留在符號頁（iOS 打標點後跳回） |
-| Rime | 輸入方案與核心分離的做法 | 每個方案只索引自己的碼；長詞條與造句用同一把尺比分數（`docs/research/rime.md` §5） |
+| Rime | 輸入方案與核心分離的做法；emoji 接在對應的候選後面、有開關、預設開（rime-emoji，§12.4） | 每個方案只索引自己的碼；長詞條與造句用同一把尺比分數（`docs/research/rime.md` §5） |
 | libime | 碼表格式、使用者學習的做法 | — |
 | afm-ime / 青簡 | 慢的模型只做非同步重排、不搶首選（ADR 0005）；青簡的容錯「預設相信使用者」（§4.8）、譯詞、主題格式（可繼承、按淺深色給變數） | 譯詞表與詞庫不拷青簡的加工檔（GPL，`docs/research/qingjian.md` §10.3） |
 | Delta skin、Keyboard Designer | 佈局是畫布：設計尺寸加每鍵座標；按鍵可自由擺放 | 允許重疊、多邊形、旋轉；內建格線與吸附 |
@@ -186,6 +186,7 @@ QIM（暫名）。
 | 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
 | 英文詞表 | ESDB（舊名 SCOWL）的 Hunspell en_US 字典（§12.1） | MIT 類寬鬆授權 | 中文狀態的英文候選用 |
 | 簡繁轉換 | OpenCC | Apache-2.0 | — |
+| emoji 標註 | Unicode CLDR 的粵語、繁中標註（`common/annotations/yue.xml`、`zh_Hant.xml`）與 Unicode 的 `emoji-test.txt` | Unicode-3.0（§12.1） | emoji 候選用（M3 票 16，plan §4.4）；不用 Helium314 彙整的 emoji 字典（混有 AGPL 資料，`docs/research/data-sources.md` §10） |
 
 不用 Rime 的倉頡 / 速成碼表（授權標示矛盾，§12.1）。
 
@@ -207,7 +208,7 @@ QIM（暫名）。
 【決定】
 
 - MVP 不同步；設定在主 App（桌面為設定視窗）修改，存在本機。
-- 會改寫使用者打出的字或改變候選位置的行為都有開關：組字中單按 Shift 先上屏或留碼接英文（預設照 Rime：左留碼、右先上屏，§4.3）、英文自動修正（預設關）、英文句首自動大寫（預設關）、中文狀態的英文候選（預設開）、容錯（預設開）、聯想（預設開）、雲端候選（預設開，填了 API key 才連線，§8）；另有智慧標點（§4.7，其中數字後半形 M1 已做、預設開）、學習（§4.5）、無痕（§4.5）。
+- 會改寫使用者打出的字或改變候選位置的行為都有開關：組字中單按 Shift 先上屏或留碼接英文（預設照 Rime：左留碼、右先上屏，§4.3）、英文自動修正（預設關）、英文句首自動大寫（預設關）、中文狀態的英文候選（預設開）、容錯（預設開）、聯想（預設開）、雲端候選（預設開，填了 API key 才連線，§8）、emoji 候選（預設開，同 rime-emoji；整串的字詞後面接它的 emoji，每列最多 3 個，plan §2.4，M3 票 16）；另有智慧標點（§4.7，其中數字後半形 M1 已做、預設開）、學習（§4.5）、無痕（§4.5）。
 - 觸控鍵盤的外觀設定：數字列（預設關，同 Gboard；§4.4）。
 - 使用者詞庫可匯出、匯入成檔案，用來換機或備份。
 - 跨裝置同步是「之後」的功能：合併規則與詞庫格式先在核心定稿；實際傳輸方式在第一個平台殼開工時選（iCloud、自架、同步資料夾），要能跨 Apple 與 Android。
@@ -277,6 +278,8 @@ QIM（暫名）。
 - ferrous-opencc 0.4.0 內建的 `s2hk` 用在已是繁體的文字上，會把也是簡體寫法的繁體字再轉一次：粵語維基（`20261101`）3,400 萬字裡「群→羣」7987、「搵→揾」7004、「里→裏」5804、「吓→嚇」3286、「晒→曬」3094、「布→佈」2969、「响→響」2426、「郁→鬱」2062 等，共換 132,587 字；`t2hk` 只換香港寫法（「說→説」「溫→温」「搵→揾」等 50 種），共 64,651 字。四份語料經兩種設定都逐字對應。`s2hk` 的簡轉繁那一步（STCharacters）就出 OpenCC 標準寫法「羣」「峯」，`t2tw`（TWVariants）把它們換成「群」「峰」；ferrous-opencc 內建的 HKVariants 和 OpenCC `fae2a0a` 的不同：ferrous 多「擡→抬」，`fae2a0a` 多「線→線 綫」「才→才」這類首值是自己的列。本機實驗 `scripts/experiments/s2hk-diff/`，2026-11-04；M1 票 17b Comments。
 - 「著／着」的簡轉：OpenCC `fae2a0a` 的 `hk2s` 用的字典（TSPhrases、TSCharacters、HKVariants、HKVariantsRevPhrases）都沒有以「著」「着」為鍵的列，所以「隨著」轉成「随著」。`tw2s` 在 TS 那組之前多一組 TWVariantsRevPhrases、TWVariantsRev：後者把「著」換成「着」，前者保護 17 個詞（著名、著作、顯著、名著、合著…），沒有「土著」「原著」「專著」。ferrous-opencc 0.4.0 `assets/config/tw2s.json`、`assets/dictionaries/TWVariantsRev.txt`、`TWVariantsRevPhrases.txt`，2026-11-05 查（M1 票 17d）。
 - CLDR annotations（yue、zh_Hant、zh_Hant_HK）為 Unicode-3.0。[CLDR](https://github.com/unicode-org/cldr/tree/main/common/annotations)。
+- CLDR `release-49`（2026-11-11 最新的 stable；lightweight tag，指向 commit `96e54b2`；`-beta*`、`-m*` 是預發布）：`common/annotations/yue.xml`、`zh_Hant.xml` 各 3,950 個 `<annotation>`，檔頭 `SPDX-License-Identifier: Unicode-3.0`；每個 emoji 一行關鍵字（` | ` 分隔）、一行短名（`type="tts"`）；`yue.xml` 是完整的一份，沒有 `↑↑↑` 繼承記號。`cp` 去掉了 U+FE0F（`zh_Hant.xml` 檔頭的 Warnings），膚色與組合序列在 `annotationsDerived/`。repo 頂層 `LICENSE` 第一段是 UTS #35 規格本身的版權（限制轉載），其餘內容（含資料檔）是 Unicode License V3。關鍵字是給搜尋的、收得很寬又不均：粵語標註裡 😄 的關鍵字有「嘴」「眼」「打開」「臉」；「笑」在繁中對到 🤣🥰😼、粵語 😆🤣😂，「哈哈」「開心」粵語一個也沒有。方框漢字的 emoji（🈶 的標註是「有」、🈚 是「無」）只是框裡的字。QIM 只收對到不超過 6 個 emoji 的關鍵字、不收方框漢字（plan §4.4，[`docs/research/emoji-candidates.md`](research/emoji-candidates.md) §3）。[cldr release-49](https://github.com/unicode-org/cldr/tree/release-49/common/annotations)、[LICENSE](https://github.com/unicode-org/cldr/blob/release-49/LICENSE)，2026-11-11 查；關鍵字對照為本機統計。
+- Unicode 18.0 的 `emoji-test.txt`（`https://www.unicode.org/Public/18.0.0/emoji/`，Unicode 17 起 emoji 資料放在版本目錄下）列出每個 emoji 的 fully-qualified 寫法（例如 `2764 FE0F` ❤️），檔頭指向 Unicode Terms of Use（Data Files 適用 Unicode License V3）。[emoji-test.txt](https://www.unicode.org/Public/18.0.0/emoji/emoji-test.txt)，2026-11-11 查。
 - HKSCS 資料集（含倉頡碼、粵拼）商用免費，須署名，有賠償條款。[data.gov.hk 條款](https://data.gov.hk/en/terms-and-conditions)。
 - ESDB（English Speller Database，舊名 SCOWL）的詞表要用 repo 裡的 Python + SQLite 工具（`combine.py` 合併 `data/` 下十幾份檔）組出；release `rel-2026.02.25`（commit `7e99eda`）附 `hunspell-en_US-2026.02.25.zip`，README 寫明是 size 60、美式的預設字典（`mk-list --accents=strip en_US 60`），`en_US.dic` 47,551 個詞幹，最強烈的禁忌詞標 NOSUGGEST（27 個）。`Copyright` 寫官方拼字字典（非澳式）只需保留 `===` 前那段聲明。展開字尾後 109,863 個詞形，速成打得出、依小寫歸併後 85,959 詞（本機統計，`cargo xtask data --verify`）。[en-wl/wordlist](https://github.com/en-wl/wordlist)（README、`Copyright`、release 頁），2026-11-04 查。
 - 隨機速成字母串（a–y）對 macOS `/usr/share/dict/words` 的 210,773 個小寫詞：4 個字母剛好是英文詞 0.9%、差一處（插入、刪除、替換、對調）38.5%；5 個字母 0.1%、8.7%；6 個字母 0%、1.1%。隨機字母不代表真實速成碼的分佈，詞表含冷僻詞，只看量級。本機實驗 `scripts/experiments/english-edit1/`，2026-11-03。
@@ -349,6 +352,7 @@ QIM（暫名）。
 - libime 的使用者分數：`max(靜態, log10((1−w)·10^靜態 + w·10^歷史))`，`w = 0.2`，歷史只加分不扣分；歷史機率 = 0.2 × unigram + 0.8 × bigram，unigram 除以滿載歷史的總質量（三池權重合計 1.0），不是已學的句數；計數綁輸入碼的變體（`WordWithCode`）給碼表引擎用。授權 LGPL-2.1-or-later。`53df6a2` `src/libime/core/userlanguagemodel.cpp:122-140`、`historybigram.cpp:578-590,660-688`，[`docs/research/libime-user-model.md`](research/libime-user-model.md)，2026-11-04 查。
 - Microsoft 繁體中文輸入法（注音、倉頡、速成）的候選窗：↓ 進入候選窗、在窗內往下移，Tab 或 → 展開成表格，Space 翻頁，數字鍵選字。[Microsoft Traditional Chinese IME](https://support.microsoft.com/en-us/windows/microsoft-traditional-chinese-ime-ef596ca5-aff7-4272-b34b-0ac7c2631a38)，2026-11-04 查。Apple 的候選窗說明沒寫展開的按鍵，只有方向鍵移動、`=` `-` 與 `[` `]` 換列。[Apple](https://support.apple.com/guide/chinese-input-method/use-the-candidate-window-cim12992/mac)。
 - libime table 引擎的使用者詞庫文字檔沒有檔頭與版本號：手動詞一列 `code value`，自動造詞在 `[Auto]` 段多一欄次數 `code value hit`，被刪的系統詞在 `[Delete]` 段；以空白分隔，含空白的值加雙引號。`53df6a2`：`src/libime/table/tablebaseddictionary.cpp:946-998,1027-1051`，[`docs/research/userdict-text-formats.md`](research/userdict-text-formats.md) §2。
+- rime-emoji 用 librime 的 `simplifier` 濾鏡（`simplifier@emoji`，`option_name: emoji_suggestion`，開關 `reset: 1` 預設開）：OpenCC 詞典的值是「原詞 emoji…」（`笑	笑 😄️ 😸️`），`Simplifier::Convert` 依序把等於原文的值放回原候選、其餘做成 `ShadowCandidate`，所以原詞留在最前、emoji 緊接在它後面；每個經過濾鏡的候選都轉、不設上限，詞典是人工整理的「詞 → emoji」表。librime `c95c0d2` `src/rime/gear/simplifier.cc`、[rime-emoji](https://github.com/rime/rime-emoji/tree/39d232996de79a95d7bf4b5e8533feed5326b075)（`39d2329`），2026-11-11 查。iOS／macOS 中文鍵盤的 emoji 候選位置沒有找到官方文件（[`docs/research/emoji-candidates.md`](research/emoji-candidates.md) §1）。
 - afm-ime 用 Apple Foundation Models 做異步重排，結果只放第 2 位。`Bemly/afm-ime` `Sources/IMECore/FMReranker.swift`（`a8543a1`）。
 - 可重用的滑動輸入實作：FlorisBoard v0.5.2 `StatisticalGlideTypingClassifier.kt`、AnySoftKeyboard `GestureTypingDetector.java`，皆 Apache-2.0；HeliBoard / OpenBoard 的滑動依賴閉源函式庫。`docs/research/open-source-imes.md` §1。
 - Delta skin 的 `info.json`：每個方向一個 `mappingSize`（設計尺寸）與 `items`，每項有 `frame`（x、y、width、height）與 `extendedEdges`（擴大觸控範圍），依裝置與方向分版本。[Delta skin 文件](https://noah978.gitbook.io/delta-docs/skins)，2026-10-31 查。

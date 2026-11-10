@@ -27,8 +27,10 @@
 | 2026-11-11 | M3 拆票 | 寫 `.scratch/m3/spec.md`（含 plan §7.8 搬來的階梯實驗），拆 23 張票；plan §7.4、§7.8 縮成連結 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 | 2026-11-11 | M3 06 | 青簡神經重排與 CyIME 模型評估寫成 `docs/research/neural-rerank.md`，摘進 brief §12.4；見票 06 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 | 2026-11-11 | M3 02 | 資料包清單收成 `build_packs` 一處、`Pack` trait、xtask 比對個人集路徑；六份 sha256 與 bench 不變；見票 02 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
+| 2026-11-11 | M3 16 | emoji 候選：CLDR 粵語、繁中標註建 `cldr-emoji-yue-hant`，整串字詞後接最多 3 個、預設開；首選不變、修正約 +0.3% 更新 baseline；見票 16 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 
 ## 偏差與決定
 
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
 - 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。
+- 2026-11-11 M3 票 16：驗收「`bench --check` 不變差」改成首選不變：emoji 佔第一頁把正解擠到下一頁，修正約 +0.3%；使用者選每列最多 3 個、更新 baseline；見票 16。

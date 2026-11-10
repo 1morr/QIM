@@ -25,6 +25,7 @@
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
 | 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
 | 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
+| emoji 候選 | `emoji_candidates`（對照表 `EmojiTable`） | | |
 
 ## 1. 架構總覽
 
@@ -142,7 +143,7 @@ pub enum ShiftKey { Left, Right }
 impl Key { pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError>; } // 綁定收「種類 + 值」
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub shift_switch: ShiftSwitch }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub emoji_candidates: bool, pub shift_switch: ShiftSwitch }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
@@ -176,6 +177,7 @@ impl Session {
 - `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它（英文直通也是）；組字中和標點相同，先上屏整個組字再接它；臨時英文中和實體鍵盤的可見字元一樣接在英文後（M1 票 27b）。文字照原樣，不轉全形、不套數字後半形（M1 票 20、27b）；簡體模式下文字也轉簡體，原文留繁體（使用者決定，M1 票 23）。觸控的標點鍵也走這裡，照鍵上的字輸出（使用者決定，M1 票 27b）。
 - `ToggleAscii`（單按 Shift，brief §4.3）：沒有組字時切英文直通，`Snapshot.ascii` 跟著變；英文直通下每個鍵都 `handled` 為假，沒有組字。組字中照 `Options.shift_switch`：`commit_text` 先上屏整個組字再切；`inline_ascii` 進臨時英文，`ascii` 為真而組字還在，最後一段是 `Segment.raw` 的分段（Rime 的 `raw` 標記），各鍵的行為照目前發佈版 librime（≤ 1.17.0，空白接進英文，M1 票 25b），見 brief §4.3。預設 `Rime` 是左 Shift `inline_ascii`、右 Shift `commit_text`（M1 票 25，推翻票 23 的左右相同）。單按的判定（按下到放開 500 ms 內、中間沒有按下或放開別的鍵，librime 同值）與分辨左右在殼；網頁用 `KeyboardEvent.code`，觸控鍵盤的中英鍵（佈局動作 `toggleAscii`）當右 Shift；觸控的 ⇧ 是另一個動作 `shift`（§2.6），是大寫鍵，不送 `ToggleAscii`。臨時英文中 `-` / `=` 是字元，殼不轉成翻頁。
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
+- emoji 候選：`Engine::with_emoji` 掛上 emoji 資料包（不由方案指名，各方案共用，§4.4）；`Options.emoji_candidates`（預設開，brief §7）開著時，整串的字詞後面接它的 emoji（§2.4）。組字中換這個選項同英文候選，殼呼叫 `refresh`（M3 票 16）。
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。殼只呼叫 `set_options` 時，下一個 `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選，重列前 `all_candidates` 是空的、不給重排要求、也不套用重排結果（M2 票 01）。`qim-ffi` 加換選項時，綁定的 `set_options` 同時呼叫 `refresh` 回快照（同網頁的 `setSimplified`），殼就碰不到這個待生效狀態（票 01 的建議，M2 票 07 延後到需要它的票）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
 - 數字後半形：`Options.digit_separators`（預設開，brief §4.7、§7）。沒有組字、前一個上屏的字是半形數字時，`.` `:` 直接上屏半形，不進組字；逗號照舊全形（使用者決定，M1 票 26）；「前一個上屏的字」由 `Session` 記最近送出去的字，M3 有 `set_context` 後改看前文。會上屏的三個方法回傳前都經過同一處記下（`Session::finish`）：`handle`（含交還宿主的鍵，只有數字鍵算數字，`Modifier` 不動它）、`select`（點候選）、`text`（觸控的文字鍵：數字列、符號頁與數字鍵盤的數字、常用頁）；`refresh`、`focus_segment`、`apply_rerank` 不上屏、不改它。觸控的標點鍵是 `text`、照鍵上的字輸出，不套這條（使用者決定，M1 票 27b，推翻票 27 的觸控標點送 `Key::Punct`）。
@@ -183,7 +185,7 @@ impl Session {
 - 按鍵的入口（M2 票 03）：綁定收不了帶資料的列舉時（WebAssembly）用 `Key::parse` 收「種類 + 值」，種類是 `Key` 各種的 camelCase 名字（`letter`、`digit`、`toggleAscii`、`space`…），值是字元、`0`–`9` 或 `left` / `right`；網頁的按鍵都經綁定的同一個 `press`，加一種鍵只改核心與網頁的按鍵對照（`web/src/keys.ts`）。同 librime 能從字串讀按鍵（`KeyEvent` 的文字表示）。`qim-ffi` 也收「種類 + 值」（M2 票 07）：uniffi 沒有 `char` 型別，收不了 `Key::Letter(char)`，另寫一份鏡像列舉又讓加一種鍵多改一處。觸控鍵盤的組字狀態也問 `Session::composing`，綁定不另存。
 - `qim-ffi` 的物件（M2 票 08）：`Engine` 是獨立的 uniffi 物件，殼建一個，各輸入框的 `Session` 共用它，換輸入框不重載資料包。資料包的位元組先各自解開成 `SchemePack` 等物件，再交給 `Engine`；交出時是移交、不複製，所以每份只能給一個 `Engine`，殼也能逐份量記憶體。`UserModel` 暫時放在各 `Session` 裡，學習資料存檔由需要它的票拆出來共用。字根提示的 `RadicalHintPack` 目前只能解開、不交給 `Engine`（M2 票 09 在鍵盤擴充量記憶體用），查詢與顯示的介面由殼要顯示字根提示的票加。
 - 上下文（M3）：`Session::set_context(before: &str)`，n-gram 與個人 bigram 用前文當起點。
-- 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的碼的字詞（和單打那個碼相同）；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
+- 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的碼的字詞（和單打那個碼相同，只是沒有英文候選與 emoji：它們只給剩下的整串，§2.4）；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
   - `Composition.focus` 預設是分段數（像 librime 的 caret 在最後）：候選列剩下沒選定的整串；← 從最後一段往前，→ 走過最後一段回到整串；打字、退格回到整串。`select(index)` 的 `index` 是全部候選的位置（librime `select_candidate`）。
   - 改選第 i 段時，前面的分段照顯示的字固定、不重算（使用者確認）：重算的輸入碼從頭建、不接選定的分段的字（和選開頭一段時相同，接前文等 M3 `set_context`），單獨重算前面只會丟掉跨段 bigram 選出、使用者看過的字。選的只蓋住第 i 段開頭時，那段剩下的碼和後面的分段一起重算；否則後面已選定的不動、沒選定的重算。都選定了就上屏。所以選定的分段永遠在開頭（M1 票 21）。
   - 移到某一段時空白上屏整個組字，和組字中按標點相同。
@@ -208,8 +210,9 @@ flowchart TB
   LM["字級 bigram"] --> V
   UM["學習計數"] --> V
   UM --> R
-  V --> R["排位規則<br/>學習、自動造詞、英文候選、重排"]
+  V --> R["emoji、排位規則<br/>學習、自動造詞、英文候選、重排"]
   EN["英文詞表"] --> R
+  EM["emoji 對照表"] --> R
   R --> P["後處理<br/>簡繁、去重、分頁"]
   P --> SN["Snapshot"]
 ```
@@ -255,6 +258,7 @@ P_段內 = 1（單字）
   3. 上屏次數 ≥ 1 的使用者詞（含自動造詞）→ 至少第 2 位；多個符合時取最近整串上屏的。本來就在前 2 位的釘在原位。
   4. 英文候選：輸入碼剛好是完整英文單字時放第 2 位（brief §4.3）；第 2 位已由規則 1–3 排定時放它後面最前的空位，不往前移、不搶首選。只給剩下的整串輸入碼（目前分段的候選列沒有），輸入碼要長過方案一個字的最長碼（速成 3 碼起，同 macOS 速成，黑箱 T7），沒有任何中文候選時不出。拼法查英文資料包（§4.4）：比對小寫，同一個小寫拼法有幾種大小寫時取全小寫的，沒有就取專有名詞的大寫（`english` → English，T7 的 macOS 也出 iPad、GitHub）。選了它和 Enter 一樣：選定的分段上屏字詞、其餘上屏英文字，整次不學、不造詞，所以選幾次都不會變首選（M1 票 15）。
   - 排定的候選釘在它的位置，其餘的依原本的順序填進空位；「至少第 n 位」移到不超過第 n 位的空位裡最後面的一個，那些位置都排定了才移到最前面的空位。
+- emoji 候選（M3 票 16，照 rime-emoji：librime 的 `simplifier` 把 OpenCC 轉出的另一種寫法接在原候選後面，brief §12.4）：排位規則之前，蓋滿整串的字詞依候選列的順序，後面各接 emoji 資料包裡它的 emoji（§4.4，短名是它的在前），整列最多 3 個（`EMOJI_LIMIT`），和候選列裡其他候選文字重複的不接；查的是繁體原文，簡體模式也照原文對。只蓋住開頭一段的字詞、目前分段的候選列不接：emoji 和英文候選一樣只給剩下的整串，選了和 Enter 一樣，選定的分段上屏字詞、其餘上屏 emoji，整次不學、不造詞，所以選幾次都不會變首選。它在規則之前接上、又沒有學習計數，規則排定的位置照舊（英文候選仍在第 2 位，emoji 往後挪），首選也不會是 emoji；代價是規則移動或釘住的候選可能夾在字詞和它的 emoji 之間，emoji 也不跟著被規則移到首選的字詞走（名額已用掉時那個詞沒有 emoji）。規則的保證優先於緊鄰。重排要求的前 9 個候選含 emoji，雲端重排要不要排除由票 22 定。Rime 每個候選都接、不設上限；這裡設上限，第一頁（9 個）大半仍是字詞。`Options.emoji_candidates` 關掉時不接。
 - 使用者詞像詞庫的詞一樣進 lattice（§2.2），蓋滿整串時就是候選；它沒有詞頻，詞內由字級 bigram 一字接一字估，不加 β，只算一段（所以比拆成單字的路徑少扣 γ），`personal` 照 §2.3。
   - 手動加詞（`UserModel::add_word`）：輸入碼是各字的碼接起來（一個字有幾個碼時取它排得最前的那個碼），連打裡也打得出；有字沒有碼（英文、數字）時改用觸發詞當輸入碼。觸發詞只能用方案的鍵；詞不能空、不能含控制字元。手動加詞是使用者明確的操作，無痕模式也收。
   - 觸發詞剛好是整串時，那個詞加進候選列再由規則 1 移到首選；有幾個時取這串觸發詞最近整串上屏的。上屏時照打的碼學（記在「觸發詞, 詞」）。
@@ -454,23 +458,25 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
   - 各語料的次數乘上權重再相加（`crates/qim-databuild/src/corpora.rs`），維基 1、口語 64：口語 train 只有維基的約 1/127 句。M1 票 12 在 dev 切分上掃 1–256，口語集修正次數隨權重一路降、維基集在 32 以上開始退，64 之後口語只再好一點；權重屬於共用的語言模型，不寫在方案檔（§2.5）。
 - 授權：語料是 CC BY-SA 4.0，這份模型隨 App 發佈是否要以相同授權散布，與 LGPL 資料並列 brief §11 的待決項，由使用者判斷。
 
-### 4.4 英文與簡繁
+### 4.4 英文、簡繁與 emoji
 
 - 英文：ESDB（舊名 SCOWL，`en-wl/wordlist`）release `rel-2026.02.25` 的 `hunspell-en_US` zip，就是官方 size 60、美式、預設變體的拼字字典，建成英文資料包 `scowl-en-us`。`qim-databuild` 照 `en_US.aff` 的字首、字尾規則展開 `en_US.dic` 的詞幹（`english.rs`），標 NOSUGGEST 的禁忌詞整個不收，只留轉成小寫後全是 a–y 的詞（`z` 不在速成字母表，撇號、重音也打不出），同一個小寫拼法只留一種大小寫（§2.4 規則 4）。不從 repo 的 `data/` 自己組：要跑 ESDB 的 Python + SQLite 工具，release 是同一份資料、釘得住 sha256。只有 size ≤ 60 一級、沒有逐詞的 size：英文候選只看是不是完整單字，用不到常見度；英文模式的預測（M4）要詞頻，開工時另查（M1 票 15）。
+- emoji：CLDR（`release-49`）`common/annotations/` 的 `yue.xml`、`zh_Hant.xml` 建成 emoji 資料包 `cldr-emoji-yue-hant`（M3 票 16，`emoji.rs`）。每個 emoji 的短名（`type="tts"`）與每個關鍵字（` | ` 分隔）各是一個字詞。短名一律收；關鍵字是給 emoji 選單搜尋的、收得很寬（粵語標註裡 😄 的關鍵字有「嘴」「眼」「打開」「臉」），只在它對到的 emoji 不超過 6 個（兩份標註合計、不重複，`MAX_KEYWORD_EMOJI`）時收，「臉」「動物」這類分類詞自然濾掉；門檻由抽查定（「笑」剛好對到 5 個、要留著，「打開」「眼」「嘴」後面不再接笑臉），首選字基準在 4–不限之間幾乎不變，見 `docs/research/emoji-candidates.md` §3（M3 票 16）。一個字詞的 emoji 依序是短名是它的、再來關鍵字有它的，兩種之內粵語在繁中前（brief §1.3 粵語字序以 iOS 為準）、檔內照檔的順序。字詞照詞庫的寫法換（`t2hk` 再換回常見寫法，§4.2），有字沒有速成碼的不收。CLDR 的 `cp` 拿掉了 U+FE0F，照 Unicode 18.0 的 `emoji-test.txt` 換回 fully-qualified 的寫法，否則 ❤ 這類字顯示成文字。膚色與組合序列（`annotationsDerived/`）不收，免得候選塞滿同一個 emoji 的變體；方框漢字（🈶🈚🈷 等 U+1F200–1F2FF 與 ㊗ ㊙）也不收，它們的標註只是框裡的字，全收時打「有」「無」「月」這些常用字第 2 位就是它。CLDR 的關鍵字覆蓋不均（「笑」在繁中只對到 🤣🥰😼、粵語是 😆🤣😂，「哈哈」「開心」粵語沒有），要補口語叫法時另加 repo 裡自行整理的詞表（同粵語口語詞表，CC0），等使用者回報。
 - 簡繁：OpenCC（`fae2a0a`）的字典建成簡繁資料包 `opencc-hk2s`，`qim-core` 照 OpenCC 的規則轉換（`simplifier.rs`）：照 `hk2s.json` 先正規化 CJK 相容表意文字、用 TSPhrases 分段，再經 HKVariantsRevPhrases + HKVariantsRev、TSPhrases + TSCharacters 兩組，每組第一張有匹配的表勝出、表內取最長的鍵。`@tofu-risk` 的罕用簡體字不用、保留原字（多數字型顯示不出）。不用 `ferrous-opencc`：它的公開 API 只能用編進 crate 的字典（版本不是 `fae2a0a`），不能從資料包載入（M1 票 16 Comments）。
 
 ### 4.5 驗證（`cargo xtask data --verify`，M0 起每次改資料管線或來源都跑）
 
 - 不掉字：連打字集的字數等於來源中旗標符合、且有倉頡碼的字數。
 - 速成碼表的每個鍵長度都是 1 或 2；不存在長度 3 以上的鍵（ADR 0003 的守門測試）。
-- 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」；`anr` 的候選有「門口」；簡體模式 `anr` 的第一頁有「门口」、沒有「門口」；中文狀態打 `the` 第 2 個候選是 `the`。「日」「門口」經 `Engine` 查，含字頻排序；「门口」與 `the` 經 `Session` 打。
+- 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」；`anr` 的候選有「門口」；簡體模式 `anr` 的第一頁有「门口」、沒有「門口」；中文狀態打 `the` 第 2 個候選是 `the`；`hk` 的「笑」後面緊接 emoji 資料包裡它的第一個 emoji。「日」「門口」經 `Engine` 查，含字頻排序；「门口」、`the` 與 `hk` 經 `Session` 打。
 - 詞庫：每個詞的碼都由詞裡每個字的一個速成碼接成；報告列詞數、被門檻與字集濾掉的數量。
 - Unihan `kCangjie` 交叉比對，差異清單輸出成報表，不擋建置。
 - bigram 資料包 ≤ 8 MB（§4.3）。
 - 前處理保留的粵語用字（`corpora.rs` 的 `CANTONESE_KEPT`：晒、搵、吓、郁、喂、涌、咸、响、仆）在 train 的字頻都大於 0；字形對照表換掉的香港寫法與雙向並存寫法的另一種在 train 都不出現（§4.3，M1 票 17b）；詞庫沒有對照表換掉的寫法與「着名」這類反向的錯字，雙向並存寫法的詞每種寫法都在、詞頻相同、兩字字頻相同，含單向前一個字的詞都另收後一個字的寫法（§4.2，M1 票 17c）；雙向兩字的 unigram、詞庫裡含它的相鄰字每種寫法的 bigram 都相同（M1 票 17d）。
 - 字根提示：碼表的每個字（含擴展區）都有至少一個倉頡碼；抽查「丟」三代 `hgi`、五代先列 `mgi`，「問」兩代都是 `anr`。
 - 英文：報告列詞幹數、禁忌詞數、展開的詞形數、打不出而不收的數量與收的詞數。
-- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫、bigram、字根提示、簡繁與英文六份）。
+- emoji：報告列 CLDR 標註數、太泛而不收的關鍵字數、方框漢字數、有字打不出而不收的字詞數、收的字詞數與 emoji 數。
+- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫、bigram、字根提示、簡繁、英文與 emoji 七份）。
 
 ## 5. 測試策略
 

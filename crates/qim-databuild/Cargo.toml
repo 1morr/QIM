@@ -30,3 +30,7 @@ path = "../../scripts/experiments/s2hk-diff/main.rs"
 [[example]]
 name = "lexicon-forms"
 path = "../../scripts/experiments/lexicon-forms/main.rs"
+
+[[example]]
+name = "emoji-keywords"
+path = "../../scripts/experiments/emoji-keywords/main.rs"
