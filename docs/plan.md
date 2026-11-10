@@ -169,6 +169,7 @@ impl Session {
     pub fn all_candidates(&self) -> Vec<Candidate>;                  // 不分頁，候選展開面板用
     pub fn rerank_request(&self) -> Option<RerankRequest>;            // generation + 上下文 + 前 RERANK_LIMIT 個候選
     pub fn apply_rerank(&mut self, engine: &Engine, generation: u64, order: &[usize]) -> Option<Snapshot>;
+    pub fn paths(&self, limit: usize) -> Vec<ScoredPath>;            // lattice 蓋滿沒選定輸入碼的前 limit 條路徑與分數
 }
 ```
 
@@ -195,6 +196,7 @@ impl Session {
   - 名次真的變了才算候選變動、`generation` +1：同一份要求的其他結果照舊順序排，要作廢；原樣回傳不作廢。殼只在按鍵等事件之後要求，不因套用了重排結果再要求。
   - 翻頁不是候選變動，`generation` 不加；翻頁中收到的結果照樣套用，因為只動第一頁，看得到的那頁不變。加的話結果在翻頁時作廢，殼重要求後仍在翻頁中套用，沒有保護到什麼（M1 票 23，M0 票 09 留下的問題）。
   - `apply_rerank` 要 `Engine` 才回得出快照（組字的簡繁與字根），比原本的簽章多一個參數。
+  - `paths(limit)`（M3 票 07）：lattice 蓋滿沒選定的輸入碼的前 `limit` 條路徑（最多 beam 條）與同步層的路徑分，繁體原文、不套排位規則。候選列只放 `ranking.sentences` 條多段路徑，答案常在 lattice 裡卻不在候選列（口語 dev：候選列 56%、前 9 條路徑 67%），模型階梯讀它看重排模型能從幾條裡挑；產品的停鍵層要不要改用它、重排結果怎麼放進候選列，由階梯結論票定（`scripts/experiments/model-ladder/`）。
 
 ### 2.2 資料流
 
@@ -514,6 +516,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline、沒有打不出的題，否則失敗；集合沒有 baseline、或 baseline 的集合沒跑到也算失敗。改核心或資料包時必跑。
 - 更新 baseline 要用 `--update-baseline`，並在同一個 commit 說明原因。
 - dev 切分也有「有前文」的題（`build/corpus/<名>/dev-context.tsv`，取法同 test 的），`--dev` 一樣給前文、不給前文各打一次（M3 票 04）。
+- 長前文（M3 票 07）：`cargo xtask data` 另寫 `build/corpus/<名>/test-context-long.tsv` 與 `dev-context-long.tsv`，是 test 與 dev「有前文」的同一批題、同順序，前文換成同一段裡前面最多 200 字（不跨換行）。基準不讀；模型階梯截成前文 0、50、200 字量（`scripts/experiments/model-ladder/`）。
 - 調參（β、γ、語料權重）只看 dev 切分：`cargo xtask bench --dev [--set <鍵>=<值>]` 打各集合的 dev 切分與由它取出的單字、詞，不比 baseline（`docs/development.md`〈dev 切分調參〉）。test 與個人集只用 `--check` 守門。
 - 使用者回報的新案例一律加進 `fixed.tsv`。網頁的「回報」把剛才用空白或數字鍵選字上屏的那次組字存成一行（輸入碼、上屏的字、來源欄附當時的首選），清單存在 `localStorage`、可直接改；組字中按標點、Enter 的上屏不算（M1 票 12）。
 - 防洩漏：個人集不進訓練語料，也不匯入基準用的 `UserModel`；`qim-databuild` 報告各測試集有幾句原樣出現在訓練語料，不為零要先查明才算數（CyIME 踩過，`docs/research/cyime.md` §3）。

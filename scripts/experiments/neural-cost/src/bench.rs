@@ -9,10 +9,19 @@ use candle_core::Result;
 use crate::footprint::{footprint, heap_in_use};
 use crate::model::{self, Scorer};
 
-/// 重排前幾條路徑（plan §7.8）。
+/// 重排前幾條路徑（M2 票 11 的近似）；環境變數 `NC_PATHS` 可蓋掉（M3 票 07 定的 N 重量用）。
 pub const PATHS: usize = 6;
-/// 每條路徑的字數：M3 一次重排的是整段輸入碼的候選句，取 8 字的短句。
+/// 每條路徑的字數：M3 一次重排的是整段輸入碼的候選句，取 8 字的短句；`NC_PATH_LEN` 可蓋掉。
 pub const PATH_LEN: usize = 8;
+
+/// `name` 的環境變數是正整數就用它，否則用 `default`（iOS 擴充沒有這些變數，照預設）。
+fn env_or(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(default)
+}
 /// 上下文字數（plan §7.8）。
 pub const CONTEXTS: [usize; 3] = [0, 50, 200];
 /// 每個上下文長度先跑幾次不計。
@@ -103,8 +112,9 @@ fn measure(path: &Path, iterations: usize, prefix: Prefix) -> Result<String> {
     let after_load = footprint().now;
 
     let vocab = loaded.kind.vocab();
-    let candidates: Vec<Vec<u32>> = (0..PATHS)
-        .map(|i| tokens(100 + i as u64, PATH_LEN, vocab))
+    let (paths, path_len) = (env_or("NC_PATHS", PATHS), env_or("NC_PATH_LEN", PATH_LEN));
+    let candidates: Vec<Vec<u32>> = (0..paths)
+        .map(|i| tokens(100 + i as u64, path_len, vocab))
         .collect();
     let start = Instant::now();
     prefix.score(loaded.scorer.as_ref(), &[], &candidates)?;
@@ -112,7 +122,7 @@ fn measure(path: &Path, iterations: usize, prefix: Prefix) -> Result<String> {
 
     let _ = writeln!(
         out,
-        "{} {} params={:.2}M file={:.2}MB threads={} prefix={}",
+        "{} {} params={:.2}M file={:.2}MB threads={} prefix={} paths={paths}x{path_len}",
         loaded.kind.stem(),
         loaded.format.label(),
         loaded.params as f64 / 1e6,

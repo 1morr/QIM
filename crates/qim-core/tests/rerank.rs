@@ -180,3 +180,43 @@ fn on_a_focused_segment_the_context_is_the_segments_before_it() {
     assert_eq!(request.context, "月");
     assert_eq!(request.candidates[0].text, "日");
 }
+
+/// 前 n 條整串路徑（M3 票 07，模型階梯）：lattice 蓋滿沒選定的輸入碼的部分路徑，依分數由高到低、
+/// 附分數；最多 beam 條。和候選列不同，多段路徑不受方案的 `sentences` 限制。
+#[test]
+fn paths_list_the_best_whole_paths_with_scores() {
+    let mut ime = Ime::new();
+    assert!(ime.session.paths(5).is_empty(), "沒有組字");
+    ime.press(Key::Letter('a'));
+    ime.press(Key::Letter('b'));
+    let paths = ime.session.paths(3);
+    let texts: Vec<&str> = paths.iter().map(|p| p.text.as_str()).collect();
+    assert_eq!(texts, ["日月", "曰月", "昌月"]);
+    assert!(paths.windows(2).all(|w| w[0].score >= w[1].score));
+    // `a` 的 10 個字各接「月」：全部 10 條，候選列只有方案的 3 條句子。
+    assert_eq!(ime.session.paths(100).len(), 10);
+    let whole = ime
+        .session
+        .all_candidates()
+        .iter()
+        .filter(|c| c.text.chars().count() == 2)
+        .count();
+    assert_eq!(whole, Ranking::default().sentences.into());
+}
+
+/// 選了開頭一段之後，路徑只蓋剩下的輸入碼。
+#[test]
+fn paths_cover_only_the_input_left_after_a_selected_beginning() {
+    let mut ime = Ime::new();
+    ime.press(Key::Letter('a'));
+    ime.press(Key::Letter('b'));
+    let at = ime
+        .session
+        .all_candidates()
+        .iter()
+        .position(|c| c.text == "曰")
+        .unwrap();
+    ime.session.select(&ime.engine, &mut ime.user, at);
+    let texts: Vec<String> = ime.session.paths(5).into_iter().map(|p| p.text).collect();
+    assert_eq!(texts, ["月"]);
+}

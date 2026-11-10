@@ -23,6 +23,15 @@ pub struct RerankRequest {
     pub candidates: Vec<Candidate>,
 }
 
+/// lattice 裡蓋滿沒選定的輸入碼的一條路徑（[`Session::paths`]）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScoredPath {
+    /// 字詞接起來的文字（繁體原文，不經簡體模式的後處理）。
+    pub text: String,
+    /// 同步層的路徑分（plan §2.3），只在同一串輸入碼內可比。
+    pub score: f64,
+}
+
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
@@ -442,6 +451,17 @@ impl Session {
         self.candidates
             .iter()
             .map(ShownCandidate::to_candidate)
+            .collect()
+    }
+
+    /// lattice 蓋滿沒選定的輸入碼的前 `limit` 條路徑與分數，依分數由高到低，最多方案的 beam 條
+    /// （plan §2.3）。和候選列不同：多段路徑不受方案的 `sentences` 限制，也不套排位規則。模型階梯
+    /// 實驗讀它看重排模型能從幾條路徑裡挑（M3 票 07）；沒有組字時是空的。
+    pub fn paths(&self, limit: usize) -> Vec<ScoredPath> {
+        self.lattice
+            .whole_paths(limit)
+            .into_iter()
+            .map(|(score, text)| ScoredPath { text, score })
             .collect()
     }
 

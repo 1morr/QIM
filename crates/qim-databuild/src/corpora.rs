@@ -310,3 +310,15 @@ pub fn dev_items_path(root: &Path, name: &str) -> PathBuf {
 pub fn dev_context_items_path(root: &Path, name: &str) -> PathBuf {
     build_dir(root, name).join("dev-context.tsv")
 }
+
+/// 語料 `name` 的長前文題（test 切分，`build/corpus/<名>/test-context-long.tsv`）：「有前文」的題換成
+/// 長前文，模型階梯讀（M3 票 07）；`qim_bench::context_long_items` 讀同一個路徑，`shared_paths` 比對。
+pub fn context_long_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("test-context-long.tsv")
+}
+
+/// 語料 `name` 的 dev 長前文題（`build/corpus/<名>/dev-context-long.tsv`）；`qim_bench::dev_context_long_items`
+/// 讀同一個路徑，`shared_paths` 比對。
+pub fn dev_context_long_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev-context-long.tsv")
+}

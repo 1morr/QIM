@@ -54,6 +54,16 @@ pub fn dev_items(name: &str) -> String {
 pub fn dev_context_items(name: &str) -> String {
     format!("build/corpus/{name}/dev-context.tsv")
 }
+/// 集合 `name` 的長前文題（test 切分）：[`CONTEXT_DIRS`] 的同一批題，前文換成同一段裡前面最多
+/// 200 字；`cargo xtask data` 寫的，不進 git。基準不讀，模型階梯實驗讀（M3 票 07，
+/// `scripts/experiments/model-ladder/`）。
+pub fn context_long_items(name: &str) -> String {
+    format!("build/corpus/{name}/test-context-long.tsv")
+}
+/// 集合 `name` 的 dev 長前文題，同 [`context_long_items`]，取自 [`dev_context_items`] 的同一批題。
+pub fn dev_context_long_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev-context-long.tsv")
+}
 /// dev 模式裡由集合 `<名>` 的句子取出的短輸入，集合名是 `<名>` 接這些字尾：
 /// 每個字（單字），與句子裡出現的詞庫的詞（2 到 [`SHORT_WORD_CHARS`] 字）。
 pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];
@@ -361,9 +371,15 @@ fn load_baseline(path: &Path, tolerate_bad_format: bool) -> Result<Option<Baseli
     }
 }
 
+/// 打一個集合（每題用新的 `Session` 與空白的 `UserModel`，有前文的題先給前文），算的指標同基準；
+/// 模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
+pub fn score_set(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetResult {
+    score::score(engine, name, items, private)
+}
+
 /// 個人集：沒有 [`PERSONAL_USERDB`] 就跳過；題目檔第一行記的來源 sha256 要等於現在的
 /// [`PERSONAL_USERDB`]，否則是還沒轉出或換過資料沒重轉，也跳過，免得安靜地跑舊題目。
-fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
+pub fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
     let userdb = root.join(PERSONAL_USERDB);
     if !userdb.exists() {
         return Ok(Personal::Missing);
@@ -383,7 +399,7 @@ fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
 }
 
 /// 各語料集合的名稱與題目，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
-fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
+pub fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
     load_sets(root, &CORPUS_DIRS, parse_corpus)
 }
 
@@ -462,7 +478,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 /// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]，建 `Engine`；
 /// `overrides` 蓋掉方案的打分參數。
 /// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
-fn load_engine(
+pub fn load_engine(
     root: &Path,
     overrides: &[(&str, &str)],
 ) -> Result<(Engine, Vec<LoadedPack>, Option<Lexicon>), String> {

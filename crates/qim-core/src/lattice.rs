@@ -136,6 +136,18 @@ impl Lattice {
         }
     }
 
+    /// 蓋滿整串的前 `limit` 條路徑的分數與文字，依分數由高到低（最多 beam 條）；沒有輸入碼時是空的。
+    pub fn whole_paths(&self, limit: usize) -> Vec<(f64, String)> {
+        if self.input.is_empty() {
+            return Vec::new();
+        }
+        self.columns[self.input.len()]
+            .iter()
+            .take(limit)
+            .map(|node| (node.score, node.text.clone()))
+            .collect()
+    }
+
     /// 首選路徑的各段（碼與字詞）；沒有路徑蓋滿整串時是空的。
     pub fn best_segments(&self) -> Vec<Segment> {
         let end = self.input.len();
