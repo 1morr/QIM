@@ -72,3 +72,23 @@ Blocked by: 02
     - `web/src/main.ts` 的 `applyEmojiCandidates` 和 `applyEnglishCandidates` 同形，留給票 01 拆設定區時一起收。
     - `pipeline.rs` 的 `build_packs` 裡 emoji 那段約 25 行，其他資料包也是在那裡讀來源、組參數，沒有另抽 `emoji::build`。
     - 簡體模式轉換後重複而被丟掉的候選，它的 emoji 會留下來，接在同字的那個候選後面。顯示的字相同，不算錯。
+- 2026-11-11 合併 main 之後（`ad8e8c8`，含票 01、04、14）：
+  - emoji 開關搬進 `web/src/settings.ts` 的 `ROWS`，`settings.spec.ts` 的預設值測試補上它。
+  - 個人集經軟連結接上（`bench/personal` → 主 checkout）。
+  - `cargo xtask data --verify` 通過：語言模型 sha256 因票 04 的句首變成 `dfa21786…387d`，emoji 資料包 `7bc0a3ff…508f` 不變。
+  - `cargo xtask bench --check` 和合併後的 main baseline 比：答錯數全同，13 個集合都沒有翻盤，固定題 84/84。修正次數變多：
+
+    | 集合 | 修正 前 → 後 |
+    | --- | --- |
+    | yue-wiki | 4340 → 4346 |
+    | zh-wiki | 4380 → 4385 |
+    | common-voice-yue | 3946 → 3964 |
+    | hkcancor | 2573 → 2596 |
+    | yue-wiki·前文／不給 | 2288 → 2292／2300 → 2304 |
+    | zh-wiki·前文／不給 | 2166 → 2169／2188 → 2191 |
+    | common-voice-yue·前文／不給 | 643 → 645／655 → 657 |
+    | hkcancor·前文／不給 | 1779 → 1796／1801 → 1817 |
+    | 個人集 | 1446 → 1466（答錯 1081 不變） |
+
+  - 原因和合併前相同：emoji 佔第一頁的位置，把第 7–9 位的正解擠到第二頁。合併後增幅較大：hkcancor 約 +0.9%，個人集約 +1.4%；合併前公開集約 +0.3%。
+  - 照協調者指示 `--update-baseline`，公開集寫進 `bench/baseline.json`；個人集的 baseline 在主 checkout，各 worktree 共用。
