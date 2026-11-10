@@ -234,7 +234,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let mut chars: Vec<(String, u64)> = Vec::new();
     let mut second_chars: Vec<(String, u64)> = Vec::new();
     // 驗證用：各語料的基準檔內容與 train 檔，洩漏要拿每個基準集比對所有 train。
-    let mut benches: Vec<(&str, String)> = Vec::new();
+    let mut benches: Vec<(String, String)> = Vec::new();
     // 各語料的 train 切分與權重，bigram 用；洩漏檢查也比對它們。
     let mut trains: Vec<(PathBuf, u64)> = Vec::new();
     for corpus in &CORPORA {
@@ -265,16 +265,26 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         std::fs::create_dir_all(&bench_dir).map_err(Error::io(&bench_dir))?;
         let bench_rel = format!("{}/{}.tsv", corpus.group.dir(), corpus.name);
         write(root.join(&bench_rel), first.bench.as_bytes())?;
+        let context_dir = root.join(corpus.group.context_dir());
+        std::fs::create_dir_all(&context_dir).map_err(Error::io(&context_dir))?;
+        let context_rel = format!("{}/{}.tsv", corpus.group.context_dir(), corpus.name);
+        write(root.join(&context_rel), first.context_bench.as_bytes())?;
         write(dir.join("chars.tsv"), first.chars.as_bytes())?;
         write(
             corpora::dev_items_path(root, corpus.name),
             first.dev_items.as_bytes(),
+        )?;
+        write(
+            corpora::dev_context_items_path(root, corpus.name),
+            first.dev_context_items.as_bytes(),
         )?;
         corpora.push(CorpusSummary {
             name: corpus.name.into(),
             counts: first.counts,
             bench_sentences: first.bench.lines().count(),
             bench: bench_rel.into(),
+            context_sentences: first.context_bench.lines().count(),
+            context_bench: context_rel.into(),
         });
         attributions.push((corpus.group, corpus.attribution(source)));
         if verify {
@@ -286,6 +296,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                     corpus.name,
                     &transcoder,
                     &first.bench,
+                    &first.context_bench,
                     open(&train_path)?,
                     open(&dev_path)?,
                     &first.digests(),
@@ -298,7 +309,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         trains.push((train_path, corpus.weight));
         chars.push((first.chars, corpus.weight));
         if verify {
-            benches.push((corpus.name, first.bench));
+            benches.push((corpus.name.to_string(), first.bench));
+            benches.push((format!("{} 有前文", corpus.name), first.context_bench));
         }
     }
     for group in Group::ALL {
@@ -471,7 +483,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let personal = build_personal(root, &transcoder)?;
     let report = if verify {
         let built = first.built();
-        let benches: Vec<(&str, &str)> = benches.iter().map(|(n, b)| (*n, b.as_str())).collect();
+        let benches: Vec<(&str, &str)> = benches
+            .iter()
+            .map(|(n, b)| (n.as_str(), b.as_str()))
+            .collect();
         let readers = trains
             .iter()
             .map(|(p, _)| open(p))
@@ -677,6 +692,8 @@ fn build_corpus<W: Write>(
         counts,
         bench,
         dev_items,
+        context_bench,
+        dev_context_items,
         chars,
         train,
         dev,
@@ -685,6 +702,8 @@ fn build_corpus<W: Write>(
         counts,
         bench,
         dev_items,
+        dev_context_items,
+        context_bench,
         chars,
         train: train.sha256(),
         dev: dev.sha256(),
@@ -703,6 +722,10 @@ struct Built {
     bench: String,
     /// dev 的調參題；由 dev 切分決定，`dev` 的 sha256 相同它就相同，不另比。
     dev_items: String,
+    /// dev 的「有前文」調參題；同 `dev_items`，不另比。
+    dev_context_items: String,
+    /// 「有前文」的題。
+    context_bench: String,
     chars: String,
     train: String,
     dev: String,
@@ -713,6 +736,7 @@ impl Built {
     fn digests(&self) -> CorpusDigests {
         CorpusDigests {
             bench: sha256_hex(self.bench.as_bytes()),
+            context_bench: sha256_hex(self.context_bench.as_bytes()),
             train: self.train.clone(),
             dev: self.dev.clone(),
             chars: sha256_hex(self.chars.as_bytes()),

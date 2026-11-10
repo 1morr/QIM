@@ -264,8 +264,9 @@ proptest! {
         }
     }
 
-    /// 改選某一段後，沒選定的分段等於把剩下的輸入碼從頭打一次的分段（plan §2.1 的重算）；
-    /// 各分段的碼接起來是整串輸入碼，選定的都在沒選定的前面。
+    /// 改選某一段後，沒選定的分段等於以選定的分段為前文、把剩下的輸入碼從頭打一次的分段
+    /// （plan §2.1 的重算、§2.3 接選定分段的最後一字）；各分段的碼接起來是整串輸入碼，
+    /// 選定的都在沒選定的前面。
     #[test]
     fn unselected_segments_equal_those_of_typing_the_unselected_input_afresh(
         table in random_table(),
@@ -290,6 +291,7 @@ proptest! {
             }
 
             let mut fresh = Session::default();
+            fresh.set_context(&composition.selected_text());
             let mut fresh_user = user.clone();
             let mut typed = Snapshot::default();
             for c in composition.unselected_input().chars() {
@@ -346,13 +348,14 @@ proptest! {
         }
     }
 
-    /// 匯出後匯入等價（plan §5.1）：學過的計數、自動造詞、手動加的詞與觸發詞都還在。
+    /// 匯出後匯入等價（plan §5.1）：學過的計數、自動造詞、手動加的詞與觸發詞、常用語都還在。
     #[test]
     fn exporting_then_importing_gives_an_equal_user_model(
         table in random_table(),
         words in random_words(),
         keys in prop::collection::vec((any::<bool>(), key()), 0..100),
         added in prop::collection::vec(("[一-十]{1,3}", prop::option::of("[abc]{1,3}")), 0..5),
+        phrases in prop::collection::vec((r"[一a \\\n\t]{1,6}", prop::option::of("[abc]{1,3}")), 0..5),
     ) {
         let (other_table, other_words) = other_scheme(&table, &words);
         let engines = [
@@ -369,9 +372,12 @@ proptest! {
             // 字沒有碼又沒給觸發詞時加不進去，那就不加。
             let _ = user.add_word(&engines[0], text, trigger.as_deref());
         }
+        for (text, trigger) in &phrases {
+            user.add_phrase(&engines[1], text, trigger.as_deref()).unwrap();
+        }
 
         let exported = user.export();
-        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v1"));
+        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v2"));
         let imported = UserModel::import(&exported);
         prop_assert_eq!(imported, Ok(user));
     }

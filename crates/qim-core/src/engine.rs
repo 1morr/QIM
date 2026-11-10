@@ -6,9 +6,9 @@ use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{
-    CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack, Simplifier,
-    SimplifierPack, UserModel, Word,
+    CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack,
+    Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -163,7 +163,7 @@ impl Engine {
         lattice::candidates(
             self,
             user,
-            &Lattice::from_input(self, user, input),
+            &Lattice::from_input(self, user, None, input),
             false,
             false,
         )
@@ -258,6 +258,19 @@ impl Engine {
     pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge) -> f64 {
         let first = self.language_model.log_prob(prev, edge.first);
         first + edge.inner + personal_bonus(first + edge.rest, edge.personal)
+    }
+
+    /// 組字接在前文 `before` 後面時，開頭的字要接的前一字（plan §2.3）。bigram 只在句內訓練
+    /// （句子以不是字母也不是數字的字元分開），所以照切句的規則：前文以字結尾時是那個字；以
+    /// 標點、空白或符號結尾，或是空的（輸入框的開頭）時是句首 [`CLAUSE_START`]。語言模型裡沒有
+    /// 它的統計（英文、數字、罕用字，或資料包沒有句首）時是 `None`，照不知道前文打。
+    pub(crate) fn context_char(&self, before: &str) -> Option<char> {
+        let last = before
+            .chars()
+            .next_back()
+            .filter(|c| c.is_alphanumeric())
+            .unwrap_or(CLAUSE_START);
+        self.language_model.has_statistics(last).then_some(last)
     }
 
     pub(crate) fn sentences(&self) -> usize {
@@ -384,14 +397,20 @@ impl Engine {
             .collect()
     }
 
-    /// 輸入碼 `input` 的全部連打字集的字與詞與它們在組字開頭的分數，依分數由高到低（同分照
-    /// 碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
-    pub(crate) fn span(&self, user: &UserModel, input: &str) -> Vec<(f64, String)> {
+    /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面（`None` 是組字開頭沒有
+    /// 前一字）的分數，依分數由高到低（同分照碼表、詞庫的順序）；`input` 中間的分隔記號見
+    /// [`Engine::exact`]。
+    pub(crate) fn span(
+        &self,
+        user: &UserModel,
+        before: Option<char>,
+        input: &str,
+    ) -> Vec<(f64, String)> {
         let user = user.for_scheme(&self.scheme.id);
         let mut edges: Vec<(f64, String)> = self
             .exact(user, input, 0, usize::MAX)
             .into_iter()
-            .map(|e| (self.edge_score(None, &e), e.text))
+            .map(|e| (self.edge_score(before, &e), e.text))
             .collect();
         edges.sort_by(|a, b| b.0.total_cmp(&a.0));
         edges

@@ -21,7 +21,7 @@ pub use code_table::{CodeEntry, CodeTable};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
 pub use engine::Engine;
 pub use english::EnglishWords;
-pub use language_model::{CharModel, LOG_PROB_STEP, LanguageModel};
+pub use language_model::{CLAUSE_START, CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
 pub use pack::{
     EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError,
@@ -34,4 +34,4 @@ pub use session::{
     Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
-pub use user::{ImportError, UserModel, UserWordError};
+pub use user::{ImportError, Phrase, UserModel, UserWordError};

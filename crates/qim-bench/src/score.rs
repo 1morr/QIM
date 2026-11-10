@@ -1,14 +1,14 @@
 //! 用核心實際打每一題、算分數：只經 `Session::handle`，不重寫排序（plan §1.3）。
 //!
 //! 每題打兩次，都用新的 `Session` 與空白的 `UserModel`，題與題互不影響（plan §5.2；
-//! 學習模式 [`learning`] 例外）：
+//! 學習模式 [`learning`] 例外）；有前文的題先給前文（`Session::set_context`）：
 //! - 逐鍵打完輸入碼不選字：最後的首選算正確率，途中的首選算跳動。
 //! - 模擬使用者選字打出整題：算修正次數與每字按鍵數（[`simulate`]）。
 
 use std::collections::BTreeSet;
 use std::fmt;
 
-use qim_core::{Candidate, Engine, Key, Options, Session, Snapshot, UserModel};
+use qim_core::{Candidate, Engine, Key, Session, Snapshot, UserModel};
 
 use crate::items::{Item, Unit};
 
@@ -183,8 +183,9 @@ pub fn score(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetR
     for item in items {
         let expected = item.expected();
         let chars = expected.chars().count();
-        let (top, jitter) = type_through(engine, &item.units);
-        let typing = simulate(engine, None, &item.units);
+        let context = item.context.as_deref();
+        let (top, jitter) = type_through(engine, context, &item.units);
+        let typing = simulate(engine, None, context, &item.units);
         let correct = top == expected;
         result.items.push(ItemResult {
             line: item.line,
@@ -220,13 +221,14 @@ pub struct LearningSet {
     pub corrections_on: usize,
 }
 
-/// 學習模式（plan §5.2）：照 `items` 的順序各模擬一次，學習關與學習開。
+/// 學習模式（plan §5.2）：照 `items` 的順序各模擬一次，學習關與學習開；有前文的題給前文。
 pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> LearningSet {
     let mut learned = UserModel::default();
     let (mut off, mut on) = (0, 0);
     for item in items {
-        off += simulate(engine, None, &item.units).correction_count;
-        on += simulate(engine, Some(&mut learned), &item.units).correction_count;
+        let context = item.context.as_deref();
+        off += simulate(engine, None, context, &item.units).correction_count;
+        on += simulate(engine, Some(&mut learned), context, &item.units).correction_count;
     }
     LearningSet {
         name: name.to_string(),
@@ -245,12 +247,15 @@ fn top_of(snapshot: &Snapshot) -> String {
         .unwrap_or_default()
 }
 
-/// 逐鍵打完輸入碼、不選字：回傳最後的首選與跳動次數。
+/// 逐鍵打完輸入碼、不選字：回傳最後的首選與跳動次數。有 `context` 時先給前文。
 ///
 /// 跳動：每一鍵之前，首選開頭屬於已打完的單位的那幾個字（首選比它短就取整個首選），
 /// 被這一鍵改掉就算一次。
-fn type_through(engine: &Engine, units: &[Unit]) -> (String, usize) {
+fn type_through(engine: &Engine, context: Option<&str>, units: &[Unit]) -> (String, usize) {
     let mut session = Session::default();
+    if let Some(context) = context {
+        session.set_context(context);
+    }
     let mut user = UserModel::default();
     let (mut top, mut done_chars, mut jitter) = (String::new(), 0, 0);
     for unit in units {
@@ -285,24 +290,29 @@ struct Typing {
 /// 翻完所有頁都接不上（卡住）時：還剩兩個以上單位就按 Esc 清掉（算一次修正），
 /// 之後一個單位一個單位打；只剩一個單位，或已經一個一個打了還卡住，就是打不出這題。
 ///
-/// 有 `learning` 時上屏的字詞照常學進它；沒有時用空白的 `UserModel` 並開無痕，題內也不學。
-fn simulate(engine: &Engine, learning: Option<&mut UserModel>, units: &[Unit]) -> Typing {
+/// 有 `context` 時每次從空的組字打起都先給前文：`context` 接著這題已上屏的字，同殼在上屏後
+/// 給游標前的文字。
+///
+/// 有 `learning` 時上屏的字詞照常學進它；沒有時用空白的 `UserModel`，每次上屏後換回空白的，
+/// 題內也不學（核心只在上屏時學）。不用無痕：無痕連前文也不用（brief §8）。
+fn simulate(
+    engine: &Engine,
+    learning: Option<&mut UserModel>,
+    context: Option<&str>,
+    units: &[Unit],
+) -> Typing {
     let mut session = Session::default();
     let mut blank = UserModel::default();
-    let user = match learning {
-        Some(user) => user,
-        None => {
-            session.set_options(Options {
-                incognito: true,
-                ..Options::default()
-            });
-            &mut blank
-        }
-    };
+    let forget = learning.is_none();
+    let user = learning.unwrap_or(&mut blank);
     let mut typing = Typing::default();
-    let mut press = |key: Key, typing: &mut Typing| {
+    let mut press = |session: &mut Session, key: Key, typing: &mut Typing| {
         typing.keys += 1;
-        session.handle(engine, user, key)
+        let snapshot = session.handle(engine, user, key);
+        if forget && snapshot.commit.is_some() {
+            *user = UserModel::default();
+        }
+        snapshot
     };
     let target: String = units.iter().map(|u| u.text.as_str()).collect();
     // 每個單位在目標裡的開頭（以字計）。
@@ -329,8 +339,12 @@ fn simulate(engine: &Engine, learning: Option<&mut UserModel>, units: &[Unit]) -
                 return typing;
             };
             let end = if one_by_one { next + 1 } else { units.len() };
+            if let Some(context) = context {
+                let typed: String = target.chars().take(done).collect();
+                session.set_context(&format!("{context}{typed}"));
+            }
             for c in units[next..end].iter().flat_map(|u| u.code.chars()) {
-                snapshot = press(Key::for_input(c), &mut typing);
+                snapshot = press(&mut session, Key::for_input(c), &mut typing);
             }
             if snapshot.composition.input.is_empty() {
                 return typing;
@@ -361,7 +375,7 @@ fn simulate(engine: &Engine, learning: Option<&mut UserModel>, units: &[Unit]) -
         } else {
             return typing;
         };
-        snapshot = press(key, &mut typing);
+        snapshot = press(&mut session, key, &mut typing);
         let Some(text) = text else {
             continue;
         };

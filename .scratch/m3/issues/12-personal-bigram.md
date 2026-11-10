@@ -21,3 +21,5 @@ Blocked by: 03, 04
 - [ ] plan §2.3、§2.4 已更新；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-11 票 14：`# qim-userdict v2` 的檔頭、v1 匯入、詞欄跳脫（`\\`、`\n`、`\t`）與 `phrase` 來源已在 `qim-core/src/user.rs`；這張票往 v2 加 bigram 的列即可，見 plan §2.4。

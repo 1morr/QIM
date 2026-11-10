@@ -69,7 +69,41 @@ impl WebSession {
             .map_err(js_error)
     }
 
-    /// 使用者詞與學習計數匯出成 `# qim-userdict v1` 的 TSV（plan §2.4），網頁存 `localStorage`、
+    /// 存一條常用語；`trigger` 是空字串時沒有觸發詞，只能從清單選（plan §2.4）。同樣的文字再存
+    /// 一次換上新的觸發詞。
+    #[wasm_bindgen(js_name = addPhrase)]
+    pub fn add_phrase(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {
+        let trigger = (!trigger.is_empty()).then_some(trigger);
+        self.user
+            .add_phrase(&self.engine, text, trigger)
+            .map_err(js_error)
+    }
+
+    /// 刪掉文字是 `text` 的常用語；沒有這條時回傳 `false`。
+    #[wasm_bindgen(js_name = removePhrase)]
+    pub fn remove_phrase(&mut self, text: &str) -> bool {
+        self.user.remove_phrase(&self.engine, text)
+    }
+
+    /// 常用語的清單，依文字排。
+    pub fn phrases(&self) -> Vec<WebPhrase> {
+        self.user
+            .phrases(&self.engine)
+            .into_iter()
+            .map(|p| WebPhrase {
+                text: p.text,
+                trigger: p.trigger.unwrap_or_default(),
+            })
+            .collect()
+    }
+
+    /// 從清單選了常用語：照觸控鍵盤的 `text` 上屏（組字中先上屏組字），回傳快照給網頁插入。
+    #[wasm_bindgen(js_name = commitText)]
+    pub fn commit_text(&mut self, text: &str) -> WebSnapshot {
+        self.session.text(&self.engine, &mut self.user, text).into()
+    }
+
+    /// 使用者詞與學習計數匯出成 `# qim-userdict v2` 的 TSV（plan §2.4），網頁存 `localStorage`、
     /// 下載成檔。
     #[wasm_bindgen(js_name = exportUserDict)]
     pub fn export_user_dict(&self) -> String {
@@ -404,6 +438,16 @@ impl WebRadicalHints {
             })
             .collect())
     }
+}
+
+/// 一條常用語。JS 端叫 `Phrase`。
+#[wasm_bindgen(js_name = Phrase, getter_with_clone)]
+pub struct WebPhrase {
+    #[wasm_bindgen(readonly)]
+    pub text: String,
+    /// 觸發詞；沒有時是空字串。
+    #[wasm_bindgen(readonly)]
+    pub trigger: String,
 }
 
 /// 候選裡一個字的字根提示。JS 端叫 `RadicalHint`。
