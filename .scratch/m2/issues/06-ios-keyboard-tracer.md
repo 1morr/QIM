@@ -1,6 +1,6 @@
 # 06: 空的鍵盤擴充裝上 iPhone（iOS tracer）
 
-Status: ready-for-agent
+Status: done
 Blocked by: None (can start immediately)
 讀: brief §10、§11、§12.3；plan §3.2、§3.3、§7.3、§8（免費佈建那列）；`docs/research/platform-frameworks.md` §3；spec〈共同規則〉
 
@@ -17,8 +17,15 @@ Blocked by: None (can start immediately)
 
 ## 驗收
 
-- [ ] 備忘錄裡讀回擴充送出的「日」；截圖 `.scratch/m2/evidence/06-*.png`。
-- [ ] App Group 的讀寫結果有實測記錄（能、不能、或只在某條件下能）。
-- [ ] 空擴充的常駐記憶體有一個數字（之後扣掉這個基線），附機型與 iOS 版本。
-- [ ] README 有日期、Xcode 版本、iOS 版本、步驟；brief §12.3 補了查證的事實與來源。
-- [ ] `cargo xtask check` 綠燈。
+- [x] 備忘錄裡讀回擴充送出的「日」；截圖 `.scratch/m2/evidence/06-*.png`。
+- [x] App Group 的讀寫結果有實測記錄（能、不能、或只在某條件下能）。
+- [x] 空擴充的常駐記憶體有一個數字（之後扣掉這個基線），附機型與 iOS 版本。
+- [x] README 有日期、Xcode 版本、iOS 版本、步驟；brief §12.3 補了查證的事實與來源。
+- [x] `cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-10 實作：Xcode 已登入免費帳號（Team 先前已信任），不用使用者登入或信任開發者。加入鍵盤與第一次切到 QIM 實驗鍵盤由使用者手動做；之後按鍵與讀回由 iphone-use 完成。iphone-use 判定地球鍵被遮住，點座標才有反應，長按座標打到格式選單。
+- 2026-11-10 實作：`os_proc_available_memory()` 在擴充裡有值，順手記下 footprint + available = 177.0 MB；這是依 Apple 定義推得的上限，實際終止點仍由票 09 加壓確認。
+- 2026-11-10 實作：每個擴充各佔一個免費帳號的 App ID（本實驗 2 個），用到 bundle 前綴 `com.personal.qim`；他人重量時換自己的前綴（`Local.xcconfig.example`）。
+- code-review 未處理（實驗碼，留給票 08 視需要處理）：主 App 與擴充各寫一份「組 lines 再逐行寫 log」（Duplicated Code）；`Probe` 同時管記憶體與 App Group（Divergent Change）；讀寫結果用字串前綴表示（Primitive Obsession），要程式判斷成敗時改 enum；量測沒記 PID，分不出冷啟動與重新載入，票 08 量基線時建議加上；主 App 讀 `from-keyboard.txt` 與重寫按鈕是票外的小附加。

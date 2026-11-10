@@ -36,6 +36,7 @@
 | 2026-11-06 | M2（公開 repo） | 補 Apache-2.0 `LICENSE` 與 `README.md`，repo 公開到 https://github.com/1morr/QIM | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-07 | M2（M1 review） | 重跑 check 與 bench 全過；決定 M2 先清理 FFI 前的介面與 `set_options` bug、另開 CI 小票、只用 iPhone 18 Pro Max 量；見 plan §7.3 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-07 | M2 拆票 | plan §7.3 細化成 `.scratch/m2/spec.md`，拆 12 張票（票序見 spec）；01、04、05、06 可平行 | 新 session 下 `/implement .scratch/m2/issues/01-set-options-stale-candidates.md` |
+| 2026-11-10 | M2 06 | 免費佈建能跑鍵盤擴充，備忘錄打出「日」；App Group 擴充可讀不可寫；空擴充約 10 MB、上限推得 177 MB；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/01-set-options-stale-candidates.md` |
 
 ## 偏差與決定
 

@@ -1,0 +1,62 @@
+# xcodegen 的專案描述；產生的 QIMKeyboardExp.xcodeproj 不進 git（README〈建置與安裝〉）。
+name: QIMKeyboardExp
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+options:
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: NO
+targets:
+  QIMKeyboardExp:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: QIM 實驗
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        QIMAppGroup: $(QIM_APP_GROUP)
+    entitlements:
+      path: App/App.entitlements
+      properties:
+        com.apple.security.application-groups: [$(QIM_APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(QIM_BUNDLE_PREFIX).exp
+    dependencies:
+      - target: QIMKeyboard
+        embed: true
+  QIMKeyboard:
+    type: app-extension
+    platform: iOS
+    sources: [Keyboard, Shared]
+    info:
+      path: Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: QIM 實驗鍵盤
+        QIMAppGroup: $(QIM_APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: zh-Hant
+            RequestsOpenAccess: false
+    entitlements:
+      path: Keyboard/Keyboard.entitlements
+      properties:
+        com.apple.security.application-groups: [$(QIM_APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(QIM_BUNDLE_PREFIX).exp.keyboard
