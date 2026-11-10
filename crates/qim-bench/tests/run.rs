@@ -671,6 +671,93 @@ fn language_model_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprint
     assert_ne!(before, pack_line(&repo), "換了語言模型，指紋要跟著變");
 }
 
+/// 「有前文」的集合（plan §5.2）：`bench/<目錄>/context/<名>.tsv`，一行「前文<TAB>逐字碼<TAB>句子」。
+/// 語言模型只有「日 → 曰」，所以前文以「日」結尾時 `a` 的首選是「曰」。
+fn repo_with_context() -> TempDir {
+    let repo = repo();
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &pack_bytes_with(TABLE, None, Some("bigram")),
+    );
+    write(
+        repo.path(),
+        "build/packs/bigram/bigram.pack",
+        &language_model_bytes('曰'),
+    );
+    write(
+        repo.path(),
+        "bench/colloquial/context/talk.tsv",
+        "今日\ta\t曰\nOK\tb\t月\n".as_bytes(),
+    );
+    repo
+}
+
+#[test]
+fn context_sets_type_the_same_items_with_and_without_the_context() {
+    let repo = repo_with_context();
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let sets: Vec<(&str, usize, usize, usize)> = outcome
+        .sets
+        .iter()
+        .map(|s| (s.name.as_str(), s.total(), s.wrong(), s.correction_count()))
+        .collect();
+    assert_eq!(
+        sets,
+        [
+            ("toy", 3, 2, 2),
+            ("talk·前文", 2, 0, 0),
+            ("talk·前文·不給", 2, 1, 1),
+        ]
+    );
+    let report = outcome.report();
+    assert!(
+        report.contains("| talk | 2 | 0 | 1 | 0 | 1 |\n| 合計 | 2 | 0 | 1 | 0 | 1 |"),
+        "給與不給前文要並列：{report}"
+    );
+
+    // 兩種都進 baseline、都由 --check 擋。
+    run(repo.path(), Mode::UpdateBaseline).unwrap();
+    let baseline = fs::read_to_string(repo.path().join("bench/baseline.json")).unwrap();
+    assert!(baseline.contains("talk·前文·不給"), "{baseline}");
+    assert!(check(&repo).is_empty());
+    write(
+        repo.path(),
+        "bench/colloquial/context/talk.tsv",
+        "今日\ta\t日\nOK\tb\t月\n".as_bytes(),
+    );
+    let violations = check(&repo);
+    assert!(
+        violations.iter().any(|v| v.contains("talk·前文")),
+        "{violations:?}"
+    );
+}
+
+/// 學習模式也打「有前文」的集合，給前文。
+#[test]
+fn learning_mode_types_context_sets_with_the_context() {
+    let repo = repo_with_context();
+    let learning = qim_bench::run_learning(repo.path()).unwrap();
+    let names: Vec<&str> = learning.sets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["toy", "talk·前文"]);
+    assert_eq!(learning.sets[1].corrections_off, 0);
+}
+
+#[test]
+fn a_context_line_without_three_columns_is_an_error() {
+    let repo = repo_with_context();
+    write(
+        repo.path(),
+        "bench/colloquial/context/talk.tsv",
+        "a\t曰\n".as_bytes(),
+    );
+    let error = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(
+        error.contains("talk.tsv") && error.contains("第 1 行"),
+        "{error}"
+    );
+}
+
 #[test]
 fn colloquial_sets_run_after_the_wiki_sets_and_need_a_baseline() {
     let repo = repo();

@@ -361,8 +361,10 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
+    /// 輸入框游標前的文字（[`Session::set_context`]）；`None` 是殼沒給過。
+    context: Option<String>,
     /// 最近一次送出去的文字（上屏或交還宿主打的鍵）以半形數字結尾。只看核心自己經手的：
-    /// 輸入框的前文要等 M3 的 `set_context`，所以游標移到別處、宿主自己改了字都看不到。
+    /// 還沒改看前文（M3 票 05 定），所以游標移到別處、宿主自己改了字都看不到。
     after_digit: bool,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
@@ -376,6 +378,15 @@ impl Session {
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
+    }
+
+    /// 輸入框游標前的文字（plan §2.1）：組字開頭的字接它最後一字的 bigram，以標點、空白、
+    /// 符號結尾或是空的時接句首，最後一字在語言模型裡沒有統計時用 unigram（plan §2.3、
+    /// [`Engine::context_char`]）。沒給過時開頭的字用 unigram。殼在聚焦、移動游標、上屏
+    /// 之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
+    /// 無痕模式不用它（brief §8）。
+    pub fn set_context(&mut self, before: &str) {
+        self.context = Some(before.to_string());
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -548,6 +559,9 @@ impl Session {
             && engine.scheme().alphabet.contains(c)
         {
             self.focus = None;
+            if self.lattice.input().is_empty() {
+                self.lattice = Lattice::starting_after(self.before_unselected(engine));
+            }
             self.lattice.push(engine, user, c);
             self.refresh_candidates(engine, user);
             return self.snapshot(engine, true, None);
@@ -823,10 +837,11 @@ impl Session {
             commit.original.push_str(&choice.text);
             segments.extend_from_slice(&choice.segments);
             rest.drain(..choice.len);
+            let before = choice.text.chars().next_back();
             top = lattice::candidates(
                 engine,
                 user,
-                &Lattice::from_input(engine, user, &rest),
+                &Lattice::from_input(engine, user, before, &rest),
                 false,
             )
             .into_iter()
@@ -978,7 +993,18 @@ impl Session {
 
     /// 剩下的輸入碼換成 `input`，lattice 從頭建。
     fn recompose(&mut self, engine: &Engine, user: &UserModel, input: &str) {
-        self.lattice = Lattice::from_input(engine, user, input);
+        let before = self.before_unselected(engine);
+        self.lattice = Lattice::from_input(engine, user, before, input);
+    }
+
+    /// 沒選定的輸入碼前面的一個字（plan §2.3）：最後選定的分段的最後一字；沒有選定的分段時
+    /// 看前文（[`Engine::context_char`]），沒給過前文或無痕時是 `None`。
+    fn before_unselected(&self, engine: &Engine) -> Option<char> {
+        match (self.selected.last(), &self.context) {
+            (Some(segment), _) => segment.text.chars().next_back(),
+            (None, Some(context)) if !self.options.incognito => engine.context_char(context),
+            (None, _) => None,
+        }
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
@@ -997,7 +1023,7 @@ impl Session {
                 lattice::candidates(
                     engine,
                     user,
-                    &Lattice::from_input(engine, user, code),
+                    &Lattice::from_input(engine, user, None, code),
                     false,
                 )
             }

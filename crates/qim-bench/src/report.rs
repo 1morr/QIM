@@ -4,9 +4,66 @@
 use crate::baseline::SetBaseline;
 use crate::score::{LENGTH_GROUPS, Metrics, SetResult};
 use crate::{
-    DevOutcome, Latency, Learning, LoadedPack, Outcome, PERSONAL, PERSONAL_USERDB, Personal,
-    SHORT_INPUTS, WASM_BINDINGS,
+    CONTEXT_SUFFIXES, DevOutcome, Latency, Learning, LoadedPack, Outcome, PERSONAL,
+    PERSONAL_USERDB, Personal, SHORT_INPUTS, WASM_BINDINGS,
 };
+
+/// 「有前文」的每批題給前文與不給前文並列（plan §5.2）；沒有這種集合時是空字串。
+fn context_pairs(sets: &[SetResult]) -> String {
+    let [given, not_given] = CONTEXT_SUFFIXES;
+    let pairs: Vec<(&str, &SetResult, &SetResult)> = sets
+        .iter()
+        .filter_map(|with| {
+            let name = with.name.strip_suffix(given)?;
+            let without = sets
+                .iter()
+                .find(|s| s.name.strip_suffix(not_given) == Some(name))?;
+            Some((name, with, without))
+        })
+        .collect();
+    if pairs.is_empty() {
+        return String::new();
+    }
+    let row = |name: &str, counts: [usize; 5]| {
+        let [
+            total,
+            wrong,
+            wrong_without,
+            corrections,
+            corrections_without,
+        ] = counts;
+        format!(
+            "| {name} | {total} | {wrong} | {wrong_without} | {corrections} | {corrections_without} |\n"
+        )
+    };
+    let counts = |with: &SetResult, without: &SetResult| {
+        [
+            with.total(),
+            with.wrong(),
+            without.wrong(),
+            with.correction_count(),
+            without.correction_count(),
+        ]
+    };
+    let mut rows: Vec<String> = pairs
+        .iter()
+        .map(|(name, with, without)| row(name, counts(with, without)))
+        .collect();
+    let mut sum = [0; 5];
+    for (_, with, without) in &pairs {
+        for (s, n) in sum.iter_mut().zip(counts(with, without)) {
+            *s += n;
+        }
+    }
+    rows.push(row("合計", sum));
+    format!(
+        "\n有前文的題：同一批題給前文與不給前文\n\n\
+         | 題目 | 題數 | 答錯（給） | 答錯（不給） | 修正（給） | 修正（不給） |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: |\n\
+         {}",
+        rows.concat()
+    )
+}
 
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
@@ -69,6 +126,7 @@ pub fn render(outcome: &Outcome) -> String {
         )),
     }
     out.push_str(&length_groups(outcome.scored_sets()));
+    out.push_str(&context_pairs(&outcome.sets));
 
     out.push_str("\n翻盤清單（和 baseline 比）\n");
     for set in outcome.scored_sets() {

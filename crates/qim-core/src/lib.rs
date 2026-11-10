@@ -19,7 +19,7 @@ mod user;
 pub use code_table::{CodeEntry, CodeTable};
 pub use engine::Engine;
 pub use english::EnglishWords;
-pub use language_model::{CharModel, LOG_PROB_STEP, LanguageModel};
+pub use language_model::{CLAUSE_START, CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
 pub use pack::{
     EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, PackError, RadicalHintPack,

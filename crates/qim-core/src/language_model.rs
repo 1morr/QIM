@@ -2,12 +2,17 @@
 //!
 //! 形式同 ARPA 的退回式：留下的 bigram 存 `ln P(c | prev)`；沒留下的用
 //! `ln α(prev) + ln P_cont(c)`。沒有前一字（組字的開頭）時用字頻的 unigram `start`。
+//! 句首（[`CLAUSE_START`]）也是一個前一字：前文以標點或空白結尾時，組字開頭的字接它。
 
 use serde::{Deserialize, Serialize};
 
 /// bigram 機率量化的級距（自然對數）：存成 `u8` 的 `round(−ln P ÷ 級距)`，255 級蓋到約 −21。
 /// 誤差最多半級（約 0.04），比 β、γ 的量級小得多。
 pub const LOG_PROB_STEP: f64 = 1.0 / 12.0;
+
+/// 句首記號（plan §2.3、§4.3）：當前一字時，`P(c | 句首)` 是 c 當一句第一字的機率。
+/// 訓練時每句的第一字接在它後面；它不是打得出的字，連打的路徑裡不會有它。
+pub const CLAUSE_START: char = '\u{2}';
 
 /// 一個字的 unigram 與退回權重，都是自然對數。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -121,6 +126,11 @@ impl LanguageModel {
             }
         }
         f64::from(model(i).backoff) + f64::from(model(j).continuation)
+    }
+
+    /// `c` 有統計：當前一字時接得上它自己的 bigram 與退回權重。
+    pub fn has_statistics(&self, c: char) -> bool {
+        self.index(c).is_some()
     }
 
     fn index(&self, c: char) -> Option<usize> {

@@ -8,8 +8,11 @@
 //! 各語料共用同一個切分函式，同一句出現在兩份語料也不會一邊 train、一邊 test。
 //!
 //! 字頻只數 train（plan §4.2），dev、test 不參與。
+//!
+//! 「有前文」的基準題（plan §5.2）：test 切分的句子配上同一段文字裡它前面的
+//! [`CONTEXT_CLAUSES`] 句與中間的標點，前文原樣保留，不轉碼。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::io::{self, Write};
 
 use sha2::{Digest, Sha256};
@@ -19,6 +22,12 @@ use crate::transcode::Transcoder;
 /// 每個語料進 `bench/` 的 test 句數上限：句子進 git，夠量出正確率的變化就好。dev 切分的調參題
 /// （`build/corpus/<名>/dev.tsv`）用同樣的上限與取法。
 pub const BENCH_SENTENCES: usize = 2000;
+
+/// 每個語料「有前文」的基準題數上限（`bench/<目錄>/context/<名>.tsv`）。
+pub const CONTEXT_SENTENCES: usize = 1000;
+
+/// 「有前文」的題，前文取目標句前面幾句。
+pub const CONTEXT_CLAUSES: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Split {
@@ -66,6 +75,8 @@ pub struct Builder<'t, W> {
     dev: W,
     test: HashSet<String>,
     dev_sentences: HashSet<String>,
+    /// 「有前文」的題：（句子的雜湊, 句子）→ 前文；只留雜湊最小的 [`CONTEXT_SENTENCES`] 句。
+    context: BTreeMap<(u64, String), String>,
     chars: HashMap<char, u64>,
     counts: Counts,
 }
@@ -78,6 +89,7 @@ impl<'t, W: Write> Builder<'t, W> {
             dev,
             test: HashSet::new(),
             dev_sentences: HashSet::new(),
+            context: BTreeMap::new(),
             chars: HashMap::new(),
             counts: Counts::default(),
         }
@@ -85,7 +97,15 @@ impl<'t, W: Write> Builder<'t, W> {
 
     /// 加入一段已轉成繁體的內文。
     pub fn add(&mut self, text: &str) -> io::Result<()> {
+        // 前面幾句（含丟掉的句子：它們也是前文）在 `text` 的開頭位置。
+        let mut recent: VecDeque<usize> = VecDeque::with_capacity(CONTEXT_CLAUSES + 1);
         for clause in clauses(text) {
+            let start = clause.as_ptr() as usize - text.as_ptr() as usize;
+            let context = recent.front().map(|&from| line_tail(&text[from..start]));
+            recent.push_back(start);
+            if recent.len() > CONTEXT_CLAUSES {
+                recent.pop_front();
+            }
             if self.transcoder.transcode(clause).is_err() {
                 self.counts.dropped += 1;
                 continue;
@@ -105,10 +125,39 @@ impl<'t, W: Write> Builder<'t, W> {
                 }
                 Split::Test => {
                     self.test.insert(clause.to_string());
+                    if let Some(context) = context.filter(|c| c.chars().any(char::is_alphanumeric))
+                    {
+                        self.offer_context(clause, context);
+                    }
                 }
             }
         }
         Ok(())
+    }
+
+    /// 留下雜湊最小的 [`CONTEXT_SENTENCES`] 句；同一句有幾種前文時取雜湊最小的前文，
+    /// 和來源的順序無關。
+    fn offer_context(&mut self, clause: &str, context: &str) {
+        let entry = (key(clause), clause.to_string());
+        if let Some(kept) = self.context.get_mut(&entry) {
+            if (key(context), context) < (key(kept), kept.as_str()) {
+                *kept = context.to_string();
+            }
+            return;
+        }
+        let full = self.context.len() >= CONTEXT_SENTENCES;
+        if full
+            && self
+                .context
+                .last_key_value()
+                .is_some_and(|(last, _)| entry > *last)
+        {
+            return;
+        }
+        self.context.insert(entry, context.to_string());
+        if self.context.len() > CONTEXT_SENTENCES {
+            self.context.pop_last();
+        }
     }
 
     /// 回傳句數、基準的內容（`bench/` 的 TSV）、dev 的調參題（同格式）、字頻與兩個 writer。
@@ -119,6 +168,13 @@ impl<'t, W: Write> Builder<'t, W> {
         self.counts.test = self.test.len();
         let bench = self.sample(&self.test);
         let dev_items = self.sample(&self.dev_sentences);
+        let context_bench = self
+            .context
+            .iter()
+            .map(|((_, sentence), context)| {
+                format!("{context}\t{}\t{sentence}\n", self.codes(sentence))
+            })
+            .collect();
         let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
         chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
@@ -126,6 +182,7 @@ impl<'t, W: Write> Builder<'t, W> {
             counts: self.counts,
             bench,
             dev_items,
+            context_bench,
             chars,
             train: self.train,
             dev: self.dev,
@@ -139,15 +196,23 @@ impl<'t, W: Write> Builder<'t, W> {
         keyed
             .iter()
             .take(BENCH_SENTENCES)
-            .map(|(_, sentence)| {
-                let codes = self
-                    .transcoder
-                    .transcode(sentence)
-                    .expect("加入時已確認轉得了碼");
-                format!("{}\t{sentence}\n", codes.join(" "))
-            })
+            .map(|(_, sentence)| format!("{}\t{sentence}\n", self.codes(sentence)))
             .collect()
     }
+
+    /// 逐字速成碼，空格分隔。
+    fn codes(&self, sentence: &str) -> String {
+        self.transcoder
+            .transcode(sentence)
+            .expect("加入時已確認轉得了碼")
+            .join(" ")
+    }
+}
+
+/// `text` 最後一個換行或 tab 之後的部分：前文不跨段落，題目檔也就沒有換行與 tab。
+fn line_tail(text: &str) -> &str {
+    text.rfind(['\n', '\r', '\t'])
+        .map_or(text, |i| &text[i + 1..])
 }
 
 pub struct Finished<W> {
@@ -156,6 +221,8 @@ pub struct Finished<W> {
     pub bench: String,
     /// dev 切分的調參題，格式同 `bench`（`cargo xtask bench --dev` 讀）。
     pub dev_items: String,
+    /// 「有前文」的題，一行一題：前文，tab，逐字速成碼，tab，句子；依句子的雜湊排序。
+    pub context_bench: String,
     /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
     pub chars: String,
     pub train: W,

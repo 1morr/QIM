@@ -1,6 +1,7 @@
-//! 題目檔的格式：`bench/fixed.tsv`、`bench/corpus/<名>.tsv` 與個人集 `bench/personal/rime-userdb.tsv`。
+//! 題目檔的格式：`bench/fixed.tsv`、`bench/corpus/<名>.tsv`、「有前文」的 `bench/corpus/context/<名>.tsv`
+//! 與個人集 `bench/personal/rime-userdb.tsv`。
 
-use qim_bench::{Item, Unit, parse_corpus, parse_fixed, parse_personal};
+use qim_bench::{Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal};
 
 fn unit(code: &str, text: &str) -> Unit {
     Unit {
@@ -11,6 +12,7 @@ fn unit(code: &str, text: &str) -> Unit {
 
 fn item(units: Vec<Unit>, line: usize, label: &str, weight: u64) -> Item {
     Item {
+        context: None,
         units,
         line,
         label: label.into(),
@@ -93,4 +95,22 @@ fn personal_errors_name_the_line_but_not_the_word() {
         !error.contains("門口"),
         "個人集的內容不能出現在訊息裡：{error}"
     );
+}
+
+#[test]
+fn context_reads_the_context_before_the_codes_and_sentence() {
+    let items = parse_context("今日，ATM\tar a\t問日\n").unwrap();
+    assert_eq!(
+        items,
+        [Item {
+            context: Some("今日，ATM".into()),
+            ..item(vec![unit("ar", "問"), unit("a", "日")], 1, "第 1 行", 1)
+        }]
+    );
+}
+
+#[test]
+fn context_rejects_an_empty_context_or_a_missing_column() {
+    assert!(parse_context("\tar\t問\n").unwrap_err().contains("第 1 行"));
+    assert!(parse_context("ar\t問\n").unwrap_err().contains("3 欄"));
 }

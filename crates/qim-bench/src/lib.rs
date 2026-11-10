@@ -15,7 +15,7 @@ use qim_core::{Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Ran
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
-pub use items::{Item, Unit, parse_corpus, parse_fixed, parse_personal};
+pub use items::{Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal};
 pub use latency::{
     LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, lefts_to_first_segment,
     node_wasm_timer, parse_timing, percentile,
@@ -33,6 +33,11 @@ pub const FIXED: &str = "bench/fixed.tsv";
 /// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
 pub const CORPUS_DIRS: [&str; 2] = ["bench/corpus", "bench/colloquial"];
 pub const BASELINE: &str = "bench/baseline.json";
+/// 「有前文」的題目目錄（plan §5.2），依序跑：每個 `<名>.tsv` 是一批題，集合名在這些目錄間不能重複。
+pub const CONTEXT_DIRS: [&str; 2] = ["bench/corpus/context", "bench/colloquial/context"];
+/// 「有前文」的一批題 `<名>` 打兩次，集合名是 `<名>` 接這些字尾：給前文、不給前文。
+/// 學習模式只打給前文的。
+pub const CONTEXT_SUFFIXES: [&str; 2] = ["·前文", "·前文·不給"];
 /// dev 模式的題目：[`CORPUS_DIRS`] 每個集合 `name` 的 dev 切分，相對 repo 根目錄；
 /// `cargo xtask data` 寫的，不進 git。
 pub fn dev_items(name: &str) -> String {
@@ -68,7 +73,8 @@ pub struct Outcome {
     /// 讀進來的資料包：速成、方案指名的詞庫與語言模型、英文。前後對照時 sha256 一樣就是沒重建。
     pub packs: Vec<LoadedPack>,
     pub fixed: SetResult,
-    /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
+    /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序；接著「有前文」的各批題，
+    /// 依 [`CONTEXT_DIRS`] 的順序，每批給前文、不給前文各一個集合（[`CONTEXT_SUFFIXES`]）。
     pub sets: Vec<SetResult>,
     pub personal: Personal,
     /// 跑之前的 baseline，報告裡對照用；沒有檔案時是 `None`。
@@ -151,6 +157,29 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
     for (name, items) in load_corpora(root)? {
         latency_inputs.extend(items.iter().map(Item::input));
         sets.push(score::score(&engine, &name, &items, false));
+    }
+    // 「有前文」的題不量延遲：輸入碼和一般的題同一種，多量只是重複。
+    for (name, items) in load_context_sets(root)? {
+        let [given, not_given] = CONTEXT_SUFFIXES;
+        let without: Vec<Item> = items
+            .iter()
+            .map(|item| Item {
+                context: None,
+                ..item.clone()
+            })
+            .collect();
+        sets.push(score::score(
+            &engine,
+            &format!("{name}{given}"),
+            &items,
+            false,
+        ));
+        sets.push(score::score(
+            &engine,
+            &format!("{name}{not_given}"),
+            &without,
+            false,
+        ));
     }
     let personal =
         load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
@@ -336,8 +365,23 @@ fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
 
 /// 各語料集合的名稱與題目，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
 fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
+    load_sets(root, &CORPUS_DIRS, parse_corpus)
+}
+
+/// 「有前文」的各批題的名稱與題目，依 [`CONTEXT_DIRS`] 的順序，同一目錄內依名稱排序。
+fn load_context_sets(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
+    load_sets(root, &CONTEXT_DIRS, parse_context)
+}
+
+/// `dirs` 下每個 `<名>.tsv` 照 `parse` 讀成一個集合，依目錄的順序、同一目錄內依名稱排序；
+/// 集合名在這些目錄間不能重複，也不能是個人集的名字。
+fn load_sets(
+    root: &Path,
+    dirs: &[&str],
+    parse: fn(&str) -> Result<Vec<Item>, String>,
+) -> Result<Vec<(String, Vec<Item>)>, String> {
     let mut sets: Vec<(String, Vec<Item>)> = Vec::new();
-    for dir in CORPUS_DIRS {
+    for dir in dirs {
         for (name, path) in corpus_files(&root.join(dir))? {
             if name == PERSONAL_SET {
                 return Err(format!(
@@ -346,13 +390,9 @@ fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
                 ));
             }
             if sets.iter().any(|(n, _)| *n == name) {
-                return Err(format!(
-                    "集合 {name} 在兩個語料目錄都有：{}",
-                    path.display()
-                ));
+                return Err(format!("集合 {name} 在兩個目錄都有：{}", path.display()));
             }
-            let items =
-                parse_corpus(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
+            let items = parse(&read(&path)?).map_err(|e| format!("{}：{e}", path.display()))?;
             sets.push((name, items));
         }
     }
@@ -383,6 +423,10 @@ pub fn run_learning(root: &Path) -> Result<Learning, String> {
         .into_iter()
         .map(|(name, items)| score::learning(&engine, &name, &items, false))
         .collect();
+    for (name, items) in load_context_sets(root)? {
+        let name = format!("{name}{}", CONTEXT_SUFFIXES[0]);
+        sets.push(score::learning(&engine, &name, &items, false));
+    }
     if let Personal::Ran(items) = load_personal(root)? {
         sets.push(score::learning(&engine, PERSONAL_SET, &items, true));
     }

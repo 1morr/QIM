@@ -9,7 +9,10 @@ section describes; it was split into clauses at punctuation and whitespace,
 and clauses containing characters outside the QIM continuous character set were
 dropped. Each file keeps up to 2000 distinct clauses from the held-out test split,
 one per line, preceded by machine-generated Quick codes (one per character, separated
-by spaces) and a tab.
+by spaces) and a tab. The files of the same name under context/ keep up to
+1000 held-out test clauses that follow other text on the same line of the source,
+one per line: the text before the clause as written (up to 2 clauses and the
+punctuation between them), a tab, the Quick codes, a tab and the clause.
 
 ## hkcancor.tsv
 
