@@ -1,50 +1,69 @@
-//! 網頁 e2e 匯入的小詞庫（`web/e2e/fixtures/e2e-lexicon/`，plan §4.6）：檔案進 git，這裡比對它和
-//! 現在的資料包格式一致，格式改了會紅。`QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test
+//! 網頁 e2e 用的小詞庫（plan §4.6、§4.7）：檔案進 git，這裡比對它們和現在的資料包、manifest 與
+//! 更新索引的格式一致，格式改了會紅。`QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test
 //! web_fixture` 重產。
+//!
+//! - `e2e-lexicon/`：從檔案匯入的詞庫。
+//! - `e2e-update-lexicon/`：線上更新前先匯入的舊版（1.0.0）。
+//!
+//! 扮演 GitHub release 的 `pack-release/` 由 `qim-databuild` 的 `tests/release.rs` 照 `cargo xtask
+//! pack-release` 的路寫出。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use qim_core::{Lexicon, LexiconPack, MANIFEST_FILE, Manifest, Pack, PackKind, Word};
 
-const ID: &str = "e2e-lexicon";
-
-/// `anr` 只有一個詞「測試詞庫」：換上它時首選和內建詞庫的「門口」不同。
-fn pack() -> LexiconPack {
+/// `anr` 只有一個詞 `word`：換上它時首選和內建詞庫的「門口」不同。
+fn lexicon(id: &str, word: &str) -> Vec<u8> {
     LexiconPack {
-        id: ID.into(),
+        id: id.into(),
         lexicon: Lexicon::new(
             [(
                 "anr".to_string(),
                 vec![Word {
-                    text: "測試詞庫".into(),
+                    text: word.into(),
                     frequency: 1000,
                 }],
             )],
             [],
         ),
     }
+    .to_bytes()
+    .unwrap()
 }
 
-fn dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/e2e/fixtures/e2e-lexicon")
+fn fixtures() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/e2e/fixtures")
+}
+
+/// 照 `QIM_UPDATE_FIXTURES` 寫出，或比對檔案和 `contents` 相同。
+fn check(path: &Path, contents: &[u8]) {
+    if std::env::var_os("QIM_UPDATE_FIXTURES").is_some() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+    assert_eq!(
+        std::fs::read(path).ok().as_deref(),
+        Some(contents),
+        "{} 和現在的格式不同：QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test web_fixture",
+        path.display()
+    );
+}
+
+/// 一份匯入用的資料包目錄：`<id>/manifest.json` 與 `<id>/<id>.pack`。
+fn check_pack_dir(id: &str, word: &str, version: &str) {
+    let bytes = lexicon(id, word);
+    let manifest = Manifest::new(PackKind::Lexicon, id, &bytes, version, "CC0-1.0");
+    let dir = fixtures().join(id);
+    check(&dir.join(manifest.file_name()), &bytes);
+    check(&dir.join(MANIFEST_FILE), manifest.to_json().as_bytes());
 }
 
 #[test]
 fn e2e_lexicon_fixture_is_current() {
-    let bytes = pack().to_bytes().unwrap();
-    let manifest = Manifest::new(PackKind::Lexicon, ID, &bytes, "1.0.0", "CC0-1.0").to_json();
-    let pack_path = dir().join(format!("{ID}.pack"));
-    let manifest_path = dir().join(MANIFEST_FILE);
-    if std::env::var_os("QIM_UPDATE_FIXTURES").is_some() {
-        std::fs::create_dir_all(dir()).unwrap();
-        std::fs::write(&pack_path, &bytes).unwrap();
-        std::fs::write(&manifest_path, &manifest).unwrap();
-    }
-    let hint = "資料包格式或 manifest 改了：QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test web_fixture";
-    assert_eq!(std::fs::read(&pack_path).ok(), Some(bytes), "{hint}");
-    assert_eq!(
-        std::fs::read_to_string(&manifest_path).ok(),
-        Some(manifest),
-        "{hint}"
-    );
+    check_pack_dir("e2e-lexicon", "測試詞庫", "1.0.0");
+}
+
+#[test]
+fn update_lexicon_fixture_is_current() {
+    check_pack_dir("e2e-update-lexicon", "舊版詞庫", "1.0.0");
 }

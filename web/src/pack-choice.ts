@@ -20,7 +20,13 @@ export function kindName(kind: string): string {
 	return KIND_NAMES[kind] ?? kind;
 }
 
-/** 設定頁列出的一份資料包：manifest 裡給人看的欄位，加上它是不是內建的。 */
+/**
+ * 資料包從哪來：隨網頁發佈的（`builtin`）、從檔案匯入的（`imported`）、線上更新下載的（`downloaded`）。
+ * 後兩種存在 IndexedDB，可以刪。
+ */
+export type PackOrigin = "builtin" | "imported" | "downloaded";
+
+/** 設定頁列出的一份資料包：manifest 裡給人看的欄位，加上它從哪來。 */
 export interface PackEntry {
 	id: string;
 	/** manifest 的 `kind`（`lexicon`、`language-model`…）。 */
@@ -30,12 +36,11 @@ export interface PackEntry {
 	size: number;
 	/** SPDX 運算式。 */
 	license: string;
-	/** 隨網頁發佈的那份；匯入的是 `false`，可以刪。 */
-	builtin: boolean;
+	origin: PackOrigin;
 }
 
 /** 讀出 manifest 裡列表要的欄位；不是 JSON 或少了欄位時丟錯（完整的核對在核心）。 */
-export function parseManifest(json: string, builtin: boolean): PackEntry {
+export function parseManifest(json: string, origin: PackOrigin): PackEntry {
 	const value: unknown = JSON.parse(json);
 	const field = (name: string, type: "string" | "number") => {
 		const found =
@@ -53,13 +58,13 @@ export function parseManifest(json: string, builtin: boolean): PackEntry {
 		version: field("version", "string") as string,
 		size: field("size", "number") as number,
 		license: field("license", "string") as string,
-		builtin,
+		origin,
 	};
 }
 
 /**
- * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面；和內建同 id 的匯入取代內建那份
- * （刪掉後回到內建的）。
+ * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面；和內建同 id 的匯入（含下載的新版）取代
+ * 內建那份（刪掉後回到內建的）。
  */
 export function listPacks(
 	builtin: readonly PackEntry[],

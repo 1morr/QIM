@@ -37,6 +37,7 @@
 | 2026-11-11 | M3 17 | 詞表匯入：Rime `.dict.yaml`、Gboard `dictionary.txt`、一行一詞，碼由字推出、加進使用者詞，壞列報行號；Gboard 快捷鍵勾選才設觸發詞；見票 17 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 18 | 粵語詞庫：rime-cantonese、粵典查不清不用（粵典待書面確認）；HKCanCor train 的詞補 383 個，口語集變好、個人集多錯 1 題更新 baseline；見票 18 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 20 | 資料包 manifest（plan §4.6），核心載入時核對；網頁設定區列出、切換、刪除、從檔案匯入（IndexedDB）；bench 不變；見票 20 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
+| 2026-11-11 | M3 21 | 線上更新：核心 `PackIndex`、`cargo xtask pack-release`（擋沒加版本）、網頁背景檢查與開關（經 Vite 轉發），本機伺服器驗；未建 GitHub release；見票 21 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 
 ## 偏差與決定
 
@@ -54,3 +55,4 @@
 - 2026-11-11 M3 票 05：殼沒給前文時用這個輸入框上屏過的字（同 librime），退格、方向鍵、`clear_context` 讓它作廢；無痕時不記也不收（brief §8）；plan §2.1；見票 05。
 - 2026-11-11 M3 票 03：觸發詞已在首選時，規則 2「選一次不成首選」不動（原本把不學習時的首選多移到第 2）；`Engine::new` 也驗打分參數；改 plan §2.3、§2.4；見票 03。
 - 2026-11-11 M3 票 18：完整粵語詞庫只補 HKCanCor 的詞；粵典 public domain 詞表與詞典本體授權對不上算查不清，留在之後待書面確認（使用者選），改 brief §1.5、§12.1、plan §4.2；見票 18。
+- 2026-11-11 M3 票 21：沒建 GitHub release（使用者不在、只授權推 main），只驗本機流程，建前先問；來源用 tag `packs` 不用 `latest`（App 的 release 會搶）；plan §4.7；見票 21。

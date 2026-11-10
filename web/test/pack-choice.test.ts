@@ -9,7 +9,8 @@ import {
 } from "../src/pack-choice.ts";
 
 function entry(id: string, kind: string, builtin: boolean): PackEntry {
-	return { id, kind, version: "1.0.0", size: 10, license: "CC0-1.0", builtin };
+	const origin = builtin ? "builtin" : "imported";
+	return { id, kind, version: "1.0.0", size: 10, license: "CC0-1.0", origin };
 }
 
 const BUILTIN = [
@@ -51,11 +52,11 @@ test("匯入和內建同 id 的取代內建那份", () => {
 	};
 	const listed = listPacks(BUILTIN, [newer]);
 	assert.deepEqual(
-		listed.map((p) => [p.id, p.version, p.builtin]),
+		listed.map((p) => [p.id, p.version, p.origin]),
 		[
-			["quick", "1.0.0", true],
-			["quick-lexicon", "1.1.0", false],
-			["cldr-emoji-yue-hant", "1.0.0", true],
+			["quick", "1.0.0", "builtin"],
+			["quick-lexicon", "1.1.0", "imported"],
+			["cldr-emoji-yue-hant", "1.0.0", "builtin"],
 		],
 	);
 });
@@ -81,16 +82,16 @@ test("manifest 讀出列表要的欄位；不是 manifest 時丟錯", () => {
 		sha256: "0".repeat(64),
 		license: "CC0-1.0",
 	});
-	assert.deepEqual(parseManifest(json, false), {
+	assert.deepEqual(parseManifest(json, "imported"), {
 		id: "e2e-lexicon",
 		kind: "lexicon",
 		version: "1.0.0",
 		size: 39,
 		license: "CC0-1.0",
-		builtin: false,
+		origin: "imported",
 	});
-	assert.throws(() => parseManifest("{}", false), /manifest/);
-	assert.throws(() => parseManifest("not json", false));
+	assert.throws(() => parseManifest("{}", "imported"), /manifest/);
+	assert.throws(() => parseManifest("not json", "imported"));
 });
 
 test("匯入和已有的資料包同 id 但種類不同時拒絕，同種的可以取代", () => {

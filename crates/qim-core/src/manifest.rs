@@ -127,9 +127,9 @@ impl Manifest {
         }
     }
 
-    /// 核對 `bytes` 是這份 manifest 說的 `P` 資料包，而且這個核心讀得了：先看欄位的格式、核心
-    /// 版本與種類，再看大小，最後算 sha256。
-    pub(crate) fn check<P: Pack>(&self, bytes: &[u8]) -> Result<(), PackError> {
+    /// 欄位的格式：`manifest_version`、`id`、`sha256`、`version` 與 `min_core_version`。回傳解析好的
+    /// 兩個版本。
+    pub(crate) fn check_format(&self) -> Result<Versions, PackError> {
         let invalid = |reason: String| Err(PackError::InvalidManifest(reason));
         if self.manifest_version != MANIFEST_VERSION {
             return invalid(format!(
@@ -145,17 +145,25 @@ impl Manifest {
         if self.sha256.len() != 64 || !self.sha256.chars().all(hex) {
             return invalid(format!("sha256 {:?} 要是 64 位小寫十六進位", self.sha256));
         }
-        if let Err(e) = semver::Version::parse(&self.version) {
-            return invalid(format!("version {:?} 不是 semver：{e}", self.version));
-        }
+        let version = semver::Version::parse(&self.version).map_err(|e| {
+            PackError::InvalidManifest(format!("version {:?} 不是 semver：{e}", self.version))
+        })?;
         let required = semver::Version::parse(&self.min_core_version).map_err(|e| {
             PackError::InvalidManifest(format!(
                 "min_core_version {:?} 不是 MAJOR.MINOR.PATCH：{e}",
                 self.min_core_version
             ))
         })?;
-        let current = semver::Version::parse(CORE_VERSION).expect("crate 版本是 semver");
-        if required > current {
+        Ok(Versions {
+            version,
+            min_core: required,
+        })
+    }
+
+    /// 核對 `bytes` 是這份 manifest 說的 `P` 資料包，而且這個核心讀得了：先看欄位的格式、核心
+    /// 版本與種類，再看大小，最後算 sha256。
+    pub(crate) fn check<P: Pack>(&self, bytes: &[u8]) -> Result<(), PackError> {
+        if !self.check_format()?.core_supported() {
             return Err(PackError::CoreTooOld {
                 required: self.min_core_version.clone(),
                 current: CORE_VERSION.into(),
@@ -182,6 +190,21 @@ impl Manifest {
             });
         }
         Ok(())
+    }
+}
+
+/// manifest 解析好的兩個版本（[`Manifest::check_format`]）。
+pub(crate) struct Versions {
+    /// `version`。
+    pub(crate) version: semver::Version,
+    /// `min_core_version`。
+    pub(crate) min_core: semver::Version,
+}
+
+impl Versions {
+    /// 這個核心讀得了它：`min_core_version ≤ CORE_VERSION`。
+    pub(crate) fn core_supported(&self) -> bool {
+        self.min_core <= semver::Version::parse(CORE_VERSION).expect("crate 版本是 semver")
     }
 }
 

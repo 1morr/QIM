@@ -10,7 +10,7 @@ mod web;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask pack-release [--previous <index.json>] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -20,6 +20,15 @@ fn main() -> ExitCode {
         ["check", "--fast"] => check(true),
         ["data"] => release_run("qim-databuild", &[]),
         ["data", "--verify"] => release_run("qim-databuild", &["--verify"]),
+        ["pack-release"] => release_run("qim-databuild", &["--pack-release"]),
+        ["pack-release", "--previous", previous] => {
+            // qim-databuild 在 repo 根目錄跑：相對路徑先照目前目錄換成絕對路徑。
+            let previous = std::path::absolute(previous).unwrap_or_else(|_| previous.into());
+            release_run(
+                "qim-databuild",
+                &["--pack-release", "--previous", &previous.to_string_lossy()],
+            )
+        }
         ["bench"] => bench(&[]),
         ["bench", flag @ ("--check" | "--update-baseline")] => bench(&[flag]),
         // 學習模式不量延遲，不必重編 WebAssembly 綁定。

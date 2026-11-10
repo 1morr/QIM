@@ -64,14 +64,21 @@
 				</section>
 				<section id="packs" aria-label="資料包">
 					<h2>資料包</h2>
-					<table aria-label="資料包清單">
-						<thead>
-							<tr><th>使用</th><th>種類</th><th>名稱</th><th>版本</th><th>大小</th><th>授權</th><th>來源</th><th></th></tr>
-						</thead>
-						<tbody id="pack-rows"></tbody>
-					</table>
+					<div class="pack-table">
+						<table aria-label="資料包清單">
+							<thead>
+								<tr><th>使用</th><th>種類</th><th>名稱</th><th>版本</th><th>大小</th><th>授權</th><th>來源</th><th></th></tr>
+							</thead>
+							<tbody id="pack-rows"></tbody>
+						</table>
+					</div>
 					<label>從檔案匯入資料包 <input id="import-pack" type="file" multiple accept=".json,.pack,application/json" aria-describedby="import-pack-note" /></label>
 					<p id="import-pack-note" class="note">一起選資料包目錄裡的 manifest.json 與 .pack 檔；核對過大小、sha256 與核心版本才收，匯入後那一種改用它。</p>
+					<div class="pack-updates">
+						<label><input id="pack-updates" type="checkbox" aria-describedby="pack-updates-note" /> 線上更新</label>
+						<button id="check-pack-updates" type="button">檢查更新</button>
+					</div>
+					<p id="pack-updates-note" class="note">開著時每次開網頁在背景檢查 GitHub Releases 有沒有裝著的資料包的新版，核對過 sha256 才換上；失敗時照用現有的。關掉就不連線。</p>
 					<p id="pack-status" role="status" aria-label="資料包狀態"></p>
 				</section>
 			</section>
