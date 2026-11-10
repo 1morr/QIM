@@ -149,7 +149,7 @@ pub enum ShiftKey { Left, Right }
 impl Key { pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError>; } // 綁定收「種類 + 值」
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub learning: bool, pub english_candidates: bool, pub digit_separators: bool, pub emoji_candidates: bool, pub shift_switch: ShiftSwitch, pub simplified_after_traditional: bool }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub learning: bool, pub english_candidates: bool, pub digit_separators: bool, pub emoji_candidates: bool, pub shift_switch: ShiftSwitch, pub simplified_after_traditional: bool, pub association: bool }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
@@ -187,6 +187,12 @@ impl Session {
 - 簡體模式：`Engine::with_simplifier` 掛上簡繁資料包（不由方案指名，各方案都輸出繁體）；`Options.simplified` 開著時，候選在排序之後轉簡體、轉換後重複的只留第一個，組字的分段與上屏也轉。轉換的單位是一個分段：多段的候選各段分開轉換再接起來，選了之後組字與上屏也是各段分開轉換，所以看到的就是上屏的；學習記繁體原文。組字中換選項時殼呼叫 `refresh`，同 librime 換選項後重算組字（M1 票 16）。殼只呼叫 `set_options` 時，下一個 `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選，重列前 `all_candidates` 是空的、不給重排要求、也不套用重排結果（M2 票 01）。`qim-ffi` 加換選項時，綁定的 `set_options` 同時呼叫 `refresh` 回快照（同網頁的 `setSimplified`），殼就碰不到這個待生效狀態（票 01 的建議，M2 票 07 延後到需要它的票）。
   - 原文：候選、分段與上屏都另帶後處理前的原文（`original`、`commit_original`，簡體模式以外和顯示的字相同）。字根提示查原文，「回報」記原文：要提示的是打得出的繁體字，`fixed.tsv` 的期望首選是繁體（協調者決定，M1 票 16）。
 - 簡體字排後：`Options.simplified_after_traditional`（預設開，brief §4.1、§7）開著、又不是簡體模式時，碼表標成簡體字的字排在同碼的其他候選之後（§2.3）；關掉時照分數混排。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M3 票 19）。
+- 聯想（M3 票 13，brief §7、名詞表）：`Options.association`（預設開）開著時，上屏組字（空白、數字鍵、點候選選完，或移到某一段時按空白）或選了一個聯想之後，`Snapshot.candidates` 是接下來可能要打的字詞（最多一頁 `ASSOCIATION_LIMIT` 個），組字是空的；排法見 §2.3。打標點、大寫字母、Enter、英文候選或 emoji、`text`、切到英文直通的上屏不出聯想（同 librime-predict 遇到 `punct`、`raw`、`thru` 的上屏就停）。聯想顯示中的鍵照 macOS 速成（黑箱 T8，brief §12.4）：
+  - 數字鍵 1–9、`Session::select`（點選）選那個聯想：上屏它，接著出下一輪，可一直接下去（同 iOS）；沒有那個聯想的數字收起聯想後照打。不學 Microsoft 的 Shift＋數字：實體鍵盤的 Shift＋數字是全形標點。代價是上屏中文後緊接著打數字要先按 Esc（或關掉聯想），同 macOS。
+  - 空白不選，收起聯想後照打空格（macOS 沒有預選）；Esc 與退格只收起聯想、吃下不交還（librime-predict；Gboard 的第一下刪除也是），退格第二下才刪字。
+  - 字母收起聯想、開始新的組字；其他鍵（標點、Enter、方向鍵、翻頁鍵、Shift…）收起後照沒有聯想時處理；不送字元的 `Modifier` 不動它。
+  - 聯想不給重排（`rerank_request` 是 `None`）。`refresh` 依新選項重列（簡體模式轉換，關掉時收起）；只呼叫 `set_options` 關掉時，下一個鍵或 `select` 照沒有聯想處理、收起。`clear_context`（換欄位、失焦）與不以剛上屏的字結尾的 `set_context`（殼點了別處、移了游標）也收起；殼在交還宿主的鍵、給前文與失焦之後照樣重畫候選列（網頁看 `all_candidates` 是不是空的）。
+  - 聯想看剛上屏的各段（原文），不讀殼給的更早的前文；簡體模式顯示、上屏轉簡體，接下一輪照原文。剛上屏的字就是下一個字的前文，所以無痕時不出聯想（brief §8）。
 - 數字後半形：`Options.digit_separators`（預設開，brief §4.7、§7）。沒有組字、游標前的字是半形數字時，`.` `:` 直接上屏半形，不進組字；逗號照舊全形（使用者決定，M1 票 26）。「游標前的字」是 `Session` 記的前文的最後一字（下面〈上下文〉，M3 票 05 起）：殼給的前文，接上之後核心送出去的字。會上屏的三個方法回傳前都經過同一處接上（`Session::finish`）：`handle`（含交還宿主的鍵）、`select`（點候選）、`text`（觸控的文字鍵：數字列、符號頁與數字鍵盤的數字、常用頁）；`refresh`、`focus_segment`、`apply_rerank` 不上屏、不改它。觸控的標點鍵是 `text`、照鍵上的字輸出，不套這條（使用者決定，M1 票 27b，推翻票 27 的觸控標點送 `Key::Punct`）。
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 按鍵的入口（M2 票 03）：綁定收不了帶資料的列舉時（WebAssembly）用 `Key::parse` 收「種類 + 值」，種類是 `Key` 各種的 camelCase 名字（`letter`、`digit`、`toggleAscii`、`space`…），值是字元、`0`–`9` 或 `left` / `right`；網頁的按鍵都經綁定的同一個 `press`，加一種鍵只改核心與網頁的按鍵對照（`web/src/keys.ts`）。同 librime 能從字串讀按鍵（`KeyEvent` 的文字表示）。`qim-ffi` 也收「種類 + 值」（M2 票 07）：uniffi 沒有 `char` 型別，收不了 `Key::Letter(char)`，另寫一份鏡像列舉又讓加一種鍵多改一處。觸控鍵盤的組字狀態也問 `Session::composing`，綁定不另存。
@@ -256,6 +262,12 @@ P_段內 = 1（單字）
 - `personal` 的 w：票 13 換上 bigram 後 w 0.2 讓 zh-wiki 學習開變差，票 12 換上口語權重與新 β、γ 後連 common-voice-yue 也變差。學習模式改讀 dev 切分掃 0.01–0.2，0.05 對口語與維基都最好；test 上口語兩集、個人集與 yue-wiki 學習開較少，zh-wiki 持平（票 12 Comments）。
 - 每個位置保留 beam 寬 20（libime 預設，`docs/research/ranking-techniques.md` §4），同文字的部分路徑只留最高分；下一段的分數看部分路徑的最後一個字，所以 beam 剪掉的路徑可能本來會勝出，beam 夠寬才等於窮舉。每個起點的每個碼只取字頻最高的 beam 個字進 lattice（詞全進），另加使用者學過的字（它們有 `personal`）；前文再支持第 21 名以後沒學過的同碼字也進不來；票 12 量過全收或 beam 40，dev 只差 1 題，不放寬。每按一鍵只補算新增的位置，選定一段後其餘的輸入碼從頭建（`docs/research/libime-lattice.md`）。
 - 分隔記號（§2.1）是「這裡一定要斷字」（brief §4.3，M1 票 28b 照 Rime 速成）：它的一欄照抄前一欄，邊不從它開始。邊的碼中間有分隔記號時去掉它再查碼表、詞庫與使用者詞，但沒有字，只留每個分隔記號都落在詞內兩字的碼之間的詞（`Engine::splits_at` 照碼表把詞一字一碼地對齊，字有幾個碼時任一種拆法都算；碼不是由字的碼組成的使用者詞不跨）；往回找邊的上限算字母數。其餘照上面打分（bigram 照樣跨過它接前一字）。結尾的分隔記號算在最後一段裡：候選列查碼時去掉它，`mi'` 的候選同 `mi`、蓋住整串。只蓋住開頭一段的字詞後面緊接分隔記號時連它一起蓋住，選了之後剩下的輸入碼不以分隔記號開頭；觸發詞只比對整串（去掉結尾的分隔記號），中間有分隔記號時沒有。
+- 聯想（M3 票 13，§2.1）也用這把尺：分數是接上那個聯想的路徑比不接時多出多少。四種來源取聯集，同文字取高的：
+  - 補完詞庫的詞：剛上屏的最後 k 段（最多蓋 8 字，`ASSOCIATION_TAIL`）接起來是詞庫某個更長的詞的開頭時，給那個詞剩下的字（「門」→「口」；選了「日」「本」兩段後「日本」→「人」）。分數是那 k 段換成整個詞的差：靜態機率照上面的邊算（詞接在第 k+1 段前面的字後面；詞的 unigram 讀另存的 f32，和邊現算的只差捨入），加上 `β − γ − Σ 那 k 段的（是詞庫的詞 ? β : 0 − γ）`，所以把單字補成詞多 β、把幾段併成一個詞省 γ。只從分段的邊界補、不拆開剛上屏的詞（拆了要扣 γ 又丟 β，很少贏）。
+  - 字級 bigram 裡留下的、接在最後一字後面的字（連打字集的字），以及以其中前 9 個字開頭、詞頻最高的 9 個詞庫的詞；個人 bigram 在最後一段後面學過的字詞。這些當新的一段，分數同 lattice 的邊：首字 bigram、詞內機率，詞庫的詞加 β，扣 γ。
+  - 每個都加 `personal`：個人機率只有個人 bigram（`P_personal = λ·P_bigram`），沒學過是 0。取前 9 個，同分依文字。
+  - 詞庫的詞另依文字排序存一份（文字接成一串、記位移與 f32 的 ln unigram），查「以某串字開頭的詞」用；載入時建，約 26 萬詞多約 4 MB 常駐、峰值多約 7 MB，載入多約 20–30 ms（票 13 Comments）。
+  - 做法參考 macOS／iOS 速成看前一個詞、iOS 可一直接下去（黑箱 T8）；librime-predict 查預先建好的「上一次上屏 → 下一個詞」資料庫，這裡不另建資料包，直接由詞庫、bigram 與個人 bigram 算。
 - Unicode 擴展區的字不進 lattice；整串輸入碼就是一個字的碼時，排在一般字之後（brief §4.1）。
 - 候選列：蓋滿整串的字、詞與分數最高的幾條多段路徑（方案檔 `ranking.sentences`，速成 3 條）依分數排 → 繁體模式的簡體字（§4.1 的標記）依分數 → 擴展區的字 → 只蓋住開頭一段的字詞，蓋得長的在前、同長依分數（繁體模式的簡體字排在同長的最後）；文字重複的只留第一個。排位規則在這之後套用，簡體字選兩次照樣成首選（brief §4.1，M3 票 19）；簡體模式或 `Options.simplified_after_traditional` 關掉時不分（§2.1）。簡體字照樣進 lattice、在多段路徑裡照分數比，不另扣分：它們在語料裡只有零星殘留，字頻極低。多段路徑放多：維基集修正次數降、口語集升（票 07 Comments）。
 
@@ -285,6 +297,7 @@ P_段內 = 1（單字）
 - 自動造詞：一次組字分兩次以上選定（選過開頭一段再選蓋滿剩下的，或移到第 2 段以後的分段改選，前面的分段照顯示的字固定）後上屏，把「整串輸入碼 → 上屏文字」記成使用者詞；上屏次數由同一次上屏的學習記成 1。碼表或詞庫已有同碼同字的不記（libime 也略過已有的詞）；標點、大寫先上屏組字與 Enter 不算選定，不造詞；無痕不造詞。
 - 分隔記號（§2.1）不進學習資料：每段、整串、自動造詞的碼都去掉它，排位規則比對的碼也去掉它（同 Rime 使用者詞典的碼由音節組成，brief §12.2）。所以 `mi'r` 選兩次「歹口」，記的是 `mir` → 歹口，不分隔打 `mir` 也成首選；分隔過的組字照舊要分兩次以上選定才自動造詞（M1 票 28）。
 - `Options.incognito` 為真時不寫任何學習資料、不用前文。學習總開關 `Options.learning`（brief §4.5、§7，預設開，M3 票 12）關掉時也不寫任何學習資料（計數、個人 bigram、自動造詞），但已學的照用、前文照用；手動加詞與常用語是使用者明確的操作，照收（同無痕）。
+- 選了聯想（§2.1，M3 票 13）只記個人 bigram「剛上屏的最後一段 → 這個聯想」（`UserModel::learn_association`，tick 同上），聯想沒有輸入碼，不記學習計數；它也成了下一次組字前面的字詞（§2.3）。無痕、學習關掉時不記。
 - 匯出格式（對外，M1 票 14 定稿 v1；M3 升 v2，收尾票定稿；改了要升版本，brief §5.3）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
   - 第一行 `# qim-userdict v2`；匯入也收 `# qim-userdict v1`（M3 spec〈共同規則〉）。接著個人 bigram 的 tick 一行 `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫），每個方案一行 `#@/tick/<方案>\t<tick>`；其餘 `#` 開頭的行與空行是註解，匯出時寫一行欄名註解，有個人 bigram 時在它們前面另一行。
   - 每個（方案, 輸入碼, 詞）一列、9 欄，依方案、輸入碼、詞排序：`方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語，v2 起）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。

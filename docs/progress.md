@@ -38,9 +38,11 @@
 | 2026-11-11 | M3 18 | 粵語詞庫：rime-cantonese、粵典查不清不用（粵典待書面確認）；HKCanCor train 的詞補 383 個，口語集變好、個人集多錯 1 題更新 baseline；見票 18 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 20 | 資料包 manifest（plan §4.6），核心載入時核對；網頁設定區列出、切換、刪除、從檔案匯入（IndexedDB）；bench 不變；見票 20 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 12 | 個人 bigram（λ 0.8，dev 掃出；句中學到的不搶單打首選）、學習總開關（網頁加開關）、匯出 v2 加 bigram 列；合併 main 後 `--learning` 公開集合合計修正 −138；見票 12 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
+| 2026-11-11 | M3 13 | 聯想：上屏後給下一個字詞（補完詞庫的詞、bigram、個人 bigram，同一把尺），按鍵照 macOS、開關預設開；bench 前後相同；黑箱 T6、T8 重跑；見票 13 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 13：數字鍵照 macOS 選聯想（不學 Microsoft 的 Shift＋數字），上屏後緊接著打數字要先按 Esc；聯想只看剛上屏的分段、從段的邊界補詞，無痕不出；改 plan §2.1、§2.3、§2.4；見票 13。
 - 2026-11-11 M3 票 17：Gboard 快捷鍵預設不設成觸發詞（原本是方案的鍵就設），確認框勾選才設、標出會搶首選的列：在別的鍵盤設的快捷鍵常撞速成的碼；改 plan §2.4；見票 17。
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
 - 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。

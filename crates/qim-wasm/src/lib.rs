@@ -280,6 +280,14 @@ impl WebSession {
         self.session.refresh(&self.engine, &self.user).into()
     }
 
+    /// 聯想（M3 票 13，brief §7）：上屏之後候選列給接下來可能要打的字詞，預設開。聯想顯示中
+    /// 關掉也立刻收起。
+    #[wasm_bindgen(js_name = setAssociation)]
+    pub fn set_association(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.association = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
     /// 數字後的 `.` `:` 用半形（M1 票 26，brief §4.7），預設開。只影響下一個標點，組字不必重列。
     #[wasm_bindgen(js_name = setDigitSeparators)]
     pub fn set_digit_separators(&mut self, on: bool) {

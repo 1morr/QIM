@@ -157,7 +157,12 @@ async function start(): Promise<void> {
 		focusText,
 	);
 	mountWordList(session, userDict.save, focusText);
-	const syncContext = mountContext(text, session, contextLimit());
+	// 給前文或失焦後核心可能收起了聯想（游標移走、換欄位）：沒有組字、核心也沒有候選了，就清掉候選列。
+	const syncContext = mountContext(text, session, contextLimit(), () => {
+		if (!shown.composing && session.allCandidates().length === 0) {
+			candidateBar.show([], [], false);
+		}
+	});
 	// 開關改了不是選字；改完重給前文（關掉無痕之後要立刻給）。
 	settings.connect(
 		session,
@@ -173,7 +178,11 @@ async function start(): Promise<void> {
 		text,
 		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
 		(snapshot) => apply(snapshot, snapshot.action === "space"),
-		(snapshot) => hostDefault(text, snapshot),
+		// 交還宿主的鍵也可能收起了聯想（空白、Enter），照樣重畫候選列。
+		(snapshot) => {
+			hostDefault(text, snapshot);
+			render(snapshot);
+		},
 	);
 	// 換資料包：核心換上新的那組（學習資料與開關留著），組字重列，字根提示跟著換。
 	mountPackSettings(
@@ -226,7 +235,13 @@ async function start(): Promise<void> {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
 			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作。
 			if (!shown.composing) {
-				session.press("other").free();
+				const snapshot = session.press("other");
+				try {
+					// 也收起了聯想。
+					render(snapshot);
+				} finally {
+					snapshot.free();
+				}
 			}
 			return;
 		}
@@ -246,6 +261,8 @@ async function start(): Promise<void> {
 		const snapshot = session.press(key.kind, key.value);
 		try {
 			if (!snapshot.handled) {
+				// 交還瀏覽器的鍵（空白、Enter、方向鍵…）收起了聯想：候選列跟著清掉。
+				render(snapshot);
 				return;
 			}
 			event.preventDefault();

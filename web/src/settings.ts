@@ -99,6 +99,14 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setEmojiCandidates(on),
 	},
 	{
+		// 上屏之後候選列給接下來可能要打的字詞（M3 票 13），數字鍵或點選選。
+		kind: "checkbox",
+		id: "association",
+		label: "聯想",
+		checked: true,
+		apply: (session, on) => session.setAssociation(on),
+	},
+	{
 		// 數字後的句點、冒號用半形；逗號照舊全形。
 		kind: "checkbox",
 		id: "digit-separators",
