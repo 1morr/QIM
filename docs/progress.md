@@ -31,8 +31,8 @@
 | 2026-11-11 | M3 14 | 常用語：來源 `phrase` 的使用者詞，觸發詞或候選列清單上屏，設定區增刪改；匯出升 v2（詞欄跳脫）、收 v1；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 19 | 繁體模式的簡體字（278 字，建置端判定，格式 v6）排在同碼繁體字之後，開關「繁體字優先」預設開；選兩次照常成首選；見票 19 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少，dev 重比結論相同）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
-| 2026-11-11 | M3 03 | 規則 1 × 2 多移一次先紅再修；規則 3、4 與分段選出的整串補測試；`beam` 驗證搬進 `Ranking::check`；bench 前後相同；見票 03 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 16 | emoji 候選：CLDR 粵語、繁中標註建 `cldr-emoji-yue-hant`，整串字詞後接最多 3 個、預設開；首選不變、修正多 0.1–1.4% 更新 baseline；見票 16 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
+| 2026-11-11 | M3 03 | 規則 1 × 2 多移一次先紅再修；規則 3、4 與分段選出的整串補測試；`beam` 驗證搬進 `Ranking::check`；bench 前後相同；見票 03 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 
 ## 偏差與決定
 
