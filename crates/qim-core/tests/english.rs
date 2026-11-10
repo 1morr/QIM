@@ -350,3 +350,63 @@ fn switching_to_english_mid_composition_commits_the_chinese_first_candidate() {
     assert_eq!(snapshot.commit, Some(first));
     assert!(snapshot.ascii);
 }
+
+/// 殼只換選項、沒呼叫 `refresh` 就選第 2 位：關掉英文候選後第 2 位是中文，不是換選項前的 `the`。
+#[test]
+fn selecting_after_turning_the_option_off_without_refresh_skips_the_english_word() {
+    let off = Options {
+        english_candidates: false,
+        ..Options::default()
+    };
+    let mut expected = Ime::new();
+    expected.session.set_options(off);
+    expected.type_code("the");
+    let expected = expected.press(Key::Digit(2));
+
+    let mut ime = Ime::new();
+    assert_eq!(texts(&ime.type_code("the"))[1], "the");
+    ime.session.set_options(off);
+    let shown = ime.session.select(&ime.engine, &mut ime.user, 1);
+    assert_ne!(shown.commit.as_deref(), Some("the"));
+    assert_eq!(shown.commit, expected.commit);
+    assert_eq!(shown.composition, expected.composition);
+}
+
+/// 換選項後還沒重列時，候選列馬上會換：不給重排要求，換選項前要求的結果也作廢。
+#[test]
+fn reranking_waits_for_the_list_of_the_new_option() {
+    let mut ime = Ime::new();
+    ime.type_code("the");
+    let request = ime.session.rerank_request().unwrap();
+    ime.session.set_options(Options {
+        english_candidates: false,
+        ..Options::default()
+    });
+    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(
+        ime.session
+            .apply_rerank(&ime.engine, request.generation, &[2, 1]),
+        None
+    );
+}
+
+/// 換選項後還沒重列時，展開面板不給舊候選：面板的位置會被 `select` 拿去選新列表，給了會選錯字。
+#[test]
+fn the_expanded_list_is_empty_until_relisted_with_the_new_option() {
+    let mut ime = Ime::new();
+    ime.type_code("the");
+    ime.session.set_options(Options {
+        english_candidates: false,
+        ..Options::default()
+    });
+    assert_eq!(ime.session.all_candidates(), Vec::new());
+    let shown = ime.session.refresh(&ime.engine, &ime.user);
+    let all: Vec<String> = ime
+        .session
+        .all_candidates()
+        .into_iter()
+        .map(|c| c.text)
+        .collect();
+    assert_eq!(all[..texts(&shown).len()], texts(&shown)[..]);
+    assert!(!all.contains(&"the".to_string()), "{all:?}");
+}

@@ -299,3 +299,35 @@ fn in_traditional_mode_a_touch_text_key_is_committed_as_is() {
     let alone = ime.session.text(&ime.engine, &mut ime.user, "多謝");
     assert_eq!(alone.commit.as_deref(), Some("多謝"));
 }
+
+/// 殼只換選項、沒呼叫 `refresh` 就點候選：選的是新選項列出的第 2 個（繁體的「幹」），
+/// 不是換選項前簡體列表的「甲」。
+#[test]
+fn selecting_after_switching_without_refresh_uses_the_new_list() {
+    let mut ime = Ime::simplified();
+    assert_eq!(texts(&ime.type_code("ef")), ["干", "甲"]);
+    ime.session.set_options(Options::default());
+    let shown = ime.session.select(&ime.engine, &mut ime.user, 1);
+    assert_eq!(shown.commit.as_deref(), Some("幹"));
+}
+
+/// 殼只換選項就點組字（回到整串，目前分段沒變）：候選照新選項重列，不是換選項前的簡體列表。
+#[test]
+fn focusing_after_switching_without_refresh_lists_with_the_new_option() {
+    let mut ime = Ime::simplified();
+    let shown = ime.type_code("ef");
+    let whole = shown.composition.segments.len();
+    ime.session.set_options(Options::default());
+    let shown = ime.session.focus_segment(&ime.engine, &mut ime.user, whole);
+    assert_eq!(texts(&shown), ["乾", "幹", "甲", "干"]);
+}
+
+/// 殼只換選項就按觸控的文字鍵：先上屏的組字照新選項，接著上屏文字。
+#[test]
+fn text_after_switching_without_refresh_commits_with_the_new_option() {
+    let mut ime = Ime::simplified();
+    ime.type_code("anrcd");
+    ime.session.set_options(Options::default());
+    let shown = ime.session.text(&ime.engine, &mut ime.user, "！");
+    assert_eq!(shown.commit.as_deref(), Some("門口們！"));
+}
