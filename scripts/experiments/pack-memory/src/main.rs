@@ -28,7 +28,7 @@ struct Sample {
     rss: u64,
     /// `ri_phys_footprint`：系統記憶體上限看的值（README〈指標〉）。
     footprint: u64,
-    /// `malloc_zone_statistics` 的 `size_in_use`：預設 zone 裡還沒釋放的配置。
+    /// `malloc_zone_statistics(NULL)` 的 `size_in_use`：所有 zone 合計還沒釋放的配置。
     heap: u64,
     /// `ri_lifetime_max_phys_footprint`：到目前為止 footprint 的最高點。
     peak_footprint: u64,
@@ -67,30 +67,55 @@ struct Row {
     after: Sample,
 }
 
+fn mb(bytes: u64) -> f64 {
+    bytes as f64 / MB
+}
+
 fn delta_mb(after: u64, before: u64) -> f64 {
     (after as f64 - before as f64) / MB
 }
 
-/// 讀檔、解析、丟掉檔案位元組，量這整段前後的差；檔案的緩衝區沒還給系統的部分也算進去。
+/// 量 `step` 前後的差記成一列；`step` 回傳它的結果與讀了多少位元組的檔案。
+fn measure<T>(
+    rows: &mut Vec<Row>,
+    name: &'static str,
+    step: impl FnOnce() -> (T, Option<u64>),
+) -> T {
+    let before = sample();
+    let (value, file) = step();
+    rows.push(Row {
+        name,
+        file,
+        before,
+        after: sample(),
+    });
+    value
+}
+
+/// 讀檔、解析、丟掉檔案位元組，量這整段；檔案的緩衝區沒還給系統的部分也算進去。
 fn load<T>(
     rows: &mut Vec<Row>,
     name: &'static str,
     path: &Path,
     parse: impl FnOnce(&[u8]) -> T,
 ) -> T {
-    let before = sample();
-    let bytes = fs::read(path)
-        .unwrap_or_else(|e| panic!("讀不了 {}：{e}（先跑 cargo xtask data）", path.display()));
-    let value = black_box(parse(&bytes));
-    let file = bytes.len() as u64;
-    drop(bytes);
-    rows.push(Row {
-        name,
-        file: Some(file),
-        before,
-        after: sample(),
-    });
-    value
+    measure(rows, name, || {
+        let bytes = read(path);
+        let value = black_box(parse(&bytes));
+        (value, Some(bytes.len() as u64))
+    })
+}
+
+fn read(path: &Path) -> Vec<u8> {
+    fs::read(path)
+        .unwrap_or_else(|e| panic!("讀不了 {}：{e}（先跑 cargo xtask data）", path.display()))
+}
+
+/// 要 libmalloc 把空出來的頁還給系統，回傳還了多少位元組。
+fn relieve() -> u64 {
+    // SAFETY: 簽章照 `malloc/malloc.h` 的 `size_t malloc_zone_pressure_relief(malloc_zone_t *zone,
+    // size_t goal)`；只歸還空頁，不碰還在用的配置。
+    unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) as u64 }
 }
 
 fn pack(build: &Path, id: &str) -> PathBuf {
@@ -110,11 +135,34 @@ fn parse_layout(text: &str) -> Layout {
     serde_json::from_str(text).expect("內建佈局讀得進型別")
 }
 
+/// `PROBE=hashset`：在沒有別的垃圾頁的新程序裡，量 `Engine::new` 為詞頻總和建的那種 HashSet。
+/// 檔案位元組留到最後才丟，免得 HashSet 重用它釋放的頁。
+fn hashset_probe(build: &Path) {
+    let bytes = read(&pack(build, "quick-lexicon"));
+    let words = LexiconPack::from_bytes(&bytes).unwrap().lexicon;
+    let before = sample();
+    let texts = words
+        .iter()
+        .flat_map(|(_, w)| w.iter().map(|w| w.text.as_str()))
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let after = sample();
+    black_box((&bytes, &words));
+    println!(
+        "PROBE=hashset：新程序裡對 {texts} 個詞建 HashSet<&str> 再丟掉後 footprint 增加 {:.2} MB、heap 增加 {:.2} MB",
+        delta_mb(after.footprint, before.footprint),
+        delta_mb(after.heap, before.heap)
+    );
+}
+
 fn main() {
     let build = std::env::args().nth(1).map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../build"),
         PathBuf::from,
     );
+    if std::env::var_os("PROBE").is_some_and(|p| p == "hashset") {
+        return hashset_probe(&build);
+    }
     let start = sample();
     let mut rows = Vec::new();
 
@@ -153,16 +201,12 @@ fn main() {
     );
 
     // Engine 拿走速成、詞庫、bigram、簡繁、英文；這一步量的是它另外建的（依字頻重排的碼表等）。
-    let before = sample();
-    let engine = Engine::new(scheme, Some(lexicon), Some(bigram))
-        .unwrap()
-        .with_simplifier(simplifier)
-        .with_english(english);
-    rows.push(Row {
-        name: "`Engine`（拿走上面五份）",
-        file: None,
-        before,
-        after: sample(),
+    let engine = measure(&mut rows, "`Engine`（拿走上面五份）", || {
+        let engine = Engine::new(scheme, Some(lexicon), Some(bigram))
+            .unwrap()
+            .with_simplifier(simplifier)
+            .with_english(english);
+        (engine, None)
     });
 
     let layout_path = build.join("layouts/gboard-quick.json");
@@ -176,25 +220,29 @@ fn main() {
     });
 
     let end = sample();
-    // SAFETY: 只要求 libmalloc 歸還空頁，不碰還在用的配置。
-    let relieved = unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
+    let relieved = relieve();
     let relief = sample();
-    // 對照：配置 13 MB、寫滿、丟掉，看釋放的大塊配置會不會從 footprint 退掉。
-    let probe = vec![1u8; 13 << 20];
-    black_box(&probe);
-    drop(probe);
-    let freed = sample();
-    // 量完才另外讀一次詞庫數結構，免得暫存的配置混進上面的增量。
-    let words = LexiconPack::from_bytes(&fs::read(pack(&build, "quick-lexicon")).unwrap())
+    // 以下都在量完之後，暫存的配置不混進上面的增量。
+    // 另讀一次詞庫，數結構；同 `Engine::new` 算詞頻總和，對全部詞建一個 HashSet 再丟掉。
+    let words = LexiconPack::from_bytes(&read(&pack(&build, "quick-lexicon")))
         .unwrap()
         .lexicon;
     let word_codes = words.iter().count();
     let word_entries: usize = words.iter().map(|(_, w)| w.len()).sum();
+    let before_set = sample();
     let word_texts = words
         .iter()
         .flat_map(|(_, w)| w.iter().map(|w| w.text.as_str()))
         .collect::<std::collections::HashSet<_>>()
         .len();
+    let after_set = sample();
+    // 對照：配置 13 MB、寫滿、丟掉，看釋放的大塊配置會不會從 footprint 退掉，再要 libmalloc 還一次。
+    let probe = vec![1u8; 13 << 20];
+    black_box(&probe);
+    drop(probe);
+    let freed = sample();
+    let relieved_again = relieve();
+    let relief_again = sample();
     let candidates = engine.candidates(&UserModel::default(), "anr");
     assert!(candidates.iter().any(|c| c == "門口"), "anr 沒有「門口」");
     black_box((&engine, &hint, &layout));
@@ -203,14 +251,14 @@ fn main() {
     println!(
         "schema={} 執行檔 {:.2} MB（{}）",
         cfg!(feature = "schema"),
-        fs::metadata(&exe).unwrap().len() as f64 / MB,
+        mb(fs::metadata(&exe).unwrap().len()),
         exe.display()
     );
     println!(
         "開始時 RSS {:.2} MB、footprint {:.2} MB、heap {:.2} MB",
-        start.rss as f64 / MB,
-        start.footprint as f64 / MB,
-        start.heap as f64 / MB
+        mb(start.rss),
+        mb(start.footprint),
+        mb(start.heap)
     );
     println!();
     println!("| 步驟 | 檔案 | RSS 增加 | footprint 增加 | heap 增加 | footprint ÷ 檔案 |");
@@ -219,8 +267,8 @@ fn main() {
         let footprint = delta_mb(row.after.footprint, row.before.footprint);
         let (file, ratio) = match row.file {
             Some(bytes) => {
-                let mb = bytes as f64 / MB;
-                (format!("{mb:.2} MB"), format!("{:.1}×", footprint / mb))
+                let file = mb(bytes);
+                (format!("{file:.2} MB"), format!("{:.1}×", footprint / file))
             }
             None => ("—".into(), "—".into()),
         };
@@ -235,29 +283,36 @@ fn main() {
     let footprint = delta_mb(end.footprint, start.footprint);
     println!(
         "| 合計 | {:.2} MB | {:.2} MB | {footprint:.2} MB | {:.2} MB | {:.1}× |",
-        files as f64 / MB,
+        mb(files),
         delta_mb(end.rss, start.rss),
         delta_mb(end.heap, start.heap),
-        footprint / (files as f64 / MB),
+        footprint / mb(files),
     );
     println!();
     println!(
         "結束時 RSS {:.2} MB、footprint {:.2} MB、heap {:.2} MB；footprint 最高 {:.2} MB",
-        end.rss as f64 / MB,
-        end.footprint as f64 / MB,
-        end.heap as f64 / MB,
-        end.peak_footprint as f64 / MB
+        mb(end.rss),
+        mb(end.footprint),
+        mb(end.heap),
+        mb(end.peak_footprint)
     );
     println!(
         "malloc_zone_pressure_relief 還給系統 {:.2} MB；之後 RSS {:.2} MB、footprint {:.2} MB",
-        relieved as f64 / MB,
-        relief.rss as f64 / MB,
-        relief.footprint as f64 / MB
+        mb(relieved),
+        mb(relief.rss),
+        mb(relief.footprint)
     );
     println!(
-        "對照：配置 13 MB 寫滿再丟掉後 footprint 增加 {:.2} MB、heap 增加 {:.2} MB",
-        delta_mb(freed.footprint, relief.footprint),
-        delta_mb(freed.heap, relief.heap)
+        "對照：對 {word_texts} 個詞建 HashSet<&str> 再丟掉後 footprint 增加 {:.2} MB、heap 增加 {:.2} MB",
+        delta_mb(after_set.footprint, before_set.footprint),
+        delta_mb(after_set.heap, before_set.heap)
+    );
+    println!(
+        "對照：配置 13 MB 寫滿再丟掉後 footprint 增加 {:.2} MB、heap 增加 {:.2} MB；再呼叫 malloc_zone_pressure_relief 還給系統 {:.2} MB，footprint 變化 {:.2} MB",
+        delta_mb(freed.footprint, after_set.footprint),
+        delta_mb(freed.heap, after_set.heap),
+        mb(relieved_again),
+        delta_mb(relief_again.footprint, freed.footprint)
     );
     println!(
         "詞庫 {} 個碼、{} 個詞條（不重複的詞 {} 個）",

@@ -1,6 +1,6 @@
 # 04: 在 Mac 量資料包載入後的常駐記憶體
 
-Status: ready-for-agent
+Status: done
 Blocked by: None (can start immediately)
 讀: plan §1.4、§4、§7.8、§8（mmap 與 `jsonschema` 兩列）；brief §9；spec〈共同規則〉；`docs/development.md`〈資料建置〉
 
@@ -14,7 +14,14 @@ Blocked by: None (can start immediately)
 
 ## 驗收
 
-- [ ] README 有日期、機器、Rust 版本、commit、量法與結果表；照 README 能重量。
-- [ ] 每份資料包都有「檔案大小 / 載入後增加的常駐記憶體 / 倍數」；有無 `jsonschema` 各一列。
-- [ ] `docs/research/ios-feasibility.md` 有這一節與建議。
-- [ ] `cargo xtask check` 綠燈。
+- [x] README 有日期、機器、Rust 版本、commit、量法與結果表；照 README 能重量。
+- [x] 每份資料包都有「檔案大小 / 載入後增加的常駐記憶體 / 倍數」；有無 `jsonschema` 各一列。
+- [x] `docs/research/ios-feasibility.md` 有這一節與建議。
+- [x] `cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-10 結果：全部載入 footprint 約 96 MB（還在用的 heap 68 MB，詞庫佔 41 MB）；整條 `validate` 讓執行檔多 3.1 MB。建議與數字見 `docs/research/ios-feasibility.md`〈Mac 上的資料包記憶體〉。
+- 票外發現：macOS 27 上 malloc 釋放的頁留在 footprint、只被之後的配置重用（13 MB 對照），所以讀檔緩衝區與 `Engine::new` 的暫存 `HashSet`（單獨 +17.3 MB）會墊高 footprint；省法列在研究文件〈建議〉，交給票 09 決定。
+- 量法的取捨：「不驗證」那版只用 `serde_json` 讀型別，Schema 那版是整條 `validate`；「只留型別與引用檢查」沒量，`qim-layout` 沒有公開那條路，等票 09 決定加 feature 後再量。
+- code-review 未處理：`by_frequency` 複製碼表的峰值沒有單獨量（併在 `Engine` 那步）；程式輸出與 panic 訊息用中文，跟 repo 其他實驗與 xtask 一致，不照全域「log 用英文」。其餘發現（heap 註解、推論標註、HashSet 數字可重量、pressure relief 再呼叫一次、`run.sh` 相對路徑、重複的取樣碼）已修。

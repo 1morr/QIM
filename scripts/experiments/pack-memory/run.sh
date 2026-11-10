@@ -1,6 +1,10 @@
 #!/bin/sh
 # 編有無 Schema 驗證兩個版本，各跑 RUNS 次（預設 3）；先在 repo 根目錄跑過 cargo xtask data。
 set -eu
+# 相對路徑的 build 目錄照呼叫時的目錄解析，再切到本目錄。
+if [ $# -gt 0 ]; then
+  set -- "$(cd "$1" && pwd)"
+fi
 cd "$(dirname "$0")"
 runs=${RUNS:-3}
 for variant in plain schema; do
@@ -17,3 +21,5 @@ for variant in plain schema; do
     i=$((i + 1))
   done
 done
+echo "== PROBE=hashset"
+PROBE=hashset ./target/pack-memory-plain "$@"

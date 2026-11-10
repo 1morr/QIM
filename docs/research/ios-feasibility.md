@@ -56,58 +56,69 @@ group-write=write-failed:NSCocoaErrorDomain#513/NSPOSIXErrorDomain#1
 
 M2 票 04，2026-11-10。實驗程式、量法、指標的定義與完整輸出：`scripts/experiments/pack-memory/`。
 
-環境：Mac18,5（Apple M6，32 GB），macOS 27.0.1（26A434），Rust 1.99.1，release 組態開 `lto`、`strip`，commit `5186e6e` 建的資料包。指標用 `phys_footprint`（同上一節的 footprint；XNU 定義為匿名頁加壓縮的匿名頁等，不含乾淨的檔案映射頁），另記 RSS 與 malloc 還在用的位元組（heap）。各跑 3 次，差在 0.5 MB 內。這是 Mac 的數字，iOS 的 malloc 與頁大小可能不同，票 08 在 iPhone 上重量。
+環境：Mac18,5（Apple M6，32 GB），macOS 27.0.1（26A434），Rust 1.99.1，release 組態開 `lto`、`strip`，資料包由 commit `5186e6e` 建。
+
+- 指標用 `phys_footprint`，同上一節的 footprint。XNU 的定義是匿名頁加上被壓縮的匿名頁等；公式沒有檔案映射項，推論不含乾淨的檔案映射頁。
+- 另記 RSS，以及 malloc 還在用的位元組（heap）。
+- 每個版本跑 6 次，差在 0.5 MB 內。
+- 這是 Mac 的數字，iOS 的 malloc 與頁大小可能不同，票 08 在 iPhone 上重量。
 
 ### 結果
 
-每步是「讀檔 → 反序列化 → 丟掉檔案位元組」前後的差：
+每步是「讀檔 → 反序列化 → 丟掉檔案位元組」前後的差。前一步釋放的頁會被後一步重用，所以單步的 footprint 與順序有關，合計與 heap 不受影響：
 
 | 資料包 | 檔案大小 | 載入後增加的 footprint | 倍數 | 其中還在用的（heap） |
 | --- | ---: | ---: | ---: | ---: |
-| 速成 `quick` | 0.43 MB | 1.36 MB | 3.2× | 0.74 MB |
-| 詞庫 `quick-lexicon` | 4.95 MB | 46.67 MB | 9.4× | 40.73 MB |
+| 速成 `quick` | 0.43 MB | 1.38 MB | 3.2× | 0.74 MB |
+| 詞庫 `quick-lexicon` | 4.95 MB | 46.69 MB | 9.4× | 40.73 MB |
 | bigram `zh-hant-bigram` | 2.87 MB | 12.34 MB | 4.3× | 7.45 MB |
-| 字根提示 `cangjie-hint` | 1.24 MB | 16.38 MB | 13.2× | 14.78 MB |
-| 簡繁 `opencc-hk2s` | 0.06 MB | 0.69 MB | 10.8× | 0.86 MB |
+| 字根提示 `cangjie-hint` | 1.24 MB | 16.33 MB | 13.1× | 14.78 MB |
+| 簡繁 `opencc-hk2s` | 0.06 MB | 0.75 MB | 11.7× | 0.86 MB |
 | 英文 `scowl-en-us` | 0.76 MB | 4.09 MB | 5.4× | 3.31 MB |
-| `Engine`（拿走速成、詞庫、bigram、簡繁、英文） | — | 12.88 MB | — | −0.03 MB |
-| 合計（含不驗證的佈局） | 10.54 MB | 94.56 MB | 9.0× | 68.25 MB |
+| `Engine`（拿走速成、詞庫、bigram、簡繁、英文） | — | 12.78 MB | — | −0.03 MB |
+| 合計（含不驗證的佈局） | 10.54 MB | 94.58 MB | 9.0× | 68.25 MB |
 
-有無 `jsonschema`（佈局 `gboard-quick.json` 0.23 MB）：
+佈局 `gboard-quick.json`（0.23 MB）有無 Schema 驗證：
+
+- 「不驗證」只用 `serde_json` 讀進型別。
+- 「Schema 驗證」是整條 `qim_layout::validate`：JSON Schema、讀進型別，再加引用與頁面檢查。所以差距是整條 `validate` 的成本，不只是 `jsonschema`。
+- 「只留型別與引用檢查」的讀法沒量，`qim-layout` 沒有公開那條路。
 
 | 佈局讀法 | 執行檔（strip 後） | 佈局那步的 footprint | 其中還在用的 | 全部載入後的 footprint |
 | --- | ---: | ---: | ---: | ---: |
-| 不驗證（`serde_json` 讀進型別） | 0.67 MB | 0.12–0.16 MB | 0.40 MB | 95.6–95.8 MB |
-| Schema 驗證（`qim_layout::validate`） | 3.75 MB | 2.98–3.14 MB | 0.84 MB | 98.7–98.9 MB |
+| 不驗證 | 0.67 MB | 0.12–0.20 MB | 0.40 MB | 95.6–95.8 MB |
+| Schema 驗證 | 3.75 MB | 2.92–3.14 MB | 0.84 MB | 98.7–98.9 MB |
 
 ### 結論
 
 - **全部載入約 96 MB footprint**，是 brief §9 暫定的 30 MB 的三倍。加上空擴充約 10 MB 的基線約 106 MB，在 iPhone 18 Pro Max 的 177 MB 上限內；低階機的上限不知道。
-- **釋放的記憶體留在 footprint 裡。** 配置 13 MB 再丟掉，footprint 照樣 +13 MB，`malloc_zone_pressure_relief` 也還不回來。所以不驗證那版的 96 MB 裡只有 68 MB 還在用，約 1 MB 是程式本身，其餘約 26 MB 大多是用完丟掉的：
-  - 讀檔的緩衝區，共 10.5 MB。
-  - `Engine::new` 的暫存，12.9 MB。為了算詞頻總和，它對 25.7 萬個詞建了一個 `HashSet`（同樣大小的 `HashSet` 單獨量過是 8.5 MB），又把碼表整份複製一次。
-  - Schema 驗證那版另多約 2–3 MB 驗證器與 regex 的暫存。
-- 吃緊時系統會不會回收這些頁、jetsam 終止前會不會先回收，沒查到依據；票 09 加壓時確認。
-- **詞庫最大**：佔還在用的 68 MB 裡的 41 MB，heap 是檔案的 8.2 倍。23.4 萬個碼與 28.3 萬個詞條，每個都是獨立配置的 `String`，外加 `BTreeMap` 節點。
-- **字根提示倍數最高**：13.2 倍，每個字兩個 `Vec<String>`。
-- **bigram 已經是攤平的陣列**，heap 只是檔案的 2.6 倍。速成、簡繁、英文合計不到 5 MB 的 heap。
+- **釋放的頁不退出 footprint，但之後的配置會重用它們。**
+  - 配置 13 MB 再丟掉，footprint 照樣 +13 MB；前後兩次 `malloc_zone_pressure_relief` 都還回 0。
+  - footprint 因此跟著 heap 用量的高水位走：不驗證那版的 96 MB 裡只有 68 MB 還在用，約 1 MB 是程式本身，其餘約 26 MB 是載入途中的峰值留下的。
+  - 峰值主要來自兩處。一是讀檔的緩衝區，共 10.5 MB。二是 `Engine::new` 的暫存：為了算詞頻總和，它對 25.7 萬個詞建一個 `HashSet`，單獨量是 +17.3 MB（擴容時舊表放不進新表）；實跑時它部分重用前面釋放的緩衝區，整步 +12.8 MB。
+  - Schema 驗證那版另多約 3 MB，是驗證器與 regex 的暫存。
+- 記憶體吃緊時系統會不會回收這些頁、jetsam 終止前會不會先回收，沒查到依據；票 09 加壓時確認。
+- **詞庫最大。** 還在用的 68 MB 裡它佔 41 MB，heap 是檔案的 8.2 倍。它有 23.4 萬個碼與 28.3 萬個詞條，每個都是獨立配置的 `String`，外加 `BTreeMap` 節點。
+- **字根提示倍數最高**，13.1 倍，因為每個字存兩個 `Vec<String>`。
+- **bigram 已經是攤平的陣列**，heap 只是檔案的 2.6 倍。速成、簡繁、英文三份的 heap 合計不到 5 MB。
 
 ### 建議
 
-- **鍵盤擴充略過 Schema 驗證。** 它讓執行檔多 3.1 MB；驗證一次，footprint 多約 3 MB 而且不退。佈局在主 App 與編輯器存檔時已經驗過，擴充只讀。
-  - 要做的事：`qim-layout` 加一個 feature，關掉 `jsonschema`，只留型別與引用檢查（plan §8 那列）。
-  - 現在的 `Layout::from_json` 一定會走 `validate`，所以擴充需要一條不經 Schema 的讀法。
-  - 依 spec，決定在票 09 寫回 plan §1.3、§1.4。
+- **鍵盤擴充略過 Schema 驗證。**
+  - 理由：整條 `validate` 讓執行檔多 3.1 MB；驗證一次，footprint 多約 3 MB 而且不退。佈局在主 App 與編輯器存檔時已經驗過，擴充只讀。
+  - 做法：`qim-layout` 加一個 feature 關掉 `jsonschema`，只留型別與引用檢查（plan §8 那列）。現在的 `Layout::from_json` 一定會走 `validate`，擴充需要一條不經 Schema 的讀法。
+  - 依 spec，這個決定由票 09 寫回 plan §1.3、§1.4。
 - **最可能要改格式的是詞庫，其次是字根提示。**
-  - 詞庫：改成 mmap 友善的格式（例如 `fst` 存碼、詞放一整塊字串、用位移索引），常駐的量會接近檔案大小（約 5 MB），而且是乾淨的檔案映射頁，推論不算 footprint。
-  - 字根提示：只給殼顯示用，可以同樣改格式，或在擴充裡等使用者打開字根提示才載入。
+  - 詞庫：改成 mmap 友善的格式，例如用 `fst` 存碼、詞放成一整塊字串加位移索引。常駐量會接近檔案大小（約 5 MB），而且是乾淨的檔案映射頁，推論不算 footprint。
+  - 字根提示：只給殼顯示用。可以同樣改格式，或在擴充裡等使用者打開字根提示才載入。
   - bigram 可以先不動。速成、簡繁、英文都小，不必改。
-- **不改格式也能先省約 23 MB**，因為丟掉的記憶體不退：
-  - 讀資料包改用 mmap 或串流解析，省掉一份整檔的緩衝區（10.5 MB）。
-  - `Engine::new` 不在載入時建全詞的 `HashSet`，詞頻總和改由 `qim-databuild` 算好存進資料包；碼表就地排序，不複製（12.9 MB）。
+- **不改格式也能先壓低峰值**，因為峰值會留在 footprint：
+  - 讀資料包改用 mmap 或串流解析，省掉整檔的緩衝區（全部 10.5 MB）。
+  - `Engine::new` 不在載入時建全詞的 `HashSet`，詞頻總和改由 `qim-databuild` 算好存進資料包。這一項的單獨峰值是 17.3 MB。
+  - 兩項能省多少要改完重量：釋放的頁會互相重用，省下的量不是兩項相加。
   - 這兩項是改格式之外的獨立工作，票 09 決定要不要另開票。
 
 ### 給之後的票
 
-- 票 08：擴充先照現在的格式載入 `Engine`（速成、詞庫、bigram）加英文、簡繁與佈局。在 iPhone 上量的 footprint 跟這裡比，看 iOS 的 malloc 是否同樣不退釋放的頁。字根提示可以先不放。
-- 票 09：加壓時記下終止點的 footprint 與上面的組成；決定格式、Schema 驗證與兩項「不改格式的省法」。
+- 票 08：擴充先照現在的格式載入 `Engine`（速成、詞庫、bigram）加英文、簡繁與佈局；字根提示可以先不放。在 iPhone 上量 footprint，跟這裡比，看 iOS 的 malloc 是否同樣不退釋放的頁。
+- 票 09：加壓時記下終止點的 footprint 與上面的組成；決定格式、Schema 驗證，以及兩項「不改格式也能壓低峰值」的改法。
