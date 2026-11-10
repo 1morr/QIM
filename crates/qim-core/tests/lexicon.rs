@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, PackError, Packs, Ranking, Scheme,
-    SchemePack, Session, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Pack, PackError, Packs, Ranking,
+    Scheme, SchemePack, Session, Snapshot, UserModel, Word,
 };
 
 fn entry(text: char) -> CodeEntry {

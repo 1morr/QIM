@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, PackError, Packs, Ranking, Scheme, SchemePack, Session, Snapshot, UserModel,
+    LexiconPack, Pack, PackError, Packs, Ranking, Scheme, SchemePack, Session, Snapshot, UserModel,
 };
 
 fn scheme(language_model: Option<&str>) -> Scheme {

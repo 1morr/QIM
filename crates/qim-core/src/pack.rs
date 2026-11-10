@@ -8,22 +8,45 @@ use crate::{CodeTable, EnglishWords, LanguageModel, Lexicon, RadicalHints, Schem
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
 pub const FORMAT_VERSION: u32 = 5;
 
-/// 輸入方案資料包檔頭的魔數。
-const SCHEME_MAGIC: &[u8; 4] = b"QIMP";
-/// 詞庫資料包檔頭的魔數。
-const LEXICON_MAGIC: &[u8; 4] = b"QIML";
-/// 語言模型資料包檔頭的魔數。
-const LANGUAGE_MODEL_MAGIC: &[u8; 4] = b"QIMB";
-/// 簡繁資料包檔頭的魔數。
-const SIMPLIFIER_MAGIC: &[u8; 4] = b"QIMS";
-/// 字根提示資料包檔頭的魔數。
-const RADICAL_HINT_MAGIC: &[u8; 4] = b"QIMH";
-/// 英文資料包檔頭的魔數。
-const ENGLISH_MAGIC: &[u8; 4] = b"QIME";
+/// 各種資料包共用的位元組格式：魔數 [`Pack::MAGIC`]、postcard 的 [`FORMAT_VERSION`]、
+/// postcard 的本體。
+pub trait Pack: Serialize + DeserializeOwned {
+    /// 檔頭的魔數，每種資料包不同。
+    const MAGIC: [u8; 4];
+
+    /// 資料包的 id；方案資料包是方案的 id。
+    fn id(&self) -> &str;
+
+    fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
+        let mut bytes = Self::MAGIC.to_vec();
+        bytes.extend(postcard::to_allocvec(&FORMAT_VERSION).map_err(malformed)?);
+        bytes.extend(postcard::to_allocvec(self).map_err(malformed)?);
+        Ok(bytes)
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
+        let rest = bytes
+            .strip_prefix(&Self::MAGIC)
+            .ok_or(PackError::NotAPack)?;
+        let (found, rest) = postcard::take_from_bytes::<u32>(rest).map_err(malformed)?;
+        if found != FORMAT_VERSION {
+            return Err(PackError::UnsupportedVersion {
+                found,
+                supported: FORMAT_VERSION,
+            });
+        }
+        let (body, rest) = postcard::take_from_bytes::<Self>(rest).map_err(malformed)?;
+        if !rest.is_empty() {
+            return Err(PackError::Malformed(format!(
+                "結尾多了 {} 個位元組",
+                rest.len()
+            )));
+        }
+        Ok(body)
+    }
+}
 
 /// 一個輸入方案的資料包：方案與它的碼表。
-///
-/// 位元組格式：魔數 `QIMP`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SchemePack {
     pub scheme: Scheme,
@@ -31,8 +54,6 @@ pub struct SchemePack {
 }
 
 /// 詞庫資料包：詞、詞頻與字頻（plan §4.2）。方案用 [`crate::Packs::lexicon`] 指名它的 `id`。
-///
-/// 位元組格式：魔數 `QIML`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LexiconPack {
     pub id: String,
@@ -40,8 +61,6 @@ pub struct LexiconPack {
 }
 
 /// 語言模型資料包：字級 bigram（plan §4.3）。方案用 [`crate::Packs::language_model`] 指名它的 `id`。
-///
-/// 位元組格式：魔數 `QIMB`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LanguageModelPack {
     pub id: String,
@@ -50,8 +69,6 @@ pub struct LanguageModelPack {
 
 /// 簡繁資料包：OpenCC 的轉換表（plan §4.4），由 [`crate::Engine::with_simplifier`] 掛上，
 /// 不由方案指名：各方案都輸出繁體，簡體模式共用同一份。
-///
-/// 位元組格式：魔數 `QIMS`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SimplifierPack {
     pub id: String,
@@ -60,8 +77,6 @@ pub struct SimplifierPack {
 
 /// 字根提示資料包：字 → 倉頡三代 / 五代碼（plan §4.1 步驟 5）。方案用
 /// [`crate::Packs::radical_hint`] 指名它的 `id`，殼用 [`RadicalHints::for_scheme`] 取出。
-///
-/// 位元組格式：魔數 `QIMH`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadicalHintPack {
     pub id: String,
@@ -70,8 +85,6 @@ pub struct RadicalHintPack {
 
 /// 英文資料包：中文狀態的英文候選用的詞表（plan §4.4），由 [`crate::Engine::with_english`]
 /// 掛上，不由方案指名，各方案共用。
-///
-/// 位元組格式：魔數 `QIME`、postcard 的 [`FORMAT_VERSION`]、postcard 的本體。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnglishPack {
     pub id: String,
@@ -142,88 +155,50 @@ fn malformed(e: postcard::Error) -> PackError {
     PackError::Malformed(e.to_string())
 }
 
-fn encode(magic: &[u8; 4], body: &impl Serialize) -> Result<Vec<u8>, PackError> {
-    let mut bytes = magic.to_vec();
-    bytes.extend(postcard::to_allocvec(&FORMAT_VERSION).map_err(malformed)?);
-    bytes.extend(postcard::to_allocvec(body).map_err(malformed)?);
-    Ok(bytes)
-}
+impl Pack for SchemePack {
+    const MAGIC: [u8; 4] = *b"QIMP";
 
-fn decode<T: DeserializeOwned>(magic: &[u8; 4], bytes: &[u8]) -> Result<T, PackError> {
-    let rest = bytes.strip_prefix(magic).ok_or(PackError::NotAPack)?;
-    let (found, rest) = postcard::take_from_bytes::<u32>(rest).map_err(malformed)?;
-    if found != FORMAT_VERSION {
-        return Err(PackError::UnsupportedVersion {
-            found,
-            supported: FORMAT_VERSION,
-        });
-    }
-    let (body, rest) = postcard::take_from_bytes::<T>(rest).map_err(malformed)?;
-    if !rest.is_empty() {
-        return Err(PackError::Malformed(format!(
-            "結尾多了 {} 個位元組",
-            rest.len()
-        )));
-    }
-    Ok(body)
-}
-
-impl SchemePack {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        encode(SCHEME_MAGIC, self)
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        decode(SCHEME_MAGIC, bytes)
+    fn id(&self) -> &str {
+        &self.scheme.id
     }
 }
 
-impl LexiconPack {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        encode(LEXICON_MAGIC, self)
-    }
+impl Pack for LexiconPack {
+    const MAGIC: [u8; 4] = *b"QIML";
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        decode(LEXICON_MAGIC, bytes)
+    fn id(&self) -> &str {
+        &self.id
     }
 }
 
-impl LanguageModelPack {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        encode(LANGUAGE_MODEL_MAGIC, self)
-    }
+impl Pack for LanguageModelPack {
+    const MAGIC: [u8; 4] = *b"QIMB";
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        decode(LANGUAGE_MODEL_MAGIC, bytes)
+    fn id(&self) -> &str {
+        &self.id
     }
 }
 
-impl SimplifierPack {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        encode(SIMPLIFIER_MAGIC, self)
-    }
+impl Pack for SimplifierPack {
+    const MAGIC: [u8; 4] = *b"QIMS";
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        decode(SIMPLIFIER_MAGIC, bytes)
+    fn id(&self) -> &str {
+        &self.id
     }
 }
 
-impl RadicalHintPack {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        encode(RADICAL_HINT_MAGIC, self)
-    }
+impl Pack for RadicalHintPack {
+    const MAGIC: [u8; 4] = *b"QIMH";
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        decode(RADICAL_HINT_MAGIC, bytes)
+    fn id(&self) -> &str {
+        &self.id
     }
 }
 
-impl EnglishPack {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
-        encode(ENGLISH_MAGIC, self)
-    }
+impl Pack for EnglishPack {
+    const MAGIC: [u8; 4] = *b"QIME";
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, PackError> {
-        decode(ENGLISH_MAGIC, bytes)
+    fn id(&self) -> &str {
+        &self.id
     }
 }

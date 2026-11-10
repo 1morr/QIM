@@ -2,13 +2,14 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, EnglishPack, EnglishWords,
-    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, RadicalHintPack, RadicalHints,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, RadicalHintPack, RadicalHints,
     SchemePack, Simplifier, SimplifierPack, Word,
 };
+use qim_databuild::built::BuiltPack;
 use qim_databuild::common_forms::BothForms;
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
-use qim_databuild::verify::{self, CheckId, PackBytes, Report};
+use qim_databuild::verify::{self, CheckId, Report};
 use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字；
@@ -54,6 +55,35 @@ sentences = 3
 "#;
 
 const ESSAY: &str = "門口\t9435\n丟丟\t200\n";
+
+/// 照 pipeline 的順序排的六份資料包：速成、詞庫、語言模型、字根提示、簡繁、英文。位元組照給，
+/// 可以是壞的；種類由位置決定。
+fn list(bytes: [&[u8]; 6]) -> Vec<BuiltPack> {
+    fn built<P: Pack>(name: &'static str, bytes: &[u8]) -> BuiltPack {
+        BuiltPack {
+            name,
+            id: name.into(),
+            magic: P::MAGIC,
+            bytes: bytes.to_vec(),
+        }
+    }
+    let [
+        quick,
+        lexicon,
+        language_model,
+        radical_hint,
+        simplifier,
+        english,
+    ] = bytes;
+    vec![
+        built::<SchemePack>("速成", quick),
+        built::<LexiconPack>("詞庫", lexicon),
+        built::<LanguageModelPack>("語言模型", language_model),
+        built::<RadicalHintPack>("字根提示", radical_hint),
+        built::<SimplifierPack>("簡繁", simplifier),
+        built::<EnglishPack>("英文", english),
+    ]
+}
 
 fn rows() -> Vec<Row> {
     libcangjie::parse(TABLE).unwrap()
@@ -182,15 +212,15 @@ fn report(
     let radical_hint = radical_hint.to_bytes().unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
     let english = english().to_bytes().unwrap();
-    let bytes = PackBytes {
-        quick: &quick,
-        lexicon: &lexicon,
-        language_model: &language_model,
-        radical_hint: &radical_hint,
-        simplifier: &simplifier,
-        english: &english,
-    };
-    verify::run(&rows(), bytes, bytes)
+    let bytes = list([
+        &quick,
+        &lexicon,
+        &language_model,
+        &radical_hint,
+        &simplifier,
+        &english,
+    ]);
+    verify::run(&rows(), &bytes, &bytes)
 }
 
 fn run(pack: &SchemePack) -> Report {
@@ -295,15 +325,15 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
         .unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
     let english = english().to_bytes().unwrap();
-    let both = PackBytes {
-        quick: &bytes,
-        lexicon: &lexicon,
-        language_model: &language_model,
-        radical_hint: &radical_hint,
-        simplifier: &simplifier,
-        english: &english,
-    };
-    let report = verify::run(&rows, both, both);
+    let both = list([
+        &bytes,
+        &lexicon,
+        &language_model,
+        &radical_hint,
+        &simplifier,
+        &english,
+    ]);
+    let report = verify::run(&rows, &both, &both);
     assert_eq!(failed(&report), []);
     assert_eq!((report.continuous, report.extension), (11, 1));
 }
@@ -415,16 +445,9 @@ fn a_simplifier_pack_that_does_not_convert_fails_the_spot_check() {
     let identity = identity.to_bytes().unwrap();
     let hint = radical_hint().to_bytes().unwrap();
     let english = english().to_bytes().unwrap();
-    let bytes = PackBytes {
-        quick: &quick,
-        lexicon: &lexicon,
-        language_model: &model,
-        radical_hint: &hint,
-        simplifier: &identity,
-        english: &english,
-    };
+    let bytes = list([&quick, &lexicon, &model, &hint, &identity, &english]);
     assert_eq!(
-        failed(&verify::run(&rows(), bytes, bytes)),
+        failed(&verify::run(&rows(), &bytes, &bytes)),
         [CheckId::SimplifiedMenKou]
     );
 }
@@ -438,16 +461,9 @@ fn an_english_pack_without_the_fails_the_spot_check() {
     let hint = radical_hint().to_bytes().unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
     let english = english_with(&["then"]).to_bytes().unwrap();
-    let bytes = PackBytes {
-        quick: &quick,
-        lexicon: &lexicon,
-        language_model: &model,
-        radical_hint: &hint,
-        simplifier: &simplifier,
-        english: &english,
-    };
+    let bytes = list([&quick, &lexicon, &model, &hint, &simplifier, &english]);
     assert_eq!(
-        failed(&verify::run(&rows(), bytes, bytes)),
+        failed(&verify::run(&rows(), &bytes, &bytes)),
         [CheckId::EnglishThe]
     );
 }
@@ -473,26 +489,52 @@ fn different_bytes_from_the_second_build_fail_determinism() {
         simplifier().to_bytes().unwrap(),
         english().to_bytes().unwrap(),
     ];
-    fn bytes(b: &[Vec<u8>; 6]) -> PackBytes<'_> {
-        PackBytes {
-            quick: &b[0],
-            lexicon: &b[1],
-            language_model: &b[2],
-            radical_hint: &b[3],
-            simplifier: &b[4],
-            english: &b[5],
-        }
+    fn bytes(b: &[Vec<u8>; 6]) -> Vec<BuiltPack> {
+        list([&b[0], &b[1], &b[2], &b[3], &b[4], &b[5]])
     }
     for changed in 0..6 {
         let mut second = first.clone();
         *second[changed].last_mut().unwrap() ^= 1;
-        let report = verify::run(&rows(), bytes(&first), bytes(&second));
+        let report = verify::run(&rows(), &bytes(&first), &bytes(&second));
         assert_eq!(
             failed(&report),
             [CheckId::Deterministic],
             "改第 {changed} 份"
         );
     }
+}
+
+fn all_six() -> Vec<BuiltPack> {
+    let bytes = [
+        pack().to_bytes().unwrap(),
+        lexicon().to_bytes().unwrap(),
+        language_model().to_bytes().unwrap(),
+        radical_hint().to_bytes().unwrap(),
+        simplifier().to_bytes().unwrap(),
+        english().to_bytes().unwrap(),
+    ];
+    list([
+        &bytes[0], &bytes[1], &bytes[2], &bytes[3], &bytes[4], &bytes[5],
+    ])
+}
+
+#[test]
+fn a_second_build_missing_a_pack_fails_determinism() {
+    let first = all_six();
+    let mut second = first.clone();
+    second.pop();
+    let report = verify::run(&rows(), &first, &second);
+    assert_eq!(failed(&report), [CheckId::Deterministic]);
+}
+
+#[test]
+fn a_list_missing_a_kind_of_pack_fails_decoding() {
+    let mut packs = all_six();
+    packs.retain(|p| p.magic != EnglishPack::MAGIC);
+    let report = verify::run(&rows(), &packs, &packs);
+    assert_eq!(failed(&report), [CheckId::Decodes]);
+    let detail = &report.checks[0].detail;
+    assert!(detail.contains("QIME"), "{detail}");
 }
 
 #[test]
@@ -584,15 +626,15 @@ fn undecodable_pack_fails_without_panicking() {
             &english[..],
         ),
     ] {
-        let bytes = PackBytes {
+        let bytes = list([
             quick,
             lexicon,
             language_model,
             radical_hint,
             simplifier,
             english,
-        };
-        let report = verify::run(&rows(), bytes, bytes);
+        ]);
+        let report = verify::run(&rows(), &bytes, &bytes);
         assert_eq!(failed(&report), [CheckId::Decodes]);
     }
 }

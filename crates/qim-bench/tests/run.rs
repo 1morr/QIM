@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{
     CharModel, CodeEntry, CodeTable, Engine, EnglishPack, EnglishWords, Key, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, Packs, Ranking, Scheme, SchemePack, Session, Snapshot,
-    UserModel, Word,
+    LanguageModelPack, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme, SchemePack, Session,
+    Snapshot, UserModel, Word,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
