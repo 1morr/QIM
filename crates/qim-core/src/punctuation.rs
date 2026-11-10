@@ -34,7 +34,7 @@ pub(crate) fn full_width(c: char) -> Option<&'static str> {
 /// 中文裡數字後的逗號多半是句子的逗號（「共3，」，使用者決定，M1 票 26）。
 const DIGIT_SEPARATORS: [char; 2] = ['.', ':'];
 
-/// 前一個上屏的字是半形數字時，`c` 上屏半形。
+/// 前文以半形數字結尾時，`c` 上屏半形（`Session` 判斷前文）。
 pub(crate) fn is_digit_separator(c: char) -> bool {
     DIGIT_SEPARATORS.contains(&c)
 }

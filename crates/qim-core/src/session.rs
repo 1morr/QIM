@@ -9,6 +9,10 @@ use crate::{Engine, UserModel, punctuation};
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
 
+/// 核心留著的游標前文字最多幾個字（[`Session::set_context`]）：送雲端的上限（brief §8），bigram
+/// 只看最後一字。殼可以給更長的，核心只留最後這麼多。
+pub const CONTEXT_LIMIT: usize = 200;
+
 /// 重排要求最多帶幾個候選：第一頁。重排只動第一頁，翻到後面的頁時看得到的不會變。
 pub const RERANK_LIMIT: usize = PAGE_SIZE;
 
@@ -34,7 +38,7 @@ pub struct Options {
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
-    /// 數字後的 `.` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，同 librime
+    /// 數字後的 `.` `:` 用半形（brief §4.7）：前文以半形數字結尾時直接上屏半形（[`Session::set_context`]），同 librime
     /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
     pub digit_separators: bool,
     /// emoji 候選（plan §2.4）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面；
@@ -373,10 +377,14 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
-    /// 輸入框游標前的文字（[`Session::set_context`]）；`None` 是殼沒給過。
+    /// 前文（plan §2.1，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
+    /// 接上之後核心送出去的字（上屏的、交還宿主打的可見字元與空白）。殼沒給過時只有核心送出去的，
+    /// 同 librime 的 commit history。`None` 是不知道：沒給過也還沒送出過字、交還宿主的鍵改了游標前的
+    /// 字或移走游標（[`Session::passed_to_host`]）、殼換了欄位（[`Session::clear_context`]），或在
+    /// 無痕中：無痕時一個字都不記，關掉後也不會冒出無痕期間的字（brief §8）。
     context: Option<String>,
-    /// 最近一次送出去的文字（上屏或交還宿主打的鍵）以半形數字結尾。只看核心自己經手的：
-    /// 還沒改看前文（M3 票 05 定），所以游標移到別處、宿主自己改了字都看不到。
+    /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
+    /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
@@ -389,16 +397,32 @@ impl Session {
     /// `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選再處理；重列前
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
+        // 無痕不讀上下文（brief §8）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
+        if options.incognito && !self.options.incognito {
+            self.clear_context();
+        }
         self.options = options;
     }
 
-    /// 輸入框游標前的文字（plan §2.1）：組字開頭的字接它最後一字的 bigram，以標點、空白、
-    /// 符號結尾或是空的時接句首，最後一字在語言模型裡沒有統計時用 unigram（plan §2.3、
-    /// [`Engine::context_char`]）。沒給過時開頭的字用 unigram。殼在聚焦、移動游標、上屏
-    /// 之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
-    /// 無痕模式不用它（brief §8）。
+    /// 輸入框游標前的文字（plan §2.1），取代核心記著的；只留最後 [`CONTEXT_LIMIT`] 字。組字開頭的
+    /// 字接它最後一字的 bigram，以標點、空白、符號結尾或是空的時接句首，最後一字在語言模型裡沒有
+    /// 統計時用 unigram（plan §2.3、[`Engine::context_char`]）；數字後半形看它的最後一字。殼在聚焦、
+    /// 移動游標、上屏之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
+    /// 之後上屏的字與交還宿主打的字元接在後面，殼不給時也知道游標前是什麼（同 librime 的 commit
+    /// history）。無痕模式殼不給，給了也不收（brief §8）。
     pub fn set_context(&mut self, before: &str) {
-        self.context = Some(before.to_string());
+        if self.options.incognito {
+            return;
+        }
+        self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
+        self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
+    }
+
+    /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
+    /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
+    pub fn clear_context(&mut self) {
+        self.context = None;
+        self.after_digit = false;
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -524,12 +548,36 @@ impl Session {
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
         let snapshot = self.handle_key(engine, user, key);
-        // 交還宿主的鍵宿主照打：只有數字鍵讓下一個字緊接在數字後。其他鍵都當成數字結束；librime
-        // 只認可見字元、退格與 Enter，不學它：方向鍵也會把游標移離數字。不送字元的修飾鍵不動它。
-        if !snapshot.handled && key != Key::Modifier {
-            self.after_digit = matches!(key, Key::Digit(_));
+        if !snapshot.handled {
+            self.passed_to_host(key);
         }
         self.finish(engine, snapshot)
+    }
+
+    /// 交還宿主的鍵宿主照打：可見字元與空白接在前文後面（librime 的 commit history 記這些
+    /// `thru` 的鍵）。其他鍵改了游標前的字或移走游標，前文就作廢了，等殼再給；librime
+    /// 只在退格與 Enter 清掉，不學它：方向鍵也把游標移走。不送字元的修飾鍵沒改輸入框，不動它。
+    fn passed_to_host(&mut self, key: Key) {
+        match key {
+            Key::Letter(c) | Key::Punct(c) => self.sent(c.encode_utf8(&mut [0; 4])),
+            Key::Digit(d) => self.sent(&d.to_string()),
+            Key::Space => self.sent(" "),
+            Key::Modifier => {}
+            _ => self.clear_context(),
+        }
+    }
+
+    /// 核心送出去的字（上屏的、交還宿主打的字元）：記下游標前是不是數字；不在無痕中時接在前文後面，
+    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始。
+    fn sent(&mut self, text: &str) {
+        self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
+        if self.options.incognito {
+            return;
+        }
+        let context = self.context.get_or_insert_with(String::new);
+        context.push_str(text);
+        let start = context.len() - last_chars(context, CONTEXT_LIMIT).len();
+        context.drain(..start);
     }
 
     /// 換了影響候選的選項、還沒重列（[`Session::set_options`] 後沒呼叫 [`Session::refresh`]）：
@@ -547,11 +595,11 @@ impl Session {
         }
     }
 
-    /// 會上屏的公開方法回傳前都經過這裡：記下上屏的字是不是以半形數字結尾
-    /// （[`Session::after_digit`]，沒上屏時不變，同 librime 的 commit history），再補分段的字根。
+    /// 會上屏的公開方法回傳前都經過這裡：上屏的字接在前文後面（[`Session::context`]，
+    /// 同 librime 的 commit history），再補分段的字根。
     fn finish(&mut self, engine: &Engine, snapshot: Snapshot) -> Snapshot {
         if let Some(commit) = &snapshot.commit {
-            self.after_digit = commit.ends_with(|c: char| c.is_ascii_digit());
+            self.sent(commit);
         }
         with_radicals(engine, snapshot)
     }
@@ -1021,7 +1069,7 @@ impl Session {
     }
 
     /// 沒選定的輸入碼前面的一個字（plan §2.3）：最後選定的分段的最後一字；沒有選定的分段時
-    /// 看前文（[`Engine::context_char`]），沒給過前文或無痕時是 `None`。
+    /// 看前文（[`Engine::context_char`]），不知道前文或無痕時是 `None`。
     fn before_unselected(&self, engine: &Engine) -> Option<char> {
         match (self.selected.last(), &self.context) {
             (Some(segment), _) => segment.text.chars().next_back(),
@@ -1146,4 +1194,39 @@ fn with_radicals(engine: &Engine, mut snapshot: Snapshot) -> Snapshot {
         segment.radicals = engine.scheme().radicals_of(&segment.code);
     }
     snapshot
+}
+
+/// `text` 的最後 `limit`（≥ 1）個字（Unicode 純量值）；不到 `limit` 個時是整串。
+fn last_chars(text: &str, limit: usize) -> &str {
+    match text.char_indices().nth_back(limit - 1) {
+        Some((start, _)) => &text[start..],
+        None => text,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_chars_keeps_the_tail_by_characters() {
+        assert_eq!(last_chars("今天天氣", 2), "天氣");
+        assert_eq!(last_chars("今天", 5), "今天");
+        assert_eq!(last_chars("", 3), "");
+    }
+
+    /// 前文與之後送出去的字合起來只留最後 [`CONTEXT_LIMIT`] 字。
+    #[test]
+    fn the_context_keeps_only_the_last_limit_characters() {
+        let mut session = Session::default();
+        session.set_context(&"天".repeat(CONTEXT_LIMIT + 5));
+        assert_eq!(
+            session.context.as_deref().map(|c| c.chars().count()),
+            Some(CONTEXT_LIMIT)
+        );
+        session.sent("今日");
+        let context = session.context.as_deref().unwrap();
+        assert_eq!(context.chars().count(), CONTEXT_LIMIT);
+        assert!(context.ends_with("天今日"));
+    }
 }

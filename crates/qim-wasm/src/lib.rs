@@ -55,10 +55,28 @@ impl WebSession {
         })
     }
 
-    /// 無痕模式：開著時不學習（plan §2.4）。
+    /// 無痕模式：開著時不學習（plan §2.4）、不用前文（brief §8）。
     #[wasm_bindgen(js_name = setIncognito)]
     pub fn set_incognito(&mut self, on: bool) {
         self.set_options(|options| options.incognito = on);
+    }
+
+    /// 無痕模式開著：網頁這時不給前文（brief §8）。
+    #[wasm_bindgen(getter)]
+    pub fn incognito(&self) -> bool {
+        self.session.options().incognito
+    }
+
+    /// 輸入框游標前的文字（`Session::set_context`）：網頁在聚焦、移動游標、輸入框改了之後給。
+    #[wasm_bindgen(js_name = setContext)]
+    pub fn set_context(&mut self, before: &str) {
+        self.session.set_context(before);
+    }
+
+    /// 忘掉前文（`Session::clear_context`）：輸入框失焦時。
+    #[wasm_bindgen(js_name = clearContext)]
+    pub fn clear_context(&mut self) {
+        self.session.clear_context();
     }
 
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
@@ -420,6 +438,12 @@ impl From<Snapshot> for WebSnapshot {
             generation: s.generation,
         }
     }
+}
+
+/// 核心留著的游標前文字最多幾個字（`qim_core::CONTEXT_LIMIT`）：網頁給前文時只取這麼多。
+#[wasm_bindgen(js_name = contextLimit)]
+pub fn context_limit() -> usize {
+    qim_core::CONTEXT_LIMIT
 }
 
 /// 候選每頁的個數（`qim_core::PAGE_SIZE`）：網頁把目前頁的位置換算成 [`WebSession::select`] 的位置。

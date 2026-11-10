@@ -3,6 +3,7 @@
 
 import { mountCandidateBar } from "./candidate-bar.ts";
 import { mountComposition } from "./composition.ts";
+import { mountContext } from "./context.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
@@ -16,6 +17,7 @@ import "./style.css";
 import type { Keyboard } from "./touch.ts";
 import { mountUserDict } from "./user-dict.ts";
 import init, {
+	contextLimit,
 	pageSize,
 	RadicalHints,
 	Session,
@@ -176,8 +178,16 @@ async function start(): Promise<void> {
 		focusText,
 	);
 	mountWordList(session, userDict.save, focusText);
-	// 開關改了不是選字。
-	settings.connect(session, (snapshot) => apply(snapshot, false), focusText);
+	const syncContext = mountContext(text, session, contextLimit());
+	// 開關改了不是選字；改完重給前文（關掉無痕之後要立刻給）。
+	settings.connect(
+		session,
+		(snapshot) => apply(snapshot, false),
+		() => {
+			syncContext();
+			focusText();
+		},
+	);
 	touchKeyboard = mountTouch(
 		session,
 		{ plain: layoutJson, numberRow: numberRowLayoutJson },
@@ -220,8 +230,8 @@ async function start(): Promise<void> {
 		}
 		const key = toKey(event, shown.composing, shown.inlineAscii);
 		if (!key) {
-			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心，數字後半形才
-			// 知道前一個字不一定是數字了（brief §4.7）。沒有組字時核心不吃、不動作。
+			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
+			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作。
 			if (!shown.composing) {
 				session.press("other").free();
 			}
@@ -235,6 +245,11 @@ async function start(): Promise<void> {
 		}
 		// 臨時英文中空白與數字是字元，不會上屏，所以不必另外排除。
 		const chosen = key.kind === "space" || key.kind === "digit";
+		// 交還瀏覽器的鍵（方向鍵、退格…）讓核心忘掉前文，游標沒動時不會有 selectionchange 補給；
+		// 每個鍵之前重給一次，這時前一個鍵的預設動作已經做完。組字中給的核心要到下次組字才用，不必給。
+		if (!shown.composing) {
+			syncContext();
+		}
 		const snapshot = session.press(key.kind, key.value);
 		try {
 			if (!snapshot.handled) {
@@ -250,6 +265,8 @@ async function start(): Promise<void> {
 	text.readOnly = false;
 	text.dataset.ready = "true";
 	status.textContent = "";
+	// 載入中已經點進輸入框時 `focus()` 不會再觸發 focus 事件。
+	syncContext();
 	text.focus();
 }
 

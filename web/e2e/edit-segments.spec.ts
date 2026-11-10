@@ -37,6 +37,24 @@ async function recomputedTop(page: Page, single: string): Promise<string> {
 }
 
 /**
+/**
+ * 不知道前文時（無痕不給前文，M3 票 05）的候選：`read` 在打開無痕時做，做完關掉。目前分段的候選
+ * 和不知道前文時單打那個碼相同，不接前一段（plan §2.1）；空的輸入框有前文（句首），單打的名次不同。
+ */
+async function withoutContext<T>(
+	page: Page,
+	read: () => Promise<T>,
+): Promise<T> {
+	const incognito = page.getByRole("checkbox", { name: "無痕" });
+	await incognito.check();
+	try {
+		return await read();
+	} finally {
+		await incognito.uncheck();
+	}
+}
+
+/**
  * 單打時接在字詞後面的 emoji 只給剩下的整串，目前分段的候選列沒有（plan §2.4），和分段的候選列
  * 比較前去掉。
  */
@@ -44,14 +62,16 @@ function withoutEmoji(texts: string[]): string[] {
 	return texts.filter((t) => !/\p{Extended_Pictographic}/u.test(t));
 }
 
-/** 單打 `code` 時的字詞候選：在空的組字打完讀回、去掉 emoji，再按 Esc 清掉。 */
+/** 不知道前文時單打 `code` 的字詞候選：在空的組字打完讀回、去掉 emoji，再按 Esc 清掉。 */
 async function candidatesOf(page: Page, code: string): Promise<string[]> {
-	await page.keyboard.type(code);
-	await expect(ui(page).composition).toHaveText(RADICALS[code]);
-	const texts = await candidateTexts(page);
-	await page.keyboard.press("Escape");
-	await expect(ui(page).composition).toHaveText("");
-	return withoutEmoji(texts);
+	return withoutContext(page, async () => {
+		await page.keyboard.type(code);
+		await expect(ui(page).composition).toHaveText(RADICALS[code]);
+		const texts = await candidateTexts(page);
+		await page.keyboard.press("Escape");
+		await expect(ui(page).composition).toHaveText("");
+		return withoutEmoji(texts);
+	});
 }
 
 test.describe("實體鍵盤", () => {
@@ -76,8 +96,8 @@ test.describe("實體鍵盤", () => {
 		await expect(segments.nth(2)).toHaveAttribute("aria-current", "true");
 		await page.keyboard.press("ArrowLeft");
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
-		// 候選改列中間一段 `kb` 的字詞，和單打 `kb` 的字詞同序；單打的第一頁有 emoji 時佔了幾格，
-		// 分段的第一頁多出後面幾個字。
+		// 候選改列中間一段 `kb` 的字詞，和不知道前文時單打 `kb` 的字詞同序；單打的第一頁有 emoji 時
+		// 佔了幾格，分段的第一頁多出後面幾個字。
 		expect((await candidateTexts(page)).slice(0, kb.length)).toEqual(kb);
 		await page.screenshot({ path: testInfo.outputPath("focus-middle.png") });
 
@@ -151,17 +171,18 @@ test.describe("觸控", () => {
 				await page.getByTestId(`key-${id}`).tap();
 			}
 		};
-		/** 單打 `code` 時的候選，讀回後點退格刪光。 */
-		const tappedCandidates = async (code: string) => {
-			await tapKeys(code);
-			await expect(composition).toHaveText(RADICALS[code]);
-			const texts = await candidateTexts(page);
-			for (const _ of code) {
-				await page.getByTestId("key-backspace").tap();
-			}
-			await expect(composition).toHaveText("");
-			return withoutEmoji(texts);
-		};
+		/** 不知道前文時單打 `code` 的字詞候選，讀回後點退格刪光。 */
+		const tappedCandidates = (code: string) =>
+			withoutContext(page, async () => {
+				await tapKeys(code);
+				await expect(composition).toHaveText(RADICALS[code]);
+				const texts = await candidateTexts(page);
+				for (const _ of code) {
+					await page.getByTestId("key-backspace").tap();
+				}
+				await expect(composition).toHaveText("");
+				return withoutEmoji(texts);
+			});
 		const kb = await tappedCandidates("kb");
 		const [last] = await tappedCandidates("of");
 
