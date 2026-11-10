@@ -176,6 +176,10 @@ pub struct LexiconSummary {
     pub counts: lexicon::Counts,
     /// 有字頻的字數。
     pub characters: usize,
+    /// 已分詞語料（HKCanCor）train 切分裡兩字以上的不重複詞數。
+    pub corpus_seen: usize,
+    /// 轉換改了字數、對不上詞位置而略過的話輪數。
+    pub unaligned: usize,
 }
 
 impl fmt::Display for LexiconSummary {
@@ -185,7 +189,7 @@ impl fmt::Display for LexiconSummary {
             f,
             "詞庫：rime-essay {} 列，單字 {} 列不收；換成常見寫法 {} 詞（其中 {} 詞和別的詞合併）；\
              詞頻 < {} 濾掉 {} 詞、含連打字集以外的字濾掉 {} 詞；\
-             粵語口語詞表補上 {} 詞；\
+             粵語口語詞表補上 {} 詞；HKCanCor train 切分的詞 {} 個（略過對不上的話輪 {} 個），出現 ≥ {} 次的補上 {} 詞；\
              收 {} 詞，並存寫法另收 {} 種寫法；碼 {} 個、詞條 {} 個（{} 詞的碼組合超過 {} 個，只收前 {} 個）\n\
              字頻：{} 字（各語料 train 切分乘上權重相加，並存寫法兩字共用）",
             c.entries,
@@ -196,6 +200,10 @@ impl fmt::Display for LexiconSummary {
             c.below_threshold,
             c.outside_continuous,
             c.colloquial,
+            self.corpus_seen,
+            self.unaligned,
+            lexicon::CORPUS_MIN_COUNT,
+            c.corpus,
             c.words,
             c.spellings,
             c.codes,

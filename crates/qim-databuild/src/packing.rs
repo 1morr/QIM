@@ -89,14 +89,19 @@ const ESSAY: UpstreamSource = UpstreamSource {
     used: "essay.txt: words and their frequencies",
 };
 
-/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻，最後是粵語口語詞表
-/// （plan §4.2）。
+/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻（已分詞的 HKCanCor
+/// 另給詞），最後是粵語口語詞表（plan §4.2）。
 pub(crate) fn lexicon_sources() -> Vec<PackSource> {
     std::iter::once(ESSAY)
         .chain(CORPORA.iter().map(|corpus| UpstreamSource {
             name: corpus.title,
             source_id: corpus.source_id,
-            used: "character counts of the training split of the extracted text",
+            used: if corpus.segmented() {
+                "character counts of the training split of the extracted text, and the words of \
+                 two or more characters in that split with their counts"
+            } else {
+                "character counts of the training split of the extracted text"
+            },
         }))
         .map(PackSource::Upstream)
         .chain([PackSource::Repo(COLLOQUIAL)])

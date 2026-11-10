@@ -129,6 +129,7 @@ fn lexicon_with(char_frequency: BTreeMap<char, u64>) -> LexiconPack {
     let (lexicon, _) = lexicon::build(
         ESSAY,
         "",
+        &BTreeMap::new(),
         &pack().code_table,
         &Transcoder::new(&rows),
         char_frequency,

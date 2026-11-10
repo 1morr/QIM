@@ -7,7 +7,7 @@ use qim_core::{
     RadicalHintPack, SchemePack, SimplifierPack,
 };
 use qim_databuild::sources::{Fetch, sha256_hex};
-use qim_databuild::{Error, Outcome, WrittenPack};
+use qim_databuild::{Error, Outcome, WrittenPack, lexicon};
 
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
@@ -292,7 +292,11 @@ fn hkcancor_transcript(utterances: &[String]) -> String {
     format!("<info>\n\t1-TN-107\n\tINFO-END\n</info>\n{sents}")
 }
 
+/// HKCanCor 分好詞的固件裡的兩字詞：rime-essay 與口語詞表都沒有，由 HKCanCor 補進詞庫。
+const HKCANCOR_WORD: &str = "丟曰";
+
 /// 長度 7 的前 2,000 句分成兩個轉寫檔；另有一個夾英文詞的話輪，整句丟掉。
+/// 第四個檔是分好詞的話輪（[`HKCANCOR_WORD`] 接一個標成人名的 5 字詞，湊成和其他話輪一樣的 7 字，各兩次），給詞庫補詞。
 fn hkcancor_zip() -> Vec<u8> {
     let mut utterances: Vec<String> = sentences_of_length(7).into_iter().take(2000).collect();
     let second = utterances.split_off(1000);
@@ -307,6 +311,16 @@ fn hkcancor_zip() -> Vec<u8> {
         zip.start_file(name, options).unwrap();
         zip.write_all(text.as_bytes()).unwrap();
     }
+    zip.start_file("utf8/FC-004_v", options).unwrap();
+    let segmented: String = sentences_of_length(5)
+        .iter()
+        .take(64)
+        .flat_map(|name| [name, name])
+        .map(|name| {
+            format!("<sent>\n<sent_tag>\n{HKCANCOR_WORD}/d/aa1/\n{name}/nr/aa1/\n。/w/VQ1/\n</sent_tag>\n</sent>\n")
+        })
+        .collect();
+    zip.write_all(segmented.as_bytes()).unwrap();
     zip.start_file("utf8/FC-003_v", options).unwrap();
     zip.write_all(
         "<sent>\n<sent_tag>\n日/v/aa1/\nOK/e/ou1kei1/\n</sent_tag>\n</sent>\n".as_bytes(),
@@ -695,6 +709,15 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert_eq!(words("aa"), ["日日"]);
     assert_eq!(words("ran"), ["口門"]);
     assert!(lexicon.lexicon.char_frequency('日') > 0);
+    // HKCanCor train 切分的兩字詞補進來，詞頻是次數乘上換算值；標成人名的不收。
+    let corpus_word = lexicon
+        .lexicon
+        .iter()
+        .flat_map(|(_, words)| words.iter())
+        .find(|w| w.text == HKCANCOR_WORD)
+        .unwrap_or_else(|| panic!("詞庫沒有 {HKCANCOR_WORD}"));
+    assert_eq!(corpus_word.frequency % lexicon::CORPUS_WORD_FREQUENCY, 0);
+    assert!(corpus_word.frequency >= lexicon::CORPUS_MIN_COUNT * lexicon::CORPUS_WORD_FREQUENCY);
     let c = outcome.lexicon.counts;
     assert_eq!(
         (
@@ -704,9 +727,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
             c.outside_continuous,
             c.words,
             c.colloquial,
+            c.corpus,
         ),
-        (14, 1, 1, 1, 11, 1)
+        (14, 1, 1, 1, 12, 1, 1)
     );
+    assert_eq!(outcome.lexicon.unaligned, 0);
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(path(&outcome, "速成")).unwrap();
     let language_model = std::fs::read(path(&outcome, "語言模型")).unwrap();
@@ -724,6 +749,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
+    assert!(
+        notice.contains("words of two or more characters in that split"),
+        "{notice}"
+    );
+    assert!(notice.contains("personal\nnames left out"), "{notice}");
     // LGPL 要寫明對來源做了什麼：錯字「顯着」改寫併進「顯著」、同頻只算一次、單向的例外（M1 票 17d）。
     for expected in ["顯着 went into 顯著", "equal frequencies", "except 合着"] {
         assert!(notice.contains(expected), "缺 {expected}：{notice}");
