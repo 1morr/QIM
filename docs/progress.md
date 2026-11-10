@@ -38,8 +38,8 @@
 | 2026-11-11 | M3 18 | 粵語詞庫：rime-cantonese、粵典查不清不用（粵典待書面確認）；HKCanCor train 的詞補 383 個，口語集變好、個人集多錯 1 題更新 baseline；見票 18 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 20 | 資料包 manifest（plan §4.6），核心載入時核對；網頁設定區列出、切換、刪除、從檔案匯入（IndexedDB）；bench 不變；見票 20 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 | 2026-11-11 | M3 12 | 個人 bigram（λ 0.8，dev 掃出；句中學到的不搶單打首選）、學習總開關（網頁加開關）、匯出 v2 加 bigram 列；合併 main 後 `--learning` 公開集合合計修正 −138；見票 12 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
-| 2026-11-11 | M3 13 | 聯想：上屏後給下一個字詞（補完詞庫的詞、bigram、個人 bigram，同一把尺），按鍵照 macOS、開關預設開；bench 前後相同；黑箱 T6、T8 重跑；見票 13 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 21 | 線上更新：核心 `PackIndex`、`pack-release`（擋沒加版本）、網頁背景檢查與開關，本機伺服器驗；內建與下載版取較高的；未建 GitHub release；見票 21 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
+| 2026-11-11 | M3 13 | 聯想：上屏後給下一個字詞（補完詞庫的詞、bigram、個人 bigram，同一把尺），按鍵照 macOS、開關預設開；bench 前後相同；黑箱 T6、T8 重跑；見票 13 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 
 ## 偏差與決定
 
