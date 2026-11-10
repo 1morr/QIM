@@ -22,15 +22,31 @@ fn databuild(corpora: &[&str]) -> Shared {
             .enumerate()
             .map(|(i, group)| (format!("第 {i} 個基準目錄"), group.dir().into())),
     );
-    shared.extend(corpora.iter().map(|name| {
-        // 照 `/` 接，Windows 的 `\` 才不算不一致。
-        let path = corpora::dev_items_path(Path::new(""), name);
-        let parts: Vec<&str> = path
+    shared.extend(
+        Group::ALL
+            .iter()
+            .enumerate()
+            .map(|(i, group)| (format!("第 {i} 個有前文目錄"), group.context_dir().into())),
+    );
+    // 照 `/` 接，Windows 的 `\` 才不算不一致。
+    let slashed = |path: std::path::PathBuf| {
+        let parts: Vec<String> = path
             .components()
-            .map(|c| c.as_os_str().to_str().expect("路徑是 UTF-8"))
+            .map(|c| c.as_os_str().to_str().expect("路徑是 UTF-8").to_string())
             .collect();
-        (format!("{name} 的 dev 題"), parts.join("/"))
-    }));
+        parts.join("/")
+    };
+    for name in corpora {
+        let root = Path::new("");
+        shared.push((
+            format!("{name} 的 dev 題"),
+            slashed(corpora::dev_items_path(root, name)),
+        ));
+        shared.push((
+            format!("{name} 的 dev 有前文題"),
+            slashed(corpora::dev_context_items_path(root, name)),
+        ));
+    }
     shared
 }
 
@@ -51,10 +67,18 @@ fn bench(corpora: &[&str]) -> Shared {
             .map(|(i, dir)| (format!("第 {i} 個基準目錄"), (*dir).into())),
     );
     shared.extend(
-        corpora
+        qim_bench::CONTEXT_DIRS
             .iter()
-            .map(|name| (format!("{name} 的 dev 題"), qim_bench::dev_items(name))),
+            .enumerate()
+            .map(|(i, dir)| (format!("第 {i} 個有前文目錄"), (*dir).into())),
     );
+    for name in corpora {
+        shared.push((format!("{name} 的 dev 題"), qim_bench::dev_items(name)));
+        shared.push((
+            format!("{name} 的 dev 有前文題"),
+            qim_bench::dev_context_items(name),
+        ));
+    }
     shared
 }
 

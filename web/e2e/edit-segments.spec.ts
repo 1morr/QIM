@@ -3,7 +3,8 @@ import { devices, expect, type Page, test } from "@playwright/test";
 // 組字中修改（M1 票 21）：移到中間的分段改選，其餘沒選定的分段重算（plan §2.1）。
 // 組字裡選定的分段顯示字詞，沒選定的顯示字根。
 // `anrkbof` 的首選路徑是「門口｜有｜無」三段，中間一段 `kb` 有別的字可選；
-// 改選中間一段後，最後一段 `of` 重算成單打的首選（M1 票 17b 換掉 `anrkboa`：資料包改了之後
+// 改選中間一段後，最後一段 `of` 接在改選的字後面重算（plan §2.3，M3 票 04）：改選「冇」時
+// 首選是「冇你」的「你」，不是單打 `of` 的「係」（M1 票 17b 換掉 `anrkboa`：資料包改了之後
 // 它的首選路徑變成「門｜口布｜會」）。
 const INPUT = "anrkbof";
 /** 組字裡沒選定的分段顯示字根（`data/schemes/quick.toml` 的 `[radicals]`）。 */
@@ -26,6 +27,13 @@ function ui(page: Page) {
 async function candidateTexts(page: Page): Promise<string[]> {
 	const texts = await ui(page).items.allTextContents();
 	return texts.map((t) => t.replace(/^\d/, ""));
+}
+
+/** 改選後重算的最後一段的首選：候選列的第一個；確認它接了改選的字、不是單打 `of` 的首選。 */
+async function recomputedTop(page: Page, single: string): Promise<string> {
+	const [top] = await candidateTexts(page);
+	expect(top).not.toBe(single);
+	return top;
 }
 
 /** 單打 `code` 時的候選：在空的組字打完讀回，再按 Esc 清掉。 */
@@ -66,13 +74,14 @@ test.describe("實體鍵盤", () => {
 
 		const other = kb[1];
 		await page.keyboard.type("2");
-		// 前面的「門口」照顯示的字固定，改選的段固定，`of` 重算。
+		// 前面的「門口」照顯示的字固定，改選的段固定，`of` 接在它後面重算。
 		await expect(segments).toHaveText(["門口", other, "人火"]);
 		await expect(text).toHaveValue("");
+		const rest = await recomputedTop(page, last);
 		await page.screenshot({ path: testInfo.outputPath("rechosen.png") });
 
 		await page.keyboard.type(" ");
-		await expect(text).toHaveValue(`門口${other}${last}`);
+		await expect(text).toHaveValue(`門口${other}${rest}`);
 		await expect(composition).toHaveText("");
 	});
 
@@ -90,8 +99,9 @@ test.describe("實體鍵盤", () => {
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
 		await items.nth(1).click();
 		await expect(segments).toHaveText(["門口", kb[1], "人火"]);
+		const rest = await recomputedTop(page, last);
 		await items.first().click();
-		const wanted = `門口${kb[1]}${last}`;
+		const wanted = `門口${kb[1]}${rest}`;
 		await expect(text).toHaveValue(wanted);
 
 		await report.click();
@@ -156,10 +166,10 @@ test.describe("觸控", () => {
 		const other = kb[1];
 		await items.nth(1).tap();
 		await expect(segments).toHaveText(["門口", other, "人火"]);
-		await expect(items.first()).toHaveText(`1${last}`);
+		const rest = await recomputedTop(page, last);
 
 		await page.getByTestId("key-space").tap();
-		await expect(text).toHaveValue(`門口${other}${last}`);
+		await expect(text).toHaveValue(`門口${other}${rest}`);
 		await expect(composition).toHaveText("");
 		await page.screenshot({ path: testInfo.outputPath("touch-commit.png") });
 	});

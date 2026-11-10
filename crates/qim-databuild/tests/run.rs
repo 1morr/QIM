@@ -1080,6 +1080,17 @@ fn wiki_dump_becomes_bench_sentences_and_training_splits() {
         assert_eq!(codes, expected.join(" "), "{line}");
         bench_sentences.push(sentence);
     }
+    // 「有前文」的題：前文、碼、句子三欄；句子是 test 句（樣本小於上限，都在基準檔裡）。
+    let context = read(root.path(), "bench/corpus/context/yue-wiki.tsv");
+    let context_items = context.lines().count();
+    assert!(context_items > 0);
+    for line in context.lines() {
+        let [before, codes, sentence] = line.split('\t').collect::<Vec<_>>()[..] else {
+            panic!("要三欄：{line}");
+        };
+        assert!(before.chars().any(char::is_alphanumeric), "{line}");
+        assert!(bench.contains(&format!("{codes}\t{sentence}\n")), "{line}");
+    }
     for sentence in train.lines().chain(dev.lines()) {
         sentence.chars().for_each(|c| {
             code(c);
@@ -1127,9 +1138,10 @@ fn wiki_dump_becomes_bench_sentences_and_training_splits() {
     let shown = report.to_string();
     for expected in [
         format!(
-            "語料 yue-wiki：train {} 句、dev {} 句、test {} 句（不重複），其中 {} 句進 bench/corpus/yue-wiki.tsv；含字集外字元丟掉 {DROPPED} 句",
+            "語料 yue-wiki：train {} 句、dev {} 句、test {} 句（不重複），其中 {} 句進 bench/corpus/yue-wiki.tsv、有前文的 {context_items} 句進 bench/corpus/context/yue-wiki.tsv；含字集外字元丟掉 {DROPPED} 句",
             counts.train, counts.dev, counts.test, counts.test
         ),
+        "[通過] 語料不洩漏：yue-wiki 有前文 test 句原樣出現在 train 0 句".into(),
         "[通過] 語料轉碼：yue-wiki 失敗 0 句".into(),
         "[通過] 語料不洩漏：yue-wiki test 句原樣出現在 train 0 句".into(),
         "[通過] 語料決定性：yue-wiki 建兩次 sha256 相同".into(),
@@ -1157,6 +1169,14 @@ fn dev_split_becomes_tuning_items_in_the_bench_format() {
         }
         assert!(!sentences.is_empty(), "{name} 沒有 dev 句");
         assert_eq!(sentences, expected, "{name}");
+        // 有前文的調參題：三欄，句子是 dev 句。
+        let context = read(root.path(), &format!("build/corpus/{name}/dev-context.tsv"));
+        for line in context.lines() {
+            let [before, _, sentence] = line.split('\t').collect::<Vec<_>>()[..] else {
+                panic!("要三欄：{line}");
+            };
+            assert!(!before.is_empty() && expected.contains(sentence), "{line}");
+        }
     }
 }
 

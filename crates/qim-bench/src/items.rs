@@ -1,5 +1,5 @@
-//! 題目檔的格式：`bench/fixed.tsv`、`bench/corpus/<名>.tsv` 與個人集 `bench/personal/rime-userdb.tsv`
-//! （`docs/development.md`〈首選字基準〉）。
+//! 題目檔的格式：`bench/fixed.tsv`、`bench/corpus/<名>.tsv`、「有前文」的 `bench/corpus/context/<名>.tsv`
+//! 與個人集 `bench/personal/rime-userdb.tsv`（`docs/development.md`〈首選字基準〉）。
 
 /// 一題：把輸入碼逐鍵打進核心，首選應該是期望的文字。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,6 +12,8 @@ pub struct Item {
     pub label: String,
     /// 依權重報數字時的權重：個人集是上屏次數，其他是 1。
     pub weight: u64,
+    /// 輸入框裡題目前面的文字（`Session::set_context`）；只有「有前文」的題有。
+    pub context: Option<String>,
 }
 
 /// 基準模擬打字的單位：一段輸入碼與它該打出的文字。是題目檔的切法，和核心組字的〈分段〉（`Segment`）無關。
@@ -58,6 +60,7 @@ pub fn parse_fixed(text: &str) -> Result<Vec<Item>, String> {
             line: number,
             label: source.to_string(),
             weight: 1,
+            context: None,
         });
     }
     Ok(items)
@@ -71,6 +74,28 @@ pub fn parse_corpus(text: &str) -> Result<Vec<Item>, String> {
             return Err(format!("第 {number} 行少了 tab：要有輸入碼與句子兩欄"));
         };
         items.push(per_character(number, codes, sentence, 1)?);
+    }
+    Ok(items)
+}
+
+/// 「有前文」的題：`<前文><TAB><逐字速成碼，空格分隔><TAB><句子>`，前文不能是空的。
+pub fn parse_context(text: &str) -> Result<Vec<Item>, String> {
+    let mut items = Vec::new();
+    for (number, line) in numbered_lines(text) {
+        let fields: Vec<&str> = line.split('\t').collect();
+        let [context, codes, sentence] = fields.as_slice() else {
+            return Err(format!(
+                "第 {number} 行要有 3 欄（前文、輸入碼、句子），實際 {} 欄",
+                fields.len()
+            ));
+        };
+        if context.is_empty() {
+            return Err(format!("第 {number} 行的前文是空的"));
+        }
+        items.push(Item {
+            context: Some(context.to_string()),
+            ..per_character(number, codes, sentence, 1)?
+        });
     }
     Ok(items)
 }
@@ -110,6 +135,7 @@ pub fn substrings(items: &[Item], len: usize) -> Vec<Item> {
                 line,
                 label: format!("第 {line} 題"),
                 weight: 0,
+                context: None,
             });
             line - 1
         });
@@ -144,6 +170,7 @@ fn per_character(number: usize, codes: &str, text: &str, weight: u64) -> Result<
         line: number,
         label: format!("第 {number} 行"),
         weight,
+        context: None,
     })
 }
 

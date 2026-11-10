@@ -1,0 +1,149 @@
+//! 上下文（plan §2.1、§2.3）：組字開頭的字接前一個字的 bigram。前一個字是選定的分段的最後一字，
+//! 沒有選定的分段時看 `Session::set_context` 給的前文：以字結尾時是那個字，以標點、空白結尾
+//! 或是空的時是句首（[`CLAUSE_START`]）；沒給前文與無痕（brief §8）時照舊用 unigram。
+
+use std::collections::BTreeMap;
+
+use qim_core::{
+    CLAUSE_START, CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack,
+    Options, Packs, Ranking, Scheme, SchemePack, Session, UserModel,
+};
+
+/// `a` 是「甲」「乙」「丁」，單打時甲的字頻高；`b` 是「天」，「天乙」是常見的接續，
+/// 丁多半當句首。
+fn engine() -> Engine {
+    let scheme = Scheme {
+        id: "quick".into(),
+        name: "速成".into(),
+        version: "1".into(),
+        alphabet: "abcdefghijklmnopqrstuvwxy".into(),
+        max_code_length: 2,
+        radicals: BTreeMap::new(),
+        packs: Packs {
+            language_model: Some("bigram".into()),
+            ..Packs::default()
+        },
+        ranking: Ranking::default(),
+    };
+    let entry = |text| CodeEntry {
+        text,
+        extension: false,
+        simplified: false,
+    };
+    let code_table = CodeTable::from_entries([
+        ("a".to_string(), vec![entry('甲'), entry('乙'), entry('丁')]),
+        ("b".to_string(), vec![entry('天')]),
+    ]);
+    // 接續機率和 unigram 反過來：前一字沒有統計時誤用退回式，首選就成了乙。
+    let model = |start: f64, continuation: f64| CharModel {
+        start: start.ln(),
+        continuation: continuation.ln(),
+        backoff: 0.0,
+    };
+    let language_model = LanguageModel::new(
+        [
+            ('甲', model(0.5, 0.1)),
+            ('乙', model(0.1, 0.5)),
+            ('天', model(0.4, 0.4)),
+            ('丁', model(0.05, 0.05)),
+            (CLAUSE_START, model(1e-6, 1e-6)),
+        ],
+        model(1e-6, 1e-6),
+        [
+            ('天', '乙', 0.9f64.ln()),
+            ('天', '甲', 0.01f64.ln()),
+            (CLAUSE_START, '丁', 0.9f64.ln()),
+        ],
+    );
+    Engine::new(
+        SchemePack { scheme, code_table },
+        None,
+        Some(LanguageModelPack {
+            id: "bigram".into(),
+            model: language_model,
+        }),
+    )
+    .unwrap()
+}
+
+/// 給前文 `before`（`None` 是不呼叫 `set_context`）、照 `options` 打 `input`，回首選。
+fn top_after(before: Option<&str>, options: Options, input: &str) -> String {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(options);
+    if let Some(before) = before {
+        session.set_context(before);
+    }
+    let mut snapshot = None;
+    for c in input.chars() {
+        snapshot = Some(session.handle(&engine, &mut user, Key::Letter(c)));
+    }
+    snapshot.unwrap().candidates[0].text.clone()
+}
+
+fn top(before: Option<&str>, input: &str) -> String {
+    top_after(before, Options::default(), input)
+}
+
+#[test]
+fn the_same_code_tops_differently_after_different_context() {
+    assert_eq!(top(None, "a"), "甲");
+    assert_eq!(top(Some("今天"), "a"), "乙");
+}
+
+/// bigram 只在句內訓練，接不過標點（跨標點接上一句的最後一字，「有前文」的基準變差）；
+/// 標點與空白之後是一句的開頭。空的前文是輸入框的開頭，也是句首。
+#[test]
+fn context_ending_in_punctuation_or_whitespace_starts_a_clause() {
+    assert_eq!(top(Some("今天，"), "a"), "丁");
+    assert_eq!(top(Some("今天。 \n"), "a"), "丁");
+    assert_eq!(top(Some("OK "), "a"), "丁");
+    assert_eq!(top(Some(""), "a"), "丁");
+}
+
+/// 英文、數字與語言模型沒有統計的字接不上 bigram：照沒有前文打。
+#[test]
+fn context_ending_in_a_character_without_statistics_is_like_no_context() {
+    assert_eq!(top(Some("天 OK"), "a"), "甲");
+    assert_eq!(top(Some("天 3"), "a"), "甲");
+    assert_eq!(top(Some("天丙"), "a"), "甲");
+}
+
+#[test]
+fn incognito_ignores_the_context() {
+    let incognito = Options {
+        incognito: true,
+        ..Options::default()
+    };
+    assert_eq!(top_after(Some("今天"), incognito, "a"), "甲");
+}
+
+/// 選了開頭一段後，剩下輸入碼的第一個字接選定分段的最後一字（plan §2.3），不再用 unigram。
+#[test]
+fn after_selecting_a_leading_segment_the_rest_follows_its_last_character() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.handle(&engine, &mut user, Key::Letter('b'));
+    session.handle(&engine, &mut user, Key::Letter('a'));
+    let all = session.all_candidates();
+    let leading = all.iter().position(|c| c.text == "天").unwrap();
+    let snapshot = session.select(&engine, &mut user, leading);
+    assert_eq!(snapshot.composition.selected_text(), "天");
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 組字中給的前文由下一次組字用。
+#[test]
+fn context_set_while_composing_is_used_by_the_next_composition() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.handle(&engine, &mut user, Key::Letter('a'));
+    session.set_context("天");
+    let snapshot = session.handle(&engine, &mut user, Key::Escape);
+    assert!(snapshot.candidates.is_empty());
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}

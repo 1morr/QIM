@@ -4,8 +4,10 @@
 //! - 字次數 甲 3、乙 3、丙 2，共 8；bigram 甲乙 2、甲丙 1、乙丙 1，n1 = 2、n2 = 1，D = 0.5。
 //! - c(甲) = 3、N1+(甲•) = 2，λ(甲) = 1/3；c(乙) = 1、N1+(乙•) = 1，λ(乙) = 1/2。
 //! - N1+(••) = 3；P_cont：甲 1/7、乙 2/7、丙 3/7、丁 1/7。
+//! - 句首（[`CLAUSE_START`]）：第一字 甲 3、乙 1，c(句首) = 4、N1+(句首•) = 2，λ(句首) = 1/4；
+//!   不算進上面的字次數與 P_cont。
 
-use qim_core::{LOG_PROB_STEP, LanguageModel, Pack};
+use qim_core::{CLAUSE_START, LOG_PROB_STEP, LanguageModel, Pack};
 use qim_databuild::bigram::{Counter, Summary, train};
 use qim_databuild::common_forms::BothForms;
 
@@ -40,6 +42,7 @@ fn interpolated_kneser_ney_without_pruning() {
             bigrams: 3,
             min_count: 1,
             kept: 3,
+            clause_starts: 2,
             copied: 0,
             discount: 0.5,
         }
@@ -67,6 +70,33 @@ fn interpolated_kneser_ney_without_pruning() {
     // 組字開頭：(c + 1)/(N + V)。
     assert_close(model.log_prob(None, '甲'), 4.0 / 12.0, EXACT);
     assert_close(model.log_prob(None, '丁'), 1.0 / 12.0, EXACT);
+}
+
+/// 句首當前一字（plan §2.3）：每句的第一字接在它後面，同樣用 Kneser-Ney，接續機率用句內的。
+#[test]
+fn clause_start_is_a_context_trained_from_the_first_character_of_each_clause() {
+    let (lm, _) = model(1);
+    // (3 − 0.5)/4 + 1/4 × 1/7；0.5/4 + 1/4 × 2/7；沒當過句首的丁：1/4 × 1/7。
+    assert_close(
+        lm.log_prob(Some(CLAUSE_START), '甲'),
+        0.625 + 1.0 / 28.0,
+        QUANTIZED,
+    );
+    assert_close(
+        lm.log_prob(Some(CLAUSE_START), '乙'),
+        0.125 + 1.0 / 14.0,
+        QUANTIZED,
+    );
+    assert_close(lm.log_prob(Some(CLAUSE_START), '丁'), 1.0 / 28.0, EXACT);
+    assert!(lm.has_statistics(CLAUSE_START));
+    // 剪枝：乙只當過一次句首，退回並重算 α，總和仍是 1。
+    let (pruned, summary) = model(2);
+    assert_eq!(summary.clause_starts, 1);
+    let sum: f64 = "甲乙丙丁"
+        .chars()
+        .map(|c| pruned.log_prob(Some(CLAUSE_START), c).exp())
+        .sum();
+    assert!((sum - 1.0).abs() < 0.05, "{sum}");
 }
 
 #[test]
@@ -143,7 +173,7 @@ fn with_both_forms(corpus: &str) -> (LanguageModel, Summary) {
 #[test]
 fn both_forms_get_the_probabilities_of_the_representative() {
     let (model, summary) = with_both_forms("甲乙\n甲乙\n甲丙\n乙丙\n丙甲\n");
-    for prev in [None, Some('甲'), Some('乙')] {
+    for prev in [None, Some('甲'), Some('乙'), Some(CLAUSE_START)] {
         assert_eq!(
             model.log_prob(prev, '丁'),
             model.log_prob(prev, '丙'),
@@ -158,8 +188,8 @@ fn both_forms_get_the_probabilities_of_the_representative() {
         model.log_prob(Some('丁'), '乙'),
         model.log_prob(Some('丙'), '乙')
     );
-    // 甲丙、乙丙、丙甲各抄一對。
-    assert_eq!((summary.kept, summary.copied), (4, 3));
+    // 甲丙、乙丙、丙甲與句首丙各抄一對。
+    assert_eq!((summary.kept, summary.copied), (4, 4));
 }
 
 #[test]

@@ -209,16 +209,22 @@ fn every_path(
 }
 
 proptest! {
+    /// 有前文時開頭的字接前文最後一字的 bigram；前文的最後一字沒有統計時照沒有前文（plan §2.3）。
     #[test]
     fn top_candidate_is_a_highest_scoring_path_over_every_segmentation(
         data in data(),
         input in "[abc]{1,5}",
+        before in prop::option::of(digit()),
     ) {
         let model = language_model(&data);
-        let paths = every_path(&data, &model, &input, None, &pieces(&data));
+        let prev = before.filter(|c| data.chars.contains_key(c));
+        let paths = every_path(&data, &model, &input, prev, &pieces(&data));
         let engine = engine(&data);
         let mut user = UserModel::default();
         let mut session = Session::default();
+        if let Some(before) = before {
+            session.set_context(&format!("前文{before}"));
+        }
         let mut snapshot = None;
         for c in input.chars() {
             snapshot = Some(session.handle(&engine, &mut user, Key::Letter(c)));
@@ -234,6 +240,43 @@ proptest! {
             .map(|(t, _)| t.as_str())
             .collect();
         let top = top.unwrap_or_default();
+        prop_assert!(winners.contains(top.as_str()), "首選 {top}，最高分的是 {winners:?}");
+    }
+}
+
+proptest! {
+    /// 選了只蓋住開頭的候選後，剩下輸入碼的首選是接在選定分段最後一字後面的最高分路徑
+    /// （plan §2.3），不是從組字開頭用 unigram 算的。
+    #[test]
+    fn after_selecting_a_leading_segment_the_top_follows_its_last_character(
+        data in data(),
+        input in "[abc]{2,5}",
+        pick in 0usize..20,
+    ) {
+        let engine = engine(&data);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for c in input.chars() {
+            session.handle(&engine, &mut user, Key::Letter(c));
+        }
+        let count = session.all_candidates().len();
+        prop_assume!(count > 0);
+        let snapshot = session.select(&engine, &mut user, pick % count);
+        // 選的蓋滿整串就上屏了，沒有剩下的輸入碼。
+        prop_assume!(snapshot.commit.is_none());
+        let composition = &snapshot.composition;
+        let last = composition.selected_text().chars().next_back();
+        let model = language_model(&data);
+        let paths = every_path(&data, &model, composition.unselected_input(), last, &pieces(&data));
+        let Some(best) = paths.iter().map(|(_, s)| *s).max_by(f64::total_cmp) else {
+            return Ok(());
+        };
+        let winners: BTreeSet<&str> = paths
+            .iter()
+            .filter(|(_, s)| (best - s).abs() < 1e-6)
+            .map(|(t, _)| t.as_str())
+            .collect();
+        let top = snapshot.candidates.first().map(|c| c.text.clone()).unwrap_or_default();
         prop_assert!(winners.contains(top.as_str()), "首選 {top}，最高分的是 {winners:?}");
     }
 }
