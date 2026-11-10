@@ -18,6 +18,7 @@
 | 使用者詞 / 觸發詞 | `UserWord` / `Trigger` | 聯想 | `Association` |
 | 自動造詞 | `AutoPhrase` | 無痕模式 | `Incognito` |
 | 常用語 | `Phrase` | 詞表匯入 | `import_word_list`（`WordList…`） |
+| 個人 bigram / 學習（開關） | `Bigrams` / `Options::learning` | | |
 | 核心 / 平台殼 | `core` / `Shell` | 佈局 / 資料包 | `Layout` / `…Pack`（方案資料包 `SchemePack`） |
 | 首選字基準 | `TopChoiceBench` | 修正次數 | `correction_count` |
 | 分段 | `Segment` | 佈局版本 | `LayoutVariant` |
@@ -149,7 +150,7 @@ pub enum ShiftKey { Left, Right }
 impl Key { pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError>; } // 綁定收「種類 + 值」
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
 
-pub struct Options { pub simplified: bool, pub incognito: bool, pub english_candidates: bool, pub digit_separators: bool, pub emoji_candidates: bool, pub shift_switch: ShiftSwitch, pub simplified_after_traditional: bool }
+pub struct Options { pub simplified: bool, pub incognito: bool, pub learning: bool, pub english_candidates: bool, pub digit_separators: bool, pub emoji_candidates: bool, pub shift_switch: ShiftSwitch, pub simplified_after_traditional: bool }
 
 pub struct Snapshot {
     pub handled: bool,              // 核心吃下這個鍵；為假時殼交還宿主（librime process_key 的回傳值）
@@ -191,7 +192,7 @@ impl Session {
 - 殼負責：鍵碼轉 `Key`、欄位類型轉 `Options.incognito`、保存 `UserModel.export()`、畫候選與鍵盤。
 - 按鍵的入口（M2 票 03）：綁定收不了帶資料的列舉時（WebAssembly）用 `Key::parse` 收「種類 + 值」，種類是 `Key` 各種的 camelCase 名字（`letter`、`digit`、`toggleAscii`、`space`…），值是字元、`0`–`9` 或 `left` / `right`；網頁的按鍵都經綁定的同一個 `press`，加一種鍵只改核心與網頁的按鍵對照（`web/src/keys.ts`）。同 librime 能從字串讀按鍵（`KeyEvent` 的文字表示）。`qim-ffi` 也收「種類 + 值」（M2 票 07）：uniffi 沒有 `char` 型別，收不了 `Key::Letter(char)`，另寫一份鏡像列舉又讓加一種鍵多改一處。觸控鍵盤的組字狀態也問 `Session::composing`，綁定不另存。
 - `qim-ffi` 的物件（M2 票 08）：`Engine` 是獨立的 uniffi 物件，殼建一個，各輸入框的 `Session` 共用它，換輸入框不重載資料包。資料包的位元組先各自解開成 `SchemePack` 等物件，再交給 `Engine`；交出時是移交、不複製，所以每份只能給一個 `Engine`，殼也能逐份量記憶體。`UserModel` 暫時放在各 `Session` 裡，學習資料存檔由需要它的票拆出來共用。字根提示的 `RadicalHintPack` 目前只能解開、不交給 `Engine`（M2 票 09 在鍵盤擴充量記憶體用），查詢與顯示的介面由殼要顯示字根提示的票加。
-- 上下文（M3 票 04、05）：`Session::set_context(before: &str)` 收輸入框游標前的文字（前文），組字開頭的字接它（§2.3 的規則；個人 bigram 由 M3 票 12 接），數字後半形看它的最後一字。殼在聚焦、移動游標、上屏之後給；組字中給的存起來，下一次從頭建組字時才用。`set_context("")` 是輸入框的開頭，接句首。
+- 上下文（M3 票 04、05）：`Session::set_context(before: &str)` 收輸入框游標前的文字（前文），組字開頭的字接它（§2.3 的規則），開頭的一段也接它給的前一個字詞的個人 bigram（§2.3，M3 票 12），數字後半形看它的最後一字。殼在聚焦、移動游標、上屏之後給；組字中給的存起來，下一次從頭建組字時才用。`set_context("")` 是輸入框的開頭，接句首。
   - `Session` 記一份前文（殼給的前文接上核心送出去的字，名詞表），最多 `CONTEXT_LIMIT`（200，brief §8 送雲端的上限）字：`set_context` 取代它，之後上屏的字、交還宿主的可見字元與空白（`Letter`、`Punct`、`Digit`、`Space`）接在後面；交還宿主的其他鍵（退格、Enter、方向鍵、`Other`…）改了游標前的字或移走游標，記的就作廢（不知道前文、用 unigram），等殼再給；`Modifier` 不動它。換欄位或失焦而沒有前文可給時，殼呼叫 `Session::clear_context()` 忘掉（上一個欄位上屏的字不會變成前文）；有前文可給時 `set_context` 同樣整份取代，自己記的不留。數字後半形另記一個布林「游標前的字是半形數字」，和前文同時更新、但不記文字（M3 票 05）。
   - 殼沒給前文時（宿主不提供、iOS 的 `documentContextBeforeInput` 是空的，brief §12.3）就用這個輸入框上屏過的字（M3 票 05 決定）。殼給了前文就整份取代，iOS 只給一兩句時不拿記著的較長歷史補長度：bigram 只看最後一字，補長度只對雲端與停鍵層的模型有用，由雲端重排票（M3 票 22）依階梯結論定。成熟做法：librime 根本不讀宿主文字，組字從頭開始時的前文就是自己的 commit history（`Translator::GetPrecedingText` 取 `commit_history().latest_text()`，最多 20 筆；退格、Enter 清掉；數字後半形也看它，`punctuator.cc` 的 `is_after_number`），fcitx5 的標點模組平時靠自己記的狀態、宿主有 SurroundingText 時在聚焦後用游標前一字校正。QIM 合起來：殼給的前文優先（每次給都取代），沒給時靠自己記的；和 librime 不同，方向鍵也作廢（游標已移走）。不採用 AOSP LatinIME 的做法（宿主回 null 就當沒有前文、不用自己的歷史）：bigram 只要最後一字，自己上屏的字就是游標前的字。來源：librime `c95c0d2` 的 [`script_translator.cc` L325–329](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/gear/script_translator.cc#L325-L329)、[`commit_history.cc` L14–26](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/commit_history.cc#L14-L26)、[`punctuator.cc` L78–86](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/gear/punctuator.cc#L78-L86)；fcitx5-chinese-addons `e8d930f` 的 [`punctuation.cpp` L217–247](https://github.com/fcitx/fcitx5-chinese-addons/blob/e8d930f402e359cfd76a101ee3e46815d1331d83/modules/punctuation/punctuation.cpp#L217-L247)；AOSP LatinIME `127336e` 的 [`RichInputConnection.java`](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/127336e9f29d69607eab55982324b210279ae8c5/java/src/com/android/inputmethod/latin/RichInputConnection.java)（`reloadTextCache`）。
   - 無痕（brief §8：不讀上下文、不送雲端，硬限制）：打開時核心丟掉前文；無痕期間一個字都不記，上屏的字不接進前文，殼給的前文也不收，所以關掉無痕後第一次打字的前文不含無痕期間打的字（殼還沒給時是不知道前文）。數字後半形的布林不含文字，無痕時照記，無痕欄位一樣打得出「3.5」。網頁無痕時不給前文、失焦時呼叫 `clear_context`；網頁只有一個輸入框，關掉無痕後會照常讀輸入框游標前的文字（含畫面上無痕時打的字），等同換到一般欄位。選開頭一段或改選某一段後，剩下的輸入碼接選定分段的最後一字，同一個機制（M1 票 21 留下的現狀改掉）。
@@ -247,8 +248,10 @@ P_段內 = 1（單字）
 - 組字開頭的字的「前一字」（M3 票 04，`Engine::context_char`）：有選定的分段時是最後一段的最後一字，和 lattice 裡路徑的下一段一樣，沒有統計的字照退回式算；否則看前文（§2.1）。bigram 只在句內訓練（§4.3 照標點、空白、符號切句），所以照切句的規則：前文以字結尾時接那個字；以標點、空白或符號結尾，或是空的時接句首（`CLAUSE_START`，§4.3）；結尾的字在語言模型裡沒有統計（英文、數字、罕用字）或資料包沒有句首時、不知道前文時（殼沒給、也還沒上屏過，或交還宿主的鍵讓它作廢，§2.1）、無痕時，用字頻的 unigram。先試過略過結尾的標點、接上一句的最後一字：「有前文」集合給前文反而比不給答錯多 1–5%、修正多 0.3–4%（四個語料都是），bigram 接不過標點；改接句首後給前文較好（票 04 Comments）。規則先在 test 的「有前文」集合上看出，之後在 dev 切分的同樣題目上重比三種規則，結論相同（`scripts/experiments/context-rule/`）。「有前文」集合的前文都以標點結尾（題目是整句），所以首選正確率量到的是句首的增益；「接前文的最後一字」只在模擬上屏一段後重打剩下的字時走到，只影響修正次數。
 - 詞的段：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，前後文由字級 bigram 接，詞內由 rime-essay 的詞頻估（每個詞算一次的詞頻總和當分母）。詞內也用字級 bigram 時，同碼的詞分不出常用度，個人集答錯多 27%（M1 票 11 Comments）。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；由首選字基準的 dev 切分調出（`cargo xtask bench --dev`），寫進方案檔。方案檔、`bench --set` 與載入資料包都經 `Ranking::check` 驗：beam 至少 1，β、γ 是有限的數（M3 票 03）。速成是 β = 1、γ = 1（M1 票 12）：dev 偏好更小的 β，但個人集（多是兩字詞）答錯變多，個人集只當守門、不拿來調。
-- `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` = 0.05（libime 用 0.2，`docs/research/libime-user-model.md` §1；M1 票 12 調）；沒學過的段為 0。所以 `personal(段) = max(0, ln((1−w)·P + w·P_personal) − ln P)`，`P` 是這一段接在前一字後的靜態機率：首字 bigram 乘詞內機率，不含 β、γ。M3 再加個人 bigram（前一字詞 → 這一段）。
+- `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` = 0.05（libime 用 0.2，`docs/research/libime-user-model.md` §1；M1 票 12 調）；沒學過的段為 0。所以 `personal(段) = max(0, ln((1−w)·P + w·P_personal) − ln P)`，`P` 是這一段接在前一字後的靜態機率：首字 bigram 乘詞內機率，不含 β、γ。個人機率由這一段的學習計數與個人 bigram 合成（下面兩條）。
   - 個人機率 `P_personal = d_now ÷ D_max`：`d_now` 是（方案, 碼, 字詞）的衰減值衰減到這個方案現在的 tick（`d · e^(−(tick − 最後 tick)/200)`），`D_max = 1 / (1 − e^(−1/200)) ≈ 200.5` 是每次上屏都是它時衰減值的上限，所以 `P_personal` 在 (0, 1]。分母取常數，照 libime 除以滿載歷史的總量：學過一次的段 `P_personal ≈ 0.005`，不會因為才學幾次就壓過所有詞。
+  - 個人 bigram（M3 票 12）：記「前一個字詞 → 這一段」的衰減值（§2.4），`P_bigram` 是這一段接在前一個字詞後面的條件機率：這組的衰減值 ÷ 前一個字詞後面各段的衰減值總和（都衰減到現在，照 libime `HistoryBigram` 除以前一詞的計數，`docs/research/libime-user-model.md` §2）。兩者合成 `P_personal = P_unigram + (1 − P_unigram)·λ·P_bigram`，λ = 0.8。libime 是 `(1 − λ)·P_unigram + λ·P_bigram`，沒有前一個字詞時學過的段只剩兩成的個人分，`a_learned_word_also_scores_in_longer_continuous_input` 就紅；這裡 bigram 只往上加。λ 在 dev 切分的學習模式掃 0–1，0.8 八個集合合計修正最少（票 12 Comments）。
+  - 前一個字詞：lattice 裡是部分路徑的最後一段；組字開頭是最後選定的分段，沒有時看前文：前文以上一次上屏的組字的最後一段結尾時是那一段（原文；簡體模式的前文是轉換後的字，也認），否則是前文的最後一字（字母或數字才算，標點、空白之後沒有）。沒給前文、無痕時沒有。前文只是一串字、分不出詞，所以接得上整個詞的只有剛上屏的那一段（同 libime 由上層傳入上一次上屏的詞）。
   - 分母改用實際上屏的段數衰減總和時，`bench --learning` 四個公開集合的修正次數都較多（M1 票 13 Comments，當時是 unigram），所以用常數。
 - 詞內在詞頻與字級 bigram 之間內插（權重 0.4–0.6）在 dev 上口語略好、維基答錯少約 3–5%，但個人集答錯多 5–16%，不採用（M1 票 12 Comments）。
 - `personal` 的 w：票 13 換上 bigram 後 w 0.2 讓 zh-wiki 學習開變差，票 12 換上口語權重與新 β、γ 後連 common-voice-yue 也變差。學習模式改讀 dev 切分掃 0.01–0.2，0.05 對口語與維基都最好；test 上口語兩集、個人集與 yue-wiki 學習開較少，zh-wiki 持平（票 12 Comments）。
@@ -259,13 +262,13 @@ P_段內 = 1（單字）
 
 ### 2.4 學習與排位（brief §4.5）
 
-- 學習計數以「(輸入方案, 輸入碼, 候選文字)」為鍵，同一串碼在不同方案互不影響（速成與倉頡都有 `ab`）；M1 用第二份測試方案驗證。之後的個人 bigram 只看文字，跨方案共用。計數記：整串上屏的次數與最後一次的 tick、衰減值與它最後更新的 tick。tick 是學習過的上屏次數，每個方案各自累加，由 `UserModel` 自己算，不讀系統時間；一個方案的使用者詞與計數在核心內部經 `UserModel::for_scheme` 取用，查詢與學習的方法不逐一帶方案（M2 票 02）；無痕與 Enter 原樣上屏輸入碼不算。衰減值照 librime `formula_d`：每次上屏 `d ← 1 + d · e^(−(tick − 最後 tick)/200)`（時間常數 200 次上屏，brief §12.2）。
+- 學習計數以「(輸入方案, 輸入碼, 候選文字)」為鍵，同一串碼在不同方案互不影響（速成與倉頡都有 `ab`）；M1 用第二份測試方案驗證。個人 bigram（§2.3，M3 票 12）只看文字，跨方案共用，有自己的 tick（各方案學習過的上屏次數合計）；每次上屏記「前一個字詞 → 第一段」（前一個字詞見 §2.3）、相鄰兩段各一次，有兩段以上時「前一個字詞 → 整串」也記（整串可能是自動造詞），同一組只記一次，衰減同下面的衰減值。計數記：整串上屏的次數與最後一次的 tick、衰減值與它最後更新的 tick。tick 是學習過的上屏次數，每個方案各自累加，由 `UserModel` 自己算，不讀系統時間；一個方案的使用者詞與計數在核心內部經 `UserModel::for_scheme` 取用，查詢與學習的方法不逐一帶方案（M2 票 02）；無痕與 Enter 原樣上屏輸入碼不算。衰減值照 librime `formula_d`：每次上屏 `d ← 1 + d · e^(−(tick − 最後 tick)/200)`（時間常數 200 次上屏，brief §12.2）。
 - 上屏時記兩種，用途不同（使用者決定）：
   - 整串上屏：整串輸入碼就是那個碼、上屏的就是那個候選，記一次上屏次數。只有它算排位規則 2 的門檻與「最近」；句中用過的字詞不會因此搶到單打時的首選。
   - 衰減值：整串和路徑的每一段各加一次（同一組鍵在一次上屏裡只加一次），只給 §2.3 的 `personal`，所以學過的詞在更長的連打裡也有效。選了開頭一段的，每個選定的分段算一段；選的是多段路徑的，路徑的每一段各算一段。標點、大寫先上屏組字時照樣學，但有沒有字的輸入碼原樣上屏時整次不學。
 - 排位規則依序套用在 Viterbi 結果上，前面的規則排定的位置後面的規則不動；只移動候選列裡已有的候選。比對的是整串輸入碼，也就是候選列的那串：選定開頭一段之後是剩下的輸入碼。次數不衰減，用來判斷門檻；衰減值只決定個人分高低，不參與門檻（衰減後選兩次只有約 1.995，永遠到不了 2）：
   1. 觸發詞完全符合的使用者詞 → 首選。
-  2. 整串上屏 ≥ 2 次，且距最後一次整串上屏不超過 10,000 次上屏（初值）的候選 → 首選；多個符合時取最近整串上屏的。沒有這樣的候選時，整串上屏剛好 1 次的候選不靠學到的分數成首選：分數排第一的是它、而不學習時（空白的個人模型）的首選不是它，就改回不學習時的首選；本來就是首選的上屏一次仍是首選，不學習時的首選不是蓋滿整串的候選時不動；首選已由規則 1 排定時，排第一的不是它，也不動（M3 票 03：原本會把不學習時的首選多移到第 2 位）。學過一次的個人分（約 0.05 × 0.005）常勝過兩字以上候選的靜態機率（多在 10⁻⁶ 以下），不擋就違反「選兩次才成首選」（brief §4.5，M1 票 14）。
+  2. 整串上屏 ≥ 2 次，且距最後一次整串上屏不超過 10,000 次上屏（初值）的候選 → 首選；多個符合時取最近整串上屏的。沒有這樣的候選時，整串上屏不到 2 次的候選不靠學到的分數成首選：分數排第一的是整串上屏剛好 1 次的候選，或 0 次但只有一段（就是單打這串碼）、這段有學習計數或接在前一個字詞後的個人 bigram（只在句中用過，句中用過的只在連打裡加分，M3 票 12），而不學習時（空白的個人模型）的首選不是它，就改回不學習時的首選；多段的候選是連打，學過的段照樣加分；本來就是首選的上屏一次仍是首選，不學習時的首選不是蓋滿整串的候選時不動；首選已由規則 1 排定時，排第一的不是它，也不動（M3 票 03：原本會把不學習時的首選多移到第 2 位）。學過一次的個人分（約 0.05 × 0.005）常勝過兩字以上候選的靜態機率（多在 10⁻⁶ 以下），不擋就違反「選兩次才成首選」（brief §4.5，M1 票 14）。
   3. 上屏次數 ≥ 1 的使用者詞（含自動造詞）→ 至少第 2 位；多個符合時取最近整串上屏的。本來就在前 2 位的釘在原位。
   4. 英文候選：輸入碼剛好是完整英文單字時放第 2 位（brief §4.3）；第 2 位已由規則 1–3 排定時放它後面最前的空位，不往前移、不搶首選。只給剩下的整串輸入碼（目前分段的候選列沒有），輸入碼要長過方案一個字的最長碼（速成 3 碼起，同 macOS 速成，黑箱 T7），沒有任何中文候選時不出。拼法查英文資料包（§4.4）：比對小寫，同一個小寫拼法有幾種大小寫時取全小寫的，沒有就取專有名詞的大寫（`english` → English，T7 的 macOS 也出 iPad、GitHub）。選了它和 Enter 一樣：選定的分段上屏字詞、其餘上屏英文字，整次不學、不造詞，所以選幾次都不會變首選（M1 票 15）。
   - 排定的候選釘在它的位置，其餘的依原本的順序填進空位；「至少第 n 位」移到不超過第 n 位的空位裡最後面的一個，那些位置都排定了才移到最前面的空位。
@@ -282,10 +285,11 @@ P_段內 = 1（單字）
     - macOS／iOS 文字替代的 plist 不收：它是短語加快捷鍵，對應常用語不是使用者詞；要收時另開票匯入成常用語。
 - 自動造詞：一次組字分兩次以上選定（選過開頭一段再選蓋滿剩下的，或移到第 2 段以後的分段改選，前面的分段照顯示的字固定）後上屏，把「整串輸入碼 → 上屏文字」記成使用者詞；上屏次數由同一次上屏的學習記成 1。碼表或詞庫已有同碼同字的不記（libime 也略過已有的詞）；標點、大寫先上屏組字與 Enter 不算選定，不造詞；無痕不造詞。
 - 分隔記號（§2.1）不進學習資料：每段、整串、自動造詞的碼都去掉它，排位規則比對的碼也去掉它（同 Rime 使用者詞典的碼由音節組成，brief §12.2）。所以 `mi'r` 選兩次「歹口」，記的是 `mir` → 歹口，不分隔打 `mir` 也成首選；分隔過的組字照舊要分兩次以上選定才自動造詞（M1 票 28）。
-- `Options.incognito` 為真時不寫任何學習資料。
+- `Options.incognito` 為真時不寫任何學習資料、不用前文。學習總開關 `Options.learning`（brief §4.5、§7，預設開，M3 票 12）關掉時也不寫任何學習資料（計數、個人 bigram、自動造詞），但已學的照用、前文照用；手動加詞與常用語是使用者明確的操作，照收（同無痕）。
 - 匯出格式（對外，M1 票 14 定稿 v1；M3 升 v2，收尾票定稿；改了要升版本，brief §5.3）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
-  - 第一行 `# qim-userdict v2`；匯入也收 `# qim-userdict v1`（M3 spec〈共同規則〉）。接著每個方案一行 `#@/tick/<方案>\t<tick>`；其餘 `#` 開頭的行與空行是註解，匯出時寫一行欄名註解。
+  - 第一行 `# qim-userdict v2`；匯入也收 `# qim-userdict v1`（M3 spec〈共同規則〉）。接著個人 bigram 的 tick 一行 `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫），每個方案一行 `#@/tick/<方案>\t<tick>`；其餘 `#` 開頭的行與空行是註解，匯出時寫一行欄名註解，有個人 bigram 時在它們前面另一行。
   - 每個（方案, 輸入碼, 詞）一列、9 欄，依方案、輸入碼、詞排序：`方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語，v2 起）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。
+  - 個人 bigram（v2 起，M3 票 12）：每組一列、5 欄，接在上面的列之後，依前一個字詞、這一段排序：`（空的方案欄）  前一個字詞  這一段  衰減值  最後 tick`。方案欄空的就是各方案共用，和其他列分得開（其他列的方案不能空）；前一個字詞與這一段照詞欄跳脫，不能是空的，衰減值是正的有限數。沒有 `#@/tick` 行時 tick 取最大的最後 tick（同方案的 tick）。v1 沒有這種列，方案欄空的照舊整份不收。
   - v2 的詞欄跳脫（M3 票 14，常用語含換行與 Tab）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，反斜線後是其他字或在結尾時整份不收；照 PostgreSQL `COPY` 的文字格式與 Linear TSV。v1 的詞欄照字面讀。常用語那列的輸入碼是空的、計數都是 0，觸發詞學到的計數另是一列 `learned`（碼是觸發詞）；其他列的輸入碼不能是空的。
   - 參考：librime userdb 文字檔（第一行註解、`#@/key<Tab>value` 的 metadata 含 `/tick`、每列記衰減值 `d` 與最後 tick `t`）；libime 使用者詞庫分手動詞與 `[Auto]` 段，這裡收成「來源」欄。和兩者不同：第一行帶格式版本（兩者都沒有）；統計用固定欄，不用 librime 的 `c= d= t=`，因為要多記整串上屏的次數與 tick（規則 2），升版本時本來就要改 parser；多個方案放同一檔；刪除記號（librime 負的 `c`、libime `[Delete]`）等 M4 同步定合併規則時一起加（§7.5）。查證在 `docs/research/userdict-text-formats.md`。
   - 匯入取代整個個人模型（殼存檔、換機都是整份），有一列不合格式就整份不收、錯誤帶行號：取代時收一半等於丟資料。兩者都是合併、壞列略過；合併規則跟同步一起在 M4 定。

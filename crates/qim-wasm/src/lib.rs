@@ -168,6 +168,12 @@ impl WebSession {
         self.set_options(|options| options.incognito = on);
     }
 
+    /// 學習（brief §4.5、§7）：關掉時不寫任何學習資料，已學的照用、前文照用。預設開。
+    #[wasm_bindgen(js_name = setLearning)]
+    pub fn set_learning(&mut self, on: bool) {
+        self.set_options(|options| options.learning = on);
+    }
+
     /// 無痕模式開著：網頁這時不給前文（brief §8）。
     #[wasm_bindgen(getter)]
     pub fn incognito(&self) -> bool {

@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::lattice::{self, CandidateSpan, Lattice, Listing};
+use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
@@ -27,14 +27,26 @@ pub struct RerankRequest {
     pub candidates: Vec<Candidate>,
 }
 
+/// 上屏的組字的最後一段（[`Session::context_word`]）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LastWord {
+    /// 原文（繁體），學習記的。
+    original: String,
+    /// 顯示、上屏的字：簡體模式下是轉換後的，前文裡是它。
+    shown: String,
+}
+
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
     /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體（plan §2.2 的後處理）；
     /// 引擎要掛上簡繁資料包（[`Engine::with_simplifier`]）。
     pub simplified: bool,
-    /// 無痕模式：不寫任何學習資料（plan §2.4）。
+    /// 無痕模式：不寫任何學習資料、不用前文（plan §2.4、brief §8）。
     pub incognito: bool,
+    /// 學習（brief §4.5、§7）：關掉時不寫任何學習資料，已學的照用、前文照用（和無痕不同）。
+    /// 預設開。
+    pub learning: bool,
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
@@ -102,8 +114,8 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選與簡體字排後影響候選，無痕、Shift、
-    /// 數字後半形都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選與簡體字排後影響候選，無痕、學習、
+    /// Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified
             && self.english_candidates == other.english_candidates
@@ -117,6 +129,7 @@ impl Default for Options {
         Self {
             simplified: false,
             incognito: false,
+            learning: true,
             english_candidates: true,
             digit_separators: true,
             emoji_candidates: true,
@@ -383,6 +396,12 @@ pub struct Session {
     /// 字或移走游標（[`Session::passed_to_host`]）、殼換了欄位（[`Session::clear_context`]），或在
     /// 無痕中：無痕時一個字都不記，關掉後也不會冒出無痕期間的字（brief §8）。
     context: Option<String>,
+    /// 上一次上屏的組字的最後一段。前文以它結尾時，它是下一次組字的前一個字詞
+    /// （[`Session::context_word`]）。
+    last_word: Option<LastWord>,
+    /// 這次組字開頭時前文給的前一個字詞（[`Session::context_word`]）；學個人 bigram 用，和打分時
+    /// 接的相同：組字中再給的前文留到下一次組字（plan §2.1）。
+    composition_word: Option<String>,
     /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
@@ -620,6 +639,9 @@ impl Session {
         {
             self.focus = None;
             if self.lattice.input().is_empty() {
+                if self.selected.is_empty() {
+                    self.composition_word = self.context_word();
+                }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
             self.lattice.push(engine, user, c);
@@ -897,7 +919,10 @@ impl Session {
             commit.original.push_str(&choice.text);
             segments.extend_from_slice(&choice.segments);
             rest.drain(..choice.len);
-            let before = choice.text.chars().next_back();
+            let before = Preceding {
+                character: choice.text.chars().next_back(),
+                word: choice.segments.last().map(|s| s.text.clone()),
+            };
             top = lattice::candidates(
                 engine,
                 user,
@@ -909,6 +934,7 @@ impl Session {
         }
         if raw.is_empty() {
             self.learn(engine, user, &segments);
+            self.remember_last_word(engine, segments.last());
         }
         commit.text.push_str(&raw);
         commit.text.push_str(&tail.text);
@@ -917,24 +943,39 @@ impl Session {
         self.commit(engine, commit)
     }
 
-    /// 學一次上屏（plan §2.4）；無痕模式不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
-    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。
+    /// 這次上屏要不要寫學習資料：無痕或學習關掉時不寫（plan §2.4）。
+    fn writes_learning(&self) -> bool {
+        self.options.learning && !self.options.incognito
+    }
+
+    /// 學一次上屏（plan §2.4）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
+    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。個人 bigram 的
+    /// 第一段接組字開頭時前文給的字詞（[`Session::composition_word`]）。
     fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
-        // 沒有分段時不取方案的個人模型：取了會建出空的一份，匯出多一行 tick。
-        if self.options.incognito || segments.is_empty() {
+        if !self.writes_learning() {
             return;
         }
         let segments: Vec<Segment> = segments
             .iter()
             .map(|s| Segment::new(without_separators(&s.code), s.text.clone()))
             .collect();
-        user.for_scheme_mut(&engine.scheme().id).learn(&segments);
+        let previous = self.composition_word.as_deref();
+        user.learn(&engine.scheme().id, previous, &segments);
+    }
+
+    /// 記下上屏的組字的最後一段 `last`，給下一次組字接前文用（[`Session::context_word`]）；學習
+    /// 關掉時也記，已學的照用。無痕不用前文，也不記。
+    fn remember_last_word(&mut self, engine: &Engine, last: Option<&Segment>) {
+        self.last_word = last.filter(|_| !self.options.incognito).map(|s| LastWord {
+            original: s.text.clone(),
+            shown: self.output(engine, &s.text),
+        });
     }
 
     /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
-    /// 詞，`docs/research/libime-user-model.md` §5）。無痕模式不記。
+    /// 詞，`docs/research/libime-user-model.md` §5）。無痕或學習關掉時不記。
     fn add_auto_phrase(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
-        if self.options.incognito {
+        if !self.writes_learning() {
             return;
         }
         let code: String = segments
@@ -1051,6 +1092,8 @@ impl Session {
         self.focus = None;
         if rest.is_empty() {
             self.learn(engine, user, &self.selected);
+            let last = self.selected.last().cloned();
+            self.remember_last_word(engine, last.as_ref());
             if auto_phrase {
                 self.add_auto_phrase(engine, user, &self.selected);
             }
@@ -1068,14 +1111,41 @@ impl Session {
         self.lattice = Lattice::from_input(engine, user, before, input);
     }
 
-    /// 沒選定的輸入碼前面的一個字（plan §2.3）：最後選定的分段的最後一字；沒有選定的分段時
-    /// 看前文（[`Engine::context_char`]），不知道前文或無痕時是 `None`。
-    fn before_unselected(&self, engine: &Engine) -> Option<char> {
+    /// 沒選定的輸入碼前面是什麼（plan §2.3）：最後選定的分段（它的最後一字與它）；沒有選定的
+    /// 分段時看前文（[`Engine::context_char`]、[`Session::context_word`]），不知道前文或無痕時沒有。
+    fn before_unselected(&self, engine: &Engine) -> Preceding {
         match (self.selected.last(), &self.context) {
-            (Some(segment), _) => segment.text.chars().next_back(),
-            (None, Some(context)) if !self.options.incognito => engine.context_char(context),
-            (None, _) => None,
+            (Some(segment), _) => Preceding {
+                character: segment.text.chars().next_back(),
+                word: Some(segment.text.clone()),
+            },
+            (None, Some(context)) if !self.options.incognito => Preceding {
+                character: engine.context_char(context),
+                word: self.context_word(),
+            },
+            (None, _) => Preceding::default(),
         }
+    }
+
+    /// 前文給的前一個字詞（個人 bigram，plan §2.3）：前文以上一次上屏的組字的最後一段結尾時是
+    /// 那一段（原文；簡體模式下前文是顯示的字，也認），否則是前文的最後一字（字母或數字才算，
+    /// 標點、空白之後沒有）。不知道前文或無痕時沒有。前文由 `Session` 接上上屏的字（[`Session::context`]），
+    /// 所以剛上屏的那段接在前文結尾。
+    fn context_word(&self) -> Option<String> {
+        if self.options.incognito {
+            return None;
+        }
+        let context = self.context.as_deref()?;
+        if let Some(last) = &self.last_word
+            && (context.ends_with(&last.original) || context.ends_with(&last.shown))
+        {
+            return Some(last.original.clone());
+        }
+        context
+            .chars()
+            .next_back()
+            .filter(|c| c.is_alphanumeric())
+            .map(String::from)
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
@@ -1094,7 +1164,7 @@ impl Session {
                 lattice::candidates(
                     engine,
                     user,
-                    &Lattice::from_input(engine, user, None, code),
+                    &Lattice::from_input(engine, user, Preceding::default(), code),
                     self.listing(false),
                 )
             }
