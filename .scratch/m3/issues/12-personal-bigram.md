@@ -35,3 +35,13 @@ Blocked by: 03, 04
 - 2026-11-11 協調者轉來的疑慮查證屬實：連打裡選過一次「丁 → 己」（`fg` 整串上屏 0 次），之後前文「丁」單打 `fg`，己成首選。`personal_bigram.rs` 的 `a_bigram_learned_mid_sentence_does_not_make_y_the_top_when_its_code_is_typed_alone` 紅：`left: "己"`、`right: "戊"`。這違反 brief §4.5「句中用過的只在連打裡加分」。先前的測試沒抓到，是因為甲、丙的字頻差 100 倍，bigram 加的分不夠翻盤；換成字頻只差 3 倍的戊、己才紅。修法：規則 2 的「選一次不成首選」放寬到整串上屏 0 次的候選，只限只有一段（就是單打這串碼）、又帶學到的分（學習計數或個人 bigram）的候選。多段的候選是連打，不擋（由 `a_bigram_learned_mid_sentence_still_scores_in_continuous_input` 守）。個人 bigram 跨方案，另一個方案沒有學習計數，所以 bigram 那一支要另判（由 `…_in_another_scheme_…` 守，拿掉這一支就紅）。同一道門也擋住句中學到的學習計數搶單打的首選（plan §2.4 本來就寫了，以前沒擋）。已改 plan §2.4 規則 2。
 - 2026-11-11 加門檻後 `--learning`（學習開的修正，加門檻前 → 後）：yue-wiki 4283→4281、zh-wiki 4372→4372、common-voice-yue 3810→3813、hkcancor 2085→2090、yue-wiki·前文 2235→2234、zh-wiki·前文 2151→2152、common-voice-yue·前文 608→608、hkcancor·前文 1440→1447、personal 1408→1404。公開集合合計 20984→20997；和本票開工前（21127）比 −130；個人集和開工前比 1407→1404。
 - 2026-11-11 合併 main（票 05、17、18、20）：衝突在 `session.rs`（`Session` 的欄位與 `before_unselected` 的註解，票 05 的前文改由核心接上上屏的字，`context_word` 照用：剛上屏的段就在前文結尾）、`qim-wasm`（`setLearning` 與票 05 的 `setContext` 等並存）、plan §0 名詞表與 §2.1 上下文（取票 05 的版本、補個人 bigram 一句）。重建資料包（票 18 改了詞庫）、`npm ci`（票 20 加了 `idb-keyval`）後 `cargo xtask check` 全綠（e2e 188 passed），`cargo test --workspace` 828 passed。`bench --check` 通過：各集合答錯、修正與 baseline 相同（yue-wiki 1123／4295、zh-wiki 1126／4381、common-voice-yue 1030／3908、hkcancor 650／2478、personal 1082／1469），翻盤清單都是「沒有翻盤」。`--learning` 學習開，main（同一份資料包、暫時 worktree）→ 合併後：yue-wiki 4225→4220、zh-wiki 4396→4368、common-voice-yue 3817→3763、hkcancor 2003→1980、yue-wiki·前文 2198→2204（+6）、zh-wiki·前文 2170→2152、common-voice-yue·前文 594→590、hkcancor·前文 1408→1396、personal 1407→1404。公開集合合計 20811→20673（−138），「前文」四集合合計 6370→6342；照先前的決定以合計為準。
+- 2026-11-11 學過的學習資料下的每鍵延遲（協調者要求；先前的「沒有變慢」是用空白的學習資料量的）。量法（暫時改 bench、量完還原）：一個 `UserModel` 依序學完全部公開集合（約 1 萬句），得 28,254 筆個人 bigram、19,289 列學習計數；原生每個輸入從它開始計時，WebAssembly 先 `importUserDict`；四次依序單獨跑（Apple M6）。計時的輸入就是學過的句子（整句都自動造詞了），偏向最壞情況。每鍵 p95（µs）：
+
+  | 學習資料 | 原生 全部 | 原生 第 20 碼起 | 原生 選開頭一段 | Wasm 全部 | Wasm 第 20 碼起 | Wasm 選開頭一段 |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 空白 | 43.5 | 45.5 | 744 | 53.8 | 57.3 | 899 |
+  | 學過，拿掉 bigram（本票之前的學習） | 116.4 | 106.4 | 1039 | 133.3 | 147.3 | 1102 |
+  | 學過，有 bigram、門檻退回加門檻前 | 119.5 | 185.0 | 1364 | 147.5 | 184.5 | 1458 |
+  | 學過，有 bigram、現在的門檻 | 218.6 | 440.6 | 1583 | 320.8 | 612.2 | 2073 |
+
+  p50（全部）原生 31.8 → 67.5 → 78.6 → 78.8、WebAssembly 39.4 → 83.8 → 94.8 → 103.4。主因是規則 2 的門檻：門檻每鍵重建不學習時的候選列，學過資料多時最壞 p95 約 2 ms；個人 bigram 查詢本身只讓長輸入 p95 106 → 185。仍遠低於 brief §9 的每鍵目標 50 ms，協調者決定接受現狀。若 M7 低階機量出問題，先做：只算不學習時的首選，或按碼快取。
