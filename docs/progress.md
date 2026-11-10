@@ -17,14 +17,16 @@
 | M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 完成，[已封存](archive/M0.md) |
 | M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 完成，[已封存](archive/M1.md) |
 | M2 | `.scratch/m2/issues/` | brief §9、§11、§12.3；plan §1.4、§3、§7.3；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 完成，[已封存](archive/M2.md) |
-| M3 | `.scratch/m3/issues/`（未拆票） | brief §1.5、§7、§8、§12.3；plan §2.3、§2.7、§7.4、§7.8；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 進行中，未拆票 |
+| M3 | `.scratch/m3/issues/` | brief §1.5、§7、§8、§12.3；plan §2.3、§2.7、§7.4、§7.8；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 進行中，已拆 23 張票（`.scratch/m3/spec.md`） |
 
 ## Session 紀錄
 
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
 | 2026-11-10 | M3 封存 M2 | 票 12：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉、iPhone 重打「門口」；brief §9、§11 寫回；M2 封存到 `docs/archive/M2.md`；見票 12 | 新 session 下 `/to-tickets docs/plan.md 拆 M3 的票` |
+| 2026-11-11 | M3 拆票 | 寫 `.scratch/m3/spec.md`（含 plan §7.8 搬來的階梯實驗），拆 23 張票；plan §7.4、§7.8 縮成連結 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 
 ## 偏差與決定
 
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
+- 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。

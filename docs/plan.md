@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0、M1、M2 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`、`.scratch/m2/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`、`docs/archive/M2.md`）；M3 進行中、還沒拆票；M3 起只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0、M1、M2 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`、`.scratch/m2/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`、`docs/archive/M2.md`）；M3 進行中（`.scratch/m3/spec.md`，已拆票）；M4 起只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -570,15 +570,7 @@ M1、M2 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 
 ### 7.4 M3 智慧候選
 
-- 模型階梯實驗（§7.8）先做，依結果決定同步層要不要升級語言模型、要不要做小型神經重排，以及 LLM 候選優化與雲端聯想、補全的範圍。開工前讀青簡的神經重排（摘要在 `docs/research/qingjian.md` §4、§5；原文 `qingjian-neural`、`docs/notes/neural-rescoring.md`，GPL，只取做法）與 CyIME 的九宮格模型評估（`docs/research/cyime.md` §3 的文件，GPL，只取做法），記到 `docs/research/`。
-- 個人 bigram（§2.3）；聯想（有開關、預設開，brief §7）；輸入框上下文配合 n-gram（數字後半形也改看前文，M1 票 26）；自動記住 email 這類字串；常用語（與觸發詞共用格式）；emoji 候選（CLDR 繁中 / 粵語標註）。
-- 雲端（brief §8）：使用者自帶 API key，結果非同步、標示來源；送出前遮蔽 email、電話、卡號；花費上限（每日請求數，預設值依 §7.8 的費用定）；排除指定 App（介面與規則放核心，平台里程碑接上）。
-- 詞庫匯入；完整粵語詞庫（授權查清後，查不清就留在之後）；資料包線上更新（可關；更新來源在開工時定，要建遠端先問使用者）：這時才給資料包加 manifest（id、種類、版本、最低核心版本、sha256、大小、授權），設定頁可切換、刪除，也可從檔案匯入資料包；模型階梯實驗採用可選下載的模型時也走這裡。
-- 完成標準：
-  - 上述功能在網頁可用，有 Playwright 實打紀錄。
-  - 首選字基準加「有前文」的集合，正確率比沒有上下文時高，其他集合不退步。
-  - 含 email、電話、卡號的測試前文，抓送出的請求內容，讀回已遮蔽；超過花費上限後不再送出，打字不受影響。
-  - 各層模型的採用結論與不採用的理由寫回 brief。
+進行中（2026-11-11 拆票）：目標、範圍、共同規則、驗收與票序見 `.scratch/m3/spec.md`。
 
 ### 7.5 M4 輸入增強
 
@@ -645,31 +637,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 ### 7.8 M3 的模型階梯實驗
 
-要回答：同步層、停鍵層、雲端層（§2.7）各用哪個模型，修正次數和首選正確率能改善多少，延遲、大小與費用是否可接受。現在的路線從字級 bigram 直接跳到 LLM，中間的選項都要量過。
-
-- 前置：M1 的 `rerank_request` / `apply_rerank` 介面與首選字基準；M2 量完的記憶體上限、Foundation Models、上下文長度與小型神經模型開銷（都已齊，`docs/research/ios-feasibility.md`、brief §12.3）。
-- 模型大小上限（M2 票 09）：iOS 鍵盤擴充裡，模型的 footprint 峰值增量 ≤ 60 MB，讓核心加資料包（79 MB）加模型留在記憶體警告線（約 142 MB）以下、不靠警告後釋放；23M 級只能用 q8（+47 MB），f32（+95 MB，合計約 174 MB，離 177 MB 上限約 3 MB）不行。數字來自 iPhone 18 Pro Max（旗艦機，低階機的上限可能更低，M7 再量），只限 iOS 鍵盤擴充（`docs/research/ios-feasibility.md`〈記憶體上限〉）。
-- 測試集：維基、口語、個人三個集合，加一個「有前文」的集合：從語料取連續句子，前一兩句當上下文，最後一句轉成速成碼。結論以口語與個人集為主，維基集只防退步。
-- 受測模型：
-
-| 層 | 模型 | 備註 |
-| --- | --- | --- |
-| 同步 | 字級 bigram（基線）、字級 trigram、詞級 n-gram | 同一份預算（≤ 8 MB）比較，再看放寬到 M2 上限時的增益；另量一份不設預算、可選下載的詞級 trigram（CyIME 是 105–203 MB，`docs/research/cyime.md` §3） |
-| 停鍵 | 小型神經模型：Gboard 級（約 1.4M 參數）、青簡級（約 23M 參數） | 自己用 §4.3 的語料訓練，重排前 6 條路徑；放不進 M2 上限就只量桌面 |
-| 停鍵 | Apple Foundation Models | 這台 Mac 上用 Swift 命令列跑（瀏覽器呼叫不了）；iOS 鍵盤擴充裡的延遲與記憶體 M2 已量（brief §12.3） |
-| 雲端 | DeepSeek `deepseek-flash`（關閉思考模式），`deepseek-v4-pro` 當對照 | 經 OpenAI 相容介面（brief §12.4）；開工時重查模型清單與價格 |
-
-- 小型神經模型的實作要做前綴快取：上下文只算一次，狀態給 6 條路徑共用。M2 票 11 的延遲以此為前提；Mac 上不共用時上下文 50 字慢約 3.4 倍、200 字慢 4–5 倍（brief §12.3、`scripts/experiments/neural-cost/README.md`〈前綴快取〉）。
-- 提示（LLM）：上下文 + 輸入碼 + 前 10 個候選，要求模型只回序號（afm-ime 做法，`docs/research/open-source-imes.md` §5）。
-- 指標：
-  - 修正次數、首選正確率、「最高到第 2 位」規則下的前 2 名命中率，各和基線比。
-  - 資料包或模型大小、常駐記憶體、載入時間。
-  - 每次請求或推論的延遲 p50 / p95；雲端每千次請求費用。
-  - 上下文長度 0、50、200 字各量一次。iOS 實際讀得到的多半只有數十字、最多 100–300 字（brief §12.3）。
-- 採用門檻：拿到基線後寫進 M3 的 spec，再跑實驗，避免看到結果才定標準。
-- API key 只放本機環境變數 `DEEPSEEK_API_KEY`，不進 repo；腳本缺 key 時跳過雲端部分並註明。
-- 訓練出來的模型受語料授權影響，與 bigram 同列 brief §11。
-- 產出：`scripts/experiments/model-ladder/` 的腳本與 README（日期、模型版本、結果表）。結論寫回 brief §12 與 §1.5，採用小型神經模型時改 §1.3、§1.4，必要時改 brief §8 的 200 字上限。
+已細化進 `.scratch/m3/spec.md`〈模型階梯實驗〉（2026-11-11），別處引用「plan §7.8」的都指那一段。
 
 ## 8. 風險與回寫點
 
