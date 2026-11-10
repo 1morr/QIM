@@ -20,3 +20,7 @@ Blocked by: 03
 - [ ] 三種路徑的每鍵 p50 / p95 都有數字，含選段那一鍵；WebAssembly 在 Chromium 仍 ≤ 50 ms。
 - [ ] plan §1.2、§1.3、§1.4 與 `RULES` 已更新，`deps` 綠燈。
 - [ ] `cargo xtask check` 綠燈。
+
+## Comments
+
+- 票 01 轉入：殼只呼叫 `set_options` 時 `Session` 有「待生效選項」狀態（重列前 `all_candidates` 空、不重排）。設計 FFI 介面時考慮讓 `set_options` 帶 `Engine`、`UserModel` 直接重列並回快照，去掉這個狀態（plan §2.1）。

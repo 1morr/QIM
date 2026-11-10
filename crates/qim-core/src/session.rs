@@ -287,8 +287,9 @@ pub struct Session {
 }
 
 impl Session {
-    /// 換選項。組字中要畫面立刻跟著換，接著呼叫 [`Session::refresh`]；沒呼叫時下一個鍵
-    /// 先依新選項重列候選再處理。
+    /// 換選項。組字中要畫面立刻跟著換，接著呼叫 [`Session::refresh`]。沒呼叫時，下一個
+    /// `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選再處理；重列前
+    /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
     }
@@ -304,6 +305,7 @@ impl Session {
 
     /// 選全部候選（不只目前頁）的第 `index` 個，和按那個候選的數字鍵相同。
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
+        self.apply_pending_options(engine, user);
         let snapshot = if self.composing() {
             self.select_at(engine, user, index)
         } else {
@@ -320,6 +322,7 @@ impl Session {
         user: &mut UserModel,
         segment: usize,
     ) -> Snapshot {
+        self.apply_pending_options(engine, user);
         if !self.composing() {
             return self.snapshot(engine, false, None);
         }
@@ -331,7 +334,11 @@ impl Session {
 
     /// 全部候選，不分頁、經過後處理，依目前的順序；候選展開面板用（brief §4.4，librime 的
     /// `RimeCandidateListBegin`、fcitx5 的 `BulkCandidateList`）。選字照位置呼叫 [`Session::select`]。
+    /// 換了選項還沒重列時是空的：`select` 會先依新選項重列，舊列表的位置會選錯字。
     pub fn all_candidates(&self) -> Vec<Candidate> {
+        if self.options_pending() {
+            return Vec::new();
+        }
         self.candidates
             .iter()
             .map(ShownCandidate::to_candidate)
@@ -339,9 +346,9 @@ impl Session {
     }
 
     /// 給背景模型的重排要求（plan §2.7）：目前的 `generation`、上下文與前 [`RERANK_LIMIT`]
-    /// 個候選。沒有組字或沒有候選時是 `None`。
+    /// 個候選。沒有組字、沒有候選，或換了選項還沒重列（候選列馬上會換）時是 `None`。
     pub fn rerank_request(&self) -> Option<RerankRequest> {
-        if self.candidates.is_empty() {
+        if self.candidates.is_empty() || self.options_pending() {
             return None;
         }
         // 上下文是候選所在的碼前面的分段：有目前分段時是它前面的，否則是選定的分段。
@@ -366,7 +373,8 @@ impl Session {
     /// 的位置，好的在前。首選不動，`order` 裡其餘的照它的順序排在第 2 位起，沒提到的照原順序
     /// 接在後面；超出範圍、重複的位置不算。
     ///
-    /// `generation` 不是目前的就丟掉、回 `None`。名次真的變了才算候選變動、`generation` 加一，
+    /// `generation` 不是目前的，或換了選項還沒重列（結果是給舊候選列的），就丟掉、
+    /// 回 `None`。名次真的變了才算候選變動、`generation` 加一，
     /// 同一份要求的另一個結果（另一層模型）因此也作廢：它的位置是照重排前的順序。殼不要因為套用了
     /// 重排的結果再要求重排。翻頁不改 `generation`，翻到第 2 頁後收到的結果照樣套用：重排只動
     /// 第一頁，看得到的那頁不變（M1 票 23）。
@@ -376,7 +384,7 @@ impl Session {
         generation: u64,
         order: &[usize],
     ) -> Option<Snapshot> {
-        if generation != self.generation {
+        if generation != self.generation || self.options_pending() {
             return None;
         }
         let limit = self.rerank_limit();
@@ -402,9 +410,7 @@ impl Session {
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
-        if !self.listed_with.lists_like(&self.options) && self.composing_chinese() {
-            self.refresh_candidates(engine, user);
-        }
+        self.apply_pending_options(engine, user);
         let snapshot = self.handle_key(engine, user, key);
         // 交還宿主的鍵宿主照打：只有數字鍵讓下一個字緊接在數字後。其他鍵都當成數字結束；librime
         // 只認可見字元、退格與 Enter，不學它：方向鍵也會把游標移離數字。不送字元的修飾鍵不動它。
@@ -412,6 +418,21 @@ impl Session {
             self.after_digit = matches!(key, Key::Digit(_));
         }
         self.finish(engine, snapshot)
+    }
+
+    /// 換了影響候選的選項、還沒重列（[`Session::set_options`] 後沒呼叫 [`Session::refresh`]）：
+    /// 候選列還是舊選項的。
+    fn options_pending(&self) -> bool {
+        self.composing_chinese() && !self.listed_with.lists_like(&self.options)
+    }
+
+    /// `handle`、`select`、`focus_segment`、`text` 開頭都經過這裡：有待生效的選項時先依
+    /// 新選項重列候選，殼只呼叫 `set_options` 時選字、移分段、打文字才用得到新的候選列。
+    /// 拿不到 `Engine` 的讀取方法改看 [`Session::options_pending`]，重列前不給舊候選。
+    fn apply_pending_options(&mut self, engine: &Engine, user: &UserModel) {
+        if self.options_pending() {
+            self.refresh_candidates(engine, user);
+        }
     }
 
     /// 會上屏的公開方法回傳前都經過這裡：記下上屏的字是不是以半形數字結尾
@@ -684,6 +705,7 @@ impl Session {
     /// 組字中和標點相同，先上屏整個組字再接 `text`；臨時英文中和實體鍵盤的可見字元一樣接在英文後
     /// （M1 票 27b）。文字照原樣、不轉全形，也不套數字後半形；簡體模式轉成簡體，原文留繁體（M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
+        self.apply_pending_options(engine, user);
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),

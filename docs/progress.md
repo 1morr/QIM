@@ -36,6 +36,7 @@
 | 2026-11-06 | M2（公開 repo） | 補 Apache-2.0 `LICENSE` 與 `README.md`，repo 公開到 https://github.com/1morr/QIM | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-07 | M2（M1 review） | 重跑 check 與 bench 全過；決定 M2 先清理 FFI 前的介面與 `set_options` bug、另開 CI 小票、只用 iPhone 18 Pro Max 量；見 plan §7.3 | 新 session 下 `/to-tickets docs/plan.md 拆 M2 的票` |
 | 2026-11-07 | M2 拆票 | plan §7.3 細化成 `.scratch/m2/spec.md`，拆 12 張票（票序見 spec）；01、04、05、06 可平行 | 新 session 下 `/implement .scratch/m2/issues/01-set-options-stale-candidates.md` |
+| 2026-11-10 | M2 01 | `set_options` 後 `select`、`focus_segment`、`text` 先依新選項重列；重列前展開面板空、不重排；bench 不變；細節見票 01 | 新 session 下 `/implement .scratch/m2/issues/02-unify-naming.md` |
 
 ## 偏差與決定
 
@@ -59,3 +60,4 @@
 - 2026-11-05 M2（補 M1 27b）：臨時英文中觸控的 `text`（標點、數字、表情、常用語）接在英文後，推翻票 25b 的先上屏英文（實作決定，brief §4.3、plan §2.1）。
 - 2026-11-05 M2（補 M1 27b）：開一次的觸控 Shift 照 Gboard 實測被任何別的鍵解除，推翻票 27 的只有字母鍵解除（brief §4.4、plan §2.6、GLOSSARY）。
 - 2026-11-07 M2（M1 review，使用者決定）：M2 加一張 FFI 前的清理票與一張 CI 小票（plan §7.3）；記憶體上限只在 iPhone 18 Pro Max 量並註明。
+- 2026-11-10 M2 票 01：換選項還沒重列時 `all_candidates` 回空、`rerank_request` 與 `apply_rerank` 回 `None`，票外決定（同類錯）；`set_options` 帶 `Engine` 直接重列留給票 07（plan §2.1）。
