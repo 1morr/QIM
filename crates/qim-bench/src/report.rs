@@ -185,11 +185,12 @@ fn length_groups<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {
     out
 }
 
-/// 每鍵延遲：原生與 WebAssembly 各兩組（全部、第 20 碼起），微秒：現在的核心每鍵不到 1 µs，用毫秒看不出前後差別。
+/// 每鍵延遲：原生與 WebAssembly 各三組（全部、第 20 碼起、選開頭一段），微秒：用毫秒看不出前後差別。
 fn latency(latency: &Latency) -> String {
     let mut out = format!(
         "\n每鍵延遲（µs；只報不擋：`--check` 不比、baseline 不記）\n\n\
-         機器 {}；固定題與各語料集合的每一題從空的組字逐鍵打、不選字，不含載入資料包。\
+         機器 {}；固定題與各語料集合的每一題從空的組字逐鍵打，不含載入資料包；\
+         打完有兩段以上的題再按 ← 到第一段（不計時）、選它的首選，「選開頭一段」計那一次。\
          WebAssembly 用 {WASM_BINDINGS}（`cargo xtask bench` 以 release 編）。\n\n\
          | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 |\n\
          | --- | --- | ---: | ---: | ---: | ---: |\n",

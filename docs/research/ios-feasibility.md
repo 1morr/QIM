@@ -237,3 +237,35 @@ Safari `<textarea>`：
 ### 官方說法
 
 官方只說鍵盤可經 `UITextDocumentProxy` 讀插入點周圍的文字，用途是 autocomplete 與 autocapitalization，沒有寫長度（`docs/research/platform-frameworks.md` §3.2）。[Handling text interactions in custom keyboards](https://developer.apple.com/documentation/uikit/handling-text-interactions-in-custom-keyboards)、[UITextDocumentProxy](https://developer.apple.com/documentation/uikit/uitextdocumentproxy)。以上長度都是實測。
+
+## 綁定開銷
+
+M2 票 07，2026-11-10。`qim-ffi`（uniffi 0.32.2）產生的 Swift 綁定在 Mac 上接核心，與原生、WebAssembly 量同一批輸入的每鍵延遲。重量步驟：Swift 是 `scripts/experiments/ffi-swift/`，Chromium 是 `scripts/experiments/wasm-latency-browser/`，原生與 Node 是 `cargo xtask bench`。
+
+環境：Apple M6、32 GB、macOS 27.0.1，Xcode 27.1（Swift 6.4），Rust 1.99.1，Node v26.12.0，HeadlessChrome 156.0.8078.4；release 編譯。資料包是基準的四份（速成、詞庫、bigram、英文）。
+
+### 結論
+
+- Swift 經 `qim-ffi` 打 `anr` 讀回首選「門口」、空白上屏「門口」：綁定接得上，iOS 鍵盤擴充（票 08）可以直接用。
+- 每鍵 p95 最慢的是 Chromium 的選開頭一段，0.9 ms；三種路徑都比每鍵 50 ms 的預算小兩個數量級以上。M1 留下的缺口（瀏覽器沒量、選段那一鍵沒算）補上了，Chromium 仍 ≤ 50 ms。
+- Swift 綁定每次呼叫比原生多約 10–20 µs，和組字長短關係不大，像是固定開銷（快照序列化成 uniffi 的 `RustBuffer` 再在 Swift 解開）；WebAssembly 多約 10 µs，選段那一鍵多約 50–150 µs（WebAssembly 本身算得慢，不是呼叫開銷）。
+- 選開頭一段（選定後剩下的輸入碼從頭重建 lattice）量的是「← 移到第一段、選它的首選」這條路；在整串的候選裡直接點只蓋住開頭的候選（例如 `anr` 的「門」）同樣從頭重建剩下的碼，沒有另外量。它比一般按鍵慢約 7 倍，p95 約 0.75 ms（原生）；M3 加神經模型時要看它，這一鍵會乘上模型的次數。
+- Chromium 與 Node 差不到一個 5 µs 的刻度，基準照舊用 Node（`wasm-latency-browser` 的結論沒變）。
+
+### 原始輸出摘要
+
+6,722 個輸入（固定題、`bench/corpus/`、`bench/colloquial/`），123,330 鍵；長到 20 碼的 2,587 個、第 20 碼起 27,142 鍵；打完有兩段以上、量選開頭一段的 6,411 個。各跑兩次，差在 0.5 µs（Chromium 一個刻度）內，列一次。µs。
+
+| 路徑 | 全部 p50 | 全部 p95 | 第 20 碼起 p50 | 第 20 碼起 p95 | 選開頭一段 p50 | 選開頭一段 p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 原生（`cargo xtask bench`） | 30.71 | 41.75 | 34.75 | 44.25 | 222.25 | 737.12 |
+| Swift 經 `qim-ffi` | 42.25 | 58.08 | 51.62 | 64.38 | 235.08 | 759.71 |
+| WebAssembly，Node（`cargo xtask bench`） | 39.67 | 53.13 | 44.79 | 56.46 | 277.04 | 889.33 |
+| WebAssembly，Chromium（`crossOriginIsolated`，5 µs 刻度） | 40.00 | 55.00 | 45.00 | 55.00 | 275.00 | 890.00 |
+
+Swift 程式（含核心）連結後 163 KB。
+
+### 給之後的票
+
+- 票 08：鍵盤擴充用 `cargo xtask ffi` 的綁定；要加 `aarch64-apple-ios` 的靜態函式庫與 xcframework（`docs/development.md`〈Swift 綁定〉）。在 iPhone 上量同一批輸入的每鍵延遲時，可以照 `scripts/experiments/ffi-swift/main.swift` 的 `latency` 迴圈，和這裡的 Mac 數字比。
+- `qim-ffi` 目前只有建立、`press`、`select`；換選項、學習資料存檔、字根提示、佈局由需要的票加。換選項時讓綁定的 `set_options` 同時重列並回快照，殼就碰不到「待生效選項」（票 01 轉入的建議，見票 07 的 Comments）。
