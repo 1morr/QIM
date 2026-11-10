@@ -476,8 +476,8 @@ pub struct WebWordListReport {
     #[wasm_bindgen(readonly)]
     pub skipped: Vec<String>,
     /// 加了、但快捷鍵沒當觸發詞的列，一列一句。
-    #[wasm_bindgen(readonly, js_name = withoutTrigger)]
-    pub without_trigger: Vec<String>,
+    #[wasm_bindgen(readonly, js_name = unusedShortcuts)]
+    pub unused_shortcuts: Vec<String>,
 }
 
 impl From<WordListReport> for WebWordListReport {
@@ -486,8 +486,8 @@ impl From<WordListReport> for WebWordListReport {
             format: report.format.to_string(),
             added: report.added,
             skipped: report.skipped.iter().map(ToString::to_string).collect(),
-            without_trigger: report
-                .without_trigger
+            unused_shortcuts: report
+                .unused_shortcuts
                 .iter()
                 .map(ToString::to_string)
                 .collect(),

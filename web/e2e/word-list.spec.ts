@@ -3,9 +3,9 @@ import { expect, type Page, test } from "@playwright/test";
 // 詞表匯入（M3 票 17）：設定區「匯入詞庫」先列出會加幾個、略過哪些列，確認後加進使用者詞，
 // 不動原本的學習資料。
 
-/** Gboard 個人字典的 `dictionary.txt`：`kk` → 雲口、詞庫已有的「口」、壞列。 */
+/** Gboard 個人字典的 `dictionary.txt`：`kk` → 雲口、詞庫已有的「口」、壞列、快捷鍵不是速成鍵的「口雲口」。 */
 const GBOARD =
-	"# Gboard Dictionary version:1\nkk\t雲口\tzh-HK\n\t口\tzh-HK\nbroken\n";
+	"# Gboard Dictionary version:1\nkk\t雲口\tzh-HK\n\t口\tzh-HK\nbroken\nOMW\t口雲口\tzh-HK\n";
 
 async function ready(page: Page) {
 	const text = page.getByRole("textbox", { name: "輸入框" });
@@ -19,6 +19,9 @@ async function ready(page: Page) {
 		confirm: section.getByRole("group", { name: "確認匯入詞庫" }),
 		skipped: section
 			.getByRole("list", { name: "略過的列" })
+			.getByRole("listitem"),
+		unused: section
+			.getByRole("list", { name: "沒當觸發詞的快捷鍵" })
 			.getByRole("listitem"),
 		status: section.getByRole("status", { name: "詞庫匯入狀態" }),
 	};
@@ -41,22 +44,26 @@ test.beforeEach(async ({ page }) => {
 test("匯入 Gboard 詞表：先列出會加幾個、略過哪些，確認後打得出", async ({
 	page,
 }, testInfo) => {
-	const { text, items, section, confirm, skipped, status } = await ready(page);
+	const { text, items, section, confirm, skipped, unused, status } =
+		await ready(page);
 	await choose(page, "dictionary.txt", GBOARD);
 	await expect(confirm).toBeVisible();
 	await expect(confirm).toContainText(
-		"dictionary.txt（Gboard 個人字典）會加 1 個詞、略過 2 列",
+		"dictionary.txt（Gboard 個人字典）會加 2 個詞、略過 2 列",
 	);
 	await expect(skipped).toHaveText([
 		"第 3 行「口」：詞庫已有",
 		"第 4 行「broken」：Gboard 的列要是「快捷鍵<Tab>詞<Tab>語言」",
+	]);
+	await expect(unused).toHaveText([
+		"第 5 行「口雲口」：快捷鍵「OMW」不是方案的鍵，加了詞、沒設觸發詞",
 	]);
 	await section.screenshot({
 		path: testInfo.outputPath("word-list-confirm.png"),
 	});
 
 	await confirm.getByRole("button", { name: "確定匯入" }).click();
-	await expect(status).toHaveText("已從 dictionary.txt 加入 1 個詞");
+	await expect(status).toHaveText("已從 dictionary.txt 加入 2 個詞");
 	await expect(confirm).toBeHidden();
 
 	// 觸發詞 `kk` 是首選；連打的碼 `mir` 也打得出。

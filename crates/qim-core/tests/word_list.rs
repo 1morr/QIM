@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Packs, Ranking, Scheme, SchemePack, Session, Skip, UserModel,
-    WordListFormat, WordListReport,
+    CodeEntry, CodeTable, Engine, Packs, Ranking, Scheme, SchemePack, Session, SkipReason,
+    UserModel, WordListFormat, WordListReport,
 };
 
 /// `m`「一」、`ir`「台」、`r`「口」，沒有詞庫與語言模型（同 `user_dict.rs`）。
@@ -41,7 +41,7 @@ fn import(user: &mut UserModel, text: &str) -> WordListReport {
 }
 
 /// 略過的列：（行號, 詞, 原因）。
-fn skipped(report: &WordListReport) -> Vec<(usize, &str, &Skip)> {
+fn skipped(report: &WordListReport) -> Vec<(usize, &str, &SkipReason)> {
     report
         .skipped
         .iter()
@@ -65,7 +65,7 @@ fn a_rime_dictionary_adds_its_words_with_codes_from_the_characters() {
     assert!(typed(&user, "irr").contains(&"台口".to_string()));
     assert_eq!(
         skipped(&report),
-        [(17, "口口\u{7}", &Skip::ControlCharacter)]
+        [(17, "口口\u{7}", &SkipReason::ControlCharacter)]
     );
 }
 
@@ -82,9 +82,9 @@ fn a_gboard_dictionary_keeps_shortcuts_that_are_scheme_keys_as_triggers() {
     assert!(typed(&user, "irr").contains(&"台口".to_string()));
     assert_eq!(
         report
-            .without_trigger
+            .unused_shortcuts
             .iter()
-            .map(|w| (w.line, w.text.as_str(), w.trigger.as_str()))
+            .map(|w| (w.line, w.text.as_str(), w.shortcut.as_str()))
             .collect::<Vec<_>>(),
         [(4, "台口", "IIRC")]
     );
@@ -92,11 +92,11 @@ fn a_gboard_dictionary_keeps_shortcuts_that_are_scheme_keys_as_triggers() {
     assert_eq!(
         skipped(&report),
         [
-            (3, "STRAY", &Skip::NoCode),
+            (3, "STRAY", &SkipReason::NoCode),
             (
                 6,
                 "broken-row",
-                &Skip::Malformed("Gboard 的列要是「快捷鍵<Tab>詞<Tab>語言」")
+                &SkipReason::Malformed("Gboard 的列要是「快捷鍵<Tab>詞<Tab>語言」")
             ),
         ]
     );
@@ -118,9 +118,9 @@ fn plain_text_takes_one_word_per_line_and_reports_what_it_skips() {
     assert_eq!(
         skipped(&report),
         [
-            (5, "一台", &Skip::Duplicate { first_line: 1 }),
-            (6, "口", &Skip::InLexicon),
-            (7, "hello", &Skip::NoCode),
+            (5, "一台", &SkipReason::Duplicate { first_line: 1 }),
+            (6, "口", &SkipReason::InLexicon),
+            (7, "hello", &SkipReason::NoCode),
         ]
     );
 }
@@ -157,7 +157,10 @@ fn a_word_that_is_already_a_user_word_is_skipped_and_keeps_its_trigger() {
     let report = user.import_word_list(&engine, "一台\n").unwrap();
 
     assert_eq!(report.added, 0);
-    assert_eq!(skipped(&report), [(1, "一台", &Skip::AlreadyUserWord)]);
+    assert_eq!(
+        skipped(&report),
+        [(1, "一台", &SkipReason::AlreadyUserWord)]
+    );
     assert_eq!(typed(&user, "yt").first().map(String::as_str), Some("一台"));
 }
 
@@ -176,7 +179,11 @@ fn a_rime_header_may_name_the_text_column_in_a_flow_list() {
     );
     assert_eq!(
         skipped(&report),
-        [(4, "只有碼", &Skip::Malformed("少了 columns 裡的 text 欄"))]
+        [(
+            4,
+            "只有碼",
+            &SkipReason::Malformed("少了 columns 裡的 text 欄")
+        )]
     );
 }
 
@@ -207,4 +214,38 @@ fn checking_on_a_copy_leaves_the_model_untouched() {
     let report = user.clone().import_word_list(&engine, PLAIN).unwrap();
     assert_eq!(report.added, 3);
     assert_eq!(user, UserModel::default());
+}
+
+#[test]
+fn a_duplicate_points_at_a_line_that_was_added() {
+    let mut user = UserModel::default();
+    // 第 2 行沒有快捷鍵、推不出碼；第 3 行有快捷鍵才加得進去，第 4 行的重複指向它。
+    let gboard = "# Gboard Dictionary version:1\n\thello\ten\nhh\thello\ten\nkk\thello\ten\n";
+    let report = import(&mut user, gboard);
+    assert_eq!(report.added, 1);
+    assert_eq!(
+        skipped(&report),
+        [
+            (2, "hello", &SkipReason::NoCode),
+            (4, "hello", &SkipReason::Duplicate { first_line: 3 }),
+        ]
+    );
+    assert_eq!(
+        typed(&user, "hh").first().map(String::as_str),
+        Some("hello")
+    );
+}
+
+#[test]
+fn an_empty_word_and_a_trailing_control_character_are_reported() {
+    let mut user = UserModel::default();
+    let report = import(&mut user, "\t碼\n台口\u{b}\n");
+    assert_eq!(report.added, 0);
+    assert_eq!(
+        skipped(&report),
+        [
+            (1, "碼", &SkipReason::Malformed("詞是空的")),
+            (2, "台口\u{b}", &SkipReason::ControlCharacter),
+        ]
+    );
 }

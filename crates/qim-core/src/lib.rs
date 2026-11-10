@@ -37,5 +37,5 @@ pub use session::{
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{ImportError, Phrase, UserModel, UserWordError};
 pub use word_list::{
-    DroppedTrigger, Skip, SkippedLine, WordListError, WordListFormat, WordListReport,
+    SkipReason, SkippedLine, UnusedShortcut, WordListError, WordListFormat, WordListReport,
 };

@@ -4,8 +4,23 @@
 import { element, message } from "./dom.ts";
 import type { Session, WordListReport } from "./wasm/qim_wasm.js";
 
-/** 略過的列最多列幾列，其餘只寫列數。 */
-const SHOWN_SKIPPED = 20;
+/** 每張清單最多列幾列，其餘只寫列數。 */
+const SHOWN_LINES = 20;
+
+/** 把 `lines` 畫進 `list`，超過 [`SHOWN_LINES`] 的只寫列數。 */
+function showLines(list: HTMLUListElement, lines: string[]): void {
+	const items = lines.slice(0, SHOWN_LINES).map((line) => {
+		const item = document.createElement("li");
+		item.textContent = line;
+		return item;
+	});
+	if (lines.length > SHOWN_LINES) {
+		const more = document.createElement("li");
+		more.textContent = `還有 ${lines.length - SHOWN_LINES} 列`;
+		items.push(more);
+	}
+	list.replaceChildren(...items);
+}
 
 /**
  * 接上匯入詞庫。`save` 存學習資料；`afterChange` 在匯入或取消之後呼叫（網頁把焦點還給輸入框）。
@@ -20,38 +35,39 @@ export function mountWordList(
 	const confirmText = element<HTMLElement>("#confirm-word-list-text");
 	const status = element<HTMLElement>("#word-list-status");
 	const skippedList = element<HTMLUListElement>("#word-list-skipped");
+	const unusedList = element<HTMLUListElement>("#word-list-unused");
 	let pending: { name: string; text: string } | undefined;
+	/** 每選一次檔加一；讀完檔時已換過檔就不理（後選的檔先讀完時不被先選的蓋掉）。 */
+	let choice = 0;
 
 	const closeConfirm = (): void => {
 		pending = undefined;
 		confirm.hidden = true;
 	};
-	/** 列出略過與沒設觸發詞的列，用完釋放 `report`。 */
-	const showLines = (report: WordListReport): void => {
-		const lines = [...report.skipped, ...report.withoutTrigger];
+	/** 列出略過的列與沒當觸發詞的快捷鍵，用完釋放 `report`。 */
+	const showReport = (report: WordListReport): void => {
+		showLines(skippedList, report.skipped);
+		showLines(unusedList, report.unusedShortcuts);
 		report.free();
-		const items = lines.slice(0, SHOWN_SKIPPED).map((line) => {
-			const item = document.createElement("li");
-			item.textContent = line;
-			return item;
-		});
-		if (lines.length > SHOWN_SKIPPED) {
-			const more = document.createElement("li");
-			more.textContent = `還有 ${lines.length - SHOWN_SKIPPED} 列`;
-			items.push(more);
-		}
-		skippedList.replaceChildren(...items);
+	};
+	const clearLines = (): void => {
+		skippedList.replaceChildren();
+		unusedList.replaceChildren();
 	};
 
 	file.addEventListener("change", async () => {
 		const chosen = file.files?.[0];
 		file.value = "";
 		closeConfirm();
-		skippedList.replaceChildren();
+		clearLines();
+		const current = ++choice;
 		if (!chosen) {
 			return;
 		}
 		const text = await chosen.text();
+		if (current !== choice) {
+			return;
+		}
 		let report: WordListReport;
 		try {
 			report = session.checkWordList(text);
@@ -61,7 +77,7 @@ export function mountWordList(
 		}
 		const { added, format } = report;
 		const skipped = report.skipped.length;
-		showLines(report);
+		showReport(report);
 		if (added === 0) {
 			status.textContent = `${chosen.name} 沒有可加的詞`;
 			return;
@@ -83,7 +99,7 @@ export function mountWordList(
 			try {
 				const report = session.importWordList(text);
 				status.textContent = `已從 ${name} 加入 ${report.added} 個詞`;
-				showLines(report);
+				showReport(report);
 				save();
 			} catch (error) {
 				status.textContent = `匯入失敗，使用者詞沒動：${message(error)}`;
@@ -95,7 +111,7 @@ export function mountWordList(
 		"click",
 		() => {
 			closeConfirm();
-			skippedList.replaceChildren();
+			clearLines();
 			status.textContent = "沒有匯入，使用者詞沒動";
 			afterChange();
 		},

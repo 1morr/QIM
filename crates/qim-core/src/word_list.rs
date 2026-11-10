@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::user::manual_word_code;
 use crate::{Engine, UserModel};
 
 /// 詞表的格式，由檔的開頭判斷。
@@ -42,8 +43,8 @@ pub struct WordListReport {
     pub added: usize,
     /// 沒加的列，依行號。
     pub skipped: Vec<SkippedLine>,
-    /// 加了、但快捷鍵不是方案的鍵而沒設觸發詞的詞（只有 Gboard 有快捷鍵）。
-    pub without_trigger: Vec<DroppedTrigger>,
+    /// 加了、但快捷鍵不是方案的鍵而沒當觸發詞的詞（只有 Gboard 有快捷鍵）。
+    pub unused_shortcuts: Vec<UnusedShortcut>,
 }
 
 /// 沒加的一列。
@@ -53,15 +54,15 @@ pub struct SkippedLine {
     pub line: usize,
     /// 那列的詞；讀不出詞時是整列。
     pub text: String,
-    pub reason: Skip,
+    pub reason: SkipReason,
 }
 
-/// 詞加了、快捷鍵沒當觸發詞的一列。
+/// 詞加了、Gboard 的快捷鍵沒當觸發詞的一列。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DroppedTrigger {
+pub struct UnusedShortcut {
     pub line: usize,
     pub text: String,
-    pub trigger: String,
+    pub shortcut: String,
 }
 
 impl fmt::Display for SkippedLine {
@@ -70,26 +71,26 @@ impl fmt::Display for SkippedLine {
     }
 }
 
-impl fmt::Display for DroppedTrigger {
+impl fmt::Display for UnusedShortcut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "第 {} 行「{}」：快捷鍵「{}」不是方案的鍵，加了詞、沒設觸發詞",
-            self.line, self.text, self.trigger
+            self.line, self.text, self.shortcut
         )
     }
 }
 
 /// 一列沒加的原因。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Skip {
+pub enum SkipReason {
     /// 讀不出詞。
     Malformed(&'static str),
     /// 詞含 Tab 以外的控制字元（手動加詞也不收）。
     ControlCharacter,
     /// 有字沒有碼、又沒有可當觸發詞的快捷鍵，打不出來。
     NoCode,
-    /// 同一份檔前面已有同樣的詞。
+    /// 同一份檔前面加過同樣的詞（第二個快捷鍵也不收，觸發詞照第一列）。
     Duplicate { first_line: usize },
     /// 已是這個方案的使用者詞；原本的（含觸發詞）不動。
     AlreadyUserWord,
@@ -97,7 +98,7 @@ pub enum Skip {
     InLexicon,
 }
 
-impl fmt::Display for Skip {
+impl fmt::Display for SkipReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Malformed(reason) => f.write_str(reason),
@@ -166,9 +167,10 @@ impl UserModel {
             format,
             added: 0,
             skipped: Vec::new(),
-            without_trigger: Vec::new(),
+            unused_shortcuts: Vec::new(),
         };
-        let mut seen: HashMap<&str, usize> = HashMap::new();
+        // 加進去的詞 → 它的行號；只記加了的，重複才指得到一列真的加了的。
+        let mut added: HashMap<&str, usize> = HashMap::new();
         for row in rows {
             let (line, word, shortcut) = match row {
                 Row::Word {
@@ -177,45 +179,39 @@ impl UserModel {
                     shortcut,
                 } => (line, text, shortcut),
                 Row::Bad { line, text, reason } => {
-                    report.skip(line, text, Skip::Malformed(reason));
+                    report.skip(line, text, SkipReason::Malformed(reason));
                     continue;
                 }
             };
-            if let Some(&first_line) = seen.get(word) {
-                report.skip(line, word, Skip::Duplicate { first_line });
+            if let Some(&first_line) = added.get(word) {
+                report.skip(line, word, SkipReason::Duplicate { first_line });
                 continue;
             }
-            seen.insert(word, line);
             if word.chars().any(char::is_control) {
-                report.skip(line, word, Skip::ControlCharacter);
+                report.skip(line, word, SkipReason::ControlCharacter);
                 continue;
             }
             let trigger = shortcut.filter(|s| engine.scheme().spells(s));
-            let Some(code) = engine.code_of(word).or_else(|| trigger.map(String::from)) else {
-                report.skip(line, word, Skip::NoCode);
+            let Some(code) = manual_word_code(engine, word, trigger) else {
+                report.skip(line, word, SkipReason::NoCode);
                 continue;
             };
             if self.for_scheme(&engine.scheme().id).is_word(&code, word) {
-                report.skip(line, word, Skip::AlreadyUserWord);
+                report.skip(line, word, SkipReason::AlreadyUserWord);
                 continue;
             }
             if trigger.is_none() && engine.has_entry(&code, word) {
-                report.skip(line, word, Skip::InLexicon);
+                report.skip(line, word, SkipReason::InLexicon);
                 continue;
             }
-            match self.add_word(engine, word, trigger) {
-                Ok(()) => report.added += 1,
-                // 上面已擋下各種加不進去的情形；這裡只防將來 `add_word` 多了條件。
-                Err(_) => {
-                    report.skip(line, word, Skip::Malformed("加不進使用者詞"));
-                    continue;
-                }
-            }
+            self.insert_manual_word(engine, &code, word, trigger);
+            added.insert(word, line);
+            report.added += 1;
             if let (Some(shortcut), None) = (shortcut, trigger) {
-                report.without_trigger.push(DroppedTrigger {
+                report.unused_shortcuts.push(UnusedShortcut {
                     line,
                     text: word.to_string(),
-                    trigger: shortcut.to_string(),
+                    shortcut: shortcut.to_string(),
                 });
             }
         }
@@ -224,7 +220,7 @@ impl UserModel {
 }
 
 impl WordListReport {
-    fn skip(&mut self, line: usize, text: &str, reason: Skip) {
+    fn skip(&mut self, line: usize, text: &str, reason: SkipReason) {
         self.skipped.push(SkippedLine {
             line,
             text: text.to_string(),
@@ -261,20 +257,33 @@ fn parse<'a>(lines: &[Line<'a>]) -> Result<(WordListFormat, Vec<Row<'a>>), WordL
     let rows = lines
         .iter()
         .filter(|(_, l)| !is_comment(l))
-        .map(|&(line, l)| Row::Word {
-            line,
-            text: l.split('\t').next().unwrap_or(l).trim(),
-            shortcut: None,
-        })
-        .filter(|row| !matches!(row, Row::Word { text: "", .. }))
+        .map(
+            |&(line, l)| match trim_word(l.split('\t').next().unwrap_or(l)) {
+                "" => Row::Bad {
+                    line,
+                    text: l.trim(),
+                    reason: "詞是空的",
+                },
+                text => Row::Word {
+                    line,
+                    text,
+                    shortcut: None,
+                },
+            },
+        )
         .collect();
     Ok((WordListFormat::PlainText, rows))
+}
+
+/// 詞前後的空白去掉；同時是控制字元的（`\u{b}`、`\u{c}`…）留著，好報成控制字元。
+fn trim_word(field: &str) -> &str {
+    field.trim_matches(|c: char| c.is_whitespace() && !c.is_control())
 }
 
 /// Gboard 的一列：快捷鍵、詞、語言（之後可能還有詞性），Tab 分隔；快捷鍵可以是空的。
 fn gboard_row(line: usize, l: &str) -> Row<'_> {
     let mut fields = l.split('\t');
-    match (fields.next(), fields.next().map(str::trim)) {
+    match (fields.next(), fields.next().map(trim_word)) {
         (Some(shortcut), Some(text)) if !text.is_empty() => Row::Word {
             line,
             text,
@@ -290,7 +299,7 @@ fn gboard_row(line: usize, l: &str) -> Row<'_> {
 
 /// Rime 碼表的一列：Tab 分隔，字詞在第 `column` 欄。
 fn rime_row(line: usize, l: &str, column: usize) -> Row<'_> {
-    match l.split('\t').nth(column).map(str::trim) {
+    match l.split('\t').nth(column).map(trim_word) {
         Some(text) if !text.is_empty() => Row::Word {
             line,
             text,

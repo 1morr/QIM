@@ -359,7 +359,8 @@ body:has(#keyboard:not([hidden])) {
 	margin: 0 0 0.5rem;
 }
 
-#word-list-skipped {
+#word-list-skipped,
+#word-list-unused {
 	margin: 0;
 	padding-left: 1.25rem;
 	font-size: 0.875rem;

@@ -1,6 +1,6 @@
 # 17: 詞庫匯入
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 讀: plan §2.4（手動加詞、匯入）；brief §1.5、§5.3；`docs/research/userdict-text-formats.md`；spec〈範圍〉〈共同規則〉
 
@@ -14,8 +14,20 @@ Blocked by: 01
 
 ## 驗收
 
-- [ ] 單元測試：每種支援的格式各一個固定檔，匯入後打得出其中的詞；壞列報出行號。
-- [ ] Playwright：匯入一份小詞表、確認、打出其中一個詞讀回；截圖。
-- [ ] plan §2.4 寫明支援的格式；`cargo xtask check` 綠燈。
+- [x] 單元測試：每種支援的格式各一個固定檔，匯入後打得出其中的詞；壞列報出行號。
+- [x] Playwright：匯入一份小詞表、確認、打出其中一個詞讀回；截圖。
+- [x] plan §2.4 寫明支援的格式；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-11 格式（採用誰的慣例）：收 Rime 碼表 `.dict.yaml`（檔頭到 `...`、`columns:` 定 `text` 欄，照 RimeWithSchemata）、Gboard 個人字典的 `dictionary.txt`（`# Gboard Dictionary …` 檔頭、「快捷鍵<Tab>詞<Tab>語言」，取使用者匯出樣本，Gboard 沒有官方格式文件）、一行一詞的純文字（Tab 後的欄不看）。來源寫進 brief §12.4，規則寫進 plan §2.4。zip 不解：網頁沒有解壓的依賴，請使用者先解壓。
+- macOS／iOS 文字替代的 plist 不收：它是「短語 + 快捷鍵」，plan §2.4 已把它對應到常用語而不是使用者詞；要收時另開票匯入成常用語，還要一個 XML plist 的 parser（核心目前不加依賴）。
+- 報法：加進去、不取代（同 librime、libime 讀使用者詞庫略過壞列），所以壞列不擋整份；結果列出每個略過的行號與原因（讀不出詞、控制字元、推不出碼、與第 n 行重複、已是使用者詞、詞庫已有）。整份讀不了的只有 Rime 檔頭沒有 `...`、`columns:` 沒有 `text`，報行號、什麼都不加。
+- 「詞庫已有」（碼表或詞庫有同碼同字、又沒有觸發詞）略過：加了也一樣打得出，只會把一份大詞表的常用詞全複製進使用者詞、撐大 `localStorage`；自動造詞也是這樣略過（libime 同）。已是使用者詞的不動，原本的觸發詞保留。
+- Gboard 的快捷鍵是方案的鍵時當觸發詞；不是（含大寫、`z`）時照加詞、不設觸發詞，結果另列「沒設觸發詞」的列。快捷鍵是給拉丁或拼音鍵盤用的，在速成可能撞到別的碼，這是觸發詞本來的語意，和手動加詞相同。
+- 匯入的詞來源是 `manual`，匯出格式不必加新的來源（v2 不變）。命名用「詞表匯入」（名詞表），因為程式碼裡的「詞庫」指資料包；網頁照票寫「匯入詞庫」。
+- 亂按一輪（`.scratch/m3/evidence/17-word-list-*.png`）：確認框開著時打字、改選另一份檔（取代待確認的那份）、連按兩下確定（只加一次）、同一份再匯入（列出「已是使用者詞」、不問）、簡體模式打出 云口、重新整理後還在；沒找到問題。
+- `cargo xtask bench --check`（改了核心，空白個人模型的排序不變）：各集合答錯、修正都和 baseline 相同（yue-wiki 1131／4346、zh-wiki 1126／4385、common-voice-yue 1032／3964、hkcancor 663／2596，有前文的集合亦同），全部沒有翻盤，固定題 84/84。這個 worktree 沒有 `bench/personal/`，個人集沒跑。不動學習，沒跑 `--learning`。
+- code-review（`9d0c627` 起）已處理：重複只指向真的加了的行（原本第 1 行推不出碼、後面同詞會報「和第 1 行重複」）；純文字詞欄空白的列改報行號（原本默默丟掉）；`trim` 不再剪掉同時是空白的控制字元（`\u{b}`）；`DroppedTrigger` 改名 `UnusedShortcut`、`Skip` 改 `SkipReason`；加詞改走 `insert_manual_word` 與 `manual_word_code`（和 `add_word` 共用），拿掉不會發生的錯誤分支；網頁「沒當觸發詞的快捷鍵」另列一張清單，不再混進「略過的列」讓數字對不上；連選兩份檔時只認後選的；plan §0 識別符表補「詞表匯入」。前兩項與網頁清單先寫了會紅的測試。
+- code-review 未處理：連選兩份檔的競態只靠讀檔後比對選檔次數，沒有自動化測試（Playwright 難穩定重現讀檔先後）；`(line, text)` 在幾個結構裡重複出現（判斷題，不動）。
+- Playwright 截圖在 `web/test-results/`（不進 git），同一批複製到 `.scratch/m3/evidence/17-gboard-*.png`。
