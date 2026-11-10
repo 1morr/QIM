@@ -84,6 +84,24 @@ pack!(
     EnglishPack
 );
 
+/// 字根提示資料包（plan §4.1 步驟 5），不給 `Engine`。目前只能解開：鍵盤擴充用它量記憶體
+/// （M2 票 09）；查詢與顯示的介面由殼要顯示字根提示時的票加。
+#[derive(uniffi::Object)]
+pub struct RadicalHintPack(
+    // 還沒有讀它的介面，解開後只為了佔住記憶體（見上方說明）。
+    #[allow(dead_code)] qim_core::RadicalHintPack,
+);
+
+#[uniffi::export]
+impl RadicalHintPack {
+    /// 由資料包檔的位元組解開；讀檔是殼的事（plan §1.3）。
+    #[uniffi::constructor]
+    pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, QimError> {
+        let pack = qim_core::RadicalHintPack::from_bytes(&bytes).map_err(error)?;
+        Ok(Arc::new(Self(pack)))
+    }
+}
+
 /// 核心的 `Engine`：不可變，多個 [`Session`] 共用（plan §2.1）。
 #[derive(uniffi::Object)]
 pub struct Engine(qim_core::Engine);

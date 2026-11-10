@@ -6,8 +6,7 @@
 - M2 票 10：鍵盤擴充裡能不能用 Foundation Models、延遲與記憶體；`documentContextBeforeInput` 實際讀得到多少字。結論在同一份文件的〈Foundation Models〉〈上下文長度〉。
 - M2 票 08：鍵盤擴充接上核心（`qim-ffi`），在備忘錄打 `anr` 讀回「門口」；資料包的常駐記憶體與每鍵延遲。結論在同一份文件的〈鍵盤擴充接上核心〉。
 - M2 票 11：candle 能不能在鍵盤擴充裡跑 1.4M、23M 參數的模型，載入、推論延遲與記憶體。量測程式在 `../neural-cost/`，結論在同一份文件的〈小型神經模型〉。
-
-之後的 iOS 實驗（票 09）也長在這個專案上。
+- M2 票 09：系統在多少記憶體時終止鍵盤擴充、核心與資料包佔多少。結論在同一份文件的〈記憶體上限〉。
 
 ## 內容
 
@@ -21,6 +20,7 @@
 | `Keyboard/ContextProbe.swift` | 票 10：測試長文與 `documentContextBeforeInput` / `AfterInput` 的摘要 |
 | `Keyboard/ModelProbe.swift` | 票 10：Foundation Models 的可用性與每次請求的延遲 |
 | `Keyboard/CoreProbe.swift` | 票 08：載入資料包、建一個 `Engine` 與 `Session`、逐步量 footprint、打字、量每鍵延遲 |
+| `Keyboard/StressProbe.swift` | 票 09：逐步佔用寫過的記憶體直到被終止，每步記進擴充自己的容器，下次載入時顯示上一輪 |
 | `core.sh` | 票 08：`cargo xtask ffi --ios`、寫出延遲的輸入、檢查資料包，再 `xcodegen generate` |
 | `neural.yml`、`Neural/` | 票 11：神經模型探針（`NeuralProbe.swift` 在背景執行緒呼叫 `../neural-cost` 的 Rust 靜態庫）；預設不併進專案，見下方〈小型神經模型（票 11）〉 |
 
@@ -149,13 +149,13 @@ Foundation Models：`available`、AFM 3 Core Advanced、`contextSize` 8192；連
 
 ## 接上核心（票 08）
 
-擴充的 bundle 放五份資料包：速成 `quick`、詞庫 `quick-lexicon`、bigram `zh-hant-bigram`、簡繁 `opencc-hk2s`、英文 `scowl-en-us`，與網頁打字時載入的相同（票 04 建議的組合）。不放的：字根提示 `cangjie-hint`（只給殼顯示，`Engine` 不用；Mac 上解開後 16 MB）與佈局（`qim-ffi` 還沒有佈局的介面，實驗的鍵也不讀佈局）。放 bundle 不放 App Group：擴充本來就讀得到自己的 bundle，不必先開主 App 複製；免費佈建的 App Group 擴充只能讀（票 06），兩處都行。
+擴充的 bundle 放五份資料包：速成 `quick`、詞庫 `quick-lexicon`、bigram `zh-hant-bigram`、簡繁 `opencc-hk2s`、英文 `scowl-en-us`，與網頁打字時載入的相同（票 04 建議的組合）。票 09 另加字根提示 `cangjie-hint`：只給殼顯示、`Engine` 不用，「載入」在 `Session` 之後解開它（`qim-ffi` 的 `RadicalHintPack`），只為了量記憶體，前面各步照舊能和票 08 比。不放佈局：`qim-ffi` 還沒有佈局的介面，實驗的鍵也不讀佈局。放 bundle 不放 App Group：擴充本來就讀得到自己的 bundle，不必先開主 App 複製；免費佈建的 App Group 擴充只能讀（票 06），兩處都行。
 
 ### 鍵
 
 | 鍵 | 做什麼 |
 | --- | --- |
-| 載入 | 在背景執行緒依序「讀檔 → 解開 → 丟掉檔案位元組」五份資料包，再建 `Engine` 與 `Session`，每步記 footprint 的增量與耗時；整個程序只建一次 |
+| 載入 | 在背景執行緒依序「讀檔 → 解開 → 丟掉檔案位元組」五份資料包，再建 `Engine` 與 `Session`，最後解開字根提示（票 09），每步記 footprint 的增量與耗時；整個程序只建一次 |
 | a、n、r、空白 | 按核心的鍵；候選列顯示輸入碼與前 6 個候選，`commit` 上屏，沒有組字時空白交還宿主（插入空白）；每鍵記核心呼叫與含畫面更新的時間、之後的 footprint |
 | 延遲 | 用同一個 `Session` 跑 ffi-swift 那批輸入（`Latency.swift` 的量法、`inputs.sh` 寫出的 `latency-inputs.txt`），印出與 Mac 同欄的表；跑的時候其他核心鍵不動作 |
 
@@ -234,3 +234,52 @@ candle 能在擴充裡跑。iPhone 上 23M q8 重排一次（6 條路徑各 8 �
 合併票 08 之後（神經模型探針改成可選），開著 `QIM_NEURAL=YES` 建的擴充在備忘錄按「載入」、`a`、`n`、`r`、「空白」，仍上屏「門口」，同一個鍵盤上也有 L32 那一列（`.scratch/m2/evidence/11-merged-anr.png`）；神經模型的數字沒重量。
 
 另一個 session 用同一個 Bundle ID 裝它的版本時會蓋掉這個擴充（票 08 與本票同時用過）；量之前看鍵盤上有沒有 L32 那一列。
+
+## 記憶體上限（票 09）
+
+### 鍵
+
+| 鍵 | 做什麼 |
+| --- | --- |
+| +10MB | 多佔 10 MB 並記一筆 |
+| 連續加壓 | 每 40 ms 多佔 1 MB，直到程序被系統終止 |
+
+每塊都用 `arc4random_buf` 寫滿：每頁都寫過才算進 footprint，亂數又壓縮不了，不會被系統的記憶體壓縮器壓小。每一步（`step=… allocated=… now footprint=… available=…`）與系統的記憶體警告（`warning …`）都寫進擴充自己容器裡的 `Library/Caches/stress.log` 並 fsync，同時寫系統 log（`stress` 開頭）。沒有完整取用時擴充仍可寫自己的容器，App Group 才是唯讀。
+
+每次 view controller 載入時，鍵盤上方會顯示上一輪（上一個程序）的摘要：
+
+- `prev run`：pid、時間、開始時的 footprint（開頭行在第一次佔用之後才寫，已含第一塊）。
+- `prev warnings`：警告次數與第一次警告時的 footprint。
+- `prev last`：最後一步。
+
+被終止的程序沒有機會寫最後一筆，所以終止點落在 `prev last` 的 footprint 之後 1 MB（一步）內。加壓中（沒載入核心時）鍵盤不畫 Foundation Models 那幾行：每次重畫都會查一次可用性，系統 log 會被 `modelmanagerd` 洗掉。
+
+### 量法
+
+1. 照〈建置與安裝〉建好、裝上（不開 `QIM_NEURAL`）。
+2. 不載入核心：在備忘錄叫出「QIM 實驗鍵盤」，確認第一行的 `pid=` 是新的，按「連續加壓」。約 7 秒後鍵盤消失，系統換回別的鍵盤。
+3. 長按地球鍵切回「QIM 實驗鍵盤」，這時已是新程序，讀 `prev` 三行並截圖。
+4. 載入核心後：新程序按「載入」，等 `core-loaded`，再按「連續加壓」；之後同第 3 步。
+5. 兩種情況各重複三次。
+
+### 取終止的證據
+
+- **系統 log（主要證據）**：手機用 USB 接上 Mac。iphone-use 用 `phone_logs action=start` 開始抓，按「連續加壓」後馬上連續讀，篩 `qim`。手機 log 很多，iphone-use 只留最近約 5000 行，晚幾秒就被洗掉。要找的行：
+  - kernel 的 `memorystatus: QIMKeyboard [pid] exceeded mem limit: ActiveHard 177 MB (fatal)` 與 `killing_specific_process … (per-process-limit …) <KB>`。
+  - SpringBoard 的 `Process exited: … domain:jetsam(1) code:per-process-limit(7)`。
+  - 沒有 iphone-use 時，Console.app 選手機、搜尋 `memorystatus` 或 `per-process-limit` 也行（未實測）。
+- **擴充自己的紀錄**：下次載入時的 `prev` 三行（見上方〈鍵〉）。
+- **jetsam 報告**：Apple 說在「設定 → 隱私權與安全性 → 分析與改進 → 分析資料」的 `JetsamEvent_<時間>`，或用 `xcrun devicectl device info files --device <UDID> --domain-type systemCrashLogs` 列出、`xcrun devicectl device copy from … --source <檔名>` 取回。實測擴充超過上限被終止時**不會**產生這種報告，`ReportCrash` 只送一筆分析事件，所以不能靠它。
+
+### 上次結果（2026-11-10）
+
+環境：iPhone 18 Pro Max（iPhone19,7），iOS 27.2；macOS 27.0.1；Xcode 27.2（27B52），iOS SDK 27.2，Swift 6.4；Rust 1.99.1，uniffi 0.32.2；xcodegen 2.46.0；Debug 組態（Rust 是 release）；沒有完整取用；量測時的程式即票 09 的 commit（父 commit `a096d79`），資料包也由它建。
+
+| 情況 | 輪數 | 開始 footprint（佔完第一個 1 MB 後） | 第一次警告 | 終止前最後一筆 |
+| --- | ---: | ---: | ---: | ---: |
+| 不載入核心 | 4 | 12.94–13.50 MB | 141.55–141.95 MB | 176.00–176.81 MB |
+| 載入核心與六份資料包後 | 3 | 78.44–78.88 MB | 142.19–142.58 MB | 176.33–176.74 MB |
+
+kernel 寫的上限是 `ActiveHard 177 MB`。載入後 footprint 78.7–79.2 MB，其中字根提示 +14.3–14.5 MB。各輪的數字、log 摘錄與截圖清單見 `docs/research/ios-feasibility.md`〈記憶體上限〉。
+
+Mac 的 Xcode 升到 27.2 後，`devicectl` 與 iphone-use 的 runner 都會卡住，直到 Xcode 的首次啟動元件裝好為止（Mac 上會跳出要管理員密碼的視窗）。`xcodebuild -checkFirstLaunchStatus` 回 0 才算裝好。

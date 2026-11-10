@@ -386,6 +386,7 @@ M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`
   - 23M q8 合計約 111 MB，剩約 66 MB。
   - 1.4M 合計約 67–69 MB。
   - 這是把兩個程序量到的增量相加。模型的峰值是在沒載入核心的擴充裡量的，兩者在同一個程序時 malloc 會互相重用頁，實際合計可能較低；票 09 加壓時以實際終止點為準。低階機的上限不知道。
+  - 票 09 補：上限確認是 177 MB；核心改算六份資料包（含字根提示）是 79 MB，23M f32 只剩約 3 MB、q8 約 126 MB，見〈記憶體上限〉。
   - 改用 Mac 的核心數字（〈Mac 上的資料包記憶體〉約 96 MB，加空擴充 10 MB）則是 f32 約 201 MB 超過上限、q8 約 153 MB；iPhone 上核心比 Mac 少約 27 MB，原因見〈鍵盤擴充接上核心〉。
 - **23M q8 的常駐約是檔案的兩倍。** candle 0.11.1 在 aarch64 第一次做 Q8_0 乘法時另存一份重排過的權重，原本那份也留著，沒有開關：檔案 23.6 MB，iPhone heap +48.3 MB。heap 裡約 22 MB 是重排的副本（Q8_0 那幾個矩陣再一份），其餘約 3 MB 是 gemm、rayon 的暫存；自己寫 int8 矩陣乘法（青簡的做法）可以省掉那份副本。
 - **執行緒數要自己限。** gemm 在每條跑過矩陣乘法的執行緒各留一塊 L2 大小的暫存。Mac 上每塊約 10 MB，用每核一條的全域 pool 時共 136 MB；iPhone 上小得多（1.4M f32 的 heap 只比檔案多 1 MB）。本實驗用 2 條的專屬 pool。
@@ -466,3 +467,100 @@ nc-after footprint=13.63MB available=163.4MB wall=2.7s
 
 - 上限與量法見本文〈免費佈建與 App Group〉。`ledger_phys_footprint_peak` 是 `task_vm_info` 在 REV3 加的欄位，`<mach/task_info.h>` 只有宣告、沒有說明；從名字推定是 footprint ledger 的最高點，實測 Mac 上它等於跑完時的 footprint（footprint 不退），iPhone 上比跑完時高，與「最高點」一致。
 - candle 的 Q8_0 重排與 gemm 的暫存都是讀原始碼與 `heap` 查到的（`candle-core` 0.11.1 的 `src/quantized/repack.rs`、`gemm-common` 0.19.0 的 `src/gemm.rs`），不是官方文件。
+
+## 記憶體上限
+
+M2 票 09，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keyboard/StressProbe.swift`，量法與重量步驟見該目錄 README〈記憶體上限（票 09）〉。
+
+裝置：iPhone 18 Pro Max（iPhone19,7），iOS 27.2。Xcode 27.2（27B52），iOS SDK 27.2，Swift 6.4；Rust 1.99.1，uniffi 0.32.2。Swift 是 Debug 組態，Rust 靜態函式庫是 release（`cargo xtask ffi --ios`）。擴充沒有完整取用，沒開 `QIM_NEURAL`。資料包與程式由票 09 的 commit 建（實驗碼、`qim-ffi` 的 `RadicalHintPack` 都在其中，父 commit `a096d79`）。
+
+### 結論
+
+- **上限是 177 MB，系統以 footprint 判定。** 第 5 輪終止時 kernel 寫 `exceeded mem limit: ActiveHard 177 MB (fatal)` 與 `per-process-limit … 181249KB`（= 177.0 MiB，本文的 MB 都是 MiB）。SpringBoard 記 `domain:jetsam(1) code:per-process-limit(7)`。只有這一輪取到 log（第 1–3 輪被洗掉，第 4、6、7 輪沒讀），其餘以擴充自己的紀錄為準。7 輪終止前的最後一筆 footprint 都在 176.00–176.81 MB，每步 1 MB，下一步就越過 177 MB。票 06 的 `footprint + available` = 177.0 MB 與這個數字一致，`os_proc_available_memory()` 可以直接當成剩餘量。
+- **載入核心與否，上限都一樣。** 先載入核心與六份資料包（79 MB）再加壓，還能再佔 100 MB，終止點同樣在 176.3–176.7 MB。載入途中釋放的頁沒有讓上限提早到來：從開始值加上之後佔的 99 MB 推算，終點應在 177.4–177.9 MB，實測少約 1.1 MB，是新配置重用了約 1 MB 釋放的頁（不載核心的幾輪沒有這個差）。
+- **約 142 MB 會收到記憶體警告。** 7 輪的第一次 `didReceiveMemoryWarning` 都在 141.55–142.58 MB，當時 available 約 35 MB（上限的 80%）。只有一輪收到第二次警告。警告之後若不釋放，再多約 35 MB 就被終止。
+- **六份資料包加 `Engine` 載入後 footprint 79 MB**（78.7–79.2 MB，三輪），是上限的 45%，還剩約 98 MB（`os_proc_available_memory` 97.8–98.6 MB）。其中：
+  - 程序本身約 13 MB：Debug 的 Swift，加上 iphone-use 重建畫面。
+  - 五份資料包加 `Engine` +51.5 MB：與票 08 相同，詞庫佔 41.5 MB。
+  - **字根提示實測 +14.3–14.5 MB**：Mac 上是 +16.3 MB（〈Mac 上的資料包記憶體〉）。為了量它，`qim-ffi` 加了只能解開的 `RadicalHintPack`。
+  - 佈局沒有實測：`qim-ffi` 還沒有佈局的介面。下面的預算用 Mac 的數字估：不驗證 +0.2 MB，經 Schema 驗證 +3 MB。
+- **沒有留下報告檔。** 擴充被終止時，`ReportCrash` 只送一筆分析事件（`sending CA event for QIMKeyboard[385]`）。手機的系統 crash 目錄（`xcrun devicectl device info files --domain-type systemCrashLogs`）沒有新的 `JetsamEvent-*.ips`，也沒有 `QIMKeyboard-*.ips`。能取到的證據只有系統 log 與擴充自己寫的紀錄，取法見 README。同一台手機上較早的 `JetsamEvent` 報告記過 SpringBoard 的 `per-process-limit`，所以報告機制本身是開著的。
+
+### 給 M3 的預算（這台旗艦機）
+
+| 項目 | footprint |
+| --- | ---: |
+| 上限 | 177 MB |
+| 記憶體警告線（實測） | 約 142 MB |
+| 核心加六份資料包（實測） | 79 MB |
+| 佈局（Mac 估算，不驗證） | +0.2 MB |
+| 到警告線還剩 | 約 62 MB |
+| 到上限還剩 | 約 98 MB |
+
+小型神經模型的峰值增量（〈小型神經模型〉，iPhone 一次樣本）放進這個預算：
+
+- 1.4M f32 / q8：+4.7 / +2.4 MB，合計約 84 MB。
+- 23M q8：+46.9 MB，合計約 126 MB，在警告線下、離上限 51 MB。
+- 23M f32：+94.9 MB，合計約 174 MB，離上限只剩約 3 MB，一有波動就被終止。票 11 推算的「剩約 18 MB」沒算字根提示。
+
+模型的峰值是在沒載入核心的程序裡量的，同一個程序時 malloc 可能互相重用頁，實際合計可能稍低，不會更高。
+
+### 決定（寫回 plan）
+
+- **M3 模型上限：iOS 鍵盤擴充裡，模型的 footprint 峰值增量 ≤ 60 MB。** 理由是核心加資料包加模型要在記憶體警告線（約 142 MB）以下，不靠警告後釋放來保命。23M 級只能用 q8（+47 MB），f32 不行。寫進 plan §7.8。
+- **資料包格式不改。** 核心加資料包用了上限的 45%，放進 23M q8 後還在警告線下。mmap 友善的格式（詞庫優先，見〈Mac 上的資料包記憶體〉〈建議〉）留到低階機的上限量出來、放不下時再做（plan §4、§8）。票 04 的兩項「不改格式也能壓低峰值」不另開票：iOS 的 malloc 重用釋放的頁，`Engine::new` 的暫存在 iPhone 上只有 +0.1–0.3 MB，讀檔緩衝區也沒有留在 footprint 裡（〈鍵盤擴充接上核心〉）。
+- **鍵盤擴充略過 Schema 驗證。** 佈局在主 App 與編輯器存檔時已驗過，擴充只讀。驗證讓執行檔多 3.1 MB、footprint 多約 3 MB（Mac），佔掉警告線前餘裕的 5%，但沒有保護作用。`qim-layout` 的 `jsonschema` 改成 feature，鍵盤擴充用不驗證 Schema、只做型別與引用檢查的讀法。實作留給 M7（iOS 殼要讀佈局時，`qim-ffi` 同時加佈局介面）。寫回 plan §1.3、§1.4、§8。
+
+### 原始輸出摘要
+
+每輪是一個新程序。「連續加壓」每 40 ms 佔 1 MB 並用 `arc4random_buf` 寫滿。每步把 footprint 寫進擴充自己容器裡的 `stress.log` 並 fsync，下次叫出鍵盤時顯示上一輪的開頭、第一次警告與最後一步。
+
+| 輪 | 情況 | pid | 開始 footprint（佔完第一個 1 MB 後） | 第一次警告（已佔） | 最後一筆：已佔 → footprint，available |
+| ---: | --- | ---: | ---: | --- | --- |
+| 1 | 不載入核心 | 12589 | 13.45 MB | 141.55 MB（129 MB），共 2 次 | 164 MB → 176.72 MB，0.3 MB |
+| 2 | 不載入核心 | 12595 | 13.50 MB | 141.86 MB（129 MB） | 163 MB → 176.03 MB，1.0 MB |
+| 3 | 不載入核心 | 12601 | 12.94 MB | 141.67 MB（129 MB） | 164 MB → 176.81 MB，0.2 MB |
+| 4 | 不載入核心 | 12606 | 13.14 MB | 141.95 MB（129 MB） | 163 MB → 176.00 MB，1.0 MB |
+| 5 | 載入核心後 | 12609 | 78.88 MB | 142.58 MB（66 MB） | 100 MB → 176.74 MB，0.3 MB |
+| 6 | 載入核心後 | 12612 | 78.44 MB | 142.19 MB（66 MB） | 100 MB → 176.33 MB，0.7 MB |
+| 7 | 載入核心後 | 12614 | 78.53 MB | 142.22 MB（66 MB） | 100 MB → 176.35 MB，0.7 MB |
+
+第 1–3 輪加壓時，鍵盤每次重畫都會查一次 Foundation Models 的可用性，系統 log 被洗掉、讀不到終止那幾行。第 4 輪起加壓中不畫那幾行，數字沒變。第 5 輪終止時的系統 log 摘錄在 `.scratch/m2/evidence/09-core-run1-kill-log.txt`：
+
+```text
+kernel[0] notice: memorystatus: QIMKeyboard [12609] exceeded mem limit: ActiveHard 177 MB (fatal)
+kernel[0] notice: memorystatus: killing_specific_process pid 12609 [QIMKeyboard] (per-process-limit 100 33s rf:- type:app) 181249KB - memorystatus_available_pages: 286430
+SpringBoard[12505] (FrontBoard) notice: [xpcservice<com.personal.qim.exp.keyboard>:12609] Process exited: <RBSProcessExitContext| specific, status:<RBSProcessExitStatus| domain:jetsam(1) code:per-process-limit(7)>>.
+ReportSystemMemory[12475] (CoreDiagnostics) notice: Process QIMKeyboard [12609] killed by jetsam reason per-process-limit
+```
+
+載入核心那三輪的各步 footprint 增量（MB，「讀檔 → 解開 → 丟掉檔案位元組」前後的差，同〈鍵盤擴充接上核心〉）：
+
+| 步驟 | 檔案 | 第 5 輪 | 第 6 輪 | 第 7 輪 |
+| --- | ---: | ---: | ---: | ---: |
+| 載入前 | — | 13.17 | 12.99 | 12.94 |
+| 速成 `quick` | 0.43 | +1.31 | +1.33 | +1.30 |
+| 詞庫 `quick-lexicon` | 4.95 | +41.48 | +41.47 | +41.44 |
+| bigram `zh-hant-bigram` | 2.87 | +5.28 | +5.28 | +5.28 |
+| 簡繁 `opencc-hk2s` | 0.06 | +0.75 | +0.75 | +0.77 |
+| 英文 `scowl-en-us` | 0.76 | +2.52 | +2.50 | +2.52 |
+| `Engine` | — | +0.19 | +0.11 | +0.28 |
+| `Session` | — | +0.00 | +0.00 | +0.00 |
+| 字根提示 `cangjie-hint` | 1.24 | +14.50 | +14.30 | +14.30 |
+| 載入後 | — | 79.20 | 78.74 | 78.81 |
+
+載入耗時 129–130 ms。截圖：`.scratch/m2/evidence/09-bare-run{1,2,3}.png`、`09-bare-run1-during.png`（加壓中）、`09-core-run{1,2,3}-loaded.png`（載入後，畫面同時顯示上一輪的結果）、`09-core-run3-result.png`。
+
+### 限制
+
+- 一台旗艦機、一個 iOS 版本。Apple 說上限隨機型而異，低階機可能低得多：社群說法 30–77 MB（brief §12.3 原本的條目）多半是舊機型、舊系統，沒有查證。
+- 擴充是 Debug 組態，程序本身約 13 MB；Release 的基線沒量，預期較小，只會讓餘裕變大。
+- 警告線是觀察到的值，Apple 沒有公布門檻，也可能隨系統的記憶體壓力變動；這幾輪手機上沒有其他吃記憶體的前景 App。
+- 佈局的記憶體是 Mac 的數字。
+- 每步 1 MB，終止點只精確到 1 MB 內。
+
+### 官方說法（2026-11-10 查）
+
+- jetsam 報告：「Search for the `reason` key to identify the jettisoned process and why the system jettisoned it.」「`per-process-limit`: The process crossed the resident memory limit imposed by the system on all apps. … extensions have a much lower per-process memory limit than foreground apps.」記憶體量是 `rpages × pageSize`。[Identifying high-memory use with jetsam event reports](https://developer.apple.com/documentation/xcode/identifying-high-memory-use-with-jetsam-event-reports)。
+- 報告在裝置的「設定 → 隱私權與安全性 → 分析與改進 → 分析資料」，jetsam 的檔名是 `JetsamEvent_<DateTime>`，也可以接上 Mac 從 Xcode 的 Devices and Simulators 取。[Acquiring crash reports and diagnostic logs](https://developer.apple.com/documentation/xcode/acquiring-crash-reports-and-diagnostic-logs)。官方沒寫每次 `per-process-limit` 都會產生報告；實測擴充被終止時沒有產生，以上是實測。
+- 上限不公布、隨機型而異、超過就終止：見本文〈免費佈建與 App Group〉〈官方說法〉的 Creating a custom keyboard。

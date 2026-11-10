@@ -46,6 +46,7 @@
 | 2026-11-10 | M2 07 | `qim-ffi`（uniffi）與 Swift 在 Mac 打出「門口」；三種路徑每鍵 p95 都 ≤ 0.9 ms（含選段），見 ios-feasibility〈綁定開銷〉 | 新 session 下 `/implement .scratch/m2/issues/08-ios-keyboard-with-core.md` |
 | 2026-11-10 | M2 08 | iPhone 備忘錄打出「門口」；資料包加 `Engine` 後 footprint 64 MB；每鍵 p95 64 µs、選段 0.79 ms；`Engine` 拆成共用物件；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/09-ios-memory-limit.md` |
 | 2026-11-10 | M2 11 | candle 能在 iPhone 鍵盤擴充跑：1.4M 幾乎不佔；23M q8 +47 MB、f32 +95 MB，加核心都在 177 MB 內；延遲以前綴快取為前提；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/09-ios-memory-limit.md` |
+| 2026-11-10 | M2 09 | iPhone 鍵盤擴充上限 177 MB（kernel 實測，7 輪），142 MB 收警告；核心加六份資料包 79 MB；M3 模型 ≤ 60 MB、格式不改、略過 Schema；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/12-m2-close.md` |
 
 ## 偏差與決定
 
@@ -74,3 +75,4 @@
 - 2026-11-10 M2 票 07：`qim-ffi` 的按鍵也收「種類 + 值」（`Key::parse`），推翻 plan §2.1 的直接收 `Key`：uniffi 沒有 `char` 型別（plan §2.1）。
 - 2026-11-10 M2 票 07：`qim-bench` 每鍵延遲加「選開頭一段」一組（原生與 WebAssembly），票外擴張，補 M1 票 24 留下的缺口（plan §5.2、development〈每鍵延遲〉）。
 - 2026-11-10 M2 票 08：`qim-ffi` 的 `Engine` 拆成獨立物件、各 `Session` 共用，資料包先解開成物件再移交給它；推翻票 07 的 `Session` 自建 `Engine`（plan §2.1）。
+- 2026-11-10 M2 票 09：`qim-ffi` 加只能解開的 `RadicalHintPack`，為了在鍵盤擴充實測字根提示的記憶體（票外擴張，協調者同意）；查詢介面留給要顯示字根提示的票（plan §2.1）。

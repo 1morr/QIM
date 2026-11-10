@@ -1,7 +1,8 @@
 import UIKit
 
 /// 實驗鍵盤：送出「日」、量常駐記憶體與 App Group（票 06）、讀游標前後文長度與試 Foundation Models（票 10）、
-/// 接上核心打 `anr`、量記憶體與每鍵延遲（票 08）、跑小型神經模型的開銷量測（票 11，`QIM_NEURAL` 開時才有）。
+/// 接上核心打 `anr`、量記憶體與每鍵延遲（票 08）、加壓找系統終止擴充的記憶體上限（票 09）、
+/// 跑小型神經模型的開銷量測（票 11，`QIM_NEURAL` 開時才有）。
 /// 結果顯示在鍵盤上方並寫 log。
 final class KeyboardViewController: UIInputViewController {
     /// 這個程序裡各鍵被按的次數與 view controller 載入次數，診斷用。
@@ -18,6 +19,7 @@ final class KeyboardViewController: UIInputViewController {
         Self.loads += 1
         loadLine = Probe.memoryLine("viewDidLoad") + " pid=\(getpid()) loads=\(Self.loads)"
         Probe.log.notice("keyboard \(self.loadLine, privacy: .public)")
+        log(StressProbe.previousLines)
 
         status.numberOfLines = 0
         status.font = .monospacedSystemFont(ofSize: 9, weight: .regular)
@@ -56,7 +58,12 @@ final class KeyboardViewController: UIInputViewController {
             key("延遲", id: "qim-key-latency") { _ in CoreProbe.runLatency() },
         ])
 
-        var rows: [UIView] = [coreRow, keyRow, moveRow]
+        let stressRow = row([
+            key("+\(StressProbe.manualMB)MB", id: "qim-key-stress-add") { _ in StressProbe.addManual() },
+            key("連續加壓", id: "qim-key-stress-run") { _ in StressProbe.runContinuous() },
+        ])
+
+        var rows: [UIView] = [coreRow, keyRow, moveRow, stressRow]
         #if QIM_NEURAL
         rows.append(neuralRow())
         #endif
@@ -71,7 +78,7 @@ final class KeyboardViewController: UIInputViewController {
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
             stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
             stack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
-            // 票 08 的三列是 380 pt；票 11 的列再加 44 pt。
+            // 票 08 的三列是 380 pt；票 09、11 的列各再加 44 pt。
             view.heightAnchor.constraint(equalToConstant: 248 + 44 * CGFloat(rows.count)),
         ])
     }
@@ -87,11 +94,17 @@ final class KeyboardViewController: UIInputViewController {
         ])
         ModelProbe.onUpdate = { [weak self] in self?.render() }
         CoreProbe.onUpdate = { [weak self] in self?.render() }
+        StressProbe.onUpdate = { [weak self] in self?.render() }
         #if QIM_NEURAL
         NeuralProbe.onUpdate = { [weak self] in self?.render() }
         #endif
         log(ModelProbe.displayLines + [ModelProbe.languagesLine()])
         readContext()
+    }
+
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        StressProbe.memoryWarning()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
@@ -137,10 +150,15 @@ final class KeyboardViewController: UIInputViewController {
     private func render() {
         let taps = "taps=" + Self.taps.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: ",")
         // 螢幕放不下全部，只顯示最近在用的探針的行；其他行照樣寫 log。
-        var probes = CoreProbe.active ? CoreProbe.displayLines : contextLines + ModelProbe.displayLines
+        // 票 09：加壓中（沒載入核心時）不畫 Foundation Models 那幾行：每次讀 `ModelProbe.displayLines` 都會查一次
+        // 可用性，系統 log 被 modelmanagerd 洗掉、找不到終止的那幾行。
+        var probes = CoreProbe.active ? CoreProbe.displayLines
+            : StressProbe.active ? [] : contextLines + ModelProbe.displayLines
         #if QIM_NEURAL
         if !NeuralProbe.latest.isEmpty { probes = NeuralProbe.latest }
         #endif
+        // 票 09：上一輪加壓的摘要與這一輪的最後一步放在探針的行前面。
+        probes = StressProbe.previousLines + StressProbe.displayLines + probes
         status.text = (memoryLines + [taps] + probes).joined(separator: "\n")
         candidates.text = CoreProbe.candidateLine
     }

@@ -60,6 +60,9 @@ targets:
         buildPhase: resources
       - path: ../../../build/packs/scowl-en-us/scowl-en-us.pack
         buildPhase: resources
+      # 票 09：字根提示只為了量記憶體。
+      - path: ../../../build/packs/cangjie-hint/cangjie-hint.pack
+        buildPhase: resources
       - path: ../../../build/ffi/latency-inputs.txt
         buildPhase: resources
     dependencies:
