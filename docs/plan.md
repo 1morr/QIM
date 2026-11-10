@@ -17,6 +17,7 @@
 | 連打 | `continuous` | 英文候選 | `EnglishCandidate` |
 | 使用者詞 / 觸發詞 | `UserWord` / `Trigger` | 聯想 | `Association` |
 | 自動造詞 | `AutoPhrase` | 無痕模式 | `Incognito` |
+| 常用語 | `Phrase` | | |
 | 核心 / 平台殼 | `core` / `Shell` | 佈局 / 資料包 | `Layout` / `…Pack`（方案資料包 `SchemePack`） |
 | 首選字基準 | `TopChoiceBench` | 修正次數 | `correction_count` |
 | 分段 | `Segment` | 佈局版本 | `LayoutVariant` |

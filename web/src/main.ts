@@ -122,7 +122,7 @@ async function start(): Promise<void> {
 			composingChinese(),
 		);
 		panel.show(composingChinese());
-		phrases?.show(shown.composing);
+		phrases?.setComposing(shown.composing);
 	};
 	const requestRerank = fakeReranker(session, settings.rerank, (snapshot) => {
 		render(snapshot);

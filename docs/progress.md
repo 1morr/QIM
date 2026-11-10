@@ -28,9 +28,11 @@
 | 2026-11-11 | M3 01 | `main.ts` 拆成候選列、面板、設定區等模組，行為不變（亂按腳本前後逐步相同）；設定區移到頁面下方；見票 01 | 新 session 下 `/implement .scratch/m3/issues/02-pack-list-cleanup.md` |
 | 2026-11-11 | M3 06 | 青簡神經重排與 CyIME 模型評估寫成 `docs/research/neural-rerank.md`，摘進 brief §12.4；見票 06 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 | 2026-11-11 | M3 02 | 資料包清單收成 `build_packs` 一處、`Pack` trait、xtask 比對個人集路徑；六份 sha256 與 bench 不變；見票 02 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
+| 2026-11-11 | M3 14 | 常用語：來源 `phrase` 的使用者詞，觸發詞或候選列清單上屏，設定區增刪改；匯出升 v2（詞欄跳脫）、收 v1；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 
 ## 偏差與決定
 
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
 - 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。
 - 2026-11-11 M3 票 01：開關收進頁面下方的設定區（`settings.ts` 一張表產生），重排選單改完也還焦點；plan §3.1 補一行；見票 01。
+- 2026-11-11 M3 票 14：匯出 v2 由票 14 先升（詞欄跳脫給常用語的換行），票 12 只加 bigram 列；常用語在簡體模式照樣轉簡體，同 M1 票 23；plan §2.4；見票 14。

@@ -107,18 +107,8 @@ impl UserModel {
         text: &str,
         trigger: Option<&str>,
     ) -> Result<(), UserWordError> {
-        if text.is_empty() {
-            return Err(UserWordError::EmptyWord);
-        }
-        if text.chars().any(char::is_control) {
-            return Err(UserWordError::ControlCharacter);
-        }
+        check_user_word(engine, text, trigger, |_| false)?;
         let scheme = engine.scheme();
-        if let Some(trigger) = trigger
-            && (trigger.is_empty() || !scheme.spells(trigger))
-        {
-            return Err(UserWordError::InvalidTrigger(trigger.to_string()));
-        }
         let code = engine
             .code_of(text)
             .or_else(|| trigger.map(String::from))
@@ -142,21 +132,8 @@ impl UserModel {
         text: &str,
         trigger: Option<&str>,
     ) -> Result<(), UserWordError> {
-        if text.is_empty() {
-            return Err(UserWordError::EmptyWord);
-        }
-        if text
-            .chars()
-            .any(|c| c.is_control() && c != '\n' && c != '\t')
-        {
-            return Err(UserWordError::ControlCharacter);
-        }
+        check_user_word(engine, text, trigger, |c| c == '\n' || c == '\t')?;
         let scheme = engine.scheme();
-        if let Some(trigger) = trigger
-            && (trigger.is_empty() || !scheme.spells(trigger))
-        {
-            return Err(UserWordError::InvalidTrigger(trigger.to_string()));
-        }
         let model = self.for_scheme_mut(&scheme.id);
         let old = model.words_at(PHRASE_CODE).insert(
             text.to_string(),
@@ -189,7 +166,8 @@ impl UserModel {
     }
 
     /// 刪掉文字是 `text` 的常用語，連同它的觸發詞學到的計數，匯出檔裡不再有它；沒有這條時回傳
-    /// `false`。
+    /// `false`。觸發詞剛好是這段文字自己的碼時，平常打字學到的同一組計數也一起刪：兩者是同一個鍵、
+    /// 分不出來，寧可少一筆學習，也不留使用者刪掉的字。
     pub fn remove_phrase(&mut self, engine: &Engine, text: &str) -> bool {
         let model = self.for_scheme_mut(&engine.scheme().id);
         let Some(phrases) = model.words.get_mut(PHRASE_CODE) else {
@@ -214,6 +192,28 @@ pub struct Phrase {
     pub text: String,
     /// 打它就讓這條常用語成首選的輸入碼；沒有時只能從清單選。
     pub trigger: Option<String>,
+}
+
+/// 使用者詞與常用語共同的檢查：文字不能空、不能含控制字元（`allowed` 放行的除外），觸發詞只能用
+/// 方案的鍵。
+fn check_user_word(
+    engine: &Engine,
+    text: &str,
+    trigger: Option<&str>,
+    allowed: impl Fn(char) -> bool,
+) -> Result<(), UserWordError> {
+    if text.is_empty() {
+        return Err(UserWordError::EmptyWord);
+    }
+    if text.chars().any(|c| c.is_control() && !allowed(c)) {
+        return Err(UserWordError::ControlCharacter);
+    }
+    if let Some(trigger) = trigger
+        && (trigger.is_empty() || !engine.scheme().spells(trigger))
+    {
+        return Err(UserWordError::InvalidTrigger(trigger.to_string()));
+    }
+    Ok(())
 }
 
 impl SchemeModel {
@@ -353,6 +353,13 @@ impl SchemeModel {
 const HEADER: &str = "# qim-userdict v2";
 /// 舊版的第一行；v1 的詞欄照字面讀、沒有常用語，匯入一直要收（M3 spec〈共同規則〉）。
 const HEADER_V1: &str = "# qim-userdict v1";
+
+/// 匯入的檔是哪一版，由第一行決定。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Version {
+    V1,
+    V2,
+}
 /// 方案 tick 的 metadata 行開頭，後接方案 id、Tab、tick；照 librime userdb 文字檔的
 /// `#@/tick`（`docs/research/userdict-text-formats.md`）。
 const TICK_KEY: &str = "#@/tick/";
@@ -411,9 +418,9 @@ impl UserModel {
             .lines()
             .map(|l| l.strip_suffix('\r').unwrap_or(l))
             .zip(1..);
-        let v1 = match lines.next().map(|(l, _)| l) {
-            Some(HEADER) => false,
-            Some(HEADER_V1) => true,
+        let version = match lines.next().map(|(l, _)| l) {
+            Some(HEADER) => Version::V2,
+            Some(HEADER_V1) => Version::V1,
             _ => {
                 return Err(ImportError::at(
                     1,
@@ -437,7 +444,7 @@ impl UserModel {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            let row = Row::parse(line, v1).map_err(error)?;
+            let row = Row::parse(line, version).map_err(error)?;
             let tick = ticks.get(row.scheme).copied();
             if tick.is_some_and(|t| row.count.last_tick.max(row.count.last_commit_tick) > t) {
                 return Err(error("最後 tick 比方案的 tick 大"));
@@ -480,8 +487,9 @@ struct Row<'a> {
 }
 
 impl<'a> Row<'a> {
-    /// `v1` 是舊版的列：詞欄照字面讀，沒有常用語。
-    fn parse(line: &'a str, v1: bool) -> Result<Self, &'static str> {
+    /// v1 的詞欄照字面讀，沒有常用語。
+    fn parse(line: &'a str, version: Version) -> Result<Self, &'static str> {
+        let v1 = version == Version::V1;
         let fields: Vec<&str> = line.split('\t').collect();
         let [
             scheme,

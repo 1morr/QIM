@@ -1,13 +1,8 @@
 // 常用語（plan §2.4、§3.1）：設定區的清單可以新增、編輯、刪除；候選列在沒有組字時有「常用語」鍵，
 // 叫出清單點了就上屏（Gboard 工具列的剪貼簿、微信輸入法的常用語面板）。觸發詞的部分在核心。
 
-import { element } from "./dom.ts";
+import { element, message } from "./dom.ts";
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
-
-/** `JsError` 與其他例外的訊息。 */
-function message(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 
 /** 清單裡的一條常用語：換行畫成 ⏎，整條才看得出是一則。 */
 function oneLine(text: string): string {
@@ -16,7 +11,7 @@ function oneLine(text: string): string {
 
 export interface Phrases {
 	/** 組字中藏起候選列的「常用語」鍵並收起清單；沒有組字時再顯示。 */
-	show(composing: boolean): void;
+	setComposing(composing: boolean): void;
 	/** 使用者詞換了一整份（匯入、清空）之後重畫清單。 */
 	refresh(): void;
 }
@@ -138,6 +133,11 @@ export function mountPhrases(
 	form.addEventListener("submit", (event) => {
 		event.preventDefault();
 		const next = text.value;
+		// 同文字只存一條（核心再存一次是換觸發詞）：擋下，免得不聲不響改了另一條的觸發詞。
+		if (next !== editing && phrases().some((phrase) => phrase.text === next)) {
+			status.textContent = `已有「${oneLine(next)}」，要改它請按「編輯」`;
+			return;
+		}
 		try {
 			// 先存新的再刪舊的：存不進去時原本那條還在。
 			session.addPhrase(next, trigger.value);
@@ -161,7 +161,7 @@ export function mountPhrases(
 
 	renderList();
 	return {
-		show(composing) {
+		setComposing(composing) {
 			open.hidden = composing;
 			if (composing && pickerOpen) {
 				setPickerOpen(false);

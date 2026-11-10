@@ -1,6 +1,6 @@
 // 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v2`（也讀得進 v1）。
 
-import { element } from "./dom.ts";
+import { element, message } from "./dom.ts";
 import type { Session } from "./wasm/qim_wasm.js";
 
 /** 學習資料在 `localStorage` 的鍵；值是 `Session.exportUserDict()` 的 TSV。 */
@@ -15,11 +15,6 @@ function rows(tsv: string): number {
 	return tsv
 		.split("\n")
 		.filter((line) => line.trim() !== "" && !line.startsWith("#")).length;
-}
-
-/** `JsError` 與其他例外的訊息。 */
-function message(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 export interface UserDict {

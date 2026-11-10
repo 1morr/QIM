@@ -146,3 +146,24 @@ test("匯出、清空、匯入後常用語還在", async ({ page }) => {
 	await expect(list).toHaveCount(1);
 	expect(await typeAndCommit(page, "qim")).toBe(ADDRESS);
 });
+
+test("新增或編輯成已有的常用語時擋下，不蓋掉那條的觸發詞", async ({ page }) => {
+	const { list, status, section } = await ready(page);
+	await addPhrase(page, "早晨", "qim");
+	await addPhrase(page, "午安", "ab");
+	await addPhrase(page, "早晨", "");
+	await expect(status).toHaveText("已有「早晨」，要改它請按「編輯」");
+	await list
+		.filter({ hasText: "午安" })
+		.getByRole("button", { name: "編輯" })
+		.click();
+	await expect(section.getByLabel("常用語", { exact: true })).toHaveValue(
+		"午安",
+	);
+	await section.getByLabel("常用語", { exact: true }).fill("早晨");
+	await section.getByRole("button", { name: "儲存修改" }).click();
+	await expect(status).toHaveText("已有「早晨」，要改它請按「編輯」");
+	await expect(list).toHaveCount(2);
+	expect(await typeAndCommit(page, "qim")).toBe("早晨");
+	expect(await typeAndCommit(page, "ab")).toBe("午安");
+});
