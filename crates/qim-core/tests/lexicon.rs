@@ -11,6 +11,7 @@ fn entry(text: char) -> CodeEntry {
     CodeEntry {
         text,
         extension: false,
+        simplified: false,
     }
 }
 
@@ -18,6 +19,7 @@ fn extension(text: char) -> CodeEntry {
     CodeEntry {
         text,
         extension: true,
+        simplified: false,
     }
 }
 

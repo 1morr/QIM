@@ -29,16 +29,20 @@
 | 2026-11-11 | M3 02 | 資料包清單收成 `build_packs` 一處、`Pack` trait、xtask 比對個人集路徑；六份 sha256 與 bench 不變；見票 02 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
 | 2026-11-11 | M3 01 | `main.ts` 拆成候選列、面板、設定區等模組，行為不變（亂按腳本前後逐步相同）；設定區移到頁面下方；見票 01 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 14 | 常用語：來源 `phrase` 的使用者詞，觸發詞或候選列清單上屏，設定區增刪改；匯出升 v2（詞欄跳脫）、收 v1；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
+| 2026-11-11 | M3 19 | 繁體模式的簡體字（278 字，建置端判定，格式 v6）排在同碼繁體字之後，開關「繁體字優先」預設開；選兩次照常成首選；見票 19 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少，dev 重比結論相同）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 16 | emoji 候選：CLDR 粵語、繁中標註建 `cldr-emoji-yue-hant`，整串字詞後接最多 3 個、預設開；首選不變、修正多 0.1–1.4% 更新 baseline；見票 16 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 17 | 詞表匯入：收 Rime `.dict.yaml`、Gboard `dictionary.txt`、一行一詞，碼由字推出、加進使用者詞，壞列報行號；設定區「匯入詞庫」先列結果再確認；見票 17 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
+| 2026-11-11 | M3 03 | 規則 1 × 2 多移一次先紅再修；規則 3、4 與分段選出的整串補測試；`beam` 驗證搬進 `Ranking::check`；bench 前後相同；見票 03 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
 
 ## 偏差與決定
 
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
 - 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。
+- 2026-11-11 M3 票 19：bench 修正次數 yue-wiki +6、common-voice-yue +2（答案含簡體字的題），使用者同意 `--update-baseline`（合併票 04 後 yue-wiki 前文兩集同因各 +6）；「恒」查證後仍算簡體字、「够」是香港標準字形，移出；叙携等與繁體同序號的算異體；見票 19。
 - 2026-11-11 M3 票 16：驗收「`bench --check` 不變差」改成首選不變：emoji 佔第一頁把正解擠到下一頁，修正多 0.1–0.9%、個人集 1.4%；使用者選每列最多 3 個、更新 baseline；見票 16。
 - 2026-11-11 M3 票 04：前文以標點結尾時接句首、不跨標點接上一句（跨標點較差），bigram 加句首一列，改 plan §2.3、§4.3；選開頭一段後接選定段，推翻 M1 票 21 的現狀；見票 04。
 - 2026-11-11 M3 票 04：「有前文」驗收看四語料合計（yue-wiki 答錯多 2、zh-wiki 持平），個人集修正 +13 接受並更新本機 baseline（使用者決定）；見票 04。
 - 2026-11-11 M3 票 01：開關收進頁面下方的設定區（`settings.ts` 一張表產生），重排選單改完也還焦點；plan §3.1 補一行；見票 01。
 - 2026-11-11 M3 票 14：匯出 v2 由票 14 先升（詞欄跳脫給常用語的換行），票 12 只加 bigram 列；常用語在簡體模式照樣轉簡體，同 M1 票 23；plan §2.4；見票 14。
+- 2026-11-11 M3 票 03：觸發詞已在首選時，規則 2「選一次不成首選」不動（原本把不學習時的首選多移到第 2）；`Engine::new` 也驗打分參數；改 plan §2.3、§2.4；見票 03。

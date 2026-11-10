@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::lattice::{self, CandidateSpan, Lattice};
+use crate::lattice::{self, CandidateSpan, Lattice, Listing};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
@@ -42,6 +42,9 @@ pub struct Options {
     pub emoji_candidates: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
+    /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
+    /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
+    pub simplified_after_traditional: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -95,12 +98,13 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體、英文候選與 emoji 候選影響候選，無痕、Shift、數字後半形
-    /// 都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選與簡體字排後影響候選，無痕、Shift、
+    /// 數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified
             && self.english_candidates == other.english_candidates
             && self.emoji_candidates == other.emoji_candidates
+            && self.simplified_after_traditional == other.simplified_after_traditional
     }
 }
 
@@ -113,6 +117,7 @@ impl Default for Options {
             digit_separators: true,
             emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
+            simplified_after_traditional: true,
         }
     }
 }
@@ -849,8 +854,7 @@ impl Session {
                 engine,
                 user,
                 &Lattice::from_input(engine, user, before, &rest),
-                false,
-                false,
+                self.listing(false),
             )
             .into_iter()
             .next();
@@ -893,6 +897,17 @@ impl Session {
         if !engine.has_entry(&code, &text) {
             user.for_scheme_mut(&engine.scheme().id)
                 .add_auto_phrase(&code, &text);
+        }
+    }
+
+    /// 列候選的選項：簡體字排後照選項（簡體模式不排）；英文候選與 emoji 照選項，但只給剩下的
+    /// 整串輸入碼（`whole_input`），目前分段與逐段取首選時沒有。
+    fn listing(&self, whole_input: bool) -> Listing {
+        let options = &self.options;
+        Listing {
+            english_candidates: whole_input && options.english_candidates,
+            emoji_candidates: whole_input && options.emoji_candidates,
+            simplified_last: options.simplified_after_traditional && !options.simplified,
         }
     }
 
@@ -1032,20 +1047,10 @@ impl Session {
                     engine,
                     user,
                     &Lattice::from_input(engine, user, None, code),
-                    false,
-                    false,
+                    self.listing(false),
                 )
             }
-            None => {
-                let options = &self.options;
-                lattice::candidates(
-                    engine,
-                    user,
-                    &self.lattice,
-                    options.english_candidates,
-                    options.emoji_candidates,
-                )
-            }
+            None => lattice::candidates(engine, user, &self.lattice, self.listing(true)),
         };
         // 排序時已去掉原文重複的，沒轉換的不必再比。
         let mut seen = HashSet::new();

@@ -36,7 +36,7 @@ fn main() -> Result<(), Error> {
         Ok(String::from_utf8(sources::load(&cache, id, file, &NoFetch)?).unwrap())
     };
     let rows = libcangjie::parse(&load("libcangjie", "data/table.txt")?)?;
-    let table = quick::code_table(&rows, &BTreeMap::new());
+    let table = quick::code_table(&rows, &BTreeMap::new(), &BTreeSet::new());
     let common = CommonForms::from_opencc(&table)?;
     if std::env::var("GAPS").is_ok() {
         let essay = load("rime_essay", "essay.txt")?;

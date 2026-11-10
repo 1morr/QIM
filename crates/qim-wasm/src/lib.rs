@@ -168,6 +168,14 @@ impl WebSession {
         self.session.refresh(&self.engine, &self.user).into()
     }
 
+    /// 繁體模式把簡體字排在同碼的繁體字之後（M3 票 19，brief §4.1），預設開。組字中切換也立刻
+    /// 重列候選。
+    #[wasm_bindgen(js_name = setSimplifiedAfterTraditional)]
+    pub fn set_simplified_after_traditional(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.simplified_after_traditional = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
     /// emoji 候選（M3 票 16）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面，預設開。
     /// 組字中切換也立刻重列候選。
     #[wasm_bindgen(js_name = setEmojiCandidates)]

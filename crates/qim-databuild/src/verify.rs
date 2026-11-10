@@ -48,6 +48,10 @@ pub enum CheckId {
     SimplifiedMenKou,
     /// 中文狀態打 `the`，第 2 個候選是 `the`：英文資料包接得上核心（排位規則 4）。
     EnglishThe,
+    /// 繁簡同形與本身是正規繁體字的字（[`NOT_SIMPLIFIED`]）沒有標成簡體字（brief §4.1，M3 票 19）。
+    NotSimplified,
+    /// 繁體模式 `ls` 的「门」排在同碼的所有繁體字之後（M3 票 19）。
+    MenAfterTraditional,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
     /// 同樣的來源建兩次，每份資料包的 sha256 都相同、清單一樣。
@@ -86,6 +90,8 @@ impl fmt::Display for CheckId {
             Self::RadicalHintByVersion => "抽查：字根提示的三代與五代碼",
             Self::SimplifiedMenKou => "抽查：簡體模式 anr 有「门口」",
             Self::EnglishThe => "抽查：the 的第 2 個候選是 the",
+            Self::NotSimplified => "抽查：正規繁體字不是簡體字",
+            Self::MenAfterTraditional => "抽查：ls 的「门」在繁體字之後",
             Self::EmojiAfterLaugh => "抽查：hk 的「笑」後面接著它的 emoji",
             Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
@@ -463,8 +469,65 @@ fn pack_checks(
         hint_by_version(hints),
         simplified_men_kou(engine),
         english_the(engine),
+        not_simplified(&pack.code_table),
+        men_after_traditional(&pack.code_table, engine),
         emoji_after_laugh(engine, emoji),
     ]);
+}
+
+/// 不能標成簡體字的字：繁簡同形的人、日，與本身是正規繁體字、又是別的字的簡體寫法的字
+/// （M3 票 19 列的台（臺）、后（後）、里（裡）…）。
+pub const NOT_SIMPLIFIED: [char; 17] = [
+    '人', '日', '台', '后', '里', '干', '面', '系', '云', '松', '只', '范', '谷', '斗', '制', '准',
+    '几',
+];
+
+/// 碼表裡標成簡體字的字都不在 [`NOT_SIMPLIFIED`]；細節列簡體字的字數。
+fn not_simplified(code_table: &CodeTable) -> Check {
+    let simplified: BTreeSet<char> = code_table
+        .iter()
+        .flat_map(|(_, entries)| entries.iter().filter(|e| e.simplified).map(|e| e.text))
+        .collect();
+    let wrong: String = NOT_SIMPLIFIED
+        .iter()
+        .filter(|c| simplified.contains(c))
+        .collect();
+    Check {
+        id: CheckId::NotSimplified,
+        passed: wrong.is_empty(),
+        detail: if wrong.is_empty() {
+            format!(
+                "簡體字 {} 個，不含 {}",
+                simplified.len(),
+                NOT_SIMPLIFIED.iter().collect::<String>()
+            )
+        } else {
+            format!("簡體字 {} 個，誤標 {wrong}", simplified.len())
+        },
+    }
+}
+
+/// 繁體模式（`Engine::candidates`）的 `ls`：「门」在，而且排在碼表裡 `ls` 每個沒標成簡體字的
+/// 連打字集的字之後。
+fn men_after_traditional(code_table: &CodeTable, engine: &Engine) -> Check {
+    let listed = engine.candidates(&UserModel::default(), "ls");
+    let at = |text: char| listed.iter().position(|c| *c == text.to_string());
+    let traditional = code_table
+        .lookup("ls")
+        .iter()
+        .filter(|e| !e.extension && !e.simplified)
+        .map(|e| at(e.text));
+    let passed = match at('门') {
+        Some(men) => traditional.into_iter().all(|t| t.is_some_and(|t| t < men)),
+        None => false,
+    };
+    // 只列到「门」為止：後面是只蓋住 `l` 的字。
+    let shown = at('门').map_or(listed.len(), |men| men + 1);
+    Check {
+        id: CheckId::MenAfterTraditional,
+        passed,
+        detail: format!("ls：{}", listed[..shown].join(" ")),
+    }
 }
 
 /// 預設選項經 `Session` 打「笑」的碼 `hk`：「笑」在第一頁，下一個候選是資料包裡它的第一個 emoji。
