@@ -78,6 +78,14 @@ Big5 這條是必要的：Big5 裡有 59 字是 `STCharacters` 一律換掉的�
 - 測試：`simplified_characters.rs` 加三條（預設開、關掉時「门」回第 1、組字中切換重列）；`settings.spec.ts` 驗預設勾選；`simplified-characters.spec.ts` 組字中關掉後 `ls` 的「门」回到第 9（改前的位置），再打開回第 18。截圖 `.scratch/m3/evidence/19-ls-panel-off.png`。
 - 合併 main（票 01、02、06、14）沒有衝突；票 14 的 `crates/qim-core/tests/phrases.rs` 補 `simplified: false` 併進合併 commit。合併沒動到 `qim-databuild` 與 `data/`，資料包沿用，沒重跑 `--verify`。合併後 `cargo xtask check` 全綠（Playwright 160 個），`bench --check` 和更新後的 baseline 相同（yue-wiki 4473、zh-wiki 4505、common-voice-yue 4045、hkcancor 2588，固定題 84/84）。
 
+### 合併票 04（2026-11-11 協調者要求）
+
+- `git merge main`（含票 04 的 `set_context`、bigram 句首列、有前文集合）。衝突在 `engine.rs`、`lattice.rs`、`session.rs`（`span` 與 `Lattice::from_input` 多了前一字參數，和本票的 `Spanned`、`Listing` 合在一起）、`docs/development.md`（verify 報告的說明兩邊都留）與 `bench/baseline.json`（取 main 的，重跑後再更新）。票 04 的 `crates/qim-core/tests/context.rs` 補 `simplified: false`。
+- 資料包格式版本：main 仍是 v5。票 04 的語言模型只多了句首記號 `CLAUSE_START` 的資料，序列化結構沒變；本票已升 v6，所有資料包檔頭一起換，合併後用 v6 就涵蓋兩邊。
+- `cargo xtask data --verify` 通過：簡體字 278 個，`ls` 的「门」排在 14 個同碼繁體字與 3 條多段路徑之後，決定性通過（速成 `33ff11d4`、語言模型 `d1392804`）。
+- `bench --check` 對 main 的 baseline：答錯數 13 個集合都不變、沒有翻盤，固定題 84/84。修正次數 yue-wiki 4340 → 4346、common-voice-yue 3946 → 3948、yue-wiki·前文 2288 → 2294、yue-wiki·前文·不給 2300 → 2306，其餘相同。前文集合裡答案含簡體字的只有 109「硫黄島」、633「稲荷寿司」，和先前的原因相同，照使用者先前的同意 `--update-baseline`。
+- 合併後 `cargo xtask check` 全綠（Playwright 160 個），`bench --check` 通過。
+
 ### code-review（`3543c83` 起）
 
 已處理：
