@@ -91,6 +91,92 @@ textarea {
 	flex-shrink: 0;
 	cursor: pointer;
 	white-space: nowrap;
+	/* 常用語可能很長：只露出開頭，不撐滿整列。 */
+	max-width: 12em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* 和展開鍵不會同時出現（一個在組字中、一個在沒有組字時），都靠右。 */
+#phrases-open {
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+/* 候選列「常用語」叫出的清單：點一條就上屏。 */
+#phrase-picker {
+	display: grid;
+	gap: 0.25rem;
+	max-height: 12rem;
+	overflow-y: auto;
+	margin: 0;
+	padding: 0.25rem 0;
+	list-style: none;
+	font-size: 1.25rem;
+}
+
+#phrase-picker[hidden] {
+	display: none;
+}
+
+#phrase-picker li {
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#phrase-picker .empty {
+	color: gray;
+	cursor: default;
+	font-size: 1rem;
+}
+
+#phrases h2 {
+	margin: 0.5rem 0 0;
+	font-size: 1rem;
+}
+
+#phrase-list {
+	display: grid;
+	gap: 0.25rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+#phrase-list li {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+#phrase-list .phrase-text {
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#phrase-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 0.5rem;
+}
+
+#phrase-text {
+	display: block;
+	font-size: 1rem;
+	width: 20rem;
+	max-width: 100%;
+}
+
+#phrases .note {
+	margin: 0;
+	color: gray;
+	font-size: 0.875rem;
 }
 
 #candidates .radical-hint {

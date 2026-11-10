@@ -6,3 +6,8 @@ export function element<T extends HTMLElement>(selector: string): T {
 	}
 	return found;
 }
+
+/** `JsError` 與其他例外的訊息。 */
+export function message(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}

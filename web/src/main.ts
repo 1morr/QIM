@@ -8,6 +8,7 @@ import { element } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
 import { LoneShift, toKey } from "./keys.ts";
 import { mountPanel } from "./panel.ts";
+import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
 import { fakeReranker } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
@@ -98,7 +99,13 @@ async function start(): Promise<void> {
 		simplifier,
 		english,
 	);
-	const userDict = mountUserDict(session, focusText);
+	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
+	let phrases: Phrases | undefined;
+	// 匯入、清空換掉整份使用者詞，常用語的清單跟著重畫。
+	const userDict = mountUserDict(session, () => {
+		phrases?.refresh();
+		focusText();
+	});
 	const reportPanel = mountReportPanel(status, focusText);
 	/** 觸控鍵盤；掛上前是 `undefined`（開關的初始套用比它早）。 */
 	let touchKeyboard: Keyboard | undefined;
@@ -115,6 +122,7 @@ async function start(): Promise<void> {
 			composingChinese(),
 		);
 		panel.show(composingChinese());
+		phrases?.setComposing(shown.composing);
 	};
 	const requestRerank = fakeReranker(session, settings.rerank, (snapshot) => {
 		render(snapshot);
@@ -154,6 +162,12 @@ async function start(): Promise<void> {
 	const panel = mountPanel(
 		() => session.allCandidates(),
 		(index) => applyHandled(session.select(index), true),
+	);
+	phrases = mountPhrases(
+		session,
+		(snapshot) => applyHandled(snapshot, false),
+		userDict.save,
+		focusText,
 	);
 	// 開關改了不是選字。
 	settings.connect(session, (snapshot) => apply(snapshot, false), focusText);
