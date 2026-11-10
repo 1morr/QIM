@@ -10,7 +10,7 @@
 //! 字頻只數 train（plan §4.2），dev、test 不參與。
 //!
 //! 「有前文」的基準題（plan §5.2）：test 切分的句子配上同一段文字裡它前面的
-//! [`CONTEXT_CLAUSES`] 句與中間的標點，前文原樣保留，不轉碼。
+//! [`CONTEXT_CLAUSES`] 句與中間的標點，前文原樣保留，不轉碼。dev 切分用同樣的取法另出一份調參題。
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::io::{self, Write};
@@ -76,7 +76,9 @@ pub struct Builder<'t, W> {
     test: HashSet<String>,
     dev_sentences: HashSet<String>,
     /// 「有前文」的題：（句子的雜湊, 句子）→ 前文；只留雜湊最小的 [`CONTEXT_SENTENCES`] 句。
-    context: BTreeMap<(u64, String), String>,
+    context: ContextItems,
+    /// dev 切分的「有前文」調參題，取法同 `context`。
+    dev_context: ContextItems,
     chars: HashMap<char, u64>,
     counts: Counts,
 }
@@ -89,7 +91,8 @@ impl<'t, W: Write> Builder<'t, W> {
             dev,
             test: HashSet::new(),
             dev_sentences: HashSet::new(),
-            context: BTreeMap::new(),
+            context: ContextItems::default(),
+            dev_context: ContextItems::default(),
             chars: HashMap::new(),
             counts: Counts::default(),
         }
@@ -110,6 +113,8 @@ impl<'t, W: Write> Builder<'t, W> {
                 self.counts.dropped += 1;
                 continue;
             }
+            // 前文要有字：只有標點的不算。
+            let context = context.filter(|c| c.chars().any(char::is_alphanumeric));
             match split_of(clause) {
                 Split::Train => {
                     self.counts.train += 1;
@@ -122,42 +127,19 @@ impl<'t, W: Write> Builder<'t, W> {
                     self.counts.dev += 1;
                     writeln!(self.dev, "{clause}")?;
                     self.dev_sentences.insert(clause.to_string());
+                    if let Some(context) = context {
+                        self.dev_context.offer(clause, context);
+                    }
                 }
                 Split::Test => {
                     self.test.insert(clause.to_string());
-                    if let Some(context) = context.filter(|c| c.chars().any(char::is_alphanumeric))
-                    {
-                        self.offer_context(clause, context);
+                    if let Some(context) = context {
+                        self.context.offer(clause, context);
                     }
                 }
             }
         }
         Ok(())
-    }
-
-    /// 留下雜湊最小的 [`CONTEXT_SENTENCES`] 句；同一句有幾種前文時取雜湊最小的前文，
-    /// 和來源的順序無關。
-    fn offer_context(&mut self, clause: &str, context: &str) {
-        let entry = (key(clause), clause.to_string());
-        if let Some(kept) = self.context.get_mut(&entry) {
-            if (key(context), context) < (key(kept), kept.as_str()) {
-                *kept = context.to_string();
-            }
-            return;
-        }
-        let full = self.context.len() >= CONTEXT_SENTENCES;
-        if full
-            && self
-                .context
-                .last_key_value()
-                .is_some_and(|(last, _)| entry > *last)
-        {
-            return;
-        }
-        self.context.insert(entry, context.to_string());
-        if self.context.len() > CONTEXT_SENTENCES {
-            self.context.pop_last();
-        }
     }
 
     /// 回傳句數、基準的內容（`bench/` 的 TSV）、dev 的調參題（同格式）、字頻與兩個 writer。
@@ -168,13 +150,8 @@ impl<'t, W: Write> Builder<'t, W> {
         self.counts.test = self.test.len();
         let bench = self.sample(&self.test);
         let dev_items = self.sample(&self.dev_sentences);
-        let context_bench = self
-            .context
-            .iter()
-            .map(|((_, sentence), context)| {
-                format!("{context}\t{}\t{sentence}\n", self.codes(sentence))
-            })
-            .collect();
+        let context_bench = self.context_lines(&self.context);
+        let dev_context_items = self.context_lines(&self.dev_context);
         let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
         chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
@@ -183,6 +160,7 @@ impl<'t, W: Write> Builder<'t, W> {
             bench,
             dev_items,
             context_bench,
+            dev_context_items,
             chars,
             train: self.train,
             dev: self.dev,
@@ -200,12 +178,53 @@ impl<'t, W: Write> Builder<'t, W> {
             .collect()
     }
 
+    /// 「有前文」的題，一行「前文<TAB>逐字速成碼<TAB>句子」，依句子的雜湊排序。
+    fn context_lines(&self, items: &ContextItems) -> String {
+        items
+            .0
+            .iter()
+            .map(|((_, sentence), context)| {
+                format!("{context}\t{}\t{sentence}\n", self.codes(sentence))
+            })
+            .collect()
+    }
+
     /// 逐字速成碼，空格分隔。
     fn codes(&self, sentence: &str) -> String {
         self.transcoder
             .transcode(sentence)
             .expect("加入時已確認轉得了碼")
             .join(" ")
+    }
+}
+
+/// 「有前文」的題：（句子的雜湊, 句子）→ 前文；只留雜湊最小的 [`CONTEXT_SENTENCES`] 句。
+#[derive(Default)]
+struct ContextItems(BTreeMap<(u64, String), String>);
+
+impl ContextItems {
+    /// 同一句有幾種前文時取雜湊最小的前文，和來源的順序無關。
+    fn offer(&mut self, clause: &str, context: &str) {
+        let items = &mut self.0;
+        let entry = (key(clause), clause.to_string());
+        if let Some(kept) = items.get_mut(&entry) {
+            if (key(context), context) < (key(kept), kept.as_str()) {
+                *kept = context.to_string();
+            }
+            return;
+        }
+        let full = items.len() >= CONTEXT_SENTENCES;
+        if full
+            && items
+                .last_key_value()
+                .is_some_and(|(last, _)| entry > *last)
+        {
+            return;
+        }
+        items.insert(entry, context.to_string());
+        if items.len() > CONTEXT_SENTENCES {
+            items.pop_last();
+        }
     }
 }
 
@@ -223,6 +242,8 @@ pub struct Finished<W> {
     pub dev_items: String,
     /// 「有前文」的題，一行一題：前文，tab，逐字速成碼，tab，句子；依句子的雜湊排序。
     pub context_bench: String,
+    /// dev 切分的「有前文」調參題，格式同 `context_bench`（`cargo xtask bench --dev` 讀）。
+    pub dev_context_items: String,
     /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
     pub chars: String,
     pub train: W,

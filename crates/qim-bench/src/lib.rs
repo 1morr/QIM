@@ -43,6 +43,11 @@ pub const CONTEXT_SUFFIXES: [&str; 2] = ["·前文", "·前文·不給"];
 pub fn dev_items(name: &str) -> String {
     format!("build/corpus/{name}/dev.tsv")
 }
+/// dev 模式的「有前文」題：集合 `name` 的 dev 切分，取法同 [`CONTEXT_DIRS`] 的題；
+/// `cargo xtask data` 寫的，不進 git，沒有就不打。
+pub fn dev_context_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev-context.tsv")
+}
 /// dev 模式裡由集合 `<名>` 的句子取出的短輸入，集合名是 `<名>` 接這些字尾：
 /// 每個字（單字），與句子裡出現的詞庫的詞（2 到 [`SHORT_WORD_CHARS`] 字）。
 pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];
@@ -160,26 +165,7 @@ pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> 
     }
     // 「有前文」的題不量延遲：輸入碼和一般的題同一種，多量只是重複。
     for (name, items) in load_context_sets(root)? {
-        let [given, not_given] = CONTEXT_SUFFIXES;
-        let without: Vec<Item> = items
-            .iter()
-            .map(|item| Item {
-                context: None,
-                ..item.clone()
-            })
-            .collect();
-        sets.push(score::score(
-            &engine,
-            &format!("{name}{given}"),
-            &items,
-            false,
-        ));
-        sets.push(score::score(
-            &engine,
-            &format!("{name}{not_given}"),
-            &without,
-            false,
-        ));
+        sets.extend(score_with_and_without_context(&engine, &name, &items));
     }
     let personal =
         load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
@@ -268,13 +254,14 @@ pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> 
     let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let fixed = score::score(&engine, "fixed", &fixed, false);
     let mut sets = Vec::new();
-    for (name, _) in load_corpora(root)? {
-        let rel = dev_items(&name);
+    let corpora = load_corpora(root)?;
+    for (name, _) in &corpora {
+        let rel = dev_items(name);
         let path = root.join(&rel);
         let text = fs::read_to_string(&path)
             .map_err(|e| format!("讀不到 {rel}：{e}；先跑 `cargo xtask data`"))?;
         let items = parse_corpus(&text).map_err(|e| format!("{rel}：{e}"))?;
-        sets.push(score::score(&engine, &name, &items, false));
+        sets.push(score::score(&engine, name, &items, false));
         let [chars, words] = SHORT_INPUTS;
         let short = items::substrings(&items, 1);
         sets.push(score::score(
@@ -294,12 +281,38 @@ pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> 
             false,
         ));
     }
+    for (name, _) in &corpora {
+        let rel = dev_context_items(name);
+        let text = match fs::read_to_string(root.join(&rel)) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("讀不到 {rel}：{e}")),
+        };
+        let items = parse_context(&text).map_err(|e| format!("{rel}：{e}"))?;
+        sets.extend(score_with_and_without_context(&engine, name, &items));
+    }
     Ok(DevOutcome {
         packs,
         ranking: engine.scheme().ranking,
         fixed,
         sets,
     })
+}
+
+/// 「有前文」的一批題打兩次（[`CONTEXT_SUFFIXES`]）：給前文，與拿掉前文的同一批題。
+fn score_with_and_without_context(engine: &Engine, name: &str, items: &[Item]) -> [SetResult; 2] {
+    let [given, not_given] = CONTEXT_SUFFIXES;
+    let without: Vec<Item> = items
+        .iter()
+        .map(|item| Item {
+            context: None,
+            ..item.clone()
+        })
+        .collect();
+    [
+        score::score(engine, &format!("{name}{given}"), items, false),
+        score::score(engine, &format!("{name}{not_given}"), &without, false),
+    ]
 }
 
 /// `--set` 能蓋的鍵：方案檔 `[ranking]` 的欄位名。

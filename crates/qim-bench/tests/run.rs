@@ -1233,6 +1233,37 @@ fn dev_mode_adds_the_short_inputs_taken_from_the_sentences_of_each_set() {
     assert!(report.contains("| toy·詞（加權） | 1 次 |"), "{report}");
 }
 
+/// dev 模式也打 dev 切分的「有前文」題（`build/corpus/<名>/dev-context.tsv`），給前文與不給前文
+/// 並列，接在所有集合之後；沒有這個檔的集合不打。語言模型只有「日 → 曰」。
+#[test]
+fn dev_mode_types_the_dev_context_items_with_and_without_the_context() {
+    let repo = repo_with_dev();
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &pack_bytes_with(TABLE, Some("quick-lexicon"), Some("bigram")),
+    );
+    write(
+        repo.path(),
+        "build/packs/bigram/bigram.pack",
+        &language_model_bytes('曰'),
+    );
+    write(
+        repo.path(),
+        "build/corpus/toy/dev-context.tsv",
+        "今日\ta\t曰\n".as_bytes(),
+    );
+    let outcome = dev(&repo, &[]).unwrap();
+    let names: Vec<&str> = outcome.sets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["toy", "toy·單字", "toy·詞", "toy·前文", "toy·前文·不給"]
+    );
+    assert_eq!((outcome.sets[3].wrong(), outcome.sets[4].wrong()), (0, 1));
+    let report = outcome.report();
+    assert!(report.contains("| toy | 1 | 0 | 1 | 0 | 1 |"), "{report}");
+}
+
 /// `a 曰` 打三次：學習關每次都要按 2 選「曰」（修正 3）；學習開時選過兩次後成首選（規則 2），
 /// 第三次按空白就好（修正 2）。
 #[test]

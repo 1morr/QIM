@@ -196,6 +196,7 @@ pub fn render_dev(outcome: &DevOutcome) -> String {
     }
     // 短輸入都在 1–4 字的組，分組沒有什麼可看。
     out.push_str(&length_groups(outcome.sets.iter().filter(|s| !is_short(s))));
+    out.push_str(&context_pairs(&outcome.sets));
     let fixed = &outcome.fixed;
     out.push_str(&format!(
         "\n固定題 {}/{} 通過\n",

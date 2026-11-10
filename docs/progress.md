@@ -25,7 +25,7 @@
 | --- | --- | --- | --- |
 | 2026-11-10 | M3 封存 M2 | 票 12：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉、iPhone 重打「門口」；brief §9、§11 寫回；M2 封存到 `docs/archive/M2.md`；見票 12 | 新 session 下 `/to-tickets docs/plan.md 拆 M3 的票` |
 | 2026-11-11 | M3 拆票 | 寫 `.scratch/m3/spec.md`（含 plan §7.8 搬來的階梯實驗），拆 23 張票；plan §7.4、§7.8 縮成連結 | 新 session 下 `/implement .scratch/m3/issues/01-web-modules.md` |
-| 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
+| 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少，dev 重比結論相同）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 
 ## 偏差與決定
 

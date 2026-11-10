@@ -270,6 +270,10 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         write(root.join(&context_rel), first.context_bench.as_bytes())?;
         write(dir.join("chars.tsv"), first.chars.as_bytes())?;
         write(dir.join("dev.tsv"), first.dev_items.as_bytes())?;
+        write(
+            dir.join("dev-context.tsv"),
+            first.dev_context_items.as_bytes(),
+        )?;
         corpora.push(CorpusSummary {
             name: corpus.name.into(),
             counts: first.counts,
@@ -654,6 +658,7 @@ fn build_corpus<W: Write>(
         bench,
         dev_items,
         context_bench,
+        dev_context_items,
         chars,
         train,
         dev,
@@ -662,6 +667,7 @@ fn build_corpus<W: Write>(
         counts,
         bench,
         dev_items,
+        dev_context_items,
         context_bench,
         chars,
         train: train.sha256(),
@@ -681,6 +687,8 @@ struct Built {
     bench: String,
     /// dev 的調參題；由 dev 切分決定，`dev` 的 sha256 相同它就相同，不另比。
     dev_items: String,
+    /// dev 的「有前文」調參題；同 `dev_items`，不另比。
+    dev_context_items: String,
     /// 「有前文」的題。
     context_bench: String,
     chars: String,

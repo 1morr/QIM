@@ -70,3 +70,26 @@ bigram 只在句內訓練（切句在每個非字母數字處），跨標點接�
 **code-review（Standards、Spec 兩軸）處理**：`fmt`、過時的註解（`after_digit`、`set_context` 的 doc、`tests/items.rs` 檔頭）已改；`score` 的兩個位置 bool 改成不給前文的那批題拿掉前文、`load_corpora` 與 `load_context_sets` 共用 `load_sets`、`Lattice::after` 改名 `starting_after`；plan §2.3 補上「基準量到的是句首的增益」與選定段不檢查統計的差異。未處理（判斷項）：`bigram.rs` 句首一列和一般 bigram 的迴圈同形，只兩處、抽 helper 反而要多帶參數，不抽；集合種類寫在集合名的字尾（`CONTEXT_SUFFIXES`），報告靠字尾配對，等集合種類再多時改成型別；`CONTEXT_DIRS` 與 `Group::context_dir` 各寫一份路徑，同既有的 `CORPUS_DIRS`（依賴規則下的現狀，M1 收尾的發現，資料包整理票 02 處理比對）。
 
 - 網頁：`web/e2e/edit-segments.spec.ts` 原本斷言改選中間一段後最後一段等於單打 `of` 的首選（M1 票 21 的現狀）；改成讀重算後的首選，並確認它不同於單打的首選（改選「冇」後是「冇你」的「你」，單打是「係」）。截圖 `.scratch/m3/evidence/04-rechosen-chains.png`。網頁還沒呼叫 `set_context`（票 05）。
+
+### 2026-11-11 前文規則在 dev 切分上重比（協調者要求）
+
+前文規則原本是看 test 的「有前文」集合選的，plan §5.2 規定調參只看 dev。補上 dev 切分的有前文題（`build/corpus/<名>/dev-context.tsv`，取法同 test，`cargo xtask bench --dev` 給前文、不給前文各打一次），用 `scripts/experiments/context-rule/run.sh` 比三種規則：
+
+| 規則 | 集合 | 題數 | 答錯 | 修正 |
+| --- | --- | ---: | ---: | ---: |
+| 不給前文 | yue-wiki | 1000 | 571 | 2362 |
+| 不給前文 | zh-wiki | 1000 | 573 | 2215 |
+| 不給前文 | common-voice-yue | 296 | 181 | 611 |
+| 不給前文 | hkcancor | 692 | 455 | 1802 |
+| 不給前文 | 合計 | 2988 | 1780 | 6990 |
+| 接句首 | yue-wiki | 1000 | 568 | 2344 |
+| 接句首 | zh-wiki | 1000 | 576 | 2203 |
+| 接句首 | common-voice-yue | 296 | 172 | 600 |
+| 接句首 | hkcancor | 692 | 451 | 1789 |
+| 接句首 | 合計 | 2988 | 1767 | 6936 |
+| 跨過標點 | yue-wiki | 1000 | 596 | 2383 |
+| 跨過標點 | zh-wiki | 1000 | 590 | 2233 |
+| 跨過標點 | common-voice-yue | 296 | 175 | 612 |
+| 跨過標點 | hkcancor | 692 | 466 | 1823 |
+| 跨過標點 | 合計 | 2988 | 1827 | 7051 |
+- dev 上也成立：接句首的合計答錯與修正最少（1767 / 6936，不給前文 1780 / 6990）；跨過標點比不給前文還差（1827 / 7051），四個語料的修正次數都較多。逐語料看，接句首的修正次數都比不給少，答錯只有 zh-wiki 多 3 題（test 上是 yue-wiki 多 2、zh-wiki 持平）。規則照現狀，不改。

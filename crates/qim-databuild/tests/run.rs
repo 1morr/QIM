@@ -1151,6 +1151,14 @@ fn dev_split_becomes_tuning_items_in_the_bench_format() {
         }
         assert!(!sentences.is_empty(), "{name} 沒有 dev 句");
         assert_eq!(sentences, expected, "{name}");
+        // 有前文的調參題：三欄，句子是 dev 句。
+        let context = read(root.path(), &format!("build/corpus/{name}/dev-context.tsv"));
+        for line in context.lines() {
+            let [before, _, sentence] = line.split('\t').collect::<Vec<_>>()[..] else {
+                panic!("要三欄：{line}");
+            };
+            assert!(!before.is_empty() && expected.contains(sentence), "{line}");
+        }
     }
 }
 

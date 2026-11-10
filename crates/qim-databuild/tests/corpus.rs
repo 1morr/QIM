@@ -110,3 +110,38 @@ fn context_does_not_reach_across_a_line_break() {
     let items = context_items(&[format!("前面\n{first}"), format!("前面\t{second}")]);
     assert!(items.is_empty(), "{items:?}");
 }
+
+/// 由日、問拼成、落在 dev 切分的前 `n` 句，短的在前。
+fn dev_clauses(n: usize) -> Vec<String> {
+    (1..12)
+        .flat_map(|len| {
+            (0..1u32 << len).map(move |bits| {
+                (0..len)
+                    .map(|i| if bits >> i & 1 == 1 { '問' } else { '日' })
+                    .collect::<String>()
+            })
+        })
+        .filter(|s| split_of(s) == Split::Dev)
+        .take(n)
+        .collect()
+}
+
+/// dev 切分也取「有前文」的題（調參用，plan §5.2），取法與格式同 test 的，兩邊不混。
+#[test]
+fn dev_clauses_get_context_items_of_their_own() {
+    let [dev] = dev_clauses(1).try_into().unwrap();
+    let [test] = test_clauses(1).try_into().unwrap();
+    let transcoder = transcoder();
+    let mut builder = Builder::new(&transcoder, std::io::sink(), std::io::sink());
+    builder.add(&format!("前文，{dev}。{test}")).unwrap();
+    let finished = builder.finish().unwrap();
+    let codes = |s: &str| transcoder.transcode(s).unwrap().join(" ");
+    assert_eq!(
+        finished.dev_context_items,
+        format!("前文，\t{}\t{dev}\n", codes(&dev))
+    );
+    assert_eq!(
+        finished.context_bench,
+        format!("前文，{dev}。\t{}\t{test}\n", codes(&test))
+    );
+}
