@@ -232,6 +232,8 @@ cargo xtask check
 
 `cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test` 與 `e2e`：測試會隨碼表與性質測試變慢，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
 
+CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `cargo xtask check --fast` 與 `cargo test --workspace`；`e2e` 與 `bench --check` 要資料包，只在本機跑（plan §6）。
+
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。
 
 `docs` 失敗時每條違規印一行 `檔案:行號: 說明`，規則在 `xtask/src/docs.rs`。最常見的是平行的票合併後 `docs/progress.md` 被 union 合併抄出第二個〈Session 紀錄〉段：把第二段新的列移回第一段的表尾、刪掉重複段。

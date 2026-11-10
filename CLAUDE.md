@@ -22,6 +22,7 @@
 | `docs/` | brief、plan、progress、`development.md`、ADR、研究、已完成里程碑的封存 `archive/` |
 | `.scratch/` | 里程碑的 spec 與票 |
 | `.githooks/` | git hook，啟用方式見 `docs/development.md` |
+| `.github/` | GitHub Actions 的 CI，跑什麼見 `docs/development.md`〈全部檢查〉 |
 | `scripts/` | 腳本；設計實驗在 `scripts/experiments/` |
 
 ## 每個 session 的流程
