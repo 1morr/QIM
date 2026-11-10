@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
-    CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, EnglishPack, EnglishWords,
-    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, RadicalHintPack, RadicalHints,
-    SchemePack, Simplifier, SimplifierPack, Word,
+    CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, EmojiPack, EmojiTable,
+    EnglishPack, EnglishWords, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack,
+    RadicalHintPack, RadicalHints, SchemePack, Simplifier, SimplifierPack, Word,
 };
 use qim_databuild::built::BuiltPack;
 use qim_databuild::common_forms::BothForms;
@@ -13,8 +13,12 @@ use qim_databuild::verify::{self, CheckId, Report};
 use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字；
-/// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）。
+/// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）；笑（`hk`）給 emoji 候選的抽查；门（HKSCS 收的簡體字）
+/// 與蚱同是 `ls`。
 const TABLE: &str = "\
+门 门 1 0 1 0 1 0 0 0 0 ls lis NA 0
+蚱 蚱 1 1 0 0 1 0 0 0 0 lihs lios NA 19379
+蚱 蚱 1 1 0 0 1 0 0 0 0 lios NA NA 0
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
 曰 曰 1 1 0 0 1 0 0 0 0 a a NA 23060
 問 问 1 1 0 0 1 0 0 0 0 anr anr NA 20001
@@ -27,13 +31,14 @@ const TABLE: &str = "\
 廿 廿 1 1 0 0 1 0 0 0 0 t t NA 23000
 竹 竹 1 1 0 0 1 0 0 0 0 h h NA 23001
 水 水 1 1 0 0 1 0 0 0 0 e e NA 23002
+笑 笑 1 1 0 0 1 0 0 0 0 hhhk hhhk NA 23003
 ";
 
 const SCHEME: &str = r#"
 id = "t"
 name = "測試"
 version = "1"
-alphabet = "abehnrt"
+alphabet = "abehklnrst"
 max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
@@ -44,8 +49,11 @@ a = "日"
 b = "月"
 e = "水"
 h = "竹"
+k = "大"
+l = "中"
 n = "弓"
 r = "口"
+s = "尸"
 t = "廿"
 [ranking]
 word_bonus = 0.0
@@ -56,8 +64,8 @@ sentences = 3
 
 const ESSAY: &str = "門口\t9435\n丟丟\t200\n";
 
-/// 照 pipeline 的順序排的六份資料包：速成、詞庫、語言模型、字根提示、簡繁、英文。位元組照給，
-/// 可以是壞的；種類由位置決定。
+/// 照 pipeline 的順序排的七份資料包：速成、詞庫、語言模型、字根提示、簡繁、英文，最後接上
+/// [`emoji`] 的 emoji 資料包。位元組照給，可以是壞的；種類由位置決定。
 fn list(bytes: [&[u8]; 6]) -> Vec<BuiltPack> {
     fn built<P: Pack>(name: &'static str, bytes: &[u8]) -> BuiltPack {
         BuiltPack {
@@ -82,18 +90,36 @@ fn list(bytes: [&[u8]; 6]) -> Vec<BuiltPack> {
         built::<RadicalHintPack>("字根提示", radical_hint),
         built::<SimplifierPack>("簡繁", simplifier),
         built::<EnglishPack>("英文", english),
+        built::<EmojiPack>("emoji", &emoji().to_bytes().unwrap()),
     ]
+}
+
+/// 「笑」接 😂 的 emoji 資料包。
+fn emoji() -> EmojiPack {
+    emoji_with(&[("笑", "😂")])
+}
+
+fn emoji_with(entries: &[(&str, &str)]) -> EmojiPack {
+    EmojiPack {
+        id: "cldr-emoji-yue-hant".into(),
+        emoji: EmojiTable::new(entries.iter().map(|&(w, e)| (w, [e]))),
+    }
 }
 
 fn rows() -> Vec<Row> {
     libcangjie::parse(TABLE).unwrap()
 }
 
-/// 日有年級，排在 Big5 排序值較小的曰前面。
+/// 日有年級，排在 Big5 排序值較小的曰前面；门是簡體字。
 fn pack() -> SchemePack {
+    pack_with_simplified(&BTreeSet::from(['门']))
+}
+
+fn pack_with_simplified(simplified: &BTreeSet<char>) -> SchemePack {
     build_scheme_pack(
         &rows(),
         &BTreeMap::from([('日', 1)]),
+        simplified,
         scheme::parse(SCHEME).unwrap(),
     )
 }
@@ -122,9 +148,9 @@ fn lexicon() -> LexiconPack {
     lexicon_with(BTreeMap::from([('日', 10), ('曰', 3)]))
 }
 
-/// 日比曰常見，`a` 的首選才是日。
+/// 日比曰常見，`a` 的首選才是日；门比蚱常見，不標簡體字時是 `ls` 的首選。
 fn language_model() -> LanguageModelPack {
-    language_model_from("日曰日\n門口\n")
+    language_model_from("日曰日\n門口\n门门\n")
 }
 
 /// 由一行一句的語料訓練；單字的分數來自這裡的字次數，和詞庫的字頻同源。
@@ -266,6 +292,7 @@ const fn entry(text: char) -> CodeEntry {
     CodeEntry {
         text,
         extension: false,
+        simplified: false,
     }
 }
 
@@ -281,7 +308,7 @@ fn packs_built_from_the_source_pass_every_check() {
     let report = run(&pack());
     assert_eq!(failed(&report), []);
     assert!(report.passed());
-    assert_eq!((report.continuous, report.extension), (10, 1));
+    assert_eq!((report.continuous, report.extension), (13, 1));
 }
 
 #[test]
@@ -303,6 +330,9 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::RadicalHintByVersion,
             CheckId::SimplifiedMenKou,
             CheckId::EnglishThe,
+            CheckId::NotSimplified,
+            CheckId::MenAfterTraditional,
+            CheckId::EmojiAfterLaugh,
             CheckId::LanguageModelSize,
             CheckId::Deterministic,
         ]
@@ -315,9 +345,14 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     let table =
         format!("{TABLE}㐀 㐀 1 0 0 0 0 0 0 0 0 a NA NA 0\n㐀 㐀 1 0 1 0 0 0 0 0 0 NA NA NA 0\n");
     let rows = libcangjie::parse(&table).unwrap();
-    let bytes = build_scheme_pack(&rows, &BTreeMap::new(), scheme::parse(SCHEME).unwrap())
-        .to_bytes()
-        .unwrap();
+    let bytes = build_scheme_pack(
+        &rows,
+        &BTreeMap::new(),
+        &BTreeSet::from(['门']),
+        scheme::parse(SCHEME).unwrap(),
+    )
+    .to_bytes()
+    .unwrap();
     let lexicon = lexicon().to_bytes().unwrap();
     let language_model = language_model().to_bytes().unwrap();
     let radical_hint = radical_hint_from(radical_hint::hints(&rows))
@@ -335,7 +370,7 @@ fn flags_and_codes_on_different_rows_of_one_character_still_count_as_continuous(
     ]);
     let report = verify::run(&rows, &both, &both);
     assert_eq!(failed(&report), []);
-    assert_eq!((report.continuous, report.extension), (11, 1));
+    assert_eq!((report.continuous, report.extension), (14, 1));
 }
 
 #[test]
@@ -412,6 +447,22 @@ fn a_higher_frequency_for_another_character_fails_the_top_candidate_check() {
 }
 
 #[test]
+fn men_not_marked_as_simplified_fails_the_order_check() {
+    // 门的分數比蚱高，沒標成簡體字就是 `ls` 的首選。
+    assert_eq!(
+        failed(&run(&pack_with_simplified(&BTreeSet::new()))),
+        [CheckId::MenAfterTraditional]
+    );
+}
+
+#[test]
+fn a_traditional_character_marked_as_simplified_fails() {
+    let pack = pack_with_simplified(&BTreeSet::from(['门', '日']));
+    let failed = failed(&run(&pack));
+    assert!(failed.contains(&CheckId::NotSimplified), "{failed:?}");
+}
+
+#[test]
 fn word_code_not_made_of_its_characters_quick_codes_fails() {
     // 問的倉頡碼 anr 不是速成碼；anx 拼不出門口。
     for (code, text) in [("anra", "問日"), ("anx", "門口")] {
@@ -468,6 +519,28 @@ fn an_english_pack_without_the_fails_the_spot_check() {
     );
 }
 
+/// emoji 資料包沒有「笑」：打 `hk` 時「笑」後面沒有 emoji。
+#[test]
+fn an_emoji_pack_without_laugh_fails_the_spot_check() {
+    let mut packs = all_packs();
+    packs.last_mut().unwrap().bytes = emoji_with(&[("日", "🌞")]).to_bytes().unwrap();
+    assert_eq!(
+        failed(&verify::run(&rows(), &packs, &packs)),
+        [CheckId::EmojiAfterLaugh]
+    );
+}
+
+#[test]
+fn a_changed_emoji_pack_fails_determinism() {
+    let first = all_packs();
+    let mut second = first.clone();
+    *second.last_mut().unwrap().bytes.last_mut().unwrap() ^= 1;
+    assert_eq!(
+        failed(&verify::run(&rows(), &first, &second)),
+        [CheckId::Deterministic]
+    );
+}
+
 #[test]
 fn missing_men_kou_for_anr_fails() {
     let lexicon = edited_lexicon(|w| {
@@ -504,7 +577,7 @@ fn different_bytes_from_the_second_build_fail_determinism() {
     }
 }
 
-fn all_six() -> Vec<BuiltPack> {
+fn all_packs() -> Vec<BuiltPack> {
     let bytes = [
         pack().to_bytes().unwrap(),
         lexicon().to_bytes().unwrap(),
@@ -520,7 +593,7 @@ fn all_six() -> Vec<BuiltPack> {
 
 #[test]
 fn a_second_build_missing_a_pack_fails_determinism() {
-    let first = all_six();
+    let first = all_packs();
     let mut second = first.clone();
     second.pop();
     let report = verify::run(&rows(), &first, &second);
@@ -529,7 +602,7 @@ fn a_second_build_missing_a_pack_fails_determinism() {
 
 #[test]
 fn a_list_missing_a_kind_of_pack_fails_decoding() {
-    let mut packs = all_six();
+    let mut packs = all_packs();
     packs.retain(|p| p.magic != EnglishPack::MAGIC);
     let report = verify::run(&rows(), &packs, &packs);
     assert_eq!(failed(&report), [CheckId::Decodes]);
@@ -878,6 +951,7 @@ mod common_forms {
         let entry = |text| CodeEntry {
             text,
             extension: false,
+            simplified: false,
         };
         let table = CodeTable::from_entries([
             ("et".to_string(), vec![entry('溫'), entry('温')]),
@@ -917,6 +991,7 @@ mod common_forms {
         let entry = |text| CodeEntry {
             text,
             extension: false,
+            simplified: false,
         };
         let table = CodeTable::from_entries([
             ("et".to_string(), vec![entry('溫'), entry('温')]),

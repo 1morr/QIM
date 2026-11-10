@@ -40,7 +40,11 @@ fn engine(data: &Data) -> Engine {
             .chars()
             .map(|text| (text, false))
             .chain(extension.chars().map(|text| (text, true)))
-            .map(|(text, extension)| CodeEntry { text, extension })
+            .map(|(text, extension)| CodeEntry {
+                text,
+                extension,
+                simplified: false,
+            })
             .collect();
         (code.to_string(), entries)
     }));

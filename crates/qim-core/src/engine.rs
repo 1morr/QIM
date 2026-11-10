@@ -1,14 +1,14 @@
 use std::cmp::Reverse;
 use std::collections::HashSet;
 
-use crate::lattice::{self, Lattice};
+use crate::lattice::{self, Lattice, Listing};
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{
-    CLAUSE_START, CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack, Simplifier,
-    SimplifierPack, UserModel, Word,
+    CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack,
+    Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -29,6 +29,8 @@ pub struct Engine {
     simplifier: Option<Simplifier>,
     /// 英文候選的詞表；沒掛上英文資料包時是空的，沒有英文候選。
     english: EnglishWords,
+    /// emoji 候選的對照表；沒掛上 emoji 資料包時是空的，沒有 emoji 候選。
+    emoji: EmojiTable,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -44,6 +46,18 @@ pub(crate) struct Edge {
     rest: f64,
     /// 個人機率（plan §2.3 的 `personal`）；沒學過是 0。
     personal: f64,
+    /// 碼表標成簡體字的字（[`CodeEntry::simplified`]）；詞不是。
+    simplified: bool,
+}
+
+/// [`Engine::span`] 的一項：剛好是一段輸入碼的一個字或詞。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Spanned {
+    /// 在組字開頭的分數。
+    pub score: f64,
+    pub text: String,
+    /// 碼表標成簡體字的字：繁體模式排在同一段的其他字詞之後（brief §4.1）。
+    pub simplified: bool,
 }
 
 impl Engine {
@@ -95,6 +109,7 @@ impl Engine {
             lexicon,
             simplifier: None,
             english: EnglishWords::default(),
+            emoji: EmojiTable::default(),
         })
     }
 
@@ -108,6 +123,17 @@ impl Engine {
     pub fn with_english(mut self, pack: EnglishPack) -> Self {
         self.english = pack.words;
         self
+    }
+
+    /// 掛上 emoji 資料包，emoji 候選（[`crate::Options::emoji_candidates`]）才有作用。
+    pub fn with_emoji(mut self, pack: EmojiPack) -> Self {
+        self.emoji = pack.emoji;
+        self
+    }
+
+    /// 字詞 `word`（繁體原文）的 emoji，好的在前。
+    pub(crate) fn emoji(&self, word: &str) -> &[String] {
+        self.emoji.lookup(word)
     }
 
     /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan §2.4）：剛好是詞表裡的完整單字、又長過
@@ -148,19 +174,20 @@ impl Engine {
         &self.scheme
     }
 
-    /// 整串輸入碼在 `user` 之下的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
-    /// 不含英文候選：它是 [`crate::Session`] 的選項。
+    /// 整串輸入碼在 `user` 之下、預設選項（繁體模式、簡體字排後）的全部候選，從頭建 lattice；
+    /// 順序見 [`lattice::candidates`]。不含英文候選與 emoji：它們是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
-        lattice::candidates(
-            self,
-            user,
-            &Lattice::from_input(self, user, None, input),
-            false,
-        )
-        .into_iter()
-        .map(|c| c.text)
-        .collect()
+        let lattice = Lattice::from_input(self, user, None, input);
+        let listing = Listing {
+            english_candidates: false,
+            emoji_candidates: false,
+            simplified_last: true,
+        };
+        lattice::candidates(self, user, &lattice, listing)
+            .into_iter()
+            .map(|c| c.text)
+            .collect()
     }
 
     pub(crate) fn beam(&self) -> usize {
@@ -168,15 +195,16 @@ impl Engine {
     }
 
     /// 碼 `code` 的一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
-    fn char_edge(&self, user: &SchemeModel, code: &str, start: usize, c: char) -> Edge {
-        let text = c.to_string();
+    fn char_edge(&self, user: &SchemeModel, code: &str, start: usize, entry: &CodeEntry) -> Edge {
+        let text = entry.text.to_string();
         Edge {
             start,
             personal: user.personal_probability(code, &text),
             text,
-            first: c,
+            first: entry.text,
             inner: -self.scheme.ranking.segment_penalty,
             rest: 0.0,
+            simplified: entry.simplified,
         }
     }
 
@@ -195,6 +223,7 @@ impl Engine {
             first,
             inner: rest + ranking.word_bonus - ranking.segment_penalty,
             rest,
+            simplified: false,
         }
     }
 
@@ -213,6 +242,7 @@ impl Engine {
             first,
             inner: rest - self.scheme.ranking.segment_penalty,
             rest,
+            simplified: false,
         }
     }
 
@@ -320,7 +350,7 @@ impl Engine {
             .filter(move |&(i, e)| {
                 i < limit || user.has_learned(code, e.text.encode_utf8(&mut [0; 4]))
             })
-            .map(move |(_, e)| self.char_edge(user, code, start, e.text));
+            .map(move |(_, e)| self.char_edge(user, code, start, e));
         let words = self
             .lexicon
             .lookup(code)
@@ -391,19 +421,18 @@ impl Engine {
     /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面（`None` 是組字開頭沒有
     /// 前一字）的分數，依分數由高到低（同分照碼表、詞庫的順序）；`input` 中間的分隔記號見
     /// [`Engine::exact`]。
-    pub(crate) fn span(
-        &self,
-        user: &UserModel,
-        before: Option<char>,
-        input: &str,
-    ) -> Vec<(f64, String)> {
+    pub(crate) fn span(&self, user: &UserModel, before: Option<char>, input: &str) -> Vec<Spanned> {
         let user = user.for_scheme(&self.scheme.id);
-        let mut edges: Vec<(f64, String)> = self
+        let mut edges: Vec<Spanned> = self
             .exact(user, input, 0, usize::MAX)
             .into_iter()
-            .map(|e| (self.edge_score(before, &e), e.text))
+            .map(|e| Spanned {
+                score: self.edge_score(before, &e),
+                simplified: e.simplified,
+                text: e.text,
+            })
             .collect();
-        edges.sort_by(|a, b| b.0.total_cmp(&a.0));
+        edges.sort_by(|a, b| b.score.total_cmp(&a.score));
         edges
     }
 

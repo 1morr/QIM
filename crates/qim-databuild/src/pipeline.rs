@@ -1,12 +1,13 @@
 //! `cargo xtask data` 的整條流程：讀來源、建資料包、寫產物，選擇性驗證。
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use qim_core::{
-    EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SchemePack, SimplifierPack,
+    EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SchemePack,
+    SimplifierPack,
 };
 
 use crate::built::{self, BuiltPack};
@@ -19,8 +20,8 @@ use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
 use crate::transcode::Transcoder;
 use crate::verify::{self, CorpusDigests, CorpusSummary, LexiconSummary, Report, UnihanSummary};
 use crate::{
-    Error, bigram, build_scheme_pack, english, gboard, lexicon, libcangjie, opencc, packing,
-    personal, radical_hint, scheme, unihan,
+    Error, bigram, build_scheme_pack, emoji, english, gboard, lexicon, libcangjie, opencc, packing,
+    personal, radical_hint, scheme, simplified, unihan,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -40,6 +41,8 @@ pub(crate) const SCOWL: &str = "scowl";
 const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
 /// 英文資料包的 id：美式英文，各方案共用，不由方案指名。
 const ENGLISH_ID: &str = "scowl-en-us";
+/// emoji 資料包的 id：粵語與繁中標註，各方案共用，不由方案指名。
+const EMOJI_ID: &str = "cldr-emoji-yue-hant";
 /// Unihan 交叉比對的差異報表，相對 repo 根目錄；格式見 `unihan::CrossCheck::to_tsv`。
 const UNIHAN_REPORT: &str = "build/reports/unihan-kcangjie.tsv";
 
@@ -52,6 +55,13 @@ other Han characters are marked as extension. Within each code, the continuous s
 comes before extension; within each set, characters with a Unihan kGradeLevel
 come first by grade, then libcangjie's Big5 order. At run time QIM puts characters
 with a higher frequency in the lexicon pack first.
+Characters of the continuous set flagged HKSCS but not Big5 are marked as
+simplified when OpenCC's STCharacters always converts them to another character,
+TSCharacters does not map them to themselves, and they are not Hong Kong variants
+in HKVariants, graphemes of the Hong Kong List of Graphemes of Commonly-Used
+Chinese Characters (Unihan kHKGlyph) that do not share an entry with their
+traditional form, or Cantonese characters kept by QIM (吓, 响). In Traditional Chinese
+output QIM lists them after the other characters of the same code.
 ";
 
 /// 簡繁資料包 NOTICE 最後一段：怎麼用來源（Apache-2.0 §4 要求註明改動）。
@@ -74,6 +84,21 @@ with the prefix and suffix rules in en_US.aff, dropped the stems flagged
 NOSUGGEST (taboo words), kept only the words whose lower-case form uses the
 letters a to y, and kept one spelling for each lower-case form: the lower-case
 spelling when there is one, otherwise the first in code point order.
+";
+
+/// emoji 資料包 NOTICE 最後一段：怎麼用來源；`{max}` 換成 [`emoji::MAX_KEYWORD_EMOJI`]。
+const EMOJI_ABOUT: &str = "\
+cldr-emoji-yue-hant maps Chinese words to emoji, for QIM to offer the emoji after
+a candidate that is such a word. For each emoji in the CLDR annotations, its short
+name (type=\"tts\") and each of its keywords became a word; a word lists first the
+emoji whose short name it is, then those with it as a keyword, Cantonese (yue)
+before Traditional Chinese (zh_Hant), each in file order. A keyword shared by more
+than {max} emoji in the two files together (broad words such as 臉, face) was
+dropped; short names were always kept. Squared CJK ideograph emoji (U+1F200 to
+U+1F2FF, U+3297 and U+3299) were left out. Words were converted with
+OpenCC t2hk and written in the common forms QIM's lexicon uses (for example 羣 as
+群); words with a character that has no Quick code were dropped. Each emoji is
+written in its fully-qualified form from emoji-test.txt (CLDR removes U+FE0F).
 ";
 
 /// 字根提示資料包 NOTICE 最後一段：怎麼用來源。
@@ -124,6 +149,7 @@ struct PackSet {
     lexicon: LexiconSummary,
     language_model: bigram::Summary,
     english: english::Counts,
+    emoji: emoji::Counts,
 }
 
 impl PackSet {
@@ -150,6 +176,7 @@ pub struct Outcome {
     pub lexicon: LexiconSummary,
     pub language_model: bigram::Summary,
     pub english: english::Counts,
+    pub emoji: emoji::Counts,
     /// 預設 Gboard 速成佈局（[`gboard::layout`]）。
     pub layout_path: PathBuf,
     /// 各語料的句數。
@@ -188,7 +215,22 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let rows = libcangjie::parse(&load_text(LIBCANGJIE, TABLE)?)?;
         let dictionary_like = unihan::read_archive(&load(UNIHAN, UNIHAN_ZIP)?)?;
         let grades = unihan::grade_levels(&dictionary_like)?;
-        let pack = build_scheme_pack(&rows, &grades, scheme::parse(&read(QUICK_SCHEME)?)?);
+        let dictionary = |file: &str| opencc::parse(file, &load_text(OPENCC, file)?);
+        let simplified = simplified::characters(
+            &rows,
+            &simplified::References {
+                st: &dictionary(opencc::ST_CHARACTERS)?,
+                ts: &dictionary(opencc::TS_CHARACTERS)?,
+                hk_variants: &dictionary(opencc::HK_VARIANTS)?,
+                hk_glyphs: &unihan::hk_glyphs(&dictionary_like)?,
+            },
+        );
+        let pack = build_scheme_pack(
+            &rows,
+            &grades,
+            &simplified,
+            scheme::parse(&read(QUICK_SCHEME)?)?,
+        );
         let radical_hint = RadicalHintPack {
             id: named(&pack.scheme.packs.radical_hint, "radical_hint", "字根提示")?,
             hints: radical_hint::hints(&rows),
@@ -373,6 +415,31 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             id: ENGLISH_ID.into(),
             words,
         };
+        // 字詞照詞庫的寫法換；有字沒有速成碼的字詞打不出，不收。
+        let annotations = emoji::CLDR_ANNOTATIONS
+            .iter()
+            .map(|(name, path)| Ok((*name, load_text(emoji::CLDR, path)?)))
+            .collect::<Result<Vec<_>, Error>>()?;
+        let coded: HashSet<char> = quick
+            .pack
+            .code_table
+            .iter()
+            .flat_map(|(_, entries)| entries.iter().map(|e| e.text))
+            .collect();
+        let built_emoji = emoji::table(
+            &annotations
+                .iter()
+                .map(|(name, xml)| emoji::Annotations { name, xml })
+                .collect::<Vec<_>>(),
+            &load_text(emoji::EMOJI_TEST, emoji::EMOJI_TEST_FILE)?,
+            &|word| essay_converter.convert(word),
+            &|c| coded.contains(&c),
+            emoji::MAX_KEYWORD_EMOJI,
+        )?;
+        let emoji = EmojiPack {
+            id: EMOJI_ID.into(),
+            emoji: built_emoji.table,
+        };
         let scheme = &quick.pack.scheme.id;
         let packs = vec![
             LicensedPack::new("速成", &quick.pack, packing::QUICK.into(), QUICK_ABOUT)?,
@@ -401,12 +468,19 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 SIMPLIFIER_ABOUT,
             )?,
             LicensedPack::new("英文", &english, packing::ENGLISH.into(), ENGLISH_ABOUT)?,
+            LicensedPack::new(
+                "emoji",
+                &emoji,
+                packing::EMOJI.into(),
+                EMOJI_ABOUT.replace("{max}", &emoji::MAX_KEYWORD_EMOJI.to_string()),
+            )?,
         ];
         Ok(PackSet {
             packs,
             lexicon: lexicon_summary,
             language_model: language_model_summary,
             english: english_counts,
+            emoji: built_emoji.counts,
         })
     };
     let first = build_packs(&quick, &chars)?;
@@ -474,6 +548,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         report.lexicon = Some(first.lexicon);
         report.language_model = Some(first.language_model);
         report.english = Some(first.english);
+        report.emoji = Some(first.emoji);
         report.corpora = corpora.clone();
         report.checks.extend(corpus_checks);
         Some(report)
@@ -485,6 +560,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         lexicon: first.lexicon,
         language_model: first.language_model,
         english: first.english,
+        emoji: first.emoji,
         layout_path,
         corpora,
         personal,

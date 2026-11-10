@@ -7,10 +7,11 @@ use qim_databuild::common_forms::{BothForms, CommonForms, ONE_WAY_FORMS, TWO_WAY
 fn table(entries: &[(&str, char, bool)]) -> CodeTable {
     let mut codes: BTreeMap<String, Vec<CodeEntry>> = BTreeMap::new();
     for &(code, text, extension) in entries {
-        codes
-            .entry(code.into())
-            .or_default()
-            .push(CodeEntry { text, extension });
+        codes.entry(code.into()).or_default().push(CodeEntry {
+            text,
+            extension,
+            simplified: false,
+        });
     }
     CodeTable::from_entries(codes)
 }

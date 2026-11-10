@@ -13,6 +13,8 @@ pub const COMPATIBILITY: &str = "data/dictionary/CJK_Compatibility_Ideographs.tx
 pub const TS_PHRASES: &str = "data/dictionary/TSPhrases.txt";
 /// 繁體字 → 簡體字。
 pub const TS_CHARACTERS: &str = "data/dictionary/TSCharacters.txt";
+/// 簡體字 → 繁體字；不進簡繁資料包，只給速成碼表判定簡體字（`crate::simplified`）。
+pub const ST_CHARACTERS: &str = "data/dictionary/STCharacters.txt";
 /// 標準繁體字 → 香港異體字；反轉成 HKVariantsRev。
 pub const HK_VARIANTS: &str = "data/dictionary/HKVariants.txt";
 /// 香港異體詞 → 標準繁體詞。

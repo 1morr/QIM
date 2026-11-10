@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::lattice::{self, CandidateSpan, Lattice};
+use crate::lattice::{self, CandidateSpan, Lattice, Listing};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
@@ -37,8 +37,14 @@ pub struct Options {
     /// 數字後的 `.` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，同 librime
     /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
     pub digit_separators: bool,
+    /// emoji 候選（plan §2.4）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面；
+    /// 引擎要掛上 emoji 資料包（[`Engine::with_emoji`]）。預設開（brief §7，同 rime-emoji）。
+    pub emoji_candidates: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
+    /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
+    /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
+    pub simplified_after_traditional: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -92,9 +98,13 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體與英文候選影響候選，無痕、Shift、數字後半形都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選與簡體字排後影響候選，無痕、Shift、
+    /// 數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
-        self.simplified == other.simplified && self.english_candidates == other.english_candidates
+        self.simplified == other.simplified
+            && self.english_candidates == other.english_candidates
+            && self.emoji_candidates == other.emoji_candidates
+            && self.simplified_after_traditional == other.simplified_after_traditional
     }
 }
 
@@ -105,7 +115,9 @@ impl Default for Options {
             incognito: false,
             english_candidates: true,
             digit_separators: true,
+            emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
+            simplified_after_traditional: true,
         }
     }
 }
@@ -842,7 +854,7 @@ impl Session {
                 engine,
                 user,
                 &Lattice::from_input(engine, user, before, &rest),
-                false,
+                self.listing(false),
             )
             .into_iter()
             .next();
@@ -885,6 +897,17 @@ impl Session {
         if !engine.has_entry(&code, &text) {
             user.for_scheme_mut(&engine.scheme().id)
                 .add_auto_phrase(&code, &text);
+        }
+    }
+
+    /// 列候選的選項：簡體字排後照選項（簡體模式不排）；英文候選與 emoji 照選項，但只給剩下的
+    /// 整串輸入碼（`whole_input`），目前分段與逐段取首選時沒有。
+    fn listing(&self, whole_input: bool) -> Listing {
+        let options = &self.options;
+        Listing {
+            english_candidates: whole_input && options.english_candidates,
+            emoji_candidates: whole_input && options.emoji_candidates,
+            simplified_last: options.simplified_after_traditional && !options.simplified,
         }
     }
 
@@ -933,9 +956,9 @@ impl Session {
         let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
             return self.snapshot(engine, true, None);
         };
-        // 英文候選蓋住剩下的整串（分段的候選列沒有它）：和 Enter 一樣，選定的分段上屏字詞、
-        // 其餘上屏英文字，整次不學也不造詞（plan §2.4）。
-        if choice.english_candidate {
+        // 英文候選與 emoji 蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
+        // 上屏字詞、其餘上屏它，整次不學也不造詞（plan §2.4）。
+        if choice.kind.is_literal() {
             let mut commit = self.selected_commit(engine);
             commit.text.push_str(&choice.text);
             commit.original.push_str(&choice.text);
@@ -1024,12 +1047,10 @@ impl Session {
                     engine,
                     user,
                     &Lattice::from_input(engine, user, None, code),
-                    false,
+                    self.listing(false),
                 )
             }
-            None => {
-                lattice::candidates(engine, user, &self.lattice, self.options.english_candidates)
-            }
+            None => lattice::candidates(engine, user, &self.lattice, self.listing(true)),
         };
         // 排序時已去掉原文重複的，沒轉換的不必再比。
         let mut seen = HashSet::new();
