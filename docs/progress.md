@@ -45,6 +45,7 @@
 | 2026-11-10 | M2 10 | 擴充內 Foundation Models 可用：連續約 190 ms、停頓後首個偶爾 6–15 s；上下文按句切，備忘錄至多 300 字、Safari 100；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/11-small-neural-model-cost.md` |
 | 2026-11-10 | M2 07 | `qim-ffi`（uniffi）與 Swift 在 Mac 打出「門口」；三種路徑每鍵 p95 都 ≤ 0.9 ms（含選段），見 ios-feasibility〈綁定開銷〉 | 新 session 下 `/implement .scratch/m2/issues/08-ios-keyboard-with-core.md` |
 | 2026-11-10 | M2 08 | iPhone 備忘錄打出「門口」；資料包加 `Engine` 後 footprint 64 MB；每鍵 p95 64 µs、選段 0.79 ms；`Engine` 拆成共用物件；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/09-ios-memory-limit.md` |
+| 2026-11-10 | M2 11 | candle 能在 iPhone 鍵盤擴充跑：1.4M 幾乎不佔；23M q8 +47 MB、f32 +95 MB，加核心都在 177 MB 內；延遲以前綴快取為前提；見 ios-feasibility | 新 session 下 `/implement .scratch/m2/issues/09-ios-memory-limit.md` |
 
 ## 偏差與決定
 

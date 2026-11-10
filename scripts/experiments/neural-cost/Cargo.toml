@@ -1,0 +1,22 @@
+# 不加進 repo 的 workspace（.scratch/m2/spec.md〈共同規則〉）：空的 [workspace] 讓它自成一個。
+[package]
+name = "neural-cost"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+# rlib 給 Mac 的命令列，staticlib 給 iOS 鍵盤擴充連結。
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+candle-core = "0.11.1"
+candle-nn = "0.11.1"
+libc = "0.2.191"
+rayon = "1.12.0"
+
+[profile.release]
+lto = true
+codegen-units = 1

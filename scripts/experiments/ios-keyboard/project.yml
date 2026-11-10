@@ -1,5 +1,10 @@
 # xcodegen 的專案描述；產生的 QIMKeyboardExp.xcodeproj 不進 git（README〈建置與安裝〉）。
 name: QIMKeyboardExp
+# 票 11 的神經模型探針要 candle 的靜態庫與 118 MB 的模型檔，預設不併進來；
+# `QIM_NEURAL=YES xcodegen generate` 才併（README〈小型神經模型（票 11）〉）。
+include:
+  - path: neural.yml
+    enable: ${QIM_NEURAL}
 configFiles:
   Debug: Local.xcconfig
   Release: Local.xcconfig

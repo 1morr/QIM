@@ -22,3 +22,7 @@ Blocked by: 08
 - [ ] 資料包格式、Schema 驗證兩個決定寫回 plan；M3 模型上限寫進 plan §7.8。
 - [ ] brief §12.3 更新（社群說法改成實測，附連結）。
 - [ ] `cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-10（票 11 留言）：`ios-keyboard` 預設不建票 11 的神經模型探針，照 README〈建置與安裝〉建就好，不需要 candle。開 `QIM_NEURAL=YES` 的擴充多約 10 MB 程式碼（Debug dylib 12.9 MB 對 3.0 MB），量終止點的基線時別用它。小型神經模型的峰值增量（iPhone）：1.4M 約 +2–5 MB、23M q8 約 +47 MB、f32 約 +95 MB，給 plan §7.8 的模型上限參考（`docs/research/ios-feasibility.md`〈小型神經模型〉）。

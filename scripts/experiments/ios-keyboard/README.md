@@ -4,10 +4,10 @@
 
 - M2 票 06：沒有付費帳號時，這台 Mac 能不能用免費佈建做出鍵盤擴充、裝到 iPhone、在真實宿主程式打字；App Group 能不能用；空擴充的常駐記憶體是多少。結論在 `docs/research/ios-feasibility.md`〈免費佈建與 App Group〉。
 - M2 票 10：鍵盤擴充裡能不能用 Foundation Models、延遲與記憶體；`documentContextBeforeInput` 實際讀得到多少字。結論在同一份文件的〈Foundation Models〉〈上下文長度〉。
-
 - M2 票 08：鍵盤擴充接上核心（`qim-ffi`），在備忘錄打 `anr` 讀回「門口」；資料包的常駐記憶體與每鍵延遲。結論在同一份文件的〈鍵盤擴充接上核心〉。
+- M2 票 11：candle 能不能在鍵盤擴充裡跑 1.4M、23M 參數的模型，載入、推論延遲與記憶體。量測程式在 `../neural-cost/`，結論在同一份文件的〈小型神經模型〉。
 
-之後的 iOS 實驗（票 11）也長在這個專案上。
+之後的 iOS 實驗（票 09）也長在這個專案上。
 
 ## 內容
 
@@ -22,6 +22,7 @@
 | `Keyboard/ModelProbe.swift` | 票 10：Foundation Models 的可用性與每次請求的延遲 |
 | `Keyboard/CoreProbe.swift` | 票 08：載入資料包、建一個 `Engine` 與 `Session`、逐步量 footprint、打字、量每鍵延遲 |
 | `core.sh` | 票 08：`cargo xtask ffi --ios`、寫出延遲的輸入、檢查資料包，再 `xcodegen generate` |
+| `neural.yml`、`Neural/` | 票 11：神經模型探針（`NeuralProbe.swift` 在背景執行緒呼叫 `../neural-cost` 的 Rust 靜態庫）；預設不併進專案，見下方〈小型神經模型（票 11）〉 |
 
 產生的 `.xcodeproj`、`Info.plist`、`.entitlements` 與 `build/` 都由 `project.yml` 產生，不進 git。
 
@@ -31,7 +32,7 @@
 
 ```sh
 cp Local.xcconfig.example Local.xcconfig   # 填 Team ID 與自己的 Bundle ID 前綴
-./core.sh                                  # 備好核心要的檔，最後跑 xcodegen generate
+./core.sh                                  # 備好核心要的檔，最後跑 xcodegen generate；要票 11 的神經模型探針時見〈小型神經模型（票 11）〉
 xcodebuild -project QIMKeyboardExp.xcodeproj -scheme QIMKeyboardExp -configuration Debug \
   -destination 'platform=iOS,id=<UDID>' -derivedDataPath build -allowProvisioningUpdates build
 xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-iphoneos/QIMKeyboardExp.app
@@ -190,3 +191,46 @@ Foundation Models：`available`、AFM 3 Core Advanced、`contextSize` 8192；連
 備忘錄打 `anr` 首選「門口」、空白上屏「門口」，兩次都是。各步的數字、與 Mac 的對照與截圖清單見 `docs/research/ios-feasibility.md`〈鍵盤擴充接上核心〉。
 
 用 iphone-use 操作時，擴充的鍵照樣要點座標：`tap_locator` 回報成功，`taps=` 卻沒加（同〈注意事項〉的地球鍵）。手機只走 Wi-Fi 時 `phone_logs` 與 `phone_crashes` 用不了（`not attached to usbmuxd`），接上 USB 才行。
+
+## 小型神經模型（票 11）
+
+### 要建進專案時
+
+神經模型探針要 candle 的靜態庫與 118 MB 的模型檔，預設不併進專案：`project.yml` 用 xcodegen 的 `include` 在環境變數 `QIM_NEURAL` 為 `YES` 時才併進 `neural.yml`（加 `Neural/` 的原始碼、`../neural-cost/models` 資料夾、bridging header、連結 `-lneural_cost`、編譯條件 `QIM_NEURAL`）。沒開時鍵盤沒有 L32 那一列，也不需要 candle；票 09 這類只量核心的實驗照〈建置與安裝〉就好。要量時：
+
+```sh
+../neural-cost/build-ios.sh       # 靜態庫（只編了實機的 aarch64-apple-ios）與 ../neural-cost/models/
+QIM_NEURAL=YES ./core.sh          # core.sh 最後的 xcodegen generate 會讀這個環境變數
+xcodebuild ...                    # 同〈建置與安裝〉
+```
+
+開著建時模擬器建不起來。開與不開的擴充大小不同（Debug 的 `QIMKeyboard.debug.dylib` 約 12.9 MB 對 3.0 MB），量基線時兩種別混用。
+
+### 鍵
+
+| 鍵 | 做什麼 |
+| --- | --- |
+| L32、L8 | 量 1.4M 參數的 CIFG-LSTM，f32 與 q8 |
+| G32、G8 | 量 23M 參數的字級 decoder，f32 與 q8 |
+| 結束 | `exit(0)`：擴充自己結束程序，下次叫出鍵盤就是新程序 |
+
+每個模型鍵在背景執行緒呼叫 `nc_run(<bundle 裡的 models/檔名>, 30, 2)`，跑完把結果顯示在鍵盤上方（取代上下文與 Foundation Models 那幾行）並寫 log。前後各加一行 Swift 這邊讀的 footprint（`nc-before`、`nc-after`，後者是模型丟掉之後）與整次的耗時 `wall=`。每行的意思見 `../neural-cost/README.md`〈指標〉。
+
+### 量法
+
+1. 開著神經模型建好、裝上（見上方〈要建進專案時〉）。
+2. 備忘錄新增一則備忘錄，切到「QIM 實驗鍵盤」，確認第一行的 `pid=` 是新的、`loads=1`。
+3. 按一個模型鍵，等結果出現（23M f32 約 4 秒），截圖。
+4. 按「結束」，點一下備忘錄叫出鍵盤；系統會換成別的鍵盤，長按地球鍵切回「QIM 實驗鍵盤」，`pid=` 換了才量下一個。每個模型都要在新程序量（理由見 `../neural-cost/README.md`〈量法〉）。
+
+用 iphone-use 操作時，這一列的鍵和票 06 的地球鍵一樣，`tap_label` 會點穿到宿主（`taps=` 沒加），要點座標。地球鍵的長按點座標也行。
+
+### 上次結果（2026-11-10）
+
+環境同上：iPhone 18 Pro Max（iPhone19,7），iOS 27.2（24B119）；Xcode 27.1，Debug 組態；candle 0.11.1，2 條執行緒；沒有完整取用。量測時 repo 在 `78ae0c2`，實驗碼即票 11 的 commit。
+
+candle 能在擴充裡跑。iPhone 上 23M q8 重排一次（6 條路徑各 8 字）上下文 200 字 p95 54.5 ms、峰值 +46.9 MB；23M f32 峰值 +94.9 MB；1.4M 兩種都在 9 ms、5 MB 內。完整表見 `../neural-cost/README.md`〈上次結果〉，截圖 `.scratch/m2/evidence/11-iphone-{L32,L8,G32,G8}.png`。
+
+合併票 08 之後（神經模型探針改成可選），開著 `QIM_NEURAL=YES` 建的擴充在備忘錄按「載入」、`a`、`n`、`r`、「空白」，仍上屏「門口」，同一個鍵盤上也有 L32 那一列（`.scratch/m2/evidence/11-merged-anr.png`）；神經模型的數字沒重量。
+
+另一個 session 用同一個 Bundle ID 裝它的版本時會蓋掉這個擴充（票 08 與本票同時用過）；量之前看鍵盤上有沒有 L32 那一列。
