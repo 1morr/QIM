@@ -11,4 +11,6 @@ cargo_metadata = "0.23.1"
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
 
 [dev-dependencies]
+qim-bench = { path = "../crates/qim-bench" }
+qim-databuild = { path = "../crates/qim-databuild" }
 tempfile = "3.27.0"

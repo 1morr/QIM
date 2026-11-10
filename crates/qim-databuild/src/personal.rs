@@ -11,7 +11,8 @@ use crate::transcode::Transcoder;
 pub const USERDB: &str = "bench/personal/rime-userdb.txt";
 /// 轉出的題目，`qim-bench` 讀它：第一行 [`SOURCE_HEADER`] 接 [`USERDB`] 的 sha256，
 /// 之後一行「逐字速成碼（空格分隔）<TAB>詞<TAB>上屏次數」。
-/// 路徑與檔頭在 `qim_bench` 有同樣的常數（plan §1.3 不讓 `qim-bench` 依賴本 crate），改時兩邊一起改。
+/// 路徑與檔頭在 `qim_bench` 有同樣的常數（plan §1.3 不讓 `qim-bench` 依賴本 crate），`xtask` 的
+/// `shared_paths` 測試比對兩邊。
 pub const ITEMS: &str = "bench/personal/rime-userdb.tsv";
 pub const SOURCE_HEADER: &str = "# rime-userdb.txt sha256 ";
 

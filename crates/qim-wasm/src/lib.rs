@@ -1,7 +1,7 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, EnglishPack, Key, Options, RadicalHintPack, RadicalHints, Scheme,
+    CangjieVersion, Engine, EnglishPack, Key, Options, Pack, RadicalHintPack, RadicalHints, Scheme,
     Session, ShiftKey, SimplifierPack, Snapshot, UserModel,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};

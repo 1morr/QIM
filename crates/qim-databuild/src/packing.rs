@@ -8,8 +8,14 @@ use crate::lexicon;
 use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, SCOWL, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
 
-/// 進資料包的一個來源。
-pub(crate) struct PackedSource {
+/// 進資料包的一個來源：經 `sources.toml` 下載的，或 QIM 自己整理、存在 repo 裡的。
+pub(crate) enum PackSource {
+    Upstream(UpstreamSource),
+    Repo(RepoData),
+}
+
+/// 經 `sources.toml` 下載、進資料包的一個來源。
+pub(crate) struct UpstreamSource {
     /// 寫進 `LICENSE`、`NOTICE` 的名字。
     pub name: &'static str,
     /// `sources.toml` 的 `[source.<id>]`。
@@ -19,57 +25,60 @@ pub(crate) struct PackedSource {
 }
 
 /// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序（plan §4.1）。
-pub(crate) const QUICK: [PackedSource; 2] = [
-    PackedSource {
+pub(crate) const QUICK: [PackSource; 2] = [
+    PackSource::Upstream(UpstreamSource {
         name: "libcangjie",
         source_id: LIBCANGJIE,
         used: "data/table.txt: Cangjie 3 and Cangjie 5 codes, Big5 and HKSCS flags, Big5 order",
-    },
-    PackedSource {
+    }),
+    PackSource::Upstream(UpstreamSource {
         name: "Unihan",
         source_id: UNIHAN,
         used: "field kGradeLevel of Unihan_DictionaryLikeData.txt",
-    },
+    }),
 ];
 
 /// 簡繁資料包：OpenCC 的字典（plan §4.4）。
-pub(crate) const SIMPLIFIER: [PackedSource; 1] = [PackedSource {
+pub(crate) const SIMPLIFIER: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "OpenCC",
     source_id: OPENCC,
     used: "data/dictionary/CJK_Compatibility_Ideographs.txt, TSPhrases.txt, TSCharacters.txt, \
            HKVariants.txt and HKVariantsRevPhrases.txt: the dictionaries of the hk2s configuration",
-}];
+})];
 
 /// 英文資料包：ESDB（SCOWL）的 Hunspell en_US 字典（plan §4.4）。
-pub(crate) const ENGLISH: [PackedSource; 1] = [PackedSource {
+pub(crate) const ENGLISH: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "ESDB (SCOWL)",
     source_id: SCOWL,
     used: "en_US.dic and en_US.aff in the hunspell-en_US zip: the words of the size 60 \
            American English speller dictionary",
-}];
+})];
 
 /// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。
-pub(crate) const RADICAL_HINT: [PackedSource; 1] = [PackedSource {
+pub(crate) const RADICAL_HINT: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "libcangjie",
     source_id: LIBCANGJIE,
     used: "data/table.txt: Cangjie 3 and Cangjie 5 codes of Han characters",
-}];
+})];
 
-/// 詞庫資料包的 rime-essay；字頻的語料另由 [`lexicon_sources`] 從語料清單加上。
-const ESSAY: PackedSource = PackedSource {
+/// 詞庫資料包的 rime-essay；字頻的語料與口語詞表另由 [`lexicon_sources`] 加上。
+const ESSAY: UpstreamSource = UpstreamSource {
     name: "rime-essay",
     source_id: RIME_ESSAY,
     used: "essay.txt: words and their frequencies",
 };
 
-/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻（plan §4.2）。
-pub(crate) fn lexicon_sources() -> Vec<PackedSource> {
+/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻，最後是粵語口語詞表
+/// （plan §4.2）。
+pub(crate) fn lexicon_sources() -> Vec<PackSource> {
     std::iter::once(ESSAY)
-        .chain(CORPORA.iter().map(|corpus| PackedSource {
+        .chain(CORPORA.iter().map(|corpus| UpstreamSource {
             name: corpus.title,
             source_id: corpus.source_id,
             used: "character counts of the training split of the extracted text",
         }))
+        .map(PackSource::Upstream)
+        .chain([PackSource::Repo(COLLOQUIAL)])
         .collect()
 }
 
@@ -88,7 +97,7 @@ pub(crate) struct RepoData {
 }
 
 /// 詞庫資料包的粵語口語詞表（plan §4.2、brief §5.2）。
-pub(crate) const COLLOQUIAL: RepoData = RepoData {
+const COLLOQUIAL: RepoData = RepoData {
     name: "QIM Cantonese colloquial word list",
     path: lexicon::COLLOQUIAL_PATH,
     license: "CC0-1.0",
@@ -97,13 +106,15 @@ pub(crate) const COLLOQUIAL: RepoData = RepoData {
 };
 
 /// 語言模型資料包的來源：每份語料的 train 切分（plan §4.3）。
-pub(crate) fn language_model_sources() -> Vec<PackedSource> {
+pub(crate) fn language_model_sources() -> Vec<PackSource> {
     CORPORA
         .iter()
-        .map(|corpus| PackedSource {
-            name: corpus.title,
-            source_id: corpus.source_id,
-            used: "counts of characters and adjacent character pairs in the training split of the extracted text",
+        .map(|corpus| {
+            PackSource::Upstream(UpstreamSource {
+                name: corpus.title,
+                source_id: corpus.source_id,
+                used: "counts of characters and adjacent character pairs in the training split of the extracted text",
+            })
         })
         .collect()
 }
@@ -131,37 +142,48 @@ struct License {
 
 /// 讀出每個來源的授權。`upstream(id, 檔)` 讀快取裡的來源檔，`repo(路徑)` 讀 repo 裡的檔。
 pub(crate) fn resolve(
-    specs: &[PackedSource],
+    specs: &[PackSource],
     sources: &Sources,
     upstream: impl Fn(&str, &str) -> Result<String, Error>,
     repo: impl Fn(&str) -> Result<String, Error>,
 ) -> Result<Vec<Packed>, Error> {
     specs
         .iter()
-        .map(|spec| {
-            let source = sources.source.get(spec.source_id).ok_or_else(|| {
-                Error::invalid(SOURCES, format!("沒有 [source.{}]", spec.source_id))
-            })?;
-            let license = license_of(source, |file| upstream(spec.source_id, file), &repo)?;
-            Ok(Packed {
-                name: spec.name,
-                repository: source.repository.clone(),
-                version: Some(source.version.clone()),
-                license_id: source.license.clone(),
-                files: source
-                    .files
-                    .iter()
-                    .map(|f| (f.path.clone(), f.sha256.clone()))
-                    .collect(),
-                used: spec.used,
-                license,
-            })
+        .map(|spec| match spec {
+            PackSource::Upstream(spec) => resolve_upstream(spec, sources, &upstream, &repo),
+            PackSource::Repo(spec) => repo_data(spec, &repo),
         })
         .collect()
 }
 
+fn resolve_upstream(
+    spec: &UpstreamSource,
+    sources: &Sources,
+    upstream: impl Fn(&str, &str) -> Result<String, Error>,
+    repo: impl Fn(&str) -> Result<String, Error>,
+) -> Result<Packed, Error> {
+    let source = sources
+        .source
+        .get(spec.source_id)
+        .ok_or_else(|| Error::invalid(SOURCES, format!("沒有 [source.{}]", spec.source_id)))?;
+    let license = license_of(source, |file| upstream(spec.source_id, file), &repo)?;
+    Ok(Packed {
+        name: spec.name,
+        repository: source.repository.clone(),
+        version: Some(source.version.clone()),
+        license_id: source.license.clone(),
+        files: source
+            .files
+            .iter()
+            .map(|f| (f.path.clone(), f.sha256.clone()))
+            .collect(),
+        used: spec.used,
+        license,
+    })
+}
+
 /// repo 裡的資料：`repo(路徑)` 讀 repo 裡的檔，`NOTICE` 記它這次內容的 sha256。
-pub(crate) fn repo_data(
+fn repo_data(
     spec: &RepoData,
     repo: impl Fn(&str) -> Result<String, Error>,
 ) -> Result<Packed, Error> {
