@@ -1,8 +1,8 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, EmojiPack, Engine, EnglishPack, Key, Options, Pack, RadicalHintPack,
-    RadicalHints, Scheme, Session, ShiftKey, SimplifierPack, Snapshot, UserModel,
+    CangjieVersion, Engine, Key, Manifest, Options, Pack, RadicalHintPack, RadicalHints, Scheme,
+    Session, ShiftKey, Shortcuts, Snapshot, UserModel, WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -10,6 +10,79 @@ use wasm_bindgen::prelude::*;
 /// 核心與 `qim-layout` 的錯誤轉成 JS 的例外，訊息照原樣。
 fn js_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
+}
+
+/// 一份資料包：`manifest.json` 的內容與資料包檔的位元組（plan §4.6），網頁 fetch 或從檔案、
+/// IndexedDB 讀來。建立時只讀 manifest；核對大小、sha256 與解開在 [`WebPack::verify`] 或交給
+/// `Session` 時（核心的 [`Pack::open`]）。JS 端叫 `Pack`。
+#[wasm_bindgen(js_name = Pack)]
+pub struct WebPack {
+    manifest: Manifest,
+    bytes: Vec<u8>,
+}
+
+#[wasm_bindgen(js_class = Pack)]
+impl WebPack {
+    #[wasm_bindgen(constructor)]
+    pub fn new(manifest: &str, bytes: Vec<u8>) -> Result<WebPack, JsError> {
+        Ok(Self {
+            manifest: Manifest::from_json(manifest).map_err(js_error)?,
+            bytes,
+        })
+    }
+
+    /// 照 manifest 核對並解開一次，不留結果：匯入前檢查用。
+    pub fn verify(&self) -> Result<(), JsError> {
+        self.manifest.verify(&self.bytes).map_err(js_error)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn id(&self) -> String {
+        self.manifest.id.clone()
+    }
+
+    /// manifest 的 `kind`（`lexicon`、`language-model`…）。
+    #[wasm_bindgen(getter)]
+    pub fn kind(&self) -> String {
+        self.manifest.kind.as_str().into()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn version(&self) -> String {
+        self.manifest.version.clone()
+    }
+
+    /// 資料包檔的位元組數（manifest 寫的）。
+    #[wasm_bindgen(getter)]
+    pub fn size(&self) -> f64 {
+        self.manifest.size as f64
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn license(&self) -> String {
+        self.manifest.license.clone()
+    }
+
+    /// 資料包檔的檔名 `<id>.pack`。
+    #[wasm_bindgen(getter, js_name = fileName)]
+    pub fn file_name(&self) -> String {
+        self.manifest.file_name()
+    }
+}
+
+impl WebPack {
+    fn open<P: Pack>(&self) -> Result<P, JsError> {
+        P::open(&self.manifest, &self.bytes).map_err(js_error)
+    }
+}
+
+/// 由一組資料包建 `Engine`（核心的 [`Engine::open`]）。
+fn engine(packs: &[WebPack]) -> Result<Engine, JsError> {
+    let files: Vec<_> = packs
+        .iter()
+        .map(|p| (&p.manifest, p.bytes.as_slice()))
+        .collect();
+    Engine::open(&files).map_err(js_error)
 }
 
 /// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁、英文與 emoji 資料包、一個個人模型、一個 `Session`。
@@ -23,38 +96,27 @@ pub struct WebSession {
 
 #[wasm_bindgen(js_class = Session)]
 impl WebSession {
-    /// 由速成資料包與方案指名的詞庫、語言模型資料包，加上簡繁資料包（沒有時簡體模式照原樣
-    /// 輸出）、英文資料包（沒有時沒有英文候選）、emoji 資料包（沒有時沒有 emoji 候選）的位元組
-    /// 建立；資料包由網頁 fetch。
+    /// 由一組資料包建立：方案資料包，加上方案要的詞庫、語言模型，與可有可無的簡繁（沒有時簡體
+    /// 模式照原樣輸出）、英文（沒有時沒有英文候選）、emoji（沒有時沒有 emoji 候選）資料包，順序
+    /// 不拘。資料包交給 `Session` 後在 JS 端就不能再用。
     #[wasm_bindgen(constructor)]
-    pub fn new(
-        scheme_pack: &[u8],
-        lexicon: Option<Vec<u8>>,
-        language_model: Option<Vec<u8>>,
-        simplifier: Option<Vec<u8>>,
-        english: Option<Vec<u8>>,
-        emoji: Option<Vec<u8>>,
-    ) -> Result<WebSession, JsError> {
-        let mut engine =
-            Engine::from_pack_bytes(scheme_pack, lexicon.as_deref(), language_model.as_deref())
-                .map_err(js_error)?;
-        if let Some(bytes) = simplifier {
-            engine = engine.with_simplifier(SimplifierPack::from_bytes(&bytes).map_err(js_error)?);
-        }
-        if let Some(bytes) = english {
-            engine = engine.with_english(EnglishPack::from_bytes(&bytes).map_err(js_error)?);
-        }
-        if let Some(bytes) = emoji {
-            engine = engine.with_emoji(EmojiPack::from_bytes(&bytes).map_err(js_error)?);
-        }
+    pub fn new(packs: Vec<WebPack>) -> Result<WebSession, JsError> {
         Ok(Self {
-            engine,
+            engine: engine(&packs)?,
             user: UserModel::default(),
             session: Session::default(),
         })
     }
 
-    /// 無痕模式：開著時不學習（plan §2.4）。
+    /// 換資料包（設定頁的切換、匯入、刪除，plan §4.6）：參數同建構子。學習資料、選項與組字留著，
+    /// 組字照新的資料包重列候選；任一份核對不過時整組不換、原本的照用。
+    #[wasm_bindgen(js_name = setPacks)]
+    pub fn set_packs(&mut self, packs: Vec<WebPack>) -> Result<WebSnapshot, JsError> {
+        self.engine = engine(&packs)?;
+        Ok(self.session.refresh(&self.engine, &self.user).into())
+    }
+
+    /// 無痕模式：開著時不學習（plan §2.4）、不用前文（brief §8）。
     #[wasm_bindgen(js_name = setIncognito)]
     pub fn set_incognito(&mut self, on: bool) {
         self.set_options(|options| options.incognito = on);
@@ -64,6 +126,24 @@ impl WebSession {
     #[wasm_bindgen(js_name = setLearning)]
     pub fn set_learning(&mut self, on: bool) {
         self.set_options(|options| options.learning = on);
+    }
+
+    /// 無痕模式開著：網頁這時不給前文（brief §8）。
+    #[wasm_bindgen(getter)]
+    pub fn incognito(&self) -> bool {
+        self.session.options().incognito
+    }
+
+    /// 輸入框游標前的文字（`Session::set_context`）：網頁在聚焦、移動游標、輸入框改了之後給。
+    #[wasm_bindgen(js_name = setContext)]
+    pub fn set_context(&mut self, before: &str) {
+        self.session.set_context(before);
+    }
+
+    /// 忘掉前文（`Session::clear_context`）：輸入框失焦時。
+    #[wasm_bindgen(js_name = clearContext)]
+    pub fn clear_context(&mut self) {
+        self.session.clear_context();
     }
 
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
@@ -127,6 +207,39 @@ impl WebSession {
     pub fn import_user_dict(&mut self, text: &str) -> Result<(), JsError> {
         self.user = UserModel::import(text).map_err(js_error)?;
         Ok(())
+    }
+
+    /// 先看匯入詞表 `text` 會加幾個詞、略過哪些列（在個人模型的複本上匯入），不動目前的資料；
+    /// 網頁請使用者確認之前呼叫。整份讀不了時丟例外。`shortcuts_as_triggers` 同
+    /// [`WebSession::import_word_list`]。
+    #[wasm_bindgen(js_name = checkWordList)]
+    pub fn check_word_list(
+        &self,
+        text: &str,
+        shortcuts_as_triggers: bool,
+    ) -> Result<WebWordListReport, JsError> {
+        let report = self
+            .user
+            .clone()
+            .import_word_list(&self.engine, text, shortcuts(shortcuts_as_triggers))
+            .map_err(js_error)?;
+        Ok(report.into())
+    }
+
+    /// 把詞表 `text` 的詞加進使用者詞（plan §2.4）：Rime `.dict.yaml`、Gboard 個人字典、一行一詞。
+    /// 是加進去，不取代學習資料；整份讀不了時丟例外、什麼都不加。`shortcuts_as_triggers` 為真時
+    /// Gboard 的快捷鍵設成觸發詞（預設不設，網頁的勾選框）。
+    #[wasm_bindgen(js_name = importWordList)]
+    pub fn import_word_list(
+        &mut self,
+        text: &str,
+        shortcuts_as_triggers: bool,
+    ) -> Result<WebWordListReport, JsError> {
+        let report = self
+            .user
+            .import_word_list(&self.engine, text, shortcuts(shortcuts_as_triggers))
+            .map_err(js_error)?;
+        Ok(report.into())
     }
 
     /// 清掉全部使用者詞與學習計數。
@@ -394,6 +507,12 @@ impl From<Snapshot> for WebSnapshot {
     }
 }
 
+/// 核心留著的游標前文字最多幾個字（`qim_core::CONTEXT_LIMIT`）：網頁給前文時只取這麼多。
+#[wasm_bindgen(js_name = contextLimit)]
+pub fn context_limit() -> usize {
+    qim_core::CONTEXT_LIMIT
+}
+
 /// 候選每頁的個數（`qim_core::PAGE_SIZE`）：網頁把目前頁的位置換算成 [`WebSession::select`] 的位置。
 #[wasm_bindgen(js_name = pageSize)]
 pub fn page_size() -> usize {
@@ -429,11 +548,11 @@ pub struct WebRadicalHints {
 
 #[wasm_bindgen(js_class = RadicalHints)]
 impl WebRadicalHints {
-    /// 由字根提示資料包的位元組建立；要是 `session` 的方案指名的那份。
+    /// 由字根提示資料包建立；`session` 的方案要指名字根提示（可以是另一份，plan §4.6）。
     #[wasm_bindgen(constructor)]
-    pub fn new(bytes: &[u8], session: &WebSession) -> Result<WebRadicalHints, JsError> {
+    pub fn new(pack: &WebPack, session: &WebSession) -> Result<WebRadicalHints, JsError> {
         let scheme = session.engine.scheme().clone();
-        let pack = RadicalHintPack::from_bytes(bytes).map_err(js_error)?;
+        let pack: RadicalHintPack = pack.open()?;
         let hints = RadicalHints::for_scheme(pack, &scheme).map_err(js_error)?;
         Ok(Self { hints, scheme })
     }
@@ -451,6 +570,64 @@ impl WebRadicalHints {
                 radicals: hint.radicals,
             })
             .collect())
+    }
+}
+
+/// 詞表匯入的結果。JS 端叫 `WordListReport`。
+#[wasm_bindgen(js_name = WordListReport, getter_with_clone)]
+pub struct WebWordListReport {
+    /// 認出的格式，給人看的名字。
+    #[wasm_bindgen(readonly)]
+    pub format: String,
+    /// 加進使用者詞的詞數。
+    #[wasm_bindgen(readonly)]
+    pub added: usize,
+    /// 沒加的列，一列一句（「第 n 行「詞」：原因」）。
+    #[wasm_bindgen(readonly)]
+    pub skipped: Vec<String>,
+    /// 快捷鍵能設成觸發詞的列，一列一句；會搶走首選的寫出搶走誰。
+    #[wasm_bindgen(readonly, js_name = triggerShortcuts)]
+    pub trigger_shortcuts: Vec<String>,
+    /// `trigger_shortcuts` 裡設了會搶走首選的列（同樣的句子），網頁拿來標出。
+    #[wasm_bindgen(readonly, js_name = displacingShortcuts)]
+    pub displacing_shortcuts: Vec<String>,
+    /// 加了、但快捷鍵不是方案的鍵而不能當觸發詞的列，一列一句。
+    #[wasm_bindgen(readonly, js_name = unusedShortcuts)]
+    pub unused_shortcuts: Vec<String>,
+}
+
+/// 網頁勾選框的值轉成核心的選項。
+fn shortcuts(as_triggers: bool) -> Shortcuts {
+    if as_triggers {
+        Shortcuts::AsTriggers
+    } else {
+        Shortcuts::Ignore
+    }
+}
+
+impl From<WordListReport> for WebWordListReport {
+    fn from(report: WordListReport) -> Self {
+        Self {
+            format: report.format.to_string(),
+            added: report.added,
+            skipped: report.skipped.iter().map(ToString::to_string).collect(),
+            trigger_shortcuts: report
+                .trigger_shortcuts
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            displacing_shortcuts: report
+                .trigger_shortcuts
+                .iter()
+                .filter(|t| t.displaces.is_some())
+                .map(ToString::to_string)
+                .collect(),
+            unused_shortcuts: report
+                .unused_shortcuts
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        }
     }
 }
 

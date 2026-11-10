@@ -3,11 +3,12 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack,
-    RadicalHintPack, SchemePack, SimplifierPack,
+    CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, MANIFEST_FILE,
+    Manifest, Pack, PackKind, RadicalHintPack, SchemePack, SimplifierPack,
 };
 use qim_databuild::sources::{Fetch, sha256_hex};
-use qim_databuild::{Error, Outcome, WrittenPack};
+use qim_databuild::verify::{self, CheckId};
+use qim_databuild::{Error, Outcome, WrittenPack, lexicon};
 
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
@@ -292,7 +293,11 @@ fn hkcancor_transcript(utterances: &[String]) -> String {
     format!("<info>\n\t1-TN-107\n\tINFO-END\n</info>\n{sents}")
 }
 
+/// HKCanCor 分好詞的固件裡的兩字詞：rime-essay 與口語詞表都沒有，由 HKCanCor 補進詞庫。
+const HKCANCOR_WORD: &str = "丟曰";
+
 /// 長度 7 的前 2,000 句分成兩個轉寫檔；另有一個夾英文詞的話輪，整句丟掉。
+/// 第四個檔是分好詞的話輪（[`HKCANCOR_WORD`] 接一個標成人名的 5 字詞，湊成和其他話輪一樣的 7 字，各兩次），給詞庫補詞。
 fn hkcancor_zip() -> Vec<u8> {
     let mut utterances: Vec<String> = sentences_of_length(7).into_iter().take(2000).collect();
     let second = utterances.split_off(1000);
@@ -307,6 +312,16 @@ fn hkcancor_zip() -> Vec<u8> {
         zip.start_file(name, options).unwrap();
         zip.write_all(text.as_bytes()).unwrap();
     }
+    zip.start_file("utf8/FC-004_v", options).unwrap();
+    let segmented: String = sentences_of_length(5)
+        .iter()
+        .take(64)
+        .flat_map(|name| [name, name])
+        .map(|name| {
+            format!("<sent>\n<sent_tag>\n{HKCANCOR_WORD}/d/aa1/\n{name}/nr/aa1/\n。/w/VQ1/\n</sent_tag>\n</sent>\n")
+        })
+        .collect();
+    zip.write_all(segmented.as_bytes()).unwrap();
     zip.start_file("utf8/FC-003_v", options).unwrap();
     zip.write_all(
         "<sent>\n<sent_tag>\n日/v/aa1/\nOK/e/ou1kei1/\n</sent_tag>\n</sent>\n".as_bytes(),
@@ -457,7 +472,7 @@ fn repo(root: &Path, statement: &str) {
 [source.libcangjie]
 repository = "https://example.invalid/libcangjie"
 version = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
-license = "Public Domain"
+license = "LicenseRef-Public-Domain"
 
 [source.libcangjie.license_text.statement]
 file = "data/README.table.md"
@@ -672,6 +687,84 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     assert_eq!((report.continuous, report.extension), (34, 1));
 }
 
+/// 每份資料包旁有 manifest（plan §4.6）：描述旁邊的資料包檔，授權是各來源的 SPDX 識別碼以 AND 接起、
+/// 不重複；`--verify` 讀回來核對。
+#[test]
+fn every_pack_has_a_manifest_next_to_it() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), true).unwrap();
+    assert_eq!(outcome.packs.len(), 7);
+    let manifest_of = |name: &str| {
+        let pack = written(&outcome, name);
+        let dir = pack.path.parent().unwrap();
+        let manifest =
+            Manifest::from_json(&std::fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap())
+                .unwrap();
+        let bytes = std::fs::read(&pack.path).unwrap();
+        assert_eq!(manifest.id, pack.id, "{name}");
+        assert_eq!(manifest.file_name(), format!("{}.pack", pack.id), "{name}");
+        assert_eq!(manifest.sha256, pack.sha256, "{name}");
+        assert_eq!(manifest.size, bytes.len() as u64, "{name}");
+        assert_eq!(manifest.version, "1.0.0", "{name}");
+        (manifest, bytes)
+    };
+    for name in [
+        "速成",
+        "詞庫",
+        "語言模型",
+        "字根提示",
+        "簡繁",
+        "英文",
+        "emoji",
+    ] {
+        manifest_of(name);
+    }
+    let (quick, _) = manifest_of("速成");
+    assert_eq!(quick.kind, PackKind::Scheme);
+    assert_eq!(
+        quick.license,
+        "LicenseRef-Public-Domain AND Unicode-3.0 AND Apache-2.0"
+    );
+    let (lexicon, bytes) = manifest_of("詞庫");
+    assert_eq!(lexicon.kind, PackKind::Lexicon);
+    // 兩份維基都是 CC-BY-SA-4.0，口語詞表與 Common Voice 都是 CC0-1.0：各只寫一次。
+    assert_eq!(
+        lexicon.license,
+        "LGPL-3.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND CC0-1.0"
+    );
+    assert_eq!(
+        LexiconPack::open(&lexicon, &bytes).unwrap().id,
+        "quick-lexicon"
+    );
+    assert_eq!(manifest_of("emoji").0.kind, PackKind::Emoji);
+
+    let report = outcome.report.unwrap();
+    let check = report
+        .checks
+        .iter()
+        .find(|c| c.id == CheckId::Manifests)
+        .expect("verify 核對 manifest");
+    assert!(check.passed, "{report}");
+}
+
+/// manifest 和旁邊的資料包對不上時 `--verify` 失敗。
+#[test]
+fn manifest_not_matching_its_pack_fails_the_check() {
+    let pack = LexiconPack {
+        id: "l".into(),
+        lexicon: qim_core::Lexicon::default(),
+    };
+    let bytes = pack.to_bytes().unwrap();
+    let good = Manifest::new(PackKind::Lexicon, "l", &bytes, "1.0.0", "CC0-1.0");
+    assert!(verify::manifests(&[(good.to_json(), bytes.clone())]).passed);
+    let mut bad = good.clone();
+    bad.sha256 = "0".repeat(64);
+    let check = verify::manifests(&[(good.to_json(), bytes.clone()), (bad.to_json(), bytes)]);
+    assert!(!check.passed);
+    assert!(check.detail.contains("sha256"), "{}", check.detail);
+}
+
 #[test]
 fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     let root = tempfile::tempdir().unwrap();
@@ -695,6 +788,15 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert_eq!(words("aa"), ["日日"]);
     assert_eq!(words("ran"), ["口門"]);
     assert!(lexicon.lexicon.char_frequency('日') > 0);
+    // HKCanCor train 切分的兩字詞補進來，詞頻是次數乘上換算值；標成人名的不收。
+    let corpus_word = lexicon
+        .lexicon
+        .iter()
+        .flat_map(|(_, words)| words.iter())
+        .find(|w| w.text == HKCANCOR_WORD)
+        .unwrap_or_else(|| panic!("詞庫沒有 {HKCANCOR_WORD}"));
+    assert_eq!(corpus_word.frequency % lexicon::CORPUS_WORD_FREQUENCY, 0);
+    assert!(corpus_word.frequency >= lexicon::CORPUS_MIN_COUNT * lexicon::CORPUS_WORD_FREQUENCY);
     let c = outcome.lexicon.counts;
     assert_eq!(
         (
@@ -704,9 +806,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
             c.outside_continuous,
             c.words,
             c.colloquial,
+            c.corpus,
         ),
-        (14, 1, 1, 1, 11, 1)
+        (14, 1, 1, 1, 12, 1, 1)
     );
+    assert_eq!(outcome.lexicon.unaligned, 0);
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(path(&outcome, "速成")).unwrap();
     let language_model = std::fs::read(path(&outcome, "語言模型")).unwrap();
@@ -724,6 +828,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
+    assert!(
+        notice.contains("words of two or more characters in that split"),
+        "{notice}"
+    );
+    assert!(notice.contains("personal\nnames left out"), "{notice}");
     // LGPL 要寫明對來源做了什麼：錯字「顯着」改寫併進「顯著」、同頻只算一次、單向的例外（M1 票 17d）。
     for expected in ["顯着 went into 顯著", "equal frequencies", "except 合着"] {
         assert!(notice.contains(expected), "缺 {expected}：{notice}");

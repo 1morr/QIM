@@ -33,10 +33,15 @@
 | 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少，dev 重比結論相同）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 16 | emoji 候選：CLDR 粵語、繁中標註建 `cldr-emoji-yue-hant`，整串字詞後接最多 3 個、預設開；首選不變、修正多 0.1–1.4% 更新 baseline；見票 16 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 03 | 規則 1 × 2 多移一次先紅再修；規則 3、4 與分段選出的整串補測試；`beam` 驗證搬進 `Ranking::check`；bench 前後相同；見票 03 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
-| 2026-11-11 | M3 12 | 個人 bigram（λ 0.8，dev 掃出）、學習總開關（網頁加開關）、匯出 v2 加 bigram 列；`--learning` 公開集合合計修正 −143；見票 12 | 新 session 下 `/implement .scratch/m3/issues/05-web-context.md` |
+| 2026-11-11 | M3 05 | 網頁給游標前文（含每鍵前重給）、數字後半形看前文；核心記游標前的文字，殼沒給時用自己上屏的字（照 librime）；bench 不變；見票 05 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
+| 2026-11-11 | M3 17 | 詞表匯入：Rime `.dict.yaml`、Gboard `dictionary.txt`、一行一詞，碼由字推出、加進使用者詞，壞列報行號；Gboard 快捷鍵勾選才設觸發詞；見票 17 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
+| 2026-11-11 | M3 18 | 粵語詞庫：rime-cantonese、粵典查不清不用（粵典待書面確認）；HKCanCor train 的詞補 383 個，口語集變好、個人集多錯 1 題更新 baseline；見票 18 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
+| 2026-11-11 | M3 20 | 資料包 manifest（plan §4.6），核心載入時核對；網頁設定區列出、切換、刪除、從檔案匯入（IndexedDB）；bench 不變；見票 20 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
+| 2026-11-11 | M3 12 | 個人 bigram（λ 0.8，dev 掃出；句中學到的不搶單打首選）、學習總開關（網頁加開關）、匯出 v2 加 bigram 列；合併 main 後 `--learning` 公開集合合計修正 −138；見票 12 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 17：Gboard 快捷鍵預設不設成觸發詞（原本是方案的鍵就設），確認框勾選才設、標出會搶首選的列：在別的鍵盤設的快捷鍵常撞速成的碼；改 plan §2.4；見票 17。
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
 - 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。
 - 2026-11-11 M3 票 19：bench 修正次數 yue-wiki +6、common-voice-yue +2（答案含簡體字的題），使用者同意 `--update-baseline`（合併票 04 後 yue-wiki 前文兩集同因各 +6）；「恒」查證後仍算簡體字、「够」是香港標準字形，移出；叙携等與繁體同序號的算異體；見票 19。
@@ -45,5 +50,9 @@
 - 2026-11-11 M3 票 04：「有前文」驗收看四語料合計（yue-wiki 答錯多 2、zh-wiki 持平），個人集修正 +13 接受並更新本機 baseline（使用者決定）；見票 04。
 - 2026-11-11 M3 票 01：開關收進頁面下方的設定區（`settings.ts` 一張表產生），重排選單改完也還焦點；plan §3.1 補一行；見票 01。
 - 2026-11-11 M3 票 14：匯出 v2 由票 14 先升（詞欄跳脫給常用語的換行），票 12 只加 bigram 列；常用語在簡體模式照樣轉簡體，同 M1 票 23；plan §2.4；見票 14。
+- 2026-11-11 M3 票 20：方案 `[packs]` 指名的改成預設，`Engine::new`、`RadicalHints::for_scheme` 只核對要不要、不核對 id（推翻 M1），建出的是否指名的那份改由 `--verify` 擋；plan §4.6；見票 20。
+- 2026-11-11 M3 票 20：沒照研究把 manifest 塞進 `.pack` 檔頭（改格式、sha256 全換），匯入改成一起選 manifest 與 `.pack`；libcangjie 授權改寫 `LicenseRef-Public-Domain`；見票 20。
+- 2026-11-11 M3 票 05：殼沒給前文時用這個輸入框上屏過的字（同 librime），退格、方向鍵、`clear_context` 讓它作廢；無痕時不記也不收（brief §8）；plan §2.1；見票 05。
 - 2026-11-11 M3 票 03：觸發詞已在首選時，規則 2「選一次不成首選」不動（原本把不學習時的首選多移到第 2）；`Engine::new` 也驗打分參數；改 plan §2.3、§2.4；見票 03。
-- 2026-11-11 M3 票 12：個人 bigram 不照 libime 的凸組合，改 `Pu + (1−Pu)·λ·Pb`（bigram 只往上加）；`--learning` 驗收改看合計：yue-wiki +6、yue·前文 +5、個人集 +1，其餘減少（使用者決定）；學習關掉時手動加詞、常用語照收（使用者確認）；改 plan §2.3、§2.4；見票 12。
+- 2026-11-11 M3 票 12：個人 bigram 不照 libime 的凸組合，改 `Pu + (1−Pu)·λ·Pb`（bigram 只往上加）；`--learning` 驗收改看合計，合併 main 後只有 yue-wiki·前文 +6，其餘減少（使用者決定）；學習關掉時手動加詞、常用語照收（使用者確認）；改 plan §2.3、§2.4；見票 12。
+- 2026-11-11 M3 票 18：完整粵語詞庫只補 HKCanCor 的詞；粵典 public domain 詞表與詞典本體授權對不上算查不清，留在之後待書面確認（使用者選），改 brief §1.5、§12.1、plan §4.2；見票 18。

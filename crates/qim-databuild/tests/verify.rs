@@ -71,6 +71,7 @@ fn list(bytes: [&[u8]; 6]) -> Vec<BuiltPack> {
         BuiltPack {
             name,
             id: name.into(),
+            kind: P::KIND,
             magic: P::MAGIC,
             bytes: bytes.to_vec(),
         }
@@ -129,6 +130,7 @@ fn lexicon_with(char_frequency: BTreeMap<char, u64>) -> LexiconPack {
     let (lexicon, _) = lexicon::build(
         ESSAY,
         "",
+        &BTreeMap::new(),
         &pack().code_table,
         &Transcoder::new(&rows),
         char_frequency,

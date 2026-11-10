@@ -1,0 +1,17 @@
+# Rime dictionary
+# encoding: utf-8
+
+---
+name: my_words
+version: "1"
+sort: by_weight
+columns:  # 文字、碼、權重
+  - text
+  - code
+  - weight
+...
+
+# 碼是別的方案的，匯入時不看
+一台	yi tai	10
+台口	toi hau
+口口	hau hau	1

@@ -89,14 +89,19 @@ const ESSAY: UpstreamSource = UpstreamSource {
     used: "essay.txt: words and their frequencies",
 };
 
-/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻，最後是粵語口語詞表
-/// （plan §4.2）。
+/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻（已分詞的 HKCanCor
+/// 另給詞），最後是粵語口語詞表（plan §4.2）。
 pub(crate) fn lexicon_sources() -> Vec<PackSource> {
     std::iter::once(ESSAY)
         .chain(CORPORA.iter().map(|corpus| UpstreamSource {
             name: corpus.title,
             source_id: corpus.source_id,
-            used: "character counts of the training split of the extracted text",
+            used: if corpus.segmented() {
+                "character counts of the training split of the extracted text, and the words of \
+                 two or more characters in that split with their counts"
+            } else {
+                "character counts of the training split of the extracted text"
+            },
         }))
         .map(PackSource::Upstream)
         .chain([PackSource::Repo(COLLOQUIAL)])
@@ -276,6 +281,17 @@ fn check_statement(source: &Source, file: &str, quote: &str, upstream: &str) -> 
             ),
         ))
     }
+}
+
+/// manifest 的 `license`（plan §4.6）：各來源的 SPDX 識別碼依來源順序以 ` AND ` 接起，重複的只寫一次。
+pub(crate) fn license_expression(packed: &[Packed]) -> String {
+    let mut ids: Vec<&str> = Vec::new();
+    for p in packed {
+        if !ids.contains(&p.license_id.as_str()) {
+            ids.push(&p.license_id);
+        }
+    }
+    ids.join(" AND ")
 }
 
 /// 在 `dir` 寫 `<id>.pack`、`LICENSE`、`NOTICE`；`about` 是 NOTICE 最後說明怎麼用來源的一段。

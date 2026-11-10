@@ -6,8 +6,8 @@ use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use qim_core::{
-    EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SchemePack,
-    SimplifierPack,
+    EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, MANIFEST_FILE, Manifest, Pack,
+    RadicalHintPack, SchemePack, SimplifierPack,
 };
 
 use crate::built::{self, BuiltPack};
@@ -16,6 +16,7 @@ use crate::common_forms::{
 };
 use crate::corpora::{self, CORPORA, Corpus, Group};
 use crate::corpus::{Builder, Finished};
+use crate::hkcancor::WordCounts;
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
 use crate::transcode::Transcoder;
 use crate::verify::{self, CorpusDigests, CorpusSummary, LexiconSummary, Report, UnihanSummary};
@@ -118,9 +119,11 @@ struct QuickBuild {
     radical_hint: RadicalHintPack,
 }
 
-/// 建出的一份資料包，與寫出時旁邊放的授權。
+/// 建出的一份資料包，與寫出時旁邊放的授權與 manifest。
 struct LicensedPack {
     pack: BuiltPack,
+    /// manifest 的 `version`（semver）。資料包的內容改了就要加（plan §4.6）。
+    version: &'static str,
     /// 寫進 `LICENSE`、`NOTICE` 的來源。
     sources: Vec<packing::PackSource>,
     /// NOTICE 最後說明怎麼用來源的一段。
@@ -131,12 +134,14 @@ impl LicensedPack {
     fn new<P: Pack>(
         name: &'static str,
         pack: &P,
+        version: &'static str,
         sources: Vec<packing::PackSource>,
         about: impl Into<String>,
     ) -> Result<Self, Error> {
         Ok(Self {
             pack: BuiltPack::new(name, pack)
                 .map_err(|e| Error::invalid(format!("{name}資料包"), e.to_string()))?,
+            version,
             sources,
             about: about.into(),
         })
@@ -255,6 +260,9 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     // 各語料兩次建置的字頻與權重，給詞庫資料包。
     let mut chars: Vec<(String, u64)> = Vec::new();
     let mut second_chars: Vec<(String, u64)> = Vec::new();
+    // 已分詞語料 train 切分的詞與次數（兩次建置各一份），給詞庫補詞；與對不上而略過的話輪數。
+    let mut words = WordCounts::default();
+    let mut second_words = WordCounts::default();
     // 驗證用：各語料的基準檔內容與 train 檔，洩漏要拿每個基準集比對所有 train。
     let mut benches: Vec<(String, String)> = Vec::new();
     // 各語料的 train 切分與權重，bigram 用；洩漏檢查也比對它們。
@@ -327,9 +335,11 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 .map_err(Error::io(&dir))?,
             );
             second_chars.push((second.chars, corpus.weight));
+            second_words.merge(corpus.train_words(&paths, &forms, &transcoder)?);
         }
         trains.push((train_path, corpus.weight));
         chars.push((first.chars, corpus.weight));
+        words.merge(corpus.train_words(&paths, &forms, &transcoder)?);
         if verify {
             benches.push((corpus.name.to_string(), first.bench));
             benches.push((format!("{} 有前文", corpus.name), first.context_bench));
@@ -351,7 +361,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     // 詞和粵語語料一樣經 `t2hk` 再換回常見寫法（rime-essay 是 OpenCC 標準寫法，brief §4.1）。
     let essay_converter = corpora::Converter::new(corpora::Conversion::T2hk, forms.clone())?;
     let build_lexicon = |quick: &QuickBuild,
-                         chars: &[(String, u64)]|
+                         chars: &[(String, u64)],
+                         words: &WordCounts|
      -> Result<(LexiconPack, LexiconSummary), Error> {
         let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
         let frequency = lexicon::char_frequency(&tables)?;
@@ -359,6 +370,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         let (lexicon, counts) = lexicon::build(
             &load_text(RIME_ESSAY, ESSAY)?,
             &read(lexicon::COLLOQUIAL_PATH)?,
+            &words.words,
             &quick.pack.code_table,
             &Transcoder::new(&quick.rows),
             frequency,
@@ -371,7 +383,15 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             id: named(&quick.pack.scheme.packs.lexicon, "lexicon", "詞庫")?,
             lexicon,
         };
-        Ok((pack, LexiconSummary { counts, characters }))
+        Ok((
+            pack,
+            LexiconSummary {
+                counts,
+                characters,
+                corpus_seen: words.words.len(),
+                unaligned: words.unaligned,
+            },
+        ))
     };
     // bigram 由各語料寫出的 train 切分訓練；每次重讀檔案，`--verify` 的第二次才是真的重訓。
     let build_language_model =
@@ -401,8 +421,11 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         };
     // 加一種資料包只在這裡加一項：建法、授權來源與 NOTICE 的說明（plan §4）。
     // 每次從快取重讀來源，`--verify` 的第二次才是真的重建。
-    let build_packs = |quick: &QuickBuild, chars: &[(String, u64)]| -> Result<PackSet, Error> {
-        let (lexicon, lexicon_summary) = build_lexicon(quick, chars)?;
+    let build_packs = |quick: &QuickBuild,
+                       chars: &[(String, u64)],
+                       words: &WordCounts|
+     -> Result<PackSet, Error> {
+        let (lexicon, lexicon_summary) = build_lexicon(quick, chars, words)?;
         let (language_model, language_model_summary) = build_language_model(quick)?;
         let simplifier = SimplifierPack {
             id: SIMPLIFIER_ID.into(),
@@ -442,35 +465,52 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         };
         let scheme = &quick.pack.scheme.id;
         let packs = vec![
-            LicensedPack::new("速成", &quick.pack, packing::QUICK.into(), QUICK_ABOUT)?,
+            LicensedPack::new(
+                "速成",
+                &quick.pack,
+                "1.0.0",
+                packing::QUICK.into(),
+                QUICK_ABOUT,
+            )?,
             LicensedPack::new(
                 "詞庫",
                 &lexicon,
+                "1.0.0",
                 packing::lexicon_sources(),
                 lexicon_about(&lexicon.id, scheme),
             )?,
             LicensedPack::new(
                 "語言模型",
                 &language_model,
+                "1.0.0",
                 packing::language_model_sources(),
                 language_model_about(&language_model.id),
             )?,
             LicensedPack::new(
                 "字根提示",
                 &quick.radical_hint,
+                "1.0.0",
                 packing::RADICAL_HINT.into(),
                 RADICAL_HINT_ABOUT,
             )?,
             LicensedPack::new(
                 "簡繁",
                 &simplifier,
+                "1.0.0",
                 packing::SIMPLIFIER.into(),
                 SIMPLIFIER_ABOUT,
             )?,
-            LicensedPack::new("英文", &english, packing::ENGLISH.into(), ENGLISH_ABOUT)?,
+            LicensedPack::new(
+                "英文",
+                &english,
+                "1.0.0",
+                packing::ENGLISH.into(),
+                ENGLISH_ABOUT,
+            )?,
             LicensedPack::new(
                 "emoji",
                 &emoji,
+                "1.0.0",
                 packing::EMOJI.into(),
                 EMOJI_ABOUT.replace("{max}", &emoji::MAX_KEYWORD_EMOJI.to_string()),
             )?,
@@ -483,7 +523,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             emoji: built_emoji.counts,
         })
     };
-    let first = build_packs(&quick, &chars)?;
+    let first = build_packs(&quick, &chars, &words)?;
     let packs = first
         .packs
         .iter()
@@ -531,8 +571,20 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         corpus_checks.push(verify::lexicon_forms(&lexicon.lexicon, &model, &forms));
 
         // 第二次從來源重建速成碼表，其餘資料包也由它重建，整條鏈都比到。
-        let second = build_packs(&build_quick()?, &second_chars)?;
+        let second = build_packs(&build_quick()?, &second_chars, &second_words)?;
         let mut report = verify::run(&quick.rows, &built, &second.built());
+        // 照殼的路讀回寫出的檔：manifest 與旁邊的資料包。
+        let written = packs
+            .iter()
+            .map(|pack| {
+                let manifest = pack.path.with_file_name(MANIFEST_FILE);
+                Ok((
+                    std::fs::read_to_string(&manifest).map_err(Error::io(&manifest))?,
+                    std::fs::read(&pack.path).map_err(Error::io(&pack.path))?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        report.checks.push(verify::manifests(&written));
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
         let check = unihan::compare(&quick.rows, &unihan::cangjie_codes(&quick.dictionary_like)?);
         let path = root.join(UNIHAN_REPORT);
@@ -585,10 +637,23 @@ fn write_pack(
     packed: &[packing::Packed],
 ) -> Result<WrittenPack, Error> {
     let BuiltPack {
-        name, id, bytes, ..
+        name,
+        id,
+        kind,
+        bytes,
+        ..
     } = &licensed.pack;
     let dir = root.join(PACKS).join(id);
     packing::write(&dir, id, bytes, packed, &licensed.about)?;
+    let manifest = Manifest::new(
+        *kind,
+        id.as_str(),
+        bytes,
+        licensed.version,
+        packing::license_expression(packed),
+    );
+    let path = dir.join(MANIFEST_FILE);
+    std::fs::write(&path, manifest.to_json()).map_err(Error::io(path))?;
     Ok(WrittenPack {
         name,
         id: id.clone(),
@@ -624,7 +689,11 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          (any of {reversed}; this rime-essay version has only 顯着) were written with 著 and\n\
          merged the same way, so 顯着 went into 顯著. The words of\n\
          the QIM Cantonese colloquial word list, which only lists words the steps above left\n\
-         out, were added with their listed frequencies. For the {both} character pairs whose\n\
+         out, were added with their listed frequencies. Then the words of two or more\n\
+         characters in the training split of HKCanCor (as segmented by the corpus, personal\n\
+         names left out, written as its conversion gives them), seen at least {corpus_min}\n\
+         times and still left out, were added with a frequency of {corpus_frequency} per occurrence.\n\
+         For the {both} character pairs whose\n\
          two forms are both kept ({pairs}), each such word is also listed in the other form\n\
          with the same frequency; for {one_way} (one way only, not the other way round) a\n\
          word with the first form is also listed with the second, merged the same way if that\n\
@@ -638,6 +707,8 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
          {CORPUS_PREPROCESSING}",
         min = lexicon::MIN_FREQUENCY,
         max = lexicon::MAX_COMBINATIONS,
+        corpus_min = lexicon::CORPUS_MIN_COUNT,
+        corpus_frequency = lexicon::CORPUS_WORD_FREQUENCY,
         weights = corpus_weights(),
         kept = ONE_WAY_FORMS.map(|(from, _)| from.to_string()).join(", "),
         reversed = REVERSED_ONE_WAY.join(", "),

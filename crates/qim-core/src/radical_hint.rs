@@ -56,10 +56,11 @@ impl RadicalHints {
         }
     }
 
-    /// 取出方案 [`crate::Packs::radical_hint`] 指名的那份資料包的提示。
+    /// 取出字根提示資料包的提示；方案要指名字根提示（[`crate::Packs::radical_hint`]），指名的是預設
+    /// 的那份，殼可以換成另一份（plan §4.6）。
     pub fn for_scheme(pack: RadicalHintPack, scheme: &Scheme) -> Result<Self, PackError> {
         let expected = scheme.packs.radical_hint.clone();
-        if expected.as_deref() != Some(pack.id.as_str()) {
+        if expected.is_none() {
             return Err(PackError::RadicalHintMismatch {
                 expected,
                 found: Some(pack.id),

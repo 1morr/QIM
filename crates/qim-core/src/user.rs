@@ -182,19 +182,29 @@ impl UserModel {
         trigger: Option<&str>,
     ) -> Result<(), UserWordError> {
         check_user_word(engine, text, trigger, |_| false)?;
-        let scheme = engine.scheme();
-        let code = engine
-            .code_of(text)
-            .or_else(|| trigger.map(String::from))
-            .ok_or(UserWordError::NoCode)?;
-        self.for_scheme_mut(&scheme.id).words_at(&code).insert(
-            text.to_string(),
-            UserWord {
-                source: WordSource::Manual,
-                trigger: trigger.map(String::from),
-            },
-        );
+        let code = manual_word_code(engine, text, trigger).ok_or(UserWordError::NoCode)?;
+        self.insert_manual_word(engine, &code, text, trigger);
         Ok(())
+    }
+
+    /// 把（`code`, `text`）記成手動加的使用者詞，已有的換上這個觸發詞；不檢查，檢查由呼叫的
+    /// [`UserModel::add_word`] 或詞表匯入做。
+    pub(crate) fn insert_manual_word(
+        &mut self,
+        engine: &Engine,
+        code: &str,
+        text: &str,
+        trigger: Option<&str>,
+    ) {
+        self.for_scheme_mut(&engine.scheme().id)
+            .words_at(code)
+            .insert(
+                text.to_string(),
+                UserWord {
+                    source: WordSource::Manual,
+                    trigger: trigger.map(String::from),
+                },
+            );
     }
 
     /// 存一條常用語（plan §2.4）：可以長、可以含換行與 Tab；`trigger` 是打它就讓它成首選的
@@ -266,6 +276,15 @@ pub struct Phrase {
     pub text: String,
     /// 打它就讓這條常用語成首選的輸入碼；沒有時只能從清單選。
     pub trigger: Option<String>,
+}
+
+/// 手動加的詞的輸入碼（plan §2.4）：各字的碼接起來；有字沒有碼時用觸發詞，都沒有時是 `None`。
+pub(crate) fn manual_word_code(
+    engine: &Engine,
+    text: &str,
+    trigger: Option<&str>,
+) -> Option<String> {
+    engine.code_of(text).or_else(|| trigger.map(String::from))
 }
 
 /// 使用者詞與常用語共同的檢查：文字不能空、不能含控制字元（`allowed` 放行的除外），觸發詞只能用
@@ -405,6 +424,11 @@ impl SchemeModel {
                 source: WordSource::AutoPhrase,
                 trigger: None,
             });
+    }
+
+    /// （`code`, `text`）是不是使用者詞（任何來源）。
+    pub(crate) fn is_word(&self, code: &str, text: &str) -> bool {
+        self.words.get(code).is_some_and(|w| w.contains_key(text))
     }
 
     /// 碼剛好是 `code` 的使用者詞。

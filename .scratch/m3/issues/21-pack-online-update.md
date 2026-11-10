@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 20
-讀: plan §4；brief §1.5、§5.3、§8；票 20 的 manifest 格式；spec〈範圍〉〈共同規則〉
+讀: plan §4（manifest 在 §4.6）；brief §1.5、§5.3、§8；票 20 的 Comments；spec〈範圍〉〈共同規則〉
 
 ## What to build
 
