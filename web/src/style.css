@@ -359,8 +359,26 @@ body:has(#keyboard:not([hidden])) {
 	margin: 0 0 0.5rem;
 }
 
+#word-list-shortcuts[hidden] {
+	display: none;
+}
+
+#word-list-shortcuts {
+	margin-bottom: 0.5rem;
+}
+
+/* 設了會搶走速成既有碼的首選的快捷鍵。 */
+#word-list-triggers .displacing {
+	color: #d93025;
+}
+
+#word-list-triggers .displacing::before {
+	content: "⚠ ";
+}
+
 #word-list-skipped,
-#word-list-unused {
+#word-list-unused,
+#word-list-triggers {
 	margin: 0;
 	padding-left: 1.25rem;
 	font-size: 0.875rem;

@@ -21,7 +21,7 @@ async function ready(page: Page) {
 			.getByRole("list", { name: "略過的列" })
 			.getByRole("listitem"),
 		unused: section
-			.getByRole("list", { name: "沒當觸發詞的快捷鍵" })
+			.getByRole("list", { name: "不能設成觸發詞的快捷鍵" })
 			.getByRole("listitem"),
 		status: section.getByRole("status", { name: "詞庫匯入狀態" }),
 	};
@@ -41,7 +41,7 @@ test.beforeEach(async ({ page }) => {
 	await page.reload();
 });
 
-test("匯入 Gboard 詞表：先列出會加幾個、略過哪些，確認後打得出", async ({
+test("匯入 Gboard 詞表：預設不設觸發詞，先列出會加幾個、略過哪些，確認後打得出", async ({
 	page,
 }, testInfo) => {
 	const { text, items, section, confirm, skipped, unused, status } =
@@ -56,8 +56,23 @@ test("匯入 Gboard 詞表：先列出會加幾個、略過哪些，確認後打
 		"第 4 行「broken」：Gboard 的列要是「快捷鍵<Tab>詞<Tab>語言」",
 	]);
 	await expect(unused).toHaveText([
-		"第 5 行「口雲口」：快捷鍵「OMW」不是方案的鍵，加了詞、沒設觸發詞",
+		"第 5 行「口雲口」：快捷鍵「OMW」不是方案的鍵，不能設成觸發詞",
 	]);
+	// 快捷鍵 `kk` 能設成觸發詞，但它本來是速成的碼：預設不勾，並標出會搶走誰的首選。
+	const asTriggers = confirm.getByRole("checkbox", {
+		name: "把 Gboard 快捷鍵設成觸發詞",
+	});
+	await expect(asTriggers).not.toBeChecked();
+	await expect(confirm).toContainText(
+		"1 列的快捷鍵能設成觸發詞，其中 1 列撞到速成既有的碼、會搶走首選",
+	);
+	const triggers = confirm
+		.getByRole("list", { name: "能設成觸發詞的快捷鍵" })
+		.getByRole("listitem");
+	await expect(triggers).toHaveText([
+		/^第 2 行「雲口」：快捷鍵「kk」，會搶走「.+」的首選$/,
+	]);
+	await expect(triggers.first()).toHaveClass("displacing");
 	await section.screenshot({
 		path: testInfo.outputPath("word-list-confirm.png"),
 	});
@@ -66,22 +81,43 @@ test("匯入 Gboard 詞表：先列出會加幾個、略過哪些，確認後打
 	await expect(status).toHaveText("已從 dictionary.txt 加入 2 個詞");
 	await expect(confirm).toBeHidden();
 
-	// 觸發詞 `kk` 是首選；連打的碼 `mir` 也打得出。
+	// 沒設觸發詞：`kk` 的首選照舊；由字的碼 `mir` 打得出。
+	await text.focus();
+	await page.keyboard.type("kk");
+	await expect(items.first()).not.toHaveText("1雲口");
+	await page.keyboard.press("Escape");
+	await page.keyboard.type("mir");
+	await expect(items.filter({ hasText: /^\d雲口$/ })).toHaveCount(1);
+	await page.keyboard.press("Escape");
+	await page.screenshot({ path: testInfo.outputPath("word-list-typed.png") });
+
+	// 存進 localStorage：重新整理後還在。
+	await page.reload();
+	const again = await ready(page);
+	await page.keyboard.type("mir");
+	await expect(again.items.filter({ hasText: /^\d雲口$/ })).toHaveCount(1);
+});
+
+test("勾了「把 Gboard 快捷鍵設成觸發詞」才設，打快捷鍵是首選", async ({
+	page,
+}, testInfo) => {
+	const { text, items, section, confirm, status } = await ready(page);
+	await choose(page, "dictionary.txt", GBOARD);
+	await confirm
+		.getByRole("checkbox", { name: "把 Gboard 快捷鍵設成觸發詞" })
+		.check();
+	await expect(confirm).toContainText("會加 2 個詞、略過 2 列");
+	await section.screenshot({
+		path: testInfo.outputPath("word-list-confirm-triggers.png"),
+	});
+	await confirm.getByRole("button", { name: "確定匯入" }).click();
+	await expect(status).toHaveText("已從 dictionary.txt 加入 2 個詞");
+
 	await text.focus();
 	await page.keyboard.type("kk");
 	await expect(items.first()).toHaveText("1雲口");
 	await page.keyboard.press("Space");
 	await expect(text).toHaveValue("雲口");
-	await page.screenshot({ path: testInfo.outputPath("word-list-typed.png") });
-	await page.keyboard.type("mir");
-	await expect(items.filter({ hasText: /^\d雲口$/ })).toHaveCount(1);
-	await page.keyboard.press("Escape");
-
-	// 存進 localStorage：重新整理後還在。
-	await page.reload();
-	const again = await ready(page);
-	await page.keyboard.type("kk");
-	await expect(again.items.first()).toHaveText("1雲口");
 });
 
 test("取消不加；沒有可加的詞時不問、直接列出略過的列", async ({ page }) => {

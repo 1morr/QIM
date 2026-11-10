@@ -3,7 +3,7 @@
 //! 收三種格式，照各自產品的慣例讀：Rime 碼表（`.dict.yaml`：YAML 檔頭，`...` 之後是 Tab 分隔的
 //! 列，欄位依 `columns:`、沒寫時第一欄是字詞）、Gboard 個人字典匯出的 `dictionary.txt`（第一行
 //! `# Gboard Dictionary …`，每列「快捷鍵<Tab>詞<Tab>語言」）、一行一詞的純文字。檔裡的碼不看
-//! （多半是別的方案的），碼照手動加詞由字推出；Gboard 的快捷鍵是速成的鍵時當觸發詞。
+//! （多半是別的方案的），碼照手動加詞由字推出；Gboard 的快捷鍵預設不設成觸發詞（[`Shortcuts`]）。
 //!
 //! 和匯入學習資料（[`UserModel::import`]）不同，這裡是加進現有的使用者詞：壞列略過、報行號，
 //! 其餘照加（librime、libime 讀使用者詞庫也是略過壞列，`docs/research/userdict-text-formats.md`）。
@@ -35,6 +35,17 @@ impl fmt::Display for WordListFormat {
     }
 }
 
+/// Gboard 的快捷鍵要不要設成觸發詞。快捷鍵是在別的鍵盤（英文、拼音）設的，同一串字母在速成
+/// 多半是別的字詞的碼，設了會搶走那個碼的首選；所以預設不設，由使用者在匯入前決定。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Shortcuts {
+    /// 不設：詞照加，碼由字推出；有字沒有碼的詞推不出碼。
+    #[default]
+    Ignore,
+    /// 是方案的鍵的快捷鍵設成觸發詞（有字沒有碼的詞也用它當碼）。
+    AsTriggers,
+}
+
 /// 一次匯入的結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WordListReport {
@@ -43,8 +54,35 @@ pub struct WordListReport {
     pub added: usize,
     /// 沒加的列，依行號。
     pub skipped: Vec<SkippedLine>,
-    /// 加了、但快捷鍵不是方案的鍵而沒當觸發詞的詞（只有 Gboard 有快捷鍵）。
+    /// 快捷鍵是方案的鍵、能設成觸發詞的列（只有 Gboard 有快捷鍵）；不論設了沒有都列出，殼拿它
+    /// 問使用者要不要設。詞已是使用者詞的不列（設不設都不會加）。
+    pub trigger_shortcuts: Vec<TriggerShortcut>,
+    /// 加了、但快捷鍵不是方案的鍵而不能當觸發詞的詞。
     pub unused_shortcuts: Vec<UnusedShortcut>,
+}
+
+/// 快捷鍵能設成觸發詞的一列。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerShortcut {
+    pub line: usize,
+    pub text: String,
+    pub shortcut: String,
+    /// 打這串快捷鍵時現在的首選（不是這個詞時）；設成觸發詞就會搶走它的首選。
+    pub displaces: Option<String>,
+}
+
+impl fmt::Display for TriggerShortcut {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "第 {} 行「{}」：快捷鍵「{}」",
+            self.line, self.text, self.shortcut
+        )?;
+        if let Some(top) = &self.displaces {
+            write!(f, "，會搶走「{top}」的首選")?;
+        }
+        Ok(())
+    }
 }
 
 /// 沒加的一列。
@@ -57,7 +95,7 @@ pub struct SkippedLine {
     pub reason: SkipReason,
 }
 
-/// 詞加了、Gboard 的快捷鍵沒當觸發詞的一列。
+/// 詞加了、Gboard 的快捷鍵不是方案的鍵而不能當觸發詞的一列。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnusedShortcut {
     pub line: usize,
@@ -75,7 +113,7 @@ impl fmt::Display for UnusedShortcut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "第 {} 行「{}」：快捷鍵「{}」不是方案的鍵，加了詞、沒設觸發詞",
+            "第 {} 行「{}」：快捷鍵「{}」不是方案的鍵，不能設成觸發詞",
             self.line, self.text, self.shortcut
         )
     }
@@ -148,12 +186,13 @@ const GBOARD_HEADER: &str = "# Gboard Dictionary";
 
 impl UserModel {
     /// 把詞表 `text` 的詞加進目前方案的使用者詞（plan §2.4）：碼照 [`UserModel::add_word`] 由字
-    /// 推出，來源是 `manual`。壞列、重複、已有的略過並記在結果裡；整份讀不了時回傳錯誤、什麼都
-    /// 不加。要先看會加幾個，在複本上呼叫。
+    /// 推出，來源是 `manual`；Gboard 的快捷鍵照 `shortcuts` 決定設不設成觸發詞。壞列、重複、已有的
+    /// 略過並記在結果裡；整份讀不了時回傳錯誤、什麼都不加。要先看會加幾個，在複本上呼叫。
     pub fn import_word_list(
         &mut self,
         engine: &Engine,
         text: &str,
+        shortcuts: Shortcuts,
     ) -> Result<WordListReport, WordListError> {
         let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         let lines: Vec<Line> = text
@@ -167,6 +206,7 @@ impl UserModel {
             format,
             added: 0,
             skipped: Vec::new(),
+            trigger_shortcuts: Vec::new(),
             unused_shortcuts: Vec::new(),
         };
         // 加進去的詞 → 它的行號；只記加了的，重複才指得到一列真的加了的。
@@ -191,7 +231,26 @@ impl UserModel {
                 report.skip(line, word, SkipReason::ControlCharacter);
                 continue;
             }
-            let trigger = shortcut.filter(|s| engine.scheme().spells(s));
+            let usable = shortcut.filter(|s| engine.scheme().spells(s));
+            // 只列設了才有差的：用快捷鍵時的碼（字推不出就是快捷鍵）已有這個使用者詞的不列。
+            let offered = usable.filter(|&s| {
+                manual_word_code(engine, word, Some(s))
+                    .is_some_and(|code| !self.for_scheme(&engine.scheme().id).is_word(&code, word))
+            });
+            if let Some(usable) = offered {
+                let displaces = engine
+                    .candidates(self, usable)
+                    .into_iter()
+                    .next()
+                    .filter(|top| top != word);
+                report.trigger_shortcuts.push(TriggerShortcut {
+                    line,
+                    text: word.to_string(),
+                    shortcut: usable.to_string(),
+                    displaces,
+                });
+            }
+            let trigger = usable.filter(|_| shortcuts == Shortcuts::AsTriggers);
             let Some(code) = manual_word_code(engine, word, trigger) else {
                 report.skip(line, word, SkipReason::NoCode);
                 continue;
@@ -207,7 +266,7 @@ impl UserModel {
             self.insert_manual_word(engine, &code, word, trigger);
             added.insert(word, line);
             report.added += 1;
-            if let (Some(shortcut), None) = (shortcut, trigger) {
+            if let (Some(shortcut), None) = (shortcut, usable) {
                 report.unused_shortcuts.push(UnusedShortcut {
                     line,
                     text: word.to_string(),

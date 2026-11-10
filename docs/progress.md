@@ -32,11 +32,12 @@
 | 2026-11-11 | M3 19 | 繁體模式的簡體字（278 字，建置端判定，格式 v6）排在同碼繁體字之後，開關「繁體字優先」預設開；選兩次照常成首選；見票 19 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少，dev 重比結論相同）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 16 | emoji 候選：CLDR 粵語、繁中標註建 `cldr-emoji-yue-hant`，整串字詞後接最多 3 個、預設開；首選不變、修正多 0.1–1.4% 更新 baseline；見票 16 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
-| 2026-11-11 | M3 17 | 詞表匯入：收 Rime `.dict.yaml`、Gboard `dictionary.txt`、一行一詞，碼由字推出、加進使用者詞，壞列報行號；設定區「匯入詞庫」先列結果再確認；見票 17 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 03 | 規則 1 × 2 多移一次先紅再修；規則 3、4 與分段選出的整串補測試；`beam` 驗證搬進 `Ranking::check`；bench 前後相同；見票 03 | 新 session 下 `/implement .scratch/m3/issues/12-personal-bigram.md` |
+| 2026-11-11 | M3 17 | 詞表匯入：Rime `.dict.yaml`、Gboard `dictionary.txt`、一行一詞，碼由字推出、加進使用者詞，壞列報行號；Gboard 快捷鍵勾選才設觸發詞；見票 17 | 新 session 下 `/implement .scratch/m3/issues/05-web-context.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 17：Gboard 快捷鍵預設不設成觸發詞（原本是方案的鍵就設），確認框勾選才設、標出會搶首選的列：在別的鍵盤設的快捷鍵常撞速成的碼；改 plan §2.4；見票 17。
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。
 - 2026-11-11 M3 拆票：繁體模式的簡體字照 macOS 排在繁體後、不過濾，𨳊 照字頻（使用者決定，改 brief §1.3）；匯出升 v2、收 v1；更新來源 GitHub Releases；見 spec。
 - 2026-11-11 M3 票 19：bench 修正次數 yue-wiki +6、common-voice-yue +2（答案含簡體字的題），使用者同意 `--update-baseline`（合併票 04 後 yue-wiki 前文兩集同因各 +6）；「恒」查證後仍算簡體字、「够」是香港標準字形，移出；叙携等與繁體同序號的算異體；見票 19。
