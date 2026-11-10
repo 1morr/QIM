@@ -1,4 +1,5 @@
-//! 詞庫資料包的內容（plan §4.2）：rime-essay 與粵語口語詞表的多字詞展開成速成碼索引，加上語料的字頻。
+//! 詞庫資料包的內容（plan §4.2）：rime-essay、粵語口語詞表與 HKCanCor train 切分的多字詞展開成
+//! 速成碼索引，加上語料的字頻。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -14,6 +15,13 @@ pub const MIN_FREQUENCY: u64 = 100;
 /// 一個詞最多收幾個碼的組合。rime-essay `054920d` 門檻以上、字都在連打字集的 25 萬詞，
 /// 99.4% 不超過 4 個組合，超過 8 個的只有 80 詞（票 06）。
 pub const MAX_COMBINATIONS: usize = 8;
+
+/// 語料的詞至少在 train 切分出現幾次才收：只出現一次的多是轉寫瑕疵與專名（M3 票 18）。
+pub const CORPUS_MIN_COUNT: u64 = 2;
+
+/// 語料的詞每出現一次算多少詞頻（rime-essay 的尺度）：兩邊都有的詞，詞頻比次數的下四分位，
+/// 怎麼定見 plan §4.2 與 M3 票 18 Comments。
+pub const CORPUS_WORD_FREQUENCY: u64 = 300;
 
 /// 建一次詞庫的統計，給 `--verify` 的報告。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -36,6 +44,8 @@ pub struct Counts {
     pub indexed: usize,
     /// 粵語口語詞表的詞數。
     pub colloquial: usize,
+    /// 語料的詞補進來的詞數（essay 與口語詞表沒收的）。
+    pub corpus: usize,
     /// rime-essay 的詞（兩字以上，重複的列算一個）經 [`Forms::normalize`] 換了寫法的詞數。
     pub converted: usize,
     /// 換了寫法之後和別的詞撞成同一個、詞頻相加的詞數。
@@ -64,10 +74,12 @@ impl Forms<'_> {
 pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 
 /// 由 rime-essay 的 `essay.txt`（一行「詞<TAB>詞頻」）與粵語口語詞表 `colloquial`（[`COLLOQUIAL_PATH`]，
-/// 同格式，`#` 開頭的行與空行略過）建詞庫。
+/// 同格式，`#` 開頭的行與空行略過）、語料 train 切分的詞與次數 `corpus`（`hkcancor::TrainWords`）建詞庫。
 ///
 /// - 口語詞表只補 essay 沒收的詞，是人工整理的：單字、詞頻低於 [`MIN_FREQUENCY`]、含連打字集以外
 ///   的字、重複、essay 已收（詞頻達門檻）的詞都算錯，不默默濾掉；essay 有但低於門檻的詞用詞表的詞頻。
+/// - 語料的詞只補 essay（達門檻）與口語詞表都沒收的詞：次數 ≥ [`CORPUS_MIN_COUNT`] 才收，詞頻是
+///   次數乘 [`CORPUS_WORD_FREQUENCY`]；是機器抽的，含連打字集以外的字的詞默默略過、不算錯。
 /// - 單字、詞頻低於 [`MIN_FREQUENCY`] 的詞、含連打字集以外的字的詞不收；同一個詞列了幾次取最大詞頻。
 /// - essay 與詞表的詞都經 `forms.normalize` 換成語料的寫法（「羣組」→「群組」）：換完撞成同一個詞的
 ///   照 [`combined`] 合併，門檻與字集看換完的詞；單向寫法反過來寫的錯字（「顯着」）改回原字。
@@ -80,6 +92,7 @@ pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 pub fn build(
     essay: &str,
     colloquial: &str,
+    corpus: &BTreeMap<String, u64>,
     code_table: &CodeTable,
     transcoder: &Transcoder,
     mut char_frequency: BTreeMap<char, u64>,
@@ -142,6 +155,22 @@ pub fn build(
         }
         *kept = frequency;
         counts.colloquial += 1;
+    }
+
+    let mut corpus_counts: BTreeMap<String, u64> = BTreeMap::new();
+    for (text, count) in corpus {
+        *corpus_counts.entry(forms.common(text)).or_default() += count;
+    }
+    for (text, count) in corpus_counts {
+        let coded = text.chars().all(|ch| codes.contains_key(&ch));
+        if count < CORPUS_MIN_COUNT || !coded || listed.contains(&text) {
+            continue;
+        }
+        let kept = words.entry(text).or_insert(0);
+        if *kept < MIN_FREQUENCY {
+            *kept = count * CORPUS_WORD_FREQUENCY;
+            counts.corpus += 1;
+        }
     }
 
     let per_char = |text: &str| {
