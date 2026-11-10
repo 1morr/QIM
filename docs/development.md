@@ -175,7 +175,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 - 題目是 `build/corpus/<名>/dev.tsv`，`<名>` 是 `bench/corpus/`、`bench/colloquial/` 下的每個集合；由 `cargo xtask data` 寫出，取 dev 切分雜湊最小的 2,000 個不重複句，格式同基準檔。沒有就失敗，先跑 `cargo xtask data`。
 - 「有前文」的調參題是 `build/corpus/<名>/dev-context.tsv`，取 dev 切分、取法與格式同 `bench/*/context/`；有這個檔的集合在所有集合之後多打 `<名>·前文`、`<名>·前文·不給` 兩個集合，報告並列兩者與合計；沒有就不打。前文規則的實驗：`scripts/experiments/context-rule/`。
-- `--set` 可重複，鍵是方案檔 `[ranking]` 的欄位名（`word_bonus`、`segment_penalty`、`beam`、`sentences`）；資料包不變。語料權重要改 `crates/qim-databuild/src/corpora.rs` 再 `cargo xtask data`。
+- `--set` 可重複，鍵是方案檔 `[ranking]` 的欄位名（`word_bonus`、`segment_penalty`、`beam`、`sentences`）；資料包不變。蓋過的值照方案檔的規則驗（`qim_core::Ranking::check`：`beam` 至少 1，β、γ 是有限的數），不合就失敗、指出是哪個值。語料權重要改 `crates/qim-databuild/src/corpora.rs` 再 `cargo xtask data`。
 - 每個集合後面接兩組由它的 dev 句子取出的短輸入（依出現次數加權的列才是照語料打的正確率）：`<名>·單字` 是句子裡每個字單獨打，`<名>·詞` 是句子裡出現、詞庫也有的 2–4 字詞單獨打。dev 都是長句，沒有它們就看不出參數讓兩碼的單字或單打一個詞時選錯。
 - 只印結果：固定題、各集合與短輸入的指標表、依長度分組；不比 baseline、不跑個人集、不量每鍵延遲，所以不重編 WebAssembly 綁定，一次約 15 秒（Apple M6）。
 - dev 的句子和 bigram 的訓練語料同源，字級 bigram 在 dev 上特別準：票 12 照 dev 調低 β 時個人集（使用者自己的詞）答錯變多，`·詞` 也看不出來。所以 dev 挑出的參數仍要過 `cargo xtask bench --check` 的個人集 baseline。
