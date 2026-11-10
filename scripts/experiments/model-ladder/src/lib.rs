@@ -13,18 +13,17 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use qim_bench::{Item, Personal, parse_context, parse_corpus};
-use qim_core::{Engine, Key, RERANK_LIMIT, Session, UserModel};
+use qim_core::{
+    Engine, Key, LanguageModelPack, Pack, RERANK_LIMIT, ScoredPath, Session, UserModel,
+};
 use serde::{Deserialize, Serialize};
 
 /// 前文長度（字）：0 是不給前文（同基準的 `·前文·不給`），50、200 取長前文的最後幾個字。
 pub const CONTEXT_LENGTHS: [usize; 3] = [0, 50, 200];
 
-/// 「答案在前 k 個」報哪些 k：知意三檔 5、9、18，青簡知微與 M2 票 11 的 6，加 1、2、3 與方案的
-/// beam 20（lattice 每個位置最多留 20 條，路徑不會更多）。
+/// 「答案在前 k 個」報哪些 k：知意三檔 5、9、18，青簡知微與 M2 票 11 的 6，加 1、2、3 與速成方案的
+/// beam 20（`data/schemes/quick.toml`；lattice 每個位置最多留 beam 條，路徑不會更多）。
 pub const RECALL_AT: [usize; 8] = [1, 2, 3, 5, 6, 9, 18, 20];
-
-/// 每題從 lattice 讀幾條路徑：方案的 beam（`data/schemes/quick.toml`），再多也沒有。
-pub const MAX_PATHS: usize = 20;
 
 /// 重排模型看的路徑數 N（本票定，README〈N 與路徑長度〉）：口語 dev 上答案在前 9 條的比例比前 6 條
 /// 多 3.7 點（每條約 1.2 點），9 條之後每條不到 0.7 點；也等於候選列一頁。
@@ -46,13 +45,15 @@ impl Split {
     }
 }
 
-/// 報告分組（spec〈模型階梯實驗〉的測試集）。
+/// 報告分組（spec〈模型階梯實驗〉的測試集）。「有前文」依語料分維基、口語：口語的長前文很短，
+/// 合在一起時前文長度的差別幾乎都來自維基（README〈限制〉）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Group {
     Wiki,
     Colloquial,
     Personal,
-    Context,
+    ContextWiki,
+    ContextColloquial,
 }
 
 impl Group {
@@ -61,8 +62,13 @@ impl Group {
             Group::Wiki => "維基",
             Group::Colloquial => "口語",
             Group::Personal => "個人",
-            Group::Context => "有前文",
+            Group::ContextWiki => "有前文·維基",
+            Group::ContextColloquial => "有前文·口語",
         }
+    }
+
+    fn is_context(self) -> bool {
+        matches!(self, Group::ContextWiki | Group::ContextColloquial)
     }
 }
 
@@ -70,6 +76,8 @@ impl Group {
 #[derive(Debug, Clone)]
 pub struct Set {
     pub name: String,
+    /// 題目取自哪個切分；外部模型的結果靠它和集合名、行號對回題目。
+    pub split: Split,
     pub group: Group,
     /// 前文長度（字），只有「有前文」的集合不是 0。
     pub context_chars: usize,
@@ -83,18 +91,21 @@ pub struct Set {
 pub fn load_sets(root: &Path, split: Split) -> Result<Vec<Set>, String> {
     let mut sets = Vec::new();
     let corpora = qim_bench::load_corpora(root)?;
-    for (name, test_items) in &corpora {
-        let colloquial = root
-            .join(qim_bench::CORPUS_DIRS[1])
+    // 語料在 `CORPUS_DIRS` 的第二個目錄（口語）就是口語集。
+    let colloquial = |name: &str| {
+        root.join(qim_bench::CORPUS_DIRS[1])
             .join(format!("{name}.tsv"))
-            .exists();
+            .exists()
+    };
+    for (name, test_items) in &corpora {
         let items = match split {
             Split::Test => test_items.clone(),
             Split::Dev => parse_corpus(&read(&root.join(qim_bench::dev_items(name)))?)?,
         };
         sets.push(Set {
             name: name.clone(),
-            group: if colloquial {
+            split,
+            group: if colloquial(name) {
                 Group::Colloquial
             } else {
                 Group::Wiki
@@ -113,7 +124,12 @@ pub fn load_sets(root: &Path, split: Split) -> Result<Vec<Set>, String> {
         for chars in CONTEXT_LENGTHS {
             sets.push(Set {
                 name: format!("{name}·前文{chars}"),
-                group: Group::Context,
+                split,
+                group: if colloquial(name) {
+                    Group::ContextColloquial
+                } else {
+                    Group::ContextWiki
+                },
                 context_chars: chars,
                 private: false,
                 items: items.iter().map(|i| with_context_chars(i, chars)).collect(),
@@ -125,6 +141,7 @@ pub fn load_sets(root: &Path, split: Split) -> Result<Vec<Set>, String> {
     {
         sets.push(Set {
             name: qim_bench::PERSONAL_SET.into(),
+            split,
             group: Group::Personal,
             context_chars: 0,
             private: true,
@@ -150,16 +167,11 @@ fn last_chars(text: &str, n: usize) -> String {
     text.chars().skip(skip).collect()
 }
 
-/// 一條 lattice 路徑與它的同步層分數（`qim_core::Session::paths`）。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PathOut {
-    pub text: String,
-    pub score: f64,
-}
-
 /// 給重排模型的一題（停鍵後的重排要求）：不含答案。匯出檔一行一個（JSONL）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Query {
+    /// `dev` 或 `test`：dev 與 test 的集合名相同，結果檔要靠它分。
+    pub split: String,
     pub set: String,
     pub line: usize,
     /// 輸入框前文（已截到集合的前文長度），沒給是空字串。
@@ -167,12 +179,20 @@ pub struct Query {
     pub input: String,
     /// 候選列第一頁（最多 `RERANK_LIMIT` 個），依核心的順序；第一個是首選，重排不動它。
     pub candidates: Vec<String>,
-    /// lattice 蓋滿整串的前 N 條路徑，依分數由高到低。
-    pub paths: Vec<PathOut>,
+    /// lattice 蓋滿整串的前 N 條路徑與路徑分，依分數由高到低。
+    pub paths: Vec<ScoredPath>,
+}
+
+impl Query {
+    /// 模型看得到的文字：候選與路徑。
+    fn shows(&self, text: &str) -> bool {
+        self.candidates.iter().any(|c| c == text) || self.paths.iter().any(|p| p.text == text)
+    }
 }
 
 /// 停鍵層、雲端層的模型（plan §2.7）：看一題的候選與路徑，回傳它排的文字，好的在前（可以是
 /// 候選、路徑或兩者混合）。首選不動（ADR 0005）：顯示的第 2 名是它排的第一個不是首選的文字。
+/// 候選與路徑以外的文字不算（框架丟掉並計數）：重排只能挑核心給得出的字。
 pub trait Reranker {
     /// 報告與逐題結果的目錄名。
     fn name(&self) -> &str;
@@ -192,8 +212,8 @@ impl Reranker for Identity {
     }
 }
 
-/// 外部模型的結果：JSONL，一行 `{"set": 集合名, "line": 行號, "ranked": [文字…]}`，對應匯出的
-/// [`Query`]。沒有結果的題照原順序，算進 [`Orders::missing`]。
+/// 外部模型的結果：JSONL，一行 `{"split": 切分, "set": 集合名, "line": 行號, "ranked": [文字…]}`，
+/// 對應匯出的 [`Query`]。沒有結果的題照原順序，算進 [`Orders::missing`]。
 pub struct Orders {
     name: String,
     orders: HashMap<(String, usize), Vec<String>>,
@@ -202,13 +222,15 @@ pub struct Orders {
 
 #[derive(Debug, Deserialize)]
 struct OrderLine {
+    split: String,
     set: String,
     line: usize,
     ranked: Vec<String>,
 }
 
 impl Orders {
-    pub fn parse(name: &str, text: &str) -> Result<Self, String> {
+    /// 讀結果檔；每一行的切分都要是 `split`，免得拿 dev 的結果去算 test。
+    pub fn parse(name: &str, text: &str, split: Split) -> Result<Self, String> {
         let mut orders = HashMap::new();
         for (i, line) in text
             .lines()
@@ -217,6 +239,14 @@ impl Orders {
         {
             let o: OrderLine =
                 serde_json::from_str(line).map_err(|e| format!("第 {} 行：{e}", i + 1))?;
+            if o.split != split.name() {
+                return Err(format!(
+                    "第 {} 行是 {} 切分的結果，這次跑的是 {}",
+                    i + 1,
+                    o.split,
+                    split.name()
+                ));
+            }
             orders.insert((o.set, o.line), o.ranked);
         }
         Ok(Self {
@@ -248,12 +278,14 @@ impl Reranker for Orders {
 pub struct Typed {
     /// 全部候選，依核心的順序。
     pub candidates: Vec<String>,
-    /// lattice 的前 [`MAX_PATHS`] 條路徑。
-    pub paths: Vec<PathOut>,
+    /// lattice 的全部路徑（最多 beam 條）。
+    pub paths: Vec<ScoredPath>,
     /// 交給模型的一題（路徑只留前 N 條）；沒有候選時是 `None`，不要求重排。
     pub query: Option<Query>,
-    /// 模型排的文字。
+    /// 模型排的文字，只留看得到的（[`Reranker`]）。
     pub ranked: Vec<String>,
+    /// 模型回了幾個看不到的文字（丟掉了）。
+    pub unseen: usize,
     /// 模型花的時間（ms）。
     pub rerank_ms: Option<f64>,
 }
@@ -276,7 +308,7 @@ impl Typed {
 /// 停鍵後要求，模型回來前使用者沒動）。有前文的題先 `set_context`，同基準。
 pub fn type_item(
     engine: &Engine,
-    set: &str,
+    set: &Set,
     item: &Item,
     n: usize,
     reranker: &mut dyn Reranker,
@@ -295,35 +327,33 @@ pub fn type_item(
         .into_iter()
         .map(|c| c.text)
         .collect();
-    let paths: Vec<PathOut> = session
-        .paths(MAX_PATHS)
-        .into_iter()
-        .map(|p| PathOut {
-            text: p.text,
-            score: p.score,
-        })
-        .collect();
+    let paths = session.paths(usize::from(engine.scheme().ranking.beam));
     let query = (!candidates.is_empty()).then(|| Query {
-        set: set.into(),
+        split: set.split.name().into(),
+        set: set.name.clone(),
         line: item.line,
         before,
         input: item.input(),
         candidates: candidates.iter().take(RERANK_LIMIT).cloned().collect(),
         paths: paths.iter().take(n).cloned().collect(),
     });
-    let (ranked, rerank_ms) = match &query {
+    let (ranked, unseen, rerank_ms) = match &query {
         Some(q) => {
             let start = Instant::now();
-            let ranked = reranker.rerank(q);
-            (ranked, Some(start.elapsed().as_secs_f64() * 1000.0))
+            let all = reranker.rerank(q);
+            let ms = start.elapsed().as_secs_f64() * 1000.0;
+            let total = all.len();
+            let ranked: Vec<String> = all.into_iter().filter(|t| q.shows(t)).collect();
+            (ranked.clone(), total - ranked.len(), Some(ms))
         }
-        None => (Vec::new(), None),
+        None => (Vec::new(), 0, None),
     };
     Typed {
         candidates,
         paths,
         query,
         ranked,
+        unseen,
         rerank_ms,
     }
 }
@@ -334,16 +364,16 @@ pub struct Row {
     pub line: usize,
     /// 期望在候選列的位置（從 0 起）；不在是 `None`。
     pub rank: Option<usize>,
-    /// 期望在 lattice 路徑的位置（從 0 起，最多看 [`MAX_PATHS`] 條）；不在是 `None`。
+    /// 期望在 lattice 路徑的位置（從 0 起，最多看 beam 條）；不在是 `None`。
     pub path_rank: Option<usize>,
     /// 首選正確（重排不動首選，和基準的整句首選正確相同）。
     pub correct: bool,
     /// 重排後期望在顯示的前 2 名（[`Typed::shown_top2`]）。
     pub top2: bool,
     /// 模型自己排的第一名是期望（假如規則讓它動首選；ADR 0005 不讓，只當參考）。模型沒排時看首選。
-    pub free_top: bool,
+    pub model_first: bool,
     /// 基準模擬的修正次數。
-    pub corrections: usize,
+    pub correction_count: usize,
     pub finished: bool,
     /// 期望的字數。
     pub chars: usize,
@@ -359,8 +389,8 @@ impl Row {
             path_rank: typed.paths.iter().position(|p| p.text == expected),
             correct: scored.correct,
             top2: typed.shown_top2().contains(&Some(expected.as_str())),
-            free_top: model_top.is_some_and(|t| *t == expected),
-            corrections: scored.correction_count,
+            model_first: model_top.is_some_and(|t| *t == expected),
+            correction_count: scored.correction_count,
             finished: scored.finished,
             chars: scored.chars,
         }
@@ -378,6 +408,8 @@ pub struct SetRun {
     pub path_counts: Vec<usize>,
     /// 模型每次花的時間（ms）。
     pub rerank_ms: Vec<f64>,
+    /// 模型回了幾個看不到的文字（候選與路徑以外，丟掉了）。
+    pub unseen: usize,
 }
 
 /// 打一個集合：首選與修正次數照基準算（`qim_bench::score_set`），其餘照 [`type_item`] 算。
@@ -389,16 +421,18 @@ pub fn run_set(engine: &Engine, set: &Set, n: usize, reranker: &mut dyn Reranker
         path_chars: Vec::new(),
         path_counts: Vec::new(),
         rerank_ms: Vec::new(),
+        unseen: 0,
     };
     for (item, result) in set.items.iter().zip(&scored.items) {
         assert_eq!(item.line, result.line, "基準的結果和題目要逐題對齊");
-        let typed = type_item(engine, &set.name, item, n, reranker);
+        let typed = type_item(engine, set, item, n, reranker);
         if let Some(q) = &typed.query {
             run.path_counts.push(q.paths.len());
             run.path_chars
                 .extend(q.paths.iter().map(|p| p.text.chars().count()));
         }
         run.rerank_ms.extend(typed.rerank_ms);
+        run.unseen += typed.unseen;
         run.rows.push(Row::from(item, &typed, result));
     }
     run
@@ -410,8 +444,8 @@ pub struct Summary {
     pub total: usize,
     pub correct: usize,
     pub top2: usize,
-    pub free_top: usize,
-    pub corrections: usize,
+    pub model_first: usize,
+    pub correction_count: usize,
     pub unfinished: usize,
     /// 答案在候選列前 k 個（[`RECALL_AT`]）。
     pub recall: [usize; RECALL_AT.len()],
@@ -435,8 +469,8 @@ impl Summary {
         for row in rows {
             s.correct += usize::from(row.correct);
             s.top2 += usize::from(row.top2);
-            s.free_top += usize::from(row.free_top);
-            s.corrections += row.corrections;
+            s.model_first += usize::from(row.model_first);
+            s.correction_count += row.correction_count;
             s.unfinished += usize::from(!row.finished);
             count(&mut s.recall, row.rank);
             count(&mut s.path_recall, row.path_rank);
@@ -448,8 +482,8 @@ impl Summary {
         self.total += other.total;
         self.correct += other.correct;
         self.top2 += other.top2;
-        self.free_top += other.free_top;
-        self.corrections += other.corrections;
+        self.model_first += other.model_first;
+        self.correction_count += other.correction_count;
         self.unfinished += other.unfinished;
         for (a, b) in self.recall.iter_mut().zip(other.recall) {
             *a += b;
@@ -485,29 +519,40 @@ pub fn percentile<T: Copy + PartialOrd>(values: &[T], p: usize) -> Option<T> {
     (n > 0).then(|| sorted[(n * p).div_ceil(100).clamp(1, n) - 1])
 }
 
-/// 合計列：同一組、同一前文長度的集合加起來。「有前文」依前文長度各一列。
+/// 合計列：同一組、同一前文長度的集合加起來；「有前文」依前文長度各一列，最後再加維基與口語合起來的
+/// 「有前文」各前文長度一列。
 fn group_totals(runs: &[SetRun]) -> Vec<(String, Summary)> {
+    let sum = |keep: &dyn Fn(&SetRun) -> bool| {
+        runs.iter()
+            .filter(|r| keep(r))
+            .map(|r| Summary::of(&r.rows))
+            .fold(Summary::default(), Summary::add)
+    };
     let mut keys: Vec<(Group, usize)> = runs
         .iter()
         .map(|r| (r.set.group, r.set.context_chars))
         .collect();
     keys.sort();
     keys.dedup();
-    keys.into_iter()
-        .map(|(group, chars)| {
-            let summary = runs
-                .iter()
-                .filter(|r| r.set.group == group && r.set.context_chars == chars)
-                .map(|r| Summary::of(&r.rows))
-                .fold(Summary::default(), Summary::add);
-            let label = if group == Group::Context {
+    let mut totals: Vec<(String, Summary)> = keys
+        .iter()
+        .map(|&(group, chars)| {
+            let label = if group.is_context() {
                 format!("{}·前文{chars}", group.label())
             } else {
                 group.label().to_string()
             };
+            let summary = sum(&|r| r.set.group == group && r.set.context_chars == chars);
             (label, summary)
         })
-        .collect()
+        .collect();
+    for chars in CONTEXT_LENGTHS {
+        let summary = sum(&|r| r.set.group.is_context() && r.set.context_chars == chars);
+        if summary.total > 0 {
+            totals.push((format!("有前文·前文{chars}"), summary));
+        }
+    }
+    totals
 }
 
 /// 給人看的報告，Markdown 表。
@@ -524,9 +569,9 @@ pub fn report(runs: &[SetRun], reranker: &str, n: usize) -> String {
             s.total,
             pct(s.correct, s.total),
             pct(s.top2, s.total),
-            pct(s.free_top, s.total),
-            per(s.corrections, s.total),
-            s.corrections,
+            pct(s.model_first, s.total),
+            per(s.correction_count, s.total),
+            s.correction_count,
             s.unfinished
         )
     };
@@ -577,7 +622,7 @@ pub fn report(runs: &[SetRun], reranker: &str, n: usize) -> String {
         let of_group: Vec<&SetRun> = runs
             .iter()
             .filter(|r| r.set.group == group)
-            .filter(|r| group != Group::Context || r.set.context_chars == CONTEXT_LENGTHS[2])
+            .filter(|r| !group.is_context() || r.set.context_chars == CONTEXT_LENGTHS[2])
             .collect();
         let counts: Vec<usize> = of_group
             .iter()
@@ -601,9 +646,10 @@ pub fn report(runs: &[SetRun], reranker: &str, n: usize) -> String {
     if reranker != Identity.name()
         && let (Some(p50), Some(p95)) = (percentile(&ms, 50), percentile(&ms, 95))
     {
+        let unseen: usize = runs.iter().map(|r| r.unseen).sum();
         let _ = writeln!(
             out,
-            "\n重排每次 p50 {p50:.2} ms、p95 {p95:.2} ms（{} 次，框架內計時）",
+            "\n重排每次 p50 {p50:.2} ms、p95 {p95:.2} ms（{} 次，框架內計時）；回了候選與路徑以外的文字 {unseen} 個（不算）",
             ms.len()
         );
     }
@@ -615,7 +661,7 @@ pub fn write_rows(dir: &Path, runs: &[SetRun]) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|e| format!("建不了 {}：{e}", dir.display()))?;
     for run in runs {
         let mut text =
-            String::from("line\trank\tpath_rank\tcorrect\ttop2\tfree_top\tcorrections\n");
+            String::from("line\trank\tpath_rank\tcorrect\ttop2\tmodel_first\tcorrection_count\n");
         let show = |r: Option<usize>| r.map_or("-".into(), |k| k.to_string());
         for r in &run.rows {
             let _ = writeln!(
@@ -626,8 +672,8 @@ pub fn write_rows(dir: &Path, runs: &[SetRun]) -> Result<(), String> {
                 show(r.path_rank),
                 u8::from(r.correct),
                 u8::from(r.top2),
-                u8::from(r.free_top),
-                r.corrections
+                u8::from(r.model_first),
+                r.correction_count
             );
         }
         let path = dir.join(format!("{}.tsv", run.set.name));
@@ -640,7 +686,7 @@ pub fn write_rows(dir: &Path, runs: &[SetRun]) -> Result<(), String> {
 pub fn export_set(engine: &Engine, set: &Set, n: usize) -> String {
     let mut out = String::new();
     for item in &set.items {
-        if let Some(query) = type_item(engine, &set.name, item, n, &mut Identity).query {
+        if let Some(query) = type_item(engine, set, item, n, &mut Identity).query {
             out.push_str(&serde_json::to_string(&query).expect("可序列化"));
             out.push('\n');
         }
@@ -652,8 +698,9 @@ pub fn export_set(engine: &Engine, set: &Set, n: usize) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Paired {
     pub total: usize,
-    /// 由錯變對、由對變錯。
+    /// 由錯變對的題數。
     pub better: usize,
+    /// 由對變錯的題數。
     pub worse: usize,
 }
 
@@ -730,6 +777,34 @@ pub fn compare(a: &Path, b: &Path) -> Result<Vec<(String, [Paired; 3])>, String>
         out.push((name, paired));
     }
     Ok(out)
+}
+
+/// 同步層的成本：語言模型資料包的大小與解開的時間（讀進記憶體後、`from_bytes` 那一步，`runs` 次的
+/// 中位數）。常駐記憶體沿用 M2 票 04 的量測（README〈基線結果〉）。
+pub fn language_model_cost(root: &Path, engine: &Engine, runs: usize) -> Result<String, String> {
+    let Some(id) = &engine.scheme().packs.language_model else {
+        return Ok("方案沒有語言模型資料包".into());
+    };
+    let rel = format!("{}/{id}/{id}.pack", qim_bench::PACKS);
+    let bytes = fs::read(root.join(&rel)).map_err(|e| format!("讀不到 {rel}：{e}"))?;
+    let mut ms: Vec<f64> = (0..runs.max(1))
+        .map(|_| {
+            let start = Instant::now();
+            let pack = LanguageModelPack::from_bytes(&bytes).expect("基準載入過的資料包");
+            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+            drop(pack);
+            elapsed
+        })
+        .collect();
+    ms.sort_by(f64::total_cmp);
+    Ok(format!(
+        "{rel}：{} 位元組，解開 {:.1} ms（{} 次的中位數，最快 {:.1}、最慢 {:.1}）",
+        bytes.len(),
+        ms[ms.len() / 2],
+        ms.len(),
+        ms[0],
+        ms[ms.len() - 1]
+    ))
 }
 
 fn read(path: &Path) -> Result<String, String> {

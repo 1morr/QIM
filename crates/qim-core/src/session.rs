@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use serde::{Deserialize, Serialize};
+
 use crate::lattice::{self, CandidateSpan, Lattice};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
@@ -23,8 +25,8 @@ pub struct RerankRequest {
     pub candidates: Vec<Candidate>,
 }
 
-/// lattice 裡蓋滿沒選定的輸入碼的一條路徑（[`Session::paths`]）。
-#[derive(Debug, Clone, PartialEq)]
+/// lattice 裡蓋滿沒選定的輸入碼的一條路徑（[`Session::paths`]）；可序列化，模型階梯匯出給外部模型。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScoredPath {
     /// 字詞接起來的文字（繁體原文，不經簡體模式的後處理）。
     pub text: String,
@@ -458,11 +460,7 @@ impl Session {
     /// （plan §2.3）。和候選列不同：多段路徑不受方案的 `sentences` 限制，也不套排位規則。模型階梯
     /// 實驗讀它看重排模型能從幾條路徑裡挑（M3 票 07）；沒有組字時是空的。
     pub fn paths(&self, limit: usize) -> Vec<ScoredPath> {
-        self.lattice
-            .whole_paths(limit)
-            .into_iter()
-            .map(|(score, text)| ScoredPath { text, score })
-            .collect()
+        self.lattice.whole_paths(limit)
     }
 
     /// 給背景模型的重排要求（plan §2.7）：目前的 `generation`、上下文與前 [`RERANK_LIMIT`]

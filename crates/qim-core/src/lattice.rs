@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::SchemeModel;
-use crate::{Engine, Segment, UserModel};
+use crate::{Engine, ScoredPath, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -137,14 +137,17 @@ impl Lattice {
     }
 
     /// 蓋滿整串的前 `limit` 條路徑的分數與文字，依分數由高到低（最多 beam 條）；沒有輸入碼時是空的。
-    pub fn whole_paths(&self, limit: usize) -> Vec<(f64, String)> {
+    pub fn whole_paths(&self, limit: usize) -> Vec<ScoredPath> {
         if self.input.is_empty() {
             return Vec::new();
         }
         self.columns[self.input.len()]
             .iter()
             .take(limit)
-            .map(|node| (node.score, node.text.clone()))
+            .map(|node| ScoredPath {
+                text: node.text.clone(),
+                score: node.score,
+            })
             .collect()
     }
 

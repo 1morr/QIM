@@ -26,6 +26,8 @@ pub use latency::{
     LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, lefts_to_first_segment,
     node_wasm_timer, parse_timing, percentile,
 };
+/// 打一個集合，指標同基準；模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
+pub use score::score as score_set;
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};
 
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
@@ -369,12 +371,6 @@ fn load_baseline(path: &Path, tolerate_bad_format: bool) -> Result<Option<Baseli
         Err(_) if tolerate_bad_format => Ok(None),
         Err(e) => Err(format!("{}：{e}", path.display())),
     }
-}
-
-/// 打一個集合（每題用新的 `Session` 與空白的 `UserModel`，有前文的題先給前文），算的指標同基準；
-/// 模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
-pub fn score_set(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetResult {
-    score::score(engine, name, items, private)
 }
 
 /// 個人集：沒有 [`PERSONAL_USERDB`] 就跳過；題目檔第一行記的來源 sha256 要等於現在的

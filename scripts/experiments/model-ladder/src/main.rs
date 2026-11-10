@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use model_ladder::{
-    DEFAULT_N, Identity, Orders, Reranker, Split, compare, export_set, load_sets, report, run_set,
-    write_rows,
+    DEFAULT_N, Identity, Orders, Reranker, Split, compare, export_set, language_model_cost,
+    load_sets, report, run_set, write_rows,
 };
 
 const USAGE: &str = "用法：\n  model-ladder eval [--split dev|test] [--n <N>] [--orders <檔> --name <名>]\n  \
@@ -82,6 +82,12 @@ fn split_of(f: &Flags) -> Split {
 
 fn eval(args: &[String]) -> Result<(), String> {
     let f = flags(args)?;
+    if f.include_personal {
+        return Err("--include-personal 只給 export".into());
+    }
+    if f.name.as_deref() == Some(Identity.name()) {
+        return Err(format!("--name 不能叫 {}：那是基線的目錄", Identity.name()));
+    }
     let split = split_of(&f);
     let n = f.n.unwrap_or(DEFAULT_N);
     let root = root();
@@ -90,7 +96,7 @@ fn eval(args: &[String]) -> Result<(), String> {
     let mut orders = match (&f.orders, &f.name) {
         (Some(path), Some(name)) => {
             let text = std::fs::read_to_string(path).map_err(|e| format!("讀不到 {path}：{e}"))?;
-            Some(Orders::parse(name, &text).map_err(|e| format!("{path}：{e}"))?)
+            Some(Orders::parse(name, &text, split).map_err(|e| format!("{path}：{e}"))?)
         }
         (None, None) => None,
         _ => return Err("--orders 與 --name 要一起給".into()),
@@ -110,6 +116,7 @@ fn eval(args: &[String]) -> Result<(), String> {
     if let Some(o) = &orders {
         println!("\n沒有外部結果、照原順序的題：{}", o.missing);
     }
+    println!("\n{}", language_model_cost(&root, &engine, 5)?);
     let dir = root
         .join("build/model-ladder")
         .join(split.name())
@@ -121,6 +128,9 @@ fn eval(args: &[String]) -> Result<(), String> {
 
 fn export(args: &[String]) -> Result<(), String> {
     let f = flags(args)?;
+    if f.orders.is_some() || f.name.is_some() {
+        return Err("--orders、--name 只給 eval".into());
+    }
     let split = split_of(&f);
     let n = f.n.unwrap_or(DEFAULT_N);
     let root = root();

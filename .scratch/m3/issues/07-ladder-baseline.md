@@ -35,3 +35,15 @@ Blocked by: 04, 06
 - 2026-11-11 給票 10：DeepSeek 官方價格頁（2026-11-11 查）`deepseek-flash` 高峰時段每百萬 tokens 輸入（未命中快取）2 元、輸出 8 元，空閒時段半價；`deepseek-v4-pro` 自 2026-09-14 起轉給 V4.1-Flash、按 Flash 計費，spec 表上「v4-pro 當對照」已不成立，票 10 開工時要另選對照。
 - 2026-11-11 `cargo xtask bench --check`（改了 `qim-core` 的公開介面與 `qim-databuild` 的建置輸出）：`bench 通過`，13 個集合都沒有翻盤，資料包 sha256 不變；每鍵延遲原生 p50 34.71 / p95 59.13 µs、選開頭一段 259.50 / 930.50 µs，WebAssembly（Node）42.63 / 69.67 µs、306.17 / 1055.83 µs（機器忙）。沒動學習，不附 `--learning`。
 
+- 2026-11-11 code-review（`936a7cf...8f8fdcb`；Standards 讀 `CLAUDE.md`、plan §0–§2.1、§5.2、`GLOSSARY.md`、`docs/development.md`、spec〈共同規則〉，Spec 讀本票、spec〈模型階梯實驗〉與協調者的補充）。Spec 軸逐題比對了 33 個逐題結果檔，數字沒有錯。已處理：
+  - 外部結果的文字不在這題的候選與路徑裡也算命中（LLM 憑空寫出答案會灌高）：框架丟掉並計數，`Reranker` 的契約寫明。
+  - 結果檔沒有切分欄，dev 的結果拿去算 test 不會報錯：`Query` 與結果行加 `split`，不符就報錯。
+  - 「有前文」合計裡維基佔三分之二、口語的長前文又很短：依語料分成維基、口語兩列，另留合計。
+  - 基線缺常駐記憶體與載入時間、延遲只量一次：`eval` 印語言模型資料包的大小與解開時間（5 次），常駐記憶體引 M2 票 04；每鍵延遲多跑兩次報範圍；神經模型表加三個程序的範圍並註明倍數誤差大。
+  - 命名：`corrections` 改 `correction_count`（plan §0）、`free_top` 改 `model_first`；「長前文」「前 2 名命中率」補進 `GLOSSARY.md`；README 寫上量數字的 commit。
+  - 小處：`PathOut` 拿掉、核心的 `ScoredPath` 加 serde 直接用，`Lattice::whole_paths` 直接回它；`score_set` 改成 re-export；路徑數上限讀方案的 beam，不再手抄 20；`--name baseline` 會蓋掉基線的目錄，拒絕；`eval`、`export` 不認得對方的旗標時報錯；`Paired` 兩個欄位各自註解。
+  - 改完 dev、test 重跑，各集合的數字與第一次相同（test 這次是重現基線，不是調參）；`export --split dev` 寫出 16 個中間檔。
+- 2026-11-11 沒處理的發現：
+  - `last_chars` 在 `qim-databuild` 與實驗 crate 各一份：實驗不依賴 `qim-databuild`，三行的函式不值得開一個共用處。
+  - 實驗用 `CORPUS_DIRS[1]` 認口語集：`qim-bench` 沒有公開語料屬於哪個目錄，加註解說明。
+  - `Session::paths` 是為階梯加的核心公開介面：票 11 若決定停鍵層不用它，連同 `tests/rerank.rs` 的兩個測試一起刪。
