@@ -5,7 +5,7 @@
 //! - c(甲) = 3、N1+(甲•) = 2，λ(甲) = 1/3；c(乙) = 1、N1+(乙•) = 1，λ(乙) = 1/2。
 //! - N1+(••) = 3；P_cont：甲 1/7、乙 2/7、丙 3/7、丁 1/7。
 
-use qim_core::{LOG_PROB_STEP, LanguageModel};
+use qim_core::{LOG_PROB_STEP, LanguageModel, Pack};
 use qim_databuild::bigram::{Counter, Summary, train};
 use qim_databuild::common_forms::BothForms;
 

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, FORMAT_VERSION, PackError, Packs, Ranking, Scheme, SchemePack,
+    CodeEntry, CodeTable, FORMAT_VERSION, Pack, PackError, Packs, Ranking, Scheme, SchemePack,
 };
 
 fn sample() -> SchemePack {
@@ -45,6 +45,12 @@ fn pack_round_trips_through_bytes() {
     let pack = sample();
     let bytes = pack.to_bytes().unwrap();
     assert_eq!(SchemePack::from_bytes(&bytes).unwrap(), pack);
+}
+
+/// 方案資料包沒有自己的 id 欄位，用方案的 id。
+#[test]
+fn scheme_pack_id_is_the_scheme_id() {
+    assert_eq!(sample().id(), "quick");
 }
 
 #[test]

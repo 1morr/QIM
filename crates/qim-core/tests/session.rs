@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Options, Packs, Ranking, Scheme, SchemePack, Session,
+    CodeEntry, CodeTable, Engine, Key, Options, Pack, Packs, Ranking, Scheme, SchemePack, Session,
     ShiftKey, ShiftSwitch, Snapshot, UserModel,
 };
 

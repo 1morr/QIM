@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use qim_core::{Key, UserModel};
+use qim_core::{Key, Pack, UserModel};
 
 uniffi::setup_scaffolding!("qim");
 

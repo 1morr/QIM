@@ -2241,6 +2241,8 @@ version = "0.0.0"
 dependencies = [
  "cargo_metadata",
  "proc-macro2",
+ "qim-bench",
+ "qim-databuild",
  "tempfile",
 ]
 

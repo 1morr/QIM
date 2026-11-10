@@ -3,6 +3,7 @@
 //! 入口是 `cargo xtask data [--verify]`，用法見 `docs/development.md`。
 
 pub mod bigram;
+pub mod built;
 pub mod common_forms;
 pub mod corpora;
 pub mod corpus;
@@ -28,7 +29,7 @@ pub mod wiki;
 pub mod wikitext;
 
 pub use error::Error;
-pub use pipeline::{Outcome, run};
+pub use pipeline::{Outcome, WrittenPack, run};
 
 use std::collections::BTreeMap;
 
