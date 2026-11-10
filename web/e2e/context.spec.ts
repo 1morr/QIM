@@ -145,6 +145,35 @@ test.describe("實體鍵盤", () => {
 	});
 });
 
+test.describe("無痕期間打的字", () => {
+	test("無痕時上屏的字不是前文；關掉後第一次打字照游標處的前文，不接無痕時打的字", async ({
+		page,
+	}) => {
+		const { text, first } = await ready(page);
+		const incognito = page.getByRole("checkbox", { name: "無痕" });
+		await incognito.check();
+		await expect(text).toBeFocused();
+		// `kb` 的第 2 個候選是「冇」；無痕不學，選了也不改名次。
+		await page.keyboard.type("kb2");
+		await expect(text).toHaveValue("冇");
+		await page.keyboard.type("of");
+		await expect(first).toHaveText("1係");
+		await page.keyboard.press("Escape");
+
+		// 還在無痕時點到開頭，再關掉無痕：前文是游標處的（空的、接句首），不是無痕時打的「冇」。
+		await text.evaluate((element: HTMLTextAreaElement) =>
+			element.setSelectionRange(0, 0),
+		);
+		await incognito.uncheck();
+		await expect(text).toBeFocused();
+		await expect
+			.poll(() => text.evaluate((e: HTMLTextAreaElement) => e.selectionStart))
+			.toBe(0);
+		await page.keyboard.type("of");
+		await expect(first).toHaveText("1係");
+	});
+});
+
 test.describe("觸控鍵盤", () => {
 	// 觸控鍵不經實體鍵盤的 keydown：前文靠輸入框的 input 與 selectionchange 給。
 	const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];

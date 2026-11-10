@@ -270,3 +270,27 @@ fn turning_incognito_on_forgets_a_digit_in_the_context() {
     ime.type_keys(".3.");
     assert_eq!(ime.text, "。3.");
 }
+
+/// 無痕時前文不記，數字後半形照樣看核心自己送出去的字（只記游標前是不是數字，不記文字）。
+#[test]
+fn in_incognito_digits_typed_still_make_a_period_half_width() {
+    let mut ime = Ime::new();
+    ime.session.set_options(Options {
+        incognito: true,
+        ..Options::default()
+    });
+    let snapshot = ime.session.text(&ime.engine, &mut ime.user, "3");
+    ime.text.push_str(snapshot.commit.as_deref().unwrap());
+    ime.type_keys(".5:0");
+    assert_eq!(ime.text, "3.5:0");
+}
+
+/// 換欄位（`clear_context`）後不再是數字後。
+#[test]
+fn clearing_the_context_ends_the_number() {
+    let mut ime = Ime::new();
+    ime.type_keys("3");
+    ime.session.clear_context();
+    ime.type_keys(".");
+    assert_eq!(ime.text, "3。");
+}

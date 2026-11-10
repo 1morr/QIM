@@ -67,6 +67,12 @@ impl WebSession {
         self.session.set_context(before);
     }
 
+    /// 忘掉前文（`Session::clear_context`）：輸入框失焦時。
+    #[wasm_bindgen(js_name = clearContext)]
+    pub fn clear_context(&mut self) {
+        self.session.clear_context();
+    }
+
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
     #[wasm_bindgen(js_name = addWord)]
     pub fn add_word(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {

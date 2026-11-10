@@ -368,8 +368,12 @@ pub struct Session {
     /// 前文（plan §2.1，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
     /// 接上之後核心送出去的字（上屏的、交還宿主打的可見字元與空白）。殼沒給過時只有核心送出去的，
     /// 同 librime 的 commit history。`None` 是不知道：沒給過也還沒送出過字、交還宿主的鍵改了游標前的
-    /// 字或移走游標（[`Session::passed_to_host`]），或剛打開無痕。
+    /// 字或移走游標（[`Session::passed_to_host`]）、殼換了欄位（[`Session::clear_context`]），或在
+    /// 無痕中：無痕時一個字都不記，關掉後也不會冒出無痕期間的字（brief §8）。
     context: Option<String>,
+    /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
+    /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
+    after_digit: bool,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
     /// 中文的組字（選定的分段、lattice）留著，英文沒動過時切回不必重算。
@@ -381,10 +385,9 @@ impl Session {
     /// `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選再處理；重列前
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
-        // 無痕不讀上下文（brief §8）：打開時丟掉殼給過的前文，之後只有核心自己送出去的字
-        // （數字後半形用；候選在無痕時不看前文）。
+        // 無痕不讀上下文（brief §8）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
         if options.incognito && !self.options.incognito {
-            self.context = None;
+            self.clear_context();
         }
         self.options = options;
     }
@@ -394,9 +397,20 @@ impl Session {
     /// 統計時用 unigram（plan §2.3、[`Engine::context_char`]）；數字後半形看它的最後一字。殼在聚焦、
     /// 移動游標、上屏之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
     /// 之後上屏的字與交還宿主打的字元接在後面，殼不給時也知道游標前是什麼（同 librime 的 commit
-    /// history）。無痕模式殼不給，候選也不用它（brief §8）。
+    /// history）。無痕模式殼不給，給了也不收（brief §8）。
     pub fn set_context(&mut self, before: &str) {
+        if self.options.incognito {
+            return;
+        }
+        self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
         self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
+    }
+
+    /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
+    /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
+    pub fn clear_context(&mut self) {
+        self.context = None;
+        self.after_digit = false;
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -533,27 +547,25 @@ impl Session {
     /// 只在退格與 Enter 清掉，不學它：方向鍵也把游標移走。不送字元的修飾鍵沒改輸入框，不動它。
     fn passed_to_host(&mut self, key: Key) {
         match key {
-            Key::Letter(c) | Key::Punct(c) => self.extend_context(c.encode_utf8(&mut [0; 4])),
-            Key::Digit(d) => self.extend_context(&d.to_string()),
-            Key::Space => self.extend_context(" "),
+            Key::Letter(c) | Key::Punct(c) => self.sent(c.encode_utf8(&mut [0; 4])),
+            Key::Digit(d) => self.sent(&d.to_string()),
+            Key::Space => self.sent(" "),
             Key::Modifier => {}
-            _ => self.context = None,
+            _ => self.clear_context(),
         }
     }
 
-    /// `text` 接在前文後面，只留最後 [`CONTEXT_LIMIT`] 字；不知道前文時就從它開始。
-    fn extend_context(&mut self, text: &str) {
+    /// 核心送出去的字（上屏的、交還宿主打的字元）：記下游標前是不是數字；不在無痕中時接在前文後面，
+    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始。
+    fn sent(&mut self, text: &str) {
+        self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
+        if self.options.incognito {
+            return;
+        }
         let context = self.context.get_or_insert_with(String::new);
         context.push_str(text);
         let start = context.len() - last_chars(context, CONTEXT_LIMIT).len();
         context.drain(..start);
-    }
-
-    /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。
-    fn after_digit(&self) -> bool {
-        self.context
-            .as_deref()
-            .is_some_and(|context| context.ends_with(|c: char| c.is_ascii_digit()))
     }
 
     /// 換了影響候選的選項、還沒重列（[`Session::set_options`] 後沒呼叫 [`Session::refresh`]）：
@@ -575,7 +587,7 @@ impl Session {
     /// 同 librime 的 commit history），再補分段的字根。
     fn finish(&mut self, engine: &Engine, snapshot: Snapshot) -> Snapshot {
         if let Some(commit) = &snapshot.commit {
-            self.extend_context(commit);
+            self.sent(commit);
         }
         with_radicals(engine, snapshot)
     }
@@ -606,7 +618,7 @@ impl Session {
         if !self.composing() {
             return match key {
                 Key::Punct(c)
-                    if self.after_digit()
+                    if self.after_digit
                         && self.options.digit_separators
                         && punctuation::is_digit_separator(c) =>
                 {
@@ -1191,7 +1203,7 @@ mod tests {
             session.context.as_deref().map(|c| c.chars().count()),
             Some(CONTEXT_LIMIT)
         );
-        session.extend_context("今日");
+        session.sent("今日");
         let context = session.context.as_deref().unwrap();
         assert_eq!(context.chars().count(), CONTEXT_LIMIT);
         assert!(context.ends_with("天今日"));
