@@ -46,3 +46,4 @@ Blocked by: 03
   - 「選段規則」與依魔數分辨資料包在 `latency.rs`、`latency.ts`、`compare.mjs`、`main.swift`、測試的假計時器各一份；`run.sh` 用 awk 重寫 qim-bench 取輸入的順序。實驗腳本是一次性的，原生與 Node 有交叉檢查、Swift 與 Chromium 靠輸入數與基準相同核對；不收。
   - `Timing` 的 `per_key_ms` 與 `select_ms` 是兩條靠順序對齊的平行陣列，可合成一個每輸入的型別；`measure` 已驗形狀，改動不值得，不收。
   - `xtask/src/ffi.rs` 沒有測試：它只轉呼叫 `cargo build` 與 uniffi 的 CLI，實跑由 `run.sh` 驗；同 `xtask/src/web.rs` 的 `wasm_bindings`。
+- 已知差距（協調者轉入）：`Session` 建構子自己建 `Engine`，多個 `Session` 不共用，與 plan §2.1 不符；最小版不改介面，轉給票 08 的 Comments（擴充只建一個 `Session`，或把 `Engine` 拆成獨立 Object 共用）。

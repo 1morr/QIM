@@ -19,3 +19,7 @@ Blocked by: 04, 06, 07
 - [ ] 常駐記憶體：每份資料包的增量與總量都有數字。
 - [ ] 每鍵 p50 / p95 都有數字，和 brief §9 的 50 ms 目標比較。
 - [ ] README 的重量步驟更新；`cargo xtask check` 綠燈。
+
+## Comments
+
+- 票 07 轉入：`qim-ffi` 的 `Session` 建構子自己載入資料包、各建一份 `Engine`（`crates/qim-ffi/src/lib.rs` 的 `#[uniffi::constructor]`），不符 plan §2.1「`Engine` 不可變，多個 `Session` 共用」。資料包載入後約 96 MB（票 04，Mac），擴充上限推得約 177 MB（票 06）：換輸入框或重載畫面時另建 `Session`、舊的沒放掉，記憶體就翻倍、擴充可能被終止，量到的數字也失真。本票擴充全程只建一個 `Session`，或把 `Engine` 拆成獨立的 uniffi Object 給各 `Session` 共用（改介面就同步 plan §2.1）；量記憶體前確認沒有重複的 `Session`。
