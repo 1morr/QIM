@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet};
 
 use crate::lattice::{self, Lattice, Listing, Preceding};
+use crate::lexicon::WordsByText;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
@@ -31,6 +32,10 @@ pub struct Engine {
     english: EnglishWords,
     /// emoji 候選的對照表；沒掛上 emoji 資料包時是空的，沒有 emoji 候選。
     emoji: EmojiTable,
+    /// 詞庫的詞依文字排序和它的 ln unigram（詞頻 ÷ 總和），聯想用（[`Engine::words_starting_with`]）。
+    words_by_text: WordsByText,
+    /// 連打字集的字（碼表裡不是擴展區的字）：聯想只給連打打得出的字。
+    continuous_chars: HashSet<char>,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -101,8 +106,22 @@ impl Engine {
             .filter(|w| seen.insert(w.text.as_str()))
             .map(|w| w.frequency)
             .sum();
+        let word_log_total = (word_total.max(1) as f64).ln();
+        // 同文字留碼的字典序最前的那個，和上面的詞頻總和取的相同。
+        let words_by_text = WordsByText::new(&lexicon, |w| {
+            (w.frequency.max(1) as f64).ln() - word_log_total
+        });
+        let continuous_chars = scheme_pack
+            .code_table
+            .iter()
+            .flat_map(|(_, entries)| entries)
+            .filter(|e| !e.extension)
+            .map(|e| e.text)
+            .collect();
         Ok(Self {
-            word_log_total: (word_total.max(1) as f64).ln(),
+            word_log_total,
+            words_by_text,
+            continuous_chars,
             code_table: by_frequency(&scheme_pack.code_table, &lexicon),
             scheme: scheme_pack.scheme,
             language_model: language_model.map(|m| m.model).unwrap_or_default(),
@@ -331,6 +350,28 @@ impl Engine {
             .filter(|c| c.is_alphanumeric())
             .unwrap_or(CLAUSE_START);
         self.language_model.has_statistics(last).then_some(last)
+    }
+
+    /// 詞庫裡以 `prefix` 開頭、比它長的詞與它的 ln unigram，依文字排序（聯想用，plan §2.3）。
+    pub(crate) fn words_starting_with<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Iterator<Item = (&'a str, f64)> + 'a {
+        self.words_by_text.starting_with(prefix)
+    }
+
+    /// 詞庫的詞 `text` 的 ln unigram（詞頻 ÷ 每個詞的詞頻總和）；不是詞庫的詞時是 `None`。
+    pub(crate) fn word_log_prob(&self, text: &str) -> Option<f64> {
+        self.words_by_text.log_prob(text)
+    }
+
+    pub(crate) fn language_model(&self) -> &LanguageModel {
+        &self.language_model
+    }
+
+    /// `c` 在連打字集裡：碼表有它、不是擴展區的字。
+    pub(crate) fn is_continuous(&self, c: char) -> bool {
+        self.continuous_chars.contains(&c)
     }
 
     pub(crate) fn sentences(&self) -> usize {

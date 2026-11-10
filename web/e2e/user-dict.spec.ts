@@ -38,6 +38,8 @@ async function learnYunHau(page: Page) {
 	await expect(text).toHaveValue("");
 	await pick(page, "口");
 	await expect(text).toHaveValue("雲口");
+	// 上屏後候選列是聯想（M3 票 13），收起再接著測。
+	await page.keyboard.press("Escape");
 	await expect(items).toHaveCount(0);
 }
 

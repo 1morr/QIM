@@ -69,8 +69,8 @@ impl SpanKind {
 }
 
 impl CandidateSpan {
-    /// 只有一段的候選：碼表的字或詞庫的詞，蓋住輸入碼開頭的 `code`。
-    fn single(text: String, code: &str) -> Self {
+    /// 只有一段的候選：碼表的字或詞庫的詞，蓋住輸入碼開頭的 `code`；聯想沒有碼，`code` 是空的。
+    pub(crate) fn single(text: String, code: &str) -> Self {
         Self {
             segments: vec![Segment::new(code.to_string(), text.clone())],
             text,

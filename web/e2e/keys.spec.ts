@@ -36,7 +36,8 @@ test("打 ar 翻頁找到「問」，用數字鍵上屏", async ({ page }, testI
 	await page.keyboard.press(String(position));
 	await expect(text).toHaveValue("問");
 	await expect(composition).toHaveText("");
-	await expect(items).toHaveCount(0);
+	// 候選列換成「問」的聯想（M3 票 13）。
+	await expect(items.first()).not.toHaveText(/問$/);
 	await page.screenshot({ path: testInfo.outputPath("ar-committed.png") });
 });
 
@@ -101,7 +102,10 @@ test("Backspace 刪一碼、Esc 清空組字，沒有組字時交給輸入框", 
 	await expect(items).toHaveCount(0);
 	await expect(text).toHaveValue("");
 
-	await page.keyboard.type("a 1-");
+	// 上屏後候選列是聯想，數字鍵會選聯想（M3 票 13）：先按 Esc 收起。
+	await page.keyboard.type("a ");
+	await page.keyboard.press("Escape");
+	await page.keyboard.type("1-");
 	await expect(text).toHaveValue("日1-");
 	await page.keyboard.press("Backspace");
 	await page.keyboard.press("Backspace");

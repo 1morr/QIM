@@ -81,6 +81,13 @@ impl Following<'_> {
             .get(text)
             .map_or(0.0, |d| d.at(self.tick) / self.total)
     }
+
+    /// 學過接在這個字詞後面的各段與它們的個人機率，依文字排序（聯想用）。
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&str, f64)> + '_ {
+        self.next
+            .iter()
+            .map(|(text, d)| (text.as_str(), d.at(self.tick) / self.total))
+    }
 }
 
 /// 一個輸入方案的個人模型：使用者詞與學習計數。核心內部經 [`UserModel::for_scheme`] 取用，
@@ -162,6 +169,15 @@ impl UserModel {
         }
         self.for_scheme_mut(scheme).learn(segments);
         self.bigrams.learn(previous, segments);
+    }
+
+    /// 選了一個聯想（plan §2.4）：只記個人 bigram「`previous` → `text`」。聯想沒有輸入碼，
+    /// 不記學習計數。
+    pub(crate) fn learn_association(&mut self, previous: &str, text: &str) {
+        self.bigrams.learn(
+            Some(previous),
+            &[Segment::new(String::new(), text.to_string())],
+        );
     }
 
     /// 學過個人 bigram 沒有。
