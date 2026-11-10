@@ -1,4 +1,4 @@
-/* 深色跟隨系統；網頁的深色開關（main.ts）在根元素寫 data-theme 蓋過。
+/* 深色跟隨系統；網頁的深色開關（display.ts）在根元素寫 data-theme 蓋過。
    按鍵顏色用 light-dark()，由 color-scheme 選佈局的淺色或深色版本（touch.ts）。 */
 :root {
 	color-scheme: light dark;
@@ -17,7 +17,9 @@ body {
 	margin: 2rem;
 }
 
-.settings {
+/* 畫面開關列與設定區的開關（settings.ts）：一列放不下就換行。 */
+.toolbar,
+.settings-options {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.5rem;
@@ -144,7 +146,7 @@ textarea {
 	display: none;
 }
 
-/* 留出鍵盤實際的高度（main.ts 量出寫進 --keyboard-height），免得蓋住輸入框。 */
+/* 留出鍵盤實際的高度（display.ts 量出寫進 --keyboard-height），免得蓋住輸入框。 */
 body:has(#keyboard:not([hidden])) {
 	padding-bottom: var(--keyboard-height, 0);
 }
