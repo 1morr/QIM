@@ -140,10 +140,10 @@ impl WebSession {
         self.session.set_context(before);
     }
 
-    /// 忘掉前文（`Session::clear_context`）：輸入框失焦時。
+    /// 忘掉前文（`Session::clear_context`）：輸入框失焦時；正在打的 email 這時算打完、記住。
     #[wasm_bindgen(js_name = clearContext)]
     pub fn clear_context(&mut self) {
-        self.session.clear_context();
+        self.session.clear_context(&mut self.user);
     }
 
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
@@ -181,6 +181,18 @@ impl WebSession {
                 trigger: p.trigger.unwrap_or_default(),
             })
             .collect()
+    }
+
+    /// 記住的字串（M3 票 15，打過的 email），依文字排；設定區的清單用。
+    #[wasm_bindgen(js_name = rememberedStrings)]
+    pub fn remembered_strings(&self) -> Vec<String> {
+        self.user.remembered_strings()
+    }
+
+    /// 忘掉記住的字串 `text`；沒記過時回傳 `false`。
+    #[wasm_bindgen(js_name = forgetRememberedString)]
+    pub fn forget_remembered_string(&mut self, text: &str) -> bool {
+        self.user.forget_remembered_string(text)
     }
 
     /// 從清單選了常用語：照觸控鍵盤的 `text` 上屏（組字中先上屏組字），回傳快照給網頁插入。
@@ -277,6 +289,14 @@ impl WebSession {
     #[wasm_bindgen(js_name = setEmojiCandidates)]
     pub fn set_emoji_candidates(&mut self, on: bool) -> WebSnapshot {
         self.set_options(|options| options.emoji_candidates = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
+    /// 記住的字串（M3 票 15）：記下打過的 email，之後打它開頭的字母時排在候選第 2 位起，預設開。
+    /// 組字中切換也立刻重列候選。
+    #[wasm_bindgen(js_name = setRememberedStrings)]
+    pub fn set_remembered_strings(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.remembered_strings = on);
         self.session.refresh(&self.engine, &self.user).into()
     }
 

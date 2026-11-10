@@ -291,7 +291,7 @@ fn in_incognito_digits_typed_still_make_a_period_half_width() {
 fn clearing_the_context_ends_the_number() {
     let mut ime = Ime::new();
     ime.type_keys("3");
-    ime.session.clear_context();
+    ime.session.clear_context(&mut ime.user);
     ime.type_keys(".");
     assert_eq!(ime.text, "3。");
 }

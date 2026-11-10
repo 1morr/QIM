@@ -135,6 +135,7 @@ textarea {
 }
 
 #phrases h2,
+#remembered h2,
 #word-list h2 {
 	margin: 0.5rem 0 0;
 	font-size: 1rem;
@@ -162,6 +163,29 @@ textarea {
 	text-overflow: ellipsis;
 }
 
+/* 記住的 email（remembered.ts）：同常用語的清單，一列一條加刪除鍵。 */
+#remembered-list {
+	display: grid;
+	gap: 0.25rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+#remembered-list li {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+#remembered-list .remembered-text {
+	overflow-wrap: anywhere;
+}
+
+#remembered-list .empty {
+	color: gray;
+}
+
 #phrase-form {
 	display: flex;
 	flex-wrap: wrap;
@@ -177,6 +201,7 @@ textarea {
 }
 
 #phrases .note,
+#remembered .note,
 #word-list .note {
 	margin: 0;
 	color: gray;

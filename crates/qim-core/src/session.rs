@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
+use crate::remembered::TypedRun;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
@@ -61,6 +62,10 @@ pub struct Options {
     /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
     /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
     pub simplified_after_traditional: bool,
+    /// 記住的字串（plan §2.4，M3 票 15）：記下經核心送出去的 email，之後在中文組字打它開頭的字母
+    /// （長過一個字的最長碼）時排在候選第 2 位起（排位規則 5）。關掉時不記也不給；無痕、學習關掉時
+    /// 不記、已記的照給。預設開（brief §7）。
+    pub remembered_strings: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -114,13 +119,14 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選與簡體字排後影響候選，無痕、學習、
-    /// Shift、數字後半形都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選、簡體字排後與記住的字串影響候選，
+    /// 無痕、學習、Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified
             && self.english_candidates == other.english_candidates
             && self.emoji_candidates == other.emoji_candidates
             && self.simplified_after_traditional == other.simplified_after_traditional
+            && self.remembered_strings == other.remembered_strings
     }
 }
 
@@ -135,6 +141,7 @@ impl Default for Options {
             emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
             simplified_after_traditional: true,
+            remembered_strings: true,
         }
     }
 }
@@ -405,6 +412,10 @@ pub struct Session {
     /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
+    /// 正在打的一串字（記住的字串，plan §2.1）：送出去的字的結尾連續的 email 字元。遇到其他字元、
+    /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，是 email 就記住
+    /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
+    typed: TypedRun,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
     /// 中文的組字（選定的分段、lattice）留著，英文沒動過時切回不必重算。
@@ -418,7 +429,7 @@ impl Session {
     pub fn set_options(&mut self, options: Options) {
         // 無痕不讀上下文（brief §8）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
         if options.incognito && !self.options.incognito {
-            self.clear_context();
+            self.forget_context();
         }
         self.options = options;
     }
@@ -435,13 +446,38 @@ impl Session {
         }
         self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
         self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
+        self.typed.sync(before);
     }
 
     /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
     /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
-    pub fn clear_context(&mut self) {
+    /// 離開欄位也是打完了一串字：正在打的是 email 就記進 `user`（記住的字串，plan §2.4）。
+    pub fn clear_context(&mut self, user: &mut UserModel) {
+        self.end_typed(user);
+        self.forget_context();
+    }
+
+    /// 不知道游標前是什麼了：前文與數字後半形的狀態都作廢。
+    fn forget_context(&mut self) {
         self.context = None;
         self.after_digit = false;
+    }
+
+    /// 正在打的一串字打完了：是整串看得到的 email 又記得住（[`Session::remembers_strings`]）時記進 `user`。
+    fn end_typed(&mut self, user: &mut UserModel) {
+        let done = self.typed.finish();
+        self.remember(user, done);
+    }
+
+    fn remember(&self, user: &mut UserModel, done: Option<String>) {
+        if let Some(text) = done.filter(|_| self.remembers_strings()) {
+            user.remember_string(&text);
+        }
+    }
+
+    /// 現在打的字記不記得住：在學習（不在無痕、學習沒關）、記住的字串開著。
+    fn remembers_strings(&self) -> bool {
+        self.writes_learning() && self.options.remembered_strings
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -466,7 +502,7 @@ impl Session {
         } else {
             self.snapshot(engine, false, None)
         };
-        self.finish(engine, snapshot)
+        self.finish(engine, user, snapshot)
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有
@@ -568,28 +604,44 @@ impl Session {
         self.apply_pending_options(engine, user);
         let snapshot = self.handle_key(engine, user, key);
         if !snapshot.handled {
-            self.passed_to_host(key);
+            self.passed_to_host(user, key);
         }
-        self.finish(engine, snapshot)
+        self.finish(engine, user, snapshot)
     }
 
     /// 交還宿主的鍵宿主照打：可見字元與空白接在前文後面（librime 的 commit history 記這些
     /// `thru` 的鍵）。其他鍵改了游標前的字或移走游標，前文就作廢了，等殼再給；librime
     /// 只在退格與 Enter 清掉，不學它：方向鍵也把游標移走。不送字元的修飾鍵沒改輸入框，不動它。
-    fn passed_to_host(&mut self, key: Key) {
+    /// 正在打的一串字（記住的字串）：退格刪它的最後一個字元；Enter 讓它打完；其他作廢前文的鍵（Tab、
+    /// 方向鍵…）也讓它打完，之後游標可能移走，接著打的到下一個分隔的字元才重新算。
+    fn passed_to_host(&mut self, user: &mut UserModel, key: Key) {
         match key {
-            Key::Letter(c) | Key::Punct(c) => self.sent(c.encode_utf8(&mut [0; 4])),
-            Key::Digit(d) => self.sent(&d.to_string()),
-            Key::Space => self.sent(" "),
+            Key::Letter(c) | Key::Punct(c) => self.sent(user, c.encode_utf8(&mut [0; 4])),
+            Key::Digit(d) => self.sent(user, &d.to_string()),
+            Key::Space => self.sent(user, " "),
             Key::Modifier => {}
-            _ => self.clear_context(),
+            Key::Backspace => {
+                self.typed.backspace();
+                self.forget_context();
+            }
+            Key::Enter => self.clear_context(user),
+            _ => {
+                self.clear_context(user);
+                self.typed.lose_track();
+            }
         }
     }
 
     /// 核心送出去的字（上屏的、交還宿主打的字元）：記下游標前是不是數字；不在無痕中時接在前文後面，
-    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始。
-    fn sent(&mut self, text: &str) {
+    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始，也接在正在打的一串字後面（遇到 email
+    /// 裡不會有的字元時那串打完，[`Session::end_typed`]）。
+    fn sent(&mut self, user: &mut UserModel, text: &str) {
         self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
+        let recording = self.remembers_strings();
+        for c in text.chars() {
+            let done = self.typed.push(c, recording);
+            self.remember(user, done);
+        }
         if self.options.incognito {
             return;
         }
@@ -616,9 +668,9 @@ impl Session {
 
     /// 會上屏的公開方法回傳前都經過這裡：上屏的字接在前文後面（[`Session::context`]，
     /// 同 librime 的 commit history），再補分段的字根。
-    fn finish(&mut self, engine: &Engine, snapshot: Snapshot) -> Snapshot {
+    fn finish(&mut self, engine: &Engine, user: &mut UserModel, snapshot: Snapshot) -> Snapshot {
         if let Some(commit) = &snapshot.commit {
-            self.sent(commit);
+            self.sent(user, commit);
         }
         with_radicals(engine, snapshot)
     }
@@ -897,7 +949,7 @@ impl Session {
             self.snapshot(engine, true, Some(text))
         };
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
-        self.finish(engine, snapshot)
+        self.finish(engine, user, snapshot)
     }
 
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
@@ -996,6 +1048,7 @@ impl Session {
         Listing {
             english_candidates: whole_input && options.english_candidates,
             emoji_candidates: whole_input && options.emoji_candidates,
+            remembered_strings: whole_input && options.remembered_strings,
             simplified_last: options.simplified_after_traditional && !options.simplified,
         }
     }
@@ -1045,7 +1098,7 @@ impl Session {
         let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
             return self.snapshot(engine, true, None);
         };
-        // 英文候選與 emoji 蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
+        // 英文候選、emoji 與記住的字串蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
         // 上屏字詞、其餘上屏它，整次不學也不造詞（plan §2.4）。
         if choice.kind.is_literal() {
             let mut commit = self.selected_commit(engine);
@@ -1294,7 +1347,7 @@ mod tests {
             session.context.as_deref().map(|c| c.chars().count()),
             Some(CONTEXT_LIMIT)
         );
-        session.sent("今日");
+        session.sent(&mut UserModel::default(), "今日");
         let context = session.context.as_deref().unwrap();
         assert_eq!(context.chars().count(), CONTEXT_LIMIT);
         assert!(context.ends_with("天今日"));

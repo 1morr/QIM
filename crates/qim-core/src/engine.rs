@@ -212,13 +212,14 @@ impl Engine {
     }
 
     /// 整串輸入碼在 `user` 之下、預設選項（繁體模式、簡體字排後）的全部候選，從頭建 lattice；
-    /// 順序見 [`lattice::candidates`]。不含英文候選與 emoji：它們是 [`crate::Session`] 的選項。
+    /// 順序見 [`lattice::candidates`]。不含英文候選、emoji 與記住的字串：它們是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
         let lattice = Lattice::from_input(self, user, Preceding::default(), input);
         let listing = Listing {
             english_candidates: false,
             emoji_candidates: false,
+            remembered_strings: false,
             simplified_last: true,
         };
         lattice::candidates(self, user, &lattice, listing)

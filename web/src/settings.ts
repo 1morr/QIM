@@ -99,6 +99,14 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setEmojiCandidates(on),
 	},
 	{
+		// 記下用英文打過的 email，打它開頭的字母時排在候選第 2 位起（M3 票 15）。
+		kind: "checkbox",
+		id: "remembered-strings",
+		label: "記住 email",
+		checked: true,
+		apply: (session, on) => session.setRememberedStrings(on),
+	},
+	{
 		// 數字後的句點、冒號用半形；逗號照舊全形。
 		kind: "checkbox",
 		id: "digit-separators",

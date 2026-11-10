@@ -19,12 +19,14 @@ export function textBefore(
 
 /**
  * 接上輸入框，每次給游標前最多 `limit` 個字（綁定的 `contextLimit()`）；回傳的函式立刻給一次
- * （例如關掉無痕之後）。
+ * （例如關掉無痕之後）。`afterLeave` 在失焦、叫核心忘掉前文之後呼叫：核心這時可能記住剛打完的
+ * email（記住的字串），網頁要存檔。
  */
 export function mountContext(
 	text: HTMLTextAreaElement,
 	session: Session,
 	limit: number,
+	afterLeave: () => void,
 ): () => void {
 	// 不比對上次給的：核心在交還宿主的退格、方向鍵後會忘掉前文，重給同一段也要給。
 	const sync = (): void => {
@@ -34,7 +36,10 @@ export function mountContext(
 	};
 	text.addEventListener("focus", sync);
 	// 失焦等於換欄位：核心忘掉前文，回來時 focus 重給（plan §2.1）。
-	text.addEventListener("blur", () => session.clearContext());
+	text.addEventListener("blur", () => {
+		session.clearContext();
+		afterLeave();
+	});
 	text.addEventListener("input", sync);
 	// 輸入框裡的游標移動在 Chromium 也會在 document 觸發 `selectionchange`。
 	document.addEventListener("selectionchange", () => {

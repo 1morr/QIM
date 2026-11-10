@@ -16,6 +16,7 @@ import { mountReportPanel } from "./report-panel.ts";
 import { fakeReranker } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
+import { mountRemembered, type Remembered } from "./remembered.ts";
 import type { Keyboard } from "./touch.ts";
 import { mountUserDict } from "./user-dict.ts";
 import init, {
@@ -90,11 +91,28 @@ async function start(): Promise<void> {
 	};
 	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
 	let phrases: Phrases | undefined;
-	// 匯入、清空換掉整份使用者詞，常用語的清單跟著重畫。
+	/** 記住的 email 清單；同上比 `userDict` 晚掛上。 */
+	let remembered: Remembered | undefined;
+	// 匯入、清空換掉整份使用者詞，常用語與記住的 email 的清單跟著重畫。
 	const userDict = mountUserDict(session, () => {
 		phrases?.refresh();
+		remembered?.refresh();
 		focusText();
 	});
+	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心記住 email）、失焦。 */
+	const saveLearning = (): void => {
+		userDict.save();
+		remembered?.refresh();
+	};
+	/**
+	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心記住剛打完的 email，要存檔；
+	 * 字母、數字只是接在那串後面，不必存。`kind` 是實體鍵的種類或觸控的動作。
+	 */
+	const afterHostKey = (kind: string | undefined): void => {
+		if (kind !== "letter" && kind !== "digit") {
+			saveLearning();
+		}
+	};
 	const reportPanel = mountReportPanel(status, focusText);
 	/** 觸控鍵盤；掛上前是 `undefined`（開關的初始套用比它早）。 */
 	let touchKeyboard: Keyboard | undefined;
@@ -123,7 +141,7 @@ async function start(): Promise<void> {
 		if (snapshot.commit !== undefined) {
 			insert(text, snapshot.commit);
 			// 上屏時核心可能學到東西；每次都存，重新整理網頁後還在。
-			userDict.save();
+			saveLearning();
 		}
 		render(snapshot);
 		touchKeyboard?.refresh();
@@ -156,8 +174,10 @@ async function start(): Promise<void> {
 		userDict.save,
 		focusText,
 	);
+	remembered = mountRemembered(session, userDict.save, focusText);
 	mountWordList(session, userDict.save, focusText);
-	const syncContext = mountContext(text, session, contextLimit());
+	// 失焦時核心把正在打的 email 當打完記住，要存檔。
+	const syncContext = mountContext(text, session, contextLimit(), saveLearning);
 	// 開關改了不是選字；改完重給前文（關掉無痕之後要立刻給）。
 	settings.connect(
 		session,
@@ -173,7 +193,10 @@ async function start(): Promise<void> {
 		text,
 		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
 		(snapshot) => apply(snapshot, snapshot.action === "space"),
-		(snapshot) => hostDefault(text, snapshot),
+		(snapshot) => {
+			hostDefault(text, snapshot);
+			afterHostKey(snapshot.action);
+		},
 	);
 	// 換資料包：核心換上新的那組（學習資料與開關留著），組字重列，字根提示跟著換。
 	mountPackSettings(
@@ -246,6 +269,7 @@ async function start(): Promise<void> {
 		const snapshot = session.press(key.kind, key.value);
 		try {
 			if (!snapshot.handled) {
+				afterHostKey(key.kind);
 				return;
 			}
 			event.preventDefault();

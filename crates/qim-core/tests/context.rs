@@ -284,7 +284,7 @@ fn clearing_or_replacing_the_context_drops_the_commits_recorded_so_far() {
     let mut user = UserModel::default();
     let mut session = Session::default();
     commit_heaven(&mut session, &mut user);
-    session.clear_context();
+    session.clear_context(&mut user);
     let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
     assert_eq!(snapshot.candidates[0].text, "甲");
 

@@ -13,6 +13,7 @@ mod manifest;
 mod pack;
 mod punctuation;
 mod radical_hint;
+mod remembered;
 mod scheme;
 mod session;
 mod simplifier;
@@ -31,6 +32,7 @@ pub use pack::{
     RadicalHintPack, SchemePack, SimplifierPack,
 };
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
+pub use remembered::REMEMBERED_LIMIT;
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
     CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT,
