@@ -116,7 +116,7 @@ fn repo() -> TempDir {
 }
 
 fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
-    qim_bench::run(root, mode, &slow_wasm)
+    qim_bench::run(root, mode, None, &slow_wasm)
 }
 
 /// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒，遠超每鍵 50 ms 的預算。
@@ -1117,13 +1117,18 @@ fn check_and_update_baseline_ignore_latency() {
 #[test]
 fn a_wasm_timer_that_misses_keys_is_an_error() {
     let repo = repo();
-    let error = qim_bench::run(repo.path(), Mode::Report, &|_: &[PathBuf], _: &[String]| {
-        Ok(Timing {
-            runtime: "假".into(),
-            per_key_ms: vec![vec![1.0]],
-            select_ms: vec![None],
-        })
-    })
+    let error = qim_bench::run(
+        repo.path(),
+        Mode::Report,
+        None,
+        &|_: &[PathBuf], _: &[String]| {
+            Ok(Timing {
+                runtime: "假".into(),
+                per_key_ms: vec![vec![1.0]],
+                select_ms: vec![None],
+            })
+        },
+    )
     .unwrap_err();
     assert!(error.contains("WebAssembly"), "{error}");
 }
@@ -1134,6 +1139,7 @@ fn a_wasm_timer_that_selects_on_other_inputs_than_native_is_an_error() {
     let error = qim_bench::run(
         repo.path(),
         Mode::Report,
+        None,
         &|packs: &[PathBuf], inputs: &[String]| {
             let mut timing = slow_wasm(packs, inputs)?;
             assert_eq!(timing.select_ms.iter().flatten().count(), 1);
@@ -1168,8 +1174,75 @@ fn repo_with_dev() -> TempDir {
 }
 
 fn dev(repo: &TempDir, overrides: &[&str]) -> Result<qim_bench::DevOutcome, String> {
+    dev_with(repo, overrides, None)
+}
+
+/// `lexicon` 是 `--lexicon <id>`：換掉方案指名的詞庫。
+fn dev_with(
+    repo: &TempDir,
+    overrides: &[&str],
+    lexicon: Option<&str>,
+) -> Result<qim_bench::DevOutcome, String> {
     let overrides: Vec<String> = overrides.iter().map(|s| s.to_string()).collect();
-    qim_bench::run_dev(repo.path(), &overrides)
+    qim_bench::run_dev(repo.path(), &overrides, lexicon)
+}
+
+/// 另一份詞庫資料包 `build/packs/other-lexicon/`，沒有 `ab` → 日月（粵典詞庫這類可選的詞庫，M3 票 24）。
+fn with_other_lexicon(repo: &TempDir) {
+    let pack = LexiconPack {
+        id: "other-lexicon".into(),
+        lexicon: Lexicon::new([], []),
+    };
+    write(
+        repo.path(),
+        "build/packs/other-lexicon/other-lexicon.pack",
+        &pack.to_bytes().unwrap(),
+    );
+}
+
+#[test]
+fn another_lexicon_pack_replaces_the_one_the_scheme_names() {
+    let repo = repo_with_dev();
+    with_other_lexicon(&repo);
+    // 方案指名的詞庫有日月，詞加分夠時答對；換成沒有日月的那份就答錯。
+    let named = dev(&repo, &["word_bonus=1.5"]).unwrap();
+    assert_eq!(named.sets[0].wrong(), 0);
+    let other = dev_with(&repo, &["word_bonus=1.5"], Some("other-lexicon")).unwrap();
+    assert_eq!(other.sets[0].wrong(), 1, "{}", other.report());
+    let paths: Vec<&str> = other.packs.iter().map(|p| p.path.as_str()).collect();
+    assert!(
+        paths.contains(&"build/packs/other-lexicon/other-lexicon.pack"),
+        "{paths:?}"
+    );
+    assert!(
+        !paths.iter().any(|p| p.contains("quick-lexicon")),
+        "{paths:?}"
+    );
+
+    let outcome =
+        qim_bench::run(repo.path(), Mode::Report, Some("other-lexicon"), &slow_wasm).unwrap();
+    assert!(
+        outcome.report().contains("other-lexicon.pack"),
+        "{}",
+        outcome.report()
+    );
+}
+
+#[test]
+fn another_lexicon_cannot_update_the_baseline_and_must_exist() {
+    let repo = repo_with_dev();
+    with_other_lexicon(&repo);
+    let err = qim_bench::run(
+        repo.path(),
+        Mode::UpdateBaseline,
+        Some("other-lexicon"),
+        &slow_wasm,
+    )
+    .unwrap_err();
+    assert!(err.contains("--update-baseline"), "{err}");
+    assert!(!repo.path().join(qim_bench::BASELINE).exists());
+    let err = dev_with(&repo, &[], Some("missing")).unwrap_err();
+    assert!(err.contains("build/packs/missing/missing.pack"), "{err}");
 }
 
 #[test]

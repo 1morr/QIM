@@ -45,9 +45,12 @@
 | 2026-11-11 | M3 08 | 同步層：字級 trigram、詞級 n-gram 預算版都過門檻（test 口語首選 36.3% → 42.3%、44.5%），放寬版剛過，標準 KN bigram 不過；核心加實驗接口；見票 08 | 新 session 下 `/implement .scratch/m3/issues/09-ladder-neural.md` |
 | 2026-11-11 | M3 10 | FM 與 DeepSeek flash 重排（選項改給 9 條路徑）：flash 口語前 2 名 +10.4 點、每千次 0.43 元，過門檻；FM +1.3、停頓後 14.6% 超過 2 s，沒過；見票 10 | 新 session 下 `/implement .scratch/m3/issues/09-ladder-neural.md` |
 | 2026-11-11 | M3 09 | 1.4M、23M 神經重排：test 口語前 2 名 49.1% → 57.5%／59.0%，1.4M 全過門檻；23M 沒比 1.4M 多 2 點、iPhone 峰值 +75 MB 超標；見票 09 | 新 session 下 `/implement .scratch/m3/issues/11-ladder-conclusion.md` |
+| 2026-11-11 | M3 24 | 可選詞庫 `quick-lexicon-words-hk`（預設詞庫加粵典詞頭 20,556 詞，非商業條款）、`bench --lexicon`；口語集修正 −10%，預設詞庫不變；見票 24 | 新 session 下 `/implement .scratch/m3/issues/11-ladder-conclusion.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 24（收尾後）：粵典來源 sha256 不符或下載失敗時只略過粵典詞庫，其他資料包照建、結束碼 0，網頁缺它照樣載入（協調者要求）；plan §4.2；見票 24。
+- 2026-11-11 M3 票 24：推翻票 18 不用粵典，照非商業條款另建可選詞庫、預設仍 `quick-lexicon`；粵典詞的並存寫法已收也算收了（HKCanCor 不套）；改 brief §1.5、§5.2、§12.1、plan §4.2；見票 24。
 - 2026-11-11 M3 票 09：23M q8 在 iPhone 實量 9 條 × 18 字峰值 +75 MB、p95 84 ms（票 07 推估 +62 MB、105–110 ms），超過 60 MB 上限；改 brief §12.3、plan §8、ios-feasibility；見票 09。
 - 2026-11-11 M3 票 09：口語語料先用現有的（使用者決定，plan §8）；訓練用 PyTorch（MPS），推論照票用 candle；口語視窗比例 1.4M 取 50%、23M 取 15%（0.3 過擬合）；見票 09。
 - 2026-11-11 M3 票 08：核心加實驗用的 `Engine::with_segment_model`（沒掛上時打分不變），票 11 定去留；KN 比過：字級 bigram 照舊，高一階要各語料各算折扣，改 plan §2.1、§4.3；見票 08。

@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use qim_core::Lexicon;
 use qim_databuild::common_forms::BothForms;
 use qim_databuild::lexicon::{
-    self, CORPUS_MIN_COUNT, CORPUS_WORD_FREQUENCY, Counts, Forms, MAX_COMBINATIONS, MIN_FREQUENCY,
+    self, CORPUS_MIN_COUNT, CORPUS_WORD_FREQUENCY, Counts, Forms, HEADWORD_FREQUENCY,
+    MAX_COMBINATIONS, MIN_FREQUENCY, WordSources,
 };
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::{libcangjie, quick};
@@ -21,6 +22,18 @@ const TABLE: &str = "\
 乙 乙 1 1 0 0 1 0 0 0 0 c bc NA 0
 𠀀 𠀀 1 0 0 0 0 0 0 0 0 a NA NA 0
 ";
+
+static NO_CORPUS: BTreeMap<String, u64> = BTreeMap::new();
+
+/// 只有 essay 與口語詞表的來源。
+fn words<'a>(essay: &'a str, colloquial: &'a str) -> WordSources<'a> {
+    WordSources {
+        essay,
+        colloquial,
+        corpus: &NO_CORPUS,
+        headwords: None,
+    }
+}
 
 fn build(essay: &str) -> (Lexicon, Counts) {
     build_with(essay, BTreeMap::new())
@@ -41,9 +54,7 @@ fn try_build(
     char_frequency: BTreeMap<char, u64>,
 ) -> Result<(Lexicon, Counts), qim_databuild::Error> {
     try_build_with_forms(
-        essay,
-        colloquial,
-        &BTreeMap::new(),
+        &words(essay, colloquial),
         char_frequency,
         &|s| s.to_string(),
         &BothForms::default(),
@@ -52,11 +63,27 @@ fn try_build(
 
 /// 加上語料 train 切分的詞與次數（HKCanCor，`hkcancor::TrainWords`）。
 fn build_corpus(essay: &str, colloquial: &str, corpus: &[(&str, u64)]) -> (Lexicon, Counts) {
-    let corpus = corpus.iter().map(|(w, n)| (w.to_string(), *n)).collect();
+    build_headwords(essay, colloquial, corpus, None)
+}
+
+/// 再加上粵典的詞頭與次數（`words_hk::headwords`）；`None` 是不收粵典的預設詞庫。
+fn build_headwords(
+    essay: &str,
+    colloquial: &str,
+    corpus: &[(&str, u64)],
+    headwords: Option<&[(&str, u64)]>,
+) -> (Lexicon, Counts) {
+    let map = |pairs: &[(&str, u64)]| -> BTreeMap<String, u64> {
+        pairs.iter().map(|(w, n)| (w.to_string(), *n)).collect()
+    };
+    let headwords = headwords.map(map);
     try_build_with_forms(
-        essay,
-        colloquial,
-        &corpus,
+        &WordSources {
+            essay,
+            colloquial,
+            corpus: &map(corpus),
+            headwords: headwords.as_ref(),
+        },
         BTreeMap::new(),
         &normalize,
         &both(),
@@ -65,9 +92,7 @@ fn build_corpus(essay: &str, colloquial: &str, corpus: &[(&str, u64)]) -> (Lexic
 }
 
 fn try_build_with_forms(
-    essay: &str,
-    colloquial: &str,
-    corpus: &BTreeMap<String, u64>,
+    words: &WordSources,
     char_frequency: BTreeMap<char, u64>,
     normalize: &dyn Fn(&str) -> String,
     both: &BothForms,
@@ -75,9 +100,7 @@ fn try_build_with_forms(
     let rows = libcangjie::parse(TABLE).unwrap();
     let code_table = quick::code_table(&rows, &BTreeMap::new(), &BTreeSet::new());
     lexicon::build(
-        essay,
-        colloquial,
-        corpus,
+        words,
         &code_table,
         &Transcoder::new(&rows),
         char_frequency,
@@ -96,9 +119,7 @@ fn both() -> BothForms {
 
 fn build_with_forms(essay: &str, colloquial: &str) -> (Lexicon, Counts) {
     try_build_with_forms(
-        essay,
-        colloquial,
-        &BTreeMap::new(),
+        &words(essay, colloquial),
         BTreeMap::from([('弓', 7), ('乙', 3), ('日', 5)]),
         &normalize,
         &both(),
@@ -157,6 +178,7 @@ fn single_characters_rare_words_and_words_outside_the_continuous_set_are_left_ou
             indexed: 2,
             colloquial: 0,
             corpus: 0,
+            headwords: 0,
             converted: 0,
             merged: 0,
             spellings: 0,
@@ -228,9 +250,12 @@ fn malformed_lines_are_errors() {
             both: &BothForms::default(),
         };
         let err = lexicon::build(
-            essay,
-            "",
-            &BTreeMap::new(),
+            &WordSources {
+                essay,
+                colloquial: "",
+                corpus: &BTreeMap::new(),
+                headwords: None,
+            },
             &code_table,
             &transcoder,
             BTreeMap::new(),
@@ -332,9 +357,7 @@ fn colloquial_words_go_through_the_same_forms() {
     assert_eq!(texts(&lexicon, "nan"), ["弓門"]);
     assert_eq!(texts(&lexicon, "can"), ["乙門"]);
     let err = try_build_with_forms(
-        "弓口\t300\n",
-        "乙口\t400\n",
-        &BTreeMap::new(),
+        &words("弓口\t300\n", "乙口\t400\n"),
         BTreeMap::new(),
         &normalize,
         &both(),
@@ -348,9 +371,7 @@ fn colloquial_words_go_through_the_same_forms() {
 fn one_way_forms_add_the_other_spelling_but_never_the_reverse() {
     // 假的單向組：門的詞也可寫成日（像隨着 → 隨著），日的詞不反過來寫成門（像著名不能寫成着名）。
     let (lexicon, counts) = try_build_with_forms(
-        "門口\t300\n日口\t200\n日弓\t150\n",
-        "",
-        &BTreeMap::new(),
+        &words("門口\t300\n日口\t200\n日弓\t150\n", ""),
         BTreeMap::from([('門', 4), ('日', 9)]),
         &|s| s.to_string(),
         &BothForms::new(&[], &[('門', '日')]).unwrap(),
@@ -435,4 +456,105 @@ fn corpus_words_go_through_the_same_forms_and_skip_characters_outside_the_set() 
     assert_eq!(texts(&lexicon, "nr"), ["弓口"]);
     assert_eq!(texts(&lexicon, "cr"), ["乙口"]);
     assert_eq!(counts.corpus, 1);
+}
+
+#[test]
+fn headwords_fill_in_what_every_other_source_leaves_out_with_a_frequency_from_their_count() {
+    let (lexicon, counts) = build_headwords(
+        &format!("門口\t9435\n口口\t{}\n", MIN_FREQUENCY - 1),
+        "日日\t300\n",
+        &[("弓日", 7)],
+        Some(&[
+            ("門口", 50),
+            ("日日", 50),
+            ("弓日", 50),
+            ("口口", 3),
+            ("日門", 0),
+            ("門日", 1),
+        ]),
+    );
+    // essay（達門檻）、口語詞表、語料已收的照舊；essay 低於門檻的用粵典的次數換算。
+    assert_eq!(frequency_of(&lexicon, "anr", "門口"), Some(9435));
+    assert_eq!(frequency_of(&lexicon, "aa", "日日"), Some(300));
+    assert_eq!(
+        frequency_of(&lexicon, "na", "弓日"),
+        Some(7 * CORPUS_WORD_FREQUENCY)
+    );
+    assert_eq!(
+        frequency_of(&lexicon, "rr", "口口"),
+        Some(3 * HEADWORD_FREQUENCY)
+    );
+    // 粵文庫沒見過的詞頭也收，詞頻是門檻（只見過一次的換算後低於門檻時同）。
+    assert_eq!(frequency_of(&lexicon, "aan", "日門"), Some(MIN_FREQUENCY));
+    assert_eq!(frequency_of(&lexicon, "ana", "門日"), Some(MIN_FREQUENCY));
+    assert_eq!(counts.headwords, 3);
+}
+
+#[test]
+fn headwords_go_through_the_same_forms_and_skip_characters_outside_the_set() {
+    // 「甲」換成「日」後和「日口」是同一個詞，次數相加；含連打字集以外的字的詞不收，不算錯。
+    let (lexicon, counts) = build_headwords(
+        "",
+        "",
+        &[],
+        Some(&[("甲口", 2), ("日口", 3), ("日𠀀", 9), ("弓口", 4)]),
+    );
+    assert_eq!(
+        frequency_of(&lexicon, "ar", "日口"),
+        Some(5 * HEADWORD_FREQUENCY)
+    );
+    assert_eq!(texts(&lexicon, "nr"), ["弓口"]);
+    assert_eq!(texts(&lexicon, "cr"), ["乙口"]);
+    assert_eq!(counts.headwords, 2);
+}
+
+#[test]
+fn without_headwords_the_lexicon_is_the_same_as_before() {
+    let essay = "門口\t9435\n";
+    let (with, _) = build_headwords(essay, "", &[("弓日", 7)], Some(&[]));
+    let (without, counts) = build_headwords(essay, "", &[("弓日", 7)], None);
+    assert_eq!(with, without);
+    assert_eq!(counts.headwords, 0);
+}
+
+#[test]
+fn a_headword_that_is_another_spelling_of_a_kept_word_counts_as_kept() {
+    // 假的單向組：門的詞也可寫成日（像開臺 → 開台）。粵典的日口是 essay 門口生出的寫法、門門生出
+    // essay 的日門：兩個都算收了，否則撞成同一個詞時詞頻相加，改到預設詞庫的詞。
+    let one_way = BothForms::new(&[], &[('門', '日')]).unwrap();
+    let corpus = BTreeMap::new();
+    let build = |headwords: Option<&BTreeMap<String, u64>>| {
+        try_build_with_forms(
+            &WordSources {
+                essay: "門口\t300\n日門\t200\n",
+                colloquial: "",
+                corpus: &corpus,
+                headwords,
+            },
+            BTreeMap::new(),
+            &|s| s.to_string(),
+            &one_way,
+        )
+        .unwrap()
+    };
+    let headwords = BTreeMap::from([
+        ("日口".to_string(), 50),
+        ("門門".to_string(), 50),
+        ("口口".to_string(), 50),
+    ]);
+    let (default, _) = build(None);
+    let (with, counts) = build(Some(&headwords));
+    for (code, words) in default.iter() {
+        for word in words {
+            assert_eq!(
+                frequency_of(&with, code, &word.text),
+                Some(word.frequency),
+                "{code} {}",
+                word.text
+            );
+        }
+    }
+    // 門門生出日門（essay 有）：不收。口口和誰都不撞：收。
+    assert_eq!(frequency_of(&with, "anan", "門門"), None);
+    assert_eq!(counts.headwords, 1);
 }

@@ -263,3 +263,30 @@ license_text = { repo_file = "data/licenses/Unicode-3.0.txt" }
 path = "emoji-test.txt"
 url = "https://www.unicode.org/Public/18.0.0/emoji/emoji-test.txt"
 sha256 = "8f3735cda1f92a779d78af67cf86066bb1f07143dc22f2ac29394d9bc57ab21a"
+
+# 粵典（words.hk）的詞頭表與詞頻（plan §4.2，M3 票 24）：只進可選的詞庫資料包 quick-lexicon-words-hk，不進預設詞庫。
+# 「細數據」頁（https://words.hk/faiman/analysis/）的 wordslist（全部詞頭與讀音）與 existingwordcount（詞在粵文庫的出現次數）
+# 標「Data License: public domain」，但詞典本體是《非商業開放資料授權協議 1.0》、兩者關係沒說明，
+# 所以照較嚴的非商業條款處理（使用者 2026-11-11 決定，brief §12.1）：資料包的 LICENSE 附英文版權告示、免責聲明、
+# 特別鳴謝名單與官網連結。授權頁沒有版本化的網址、每年改版權年份，全文同 Unicode 存在 repo。
+# 取用：wordslist 每行第一欄的詞頭（去掉結尾的「*」，那是含異體字的記號），兩字以上；existingwordcount 的次數給詞頻。
+# 規則在 crates/qim-databuild/src/words_hk.rs 與 lexicon.rs。CSV 是 CRLF、沒有引號，首行是「Source,<頁面網址>」。
+# 釘版本：網址沒有版本、內容隨詞典更新，version 填下載日期，sha256 釘住那天的內容（頁面標的更新日：wordslist 2026-10-08、
+# existingwordcount 2026-03-30）。上游更新後乾淨建置報 sha256 不符：重新下載、核對後改 version 與兩個 sha256，
+# 重跑 bench 再更新 plan §4.2 的詞數。對不上（或下載失敗）時只略過粵典詞庫，其他資料包照建、結束碼仍是 0，
+# 警告印在 stderr（crates/qim-databuild/src/pipeline.rs 的 load_headwords）。CI 不建資料包，不受影響。
+[source.words_hk]
+repository = "https://words.hk/faiman/analysis/"
+version = "2026-11-11"
+license = "LicenseRef-words-hk-NCODL-1.0"
+license_text = { repo_file = "data/licenses/words-hk-NCODL-1.0.txt" }
+
+[[source.words_hk.files]]
+path = "wordslist.csv"
+url = "https://words.hk/faiman/analysis/wordslist.csv"
+sha256 = "617e714fdcf0a5bfb327c61952c1f2c2b9f5bea3d713bd5aac42aa5714ea033b"
+
+[[source.words_hk.files]]
+path = "existingwordcount.csv"
+url = "https://words.hk/faiman/analysis/existingwordcount.csv"
+sha256 = "33b08d2e4cab4bdf9b481c956da68be09784c2638f999da7f88fb70cf9fc4960"

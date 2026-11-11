@@ -1,6 +1,6 @@
 //! `cargo xtask data` 的整條流程：讀來源、建資料包、寫產物，選擇性驗證。
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -19,10 +19,13 @@ use crate::corpus::{Builder, Finished};
 use crate::hkcancor::WordCounts;
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
 use crate::transcode::Transcoder;
-use crate::verify::{self, CorpusDigests, CorpusSummary, LexiconSummary, Report, UnihanSummary};
+use crate::verify::{
+    self, CorpusDigests, CorpusSummary, LexiconSummary, Report, Skipped, UnihanSummary,
+    WordsHkSummary,
+};
 use crate::{
     Error, bigram, build_scheme_pack, emoji, english, gboard, lexicon, libcangjie, opencc, packing,
-    personal, radical_hint, scheme, simplified, unihan,
+    personal, radical_hint, scheme, simplified, unihan, words_hk,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -43,6 +46,12 @@ pub(crate) const SCOWL: &str = "scowl";
 const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
 /// 英文資料包的 id：美式英文，各方案共用，不由方案指名。
 const ENGLISH_ID: &str = "scowl-en-us";
+/// 可選的粵典詞庫資料包的 id：方案指名的詞庫加粵典的詞頭（plan §4.2，M3 票 24）。
+pub const WORDS_HK_LEXICON_ID: &str = "quick-lexicon-words-hk";
+/// 粵典的來源對不上而略過粵典詞庫時，怎麼修。
+const WORDS_HK_FIX: &str = "粵典的網址沒有版本，多半是詞典更新了：照 data/sources.toml \
+    [source.words_hk] 的註解重新下載、核對後改 version 與兩個 sha256，再跑 cargo xtask data；\
+    其他資料包已照常建好";
 /// emoji 資料包的 id：粵語與繁中標註，各方案共用，不由方案指名。
 const EMOJI_ID: &str = "cldr-emoji-yue-hant";
 /// Unihan 交叉比對的差異報表，相對 repo 根目錄；格式見 `unihan::CrossCheck::to_tsv`。
@@ -153,6 +162,9 @@ impl LicensedPack {
 struct PackSet {
     packs: Vec<LicensedPack>,
     lexicon: LexiconSummary,
+    /// 粵典詞庫的統計；粵典的來源出問題而略過時是 `None`，原因在 `skipped`。
+    words_hk: Option<WordsHkSummary>,
+    skipped: Vec<Skipped>,
     language_model: bigram::Summary,
     english: english::Counts,
     emoji: emoji::Counts,
@@ -180,6 +192,10 @@ pub struct Outcome {
     /// 寫出的資料包，依建置順序。
     pub packs: Vec<WrittenPack>,
     pub lexicon: LexiconSummary,
+    /// 粵典詞庫的統計；略過時是 `None`。
+    pub words_hk: Option<WordsHkSummary>,
+    /// 來源出問題而沒建的可選資料包（粵典詞庫），其他資料包照建。
+    pub skipped: Vec<Skipped>,
     pub language_model: bigram::Summary,
     pub english: english::Counts,
     pub emoji: emoji::Counts,
@@ -369,17 +385,23 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     // 詞庫的碼由這次建出的速成碼表展開，字頻由各語料的 train 乘上權重相加；每次從快取重讀 essay.txt。
     // 詞和粵語語料一樣經 `t2hk` 再換回常見寫法（rime-essay 是 OpenCC 標準寫法，brief §4.1）。
     let essay_converter = corpora::Converter::new(corpora::Conversion::T2hk, forms.clone())?;
-    let build_lexicon = |quick: &QuickBuild,
+    // `headwords` 是粵典的詞頭：預設詞庫不收（`None`），粵典詞庫（[`WORDS_HK_LEXICON_ID`]）收。
+    let build_lexicon = |id: String,
+                         quick: &QuickBuild,
                          chars: &[(String, u64)],
-                         words: &WordCounts|
+                         words: &WordCounts,
+                         headwords: Option<&BTreeMap<String, u64>>|
      -> Result<(LexiconPack, LexiconSummary), Error> {
         let tables: Vec<(&str, u64)> = chars.iter().map(|(t, w)| (t.as_str(), *w)).collect();
         let frequency = lexicon::char_frequency(&tables)?;
         let characters = frequency.len();
         let (lexicon, counts) = lexicon::build(
-            &load_text(RIME_ESSAY, ESSAY)?,
-            &read(lexicon::COLLOQUIAL_PATH)?,
-            &words.words,
+            &lexicon::WordSources {
+                essay: &load_text(RIME_ESSAY, ESSAY)?,
+                colloquial: &read(lexicon::COLLOQUIAL_PATH)?,
+                corpus: &words.words,
+                headwords,
+            },
             &quick.pack.code_table,
             &Transcoder::new(&quick.rows),
             frequency,
@@ -388,10 +410,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 both: forms.both(),
             },
         )?;
-        let pack = LexiconPack {
-            id: named(&quick.pack.scheme.packs.lexicon, "lexicon", "詞庫")?,
-            lexicon,
-        };
+        let pack = LexiconPack { id, lexicon };
         Ok((
             pack,
             LexiconSummary {
@@ -428,13 +447,55 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             };
             Ok((pack, summary))
         };
+    // 粵典的詞頭。網址沒有版本，上游一更新 sha256 就對不上（或下載不到）：可選的粵典詞庫不能擋其他
+    // 資料包，所以這兩種錯回傳 `Ok(Err(略過的原因))`，只略過粵典詞庫；檔案內容不合格式照樣是錯。
+    let load_headwords = || -> Result<Result<BTreeMap<String, u64>, Skipped>, Error> {
+        let mut texts = Vec::new();
+        for file in [words_hk::WORDSLIST, words_hk::WORD_COUNT] {
+            match load_text(words_hk::WORDS_HK, file) {
+                Ok(text) => texts.push(text),
+                Err(e @ (Error::ChecksumMismatch { .. } | Error::Fetch { .. })) => {
+                    return Ok(Err(Skipped {
+                        id: WORDS_HK_LEXICON_ID.into(),
+                        reason: e.to_string(),
+                        fix: WORDS_HK_FIX.into(),
+                    }));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(Ok(words_hk::headwords(&texts[0], &texts[1])?))
+    };
     // 加一種資料包只在這裡加一項：建法、授權來源與 NOTICE 的說明（plan §4）。
     // 每次從快取重讀來源，`--verify` 的第二次才是真的重建。
     let build_packs = |quick: &QuickBuild,
                        chars: &[(String, u64)],
                        words: &WordCounts|
      -> Result<PackSet, Error> {
-        let (lexicon, lexicon_summary) = build_lexicon(quick, chars, words)?;
+        let (lexicon, lexicon_summary) = build_lexicon(
+            named(&quick.pack.scheme.packs.lexicon, "lexicon", "詞庫")?,
+            quick,
+            chars,
+            words,
+            None,
+        )?;
+        let (words_hk, skipped) = match load_headwords()? {
+            Ok(headwords) => {
+                let (pack, summary) = build_lexicon(
+                    WORDS_HK_LEXICON_ID.into(),
+                    quick,
+                    chars,
+                    words,
+                    Some(&headwords),
+                )?;
+                let summary = WordsHkSummary {
+                    headwords: headwords.len(),
+                    counts: summary.counts,
+                };
+                (Some((pack, summary)), Vec::new())
+            }
+            Err(skipped) => (None, vec![skipped]),
+        };
         let (language_model, language_model_summary) = build_language_model(quick)?;
         let simplifier = SimplifierPack {
             id: SIMPLIFIER_ID.into(),
@@ -473,7 +534,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             emoji: built_emoji.table,
         };
         let scheme = &quick.pack.scheme.id;
-        let packs = vec![
+        let mut packs = vec![
             LicensedPack::new(
                 "速成",
                 &quick.pack,
@@ -524,9 +585,24 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 EMOJI_ABOUT.replace("{max}", &emoji::MAX_KEYWORD_EMOJI.to_string()),
             )?,
         ];
+        // 接在預設詞庫後面：`built::find` 取同種的第一份，預設詞庫要在前。
+        if let Some((pack, _)) = &words_hk {
+            packs.insert(
+                2,
+                LicensedPack::new(
+                    "詞庫（粵典）",
+                    pack,
+                    "1.0.0",
+                    packing::words_hk_lexicon_sources(),
+                    words_hk_about(&pack.id, &lexicon.id, scheme),
+                )?,
+            );
+        }
         Ok(PackSet {
             packs,
             lexicon: lexicon_summary,
+            words_hk: words_hk.map(|(_, summary)| summary),
+            skipped,
             language_model: language_model_summary,
             english: english_counts,
             emoji: built_emoji.counts,
@@ -541,6 +617,14 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             write_pack(root, licensed, &packed)
         })
         .collect::<Result<Vec<_>, Error>>()?;
+    // 略過的資料包刪掉上次建出的那份：留著的話殼會讀到用舊來源、和這次的預設詞庫對不上的版本。
+    for skipped in &first.skipped {
+        let dir = root.join(PACKS_DIR).join(&skipped.id);
+        match std::fs::remove_dir_all(&dir) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(Error::io(&dir)(e)),
+            _ => {}
+        }
+    }
 
     let layouts = root.join(LAYOUTS);
     std::fs::create_dir_all(&layouts).map_err(Error::io(&layouts))?;
@@ -578,6 +662,15 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             .map_err(decoded)?
             .model;
         corpus_checks.push(verify::lexicon_forms(&lexicon.lexicon, &model, &forms));
+        if first.words_hk.is_some() {
+            let words_hk_lexicon = built::find_id(&built, WORDS_HK_LEXICON_ID)
+                .and_then(|p| LexiconPack::from_bytes(&p.bytes).map_err(|e| e.to_string()))
+                .map_err(decoded)?;
+            corpus_checks.push(verify::words_hk_lexicon(
+                &lexicon.lexicon,
+                &words_hk_lexicon.lexicon,
+            ));
+        }
 
         // 第二次從來源重建速成碼表，其餘資料包也由它重建，整條鏈都比到。
         let second = build_packs(&build_quick()?, &second_chars, &second_words)?;
@@ -607,6 +700,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             report: UNIHAN_REPORT.into(),
         });
         report.lexicon = Some(first.lexicon);
+        report.words_hk = first.words_hk;
+        report.skipped = first.skipped.clone();
         report.language_model = Some(first.language_model);
         report.english = Some(first.english);
         report.emoji = Some(first.emoji);
@@ -619,6 +714,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     Ok(Outcome {
         packs,
         lexicon: first.lexicon,
+        words_hk: first.words_hk,
+        skipped: first.skipped,
         language_model: first.language_model,
         english: first.english,
         emoji: first.emoji,
@@ -725,6 +822,36 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
         pairs = list(&TWO_WAY_FORMS, "/"),
         one_way = list(&ONE_WAY_FORMS, " -> "),
         distinct = ONE_WAY_DISTINCT.join(", "),
+    )
+}
+
+/// 粵典詞庫資料包 NOTICE 最後一段：預設詞庫的說明，再加粵典的詞怎麼收與它的條款（plan §4.2）。
+fn words_hk_about(id: &str, default: &str, scheme: &str) -> String {
+    format!(
+        "{id} is {default} with the headwords of words.hk added. It is optional:\n\
+         removing it leaves {default}, which has no words.hk data.\n\
+         \n\
+         The words.hk part: the headwords of two or more characters in wordslist.csv, with the\n\
+         variant mark * removed, converted and written in the common forms as below; headwords\n\
+         with a character outside the continuous set (Latin letters, digits, punctuation) were\n\
+         dropped, and so were those that the steps for {default} already added. Each added\n\
+         word has a frequency of {per} per occurrence in existingwordcount.csv, at least {min}.\n\
+         \n\
+         The words.hk part is distributed under the Non-Commercial Open Data License 1.0 of\n\
+         Hong Kong Lexicography Limited, whose copyright notice, disclaimer and Credits List\n\
+         are in LICENSE. Website: https://words.hk/\n\
+         The headwords: Licensed under the Non-Commercial Open Data License\n\
+         ( https://words.hk/faiman/analysis/wordslist/ )\n\
+         The counts: Licensed under the Non-Commercial Open Data License\n\
+         ( https://words.hk/faiman/analysis/existingwordcount/ )\n\
+         The words.hk part may not be sub-licensed\n\
+         and may not be used for commercial purposes (Section 2 of that license);\n\
+         for commercial use, use {default} instead.\n\
+         \n\
+         {default}: {}",
+        lexicon_about(default, scheme),
+        per = lexicon::HEADWORD_FREQUENCY,
+        min = lexicon::MIN_FREQUENCY,
     )
 }
 

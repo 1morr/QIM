@@ -74,6 +74,8 @@ pub enum CheckId {
     /// 詞庫沒有對照表換掉的寫法與反向的錯字；並存寫法的詞每種寫法都收（`verify::lexicon_forms`，
     /// M1 票 17c）。
     LexiconForms,
+    /// 粵典詞庫收了預設詞庫的每個詞條（同碼、同詞頻），也多了詞（M3 票 24，plan §4.2）。
+    WordsHkLexicon,
 }
 
 impl fmt::Display for CheckId {
@@ -104,6 +106,7 @@ impl fmt::Display for CheckId {
             Self::KeptCharacters => "前處理保留粵語用字",
             Self::CommonForms => "字形用常見寫法",
             Self::LexiconForms => "詞庫用常見寫法",
+            Self::WordsHkLexicon => "粵典詞庫是預設詞庫加粵典的詞",
         })
     }
 }
@@ -129,6 +132,10 @@ pub struct Report {
     pub emoji: Option<emoji::Counts>,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
+    /// 粵典詞庫的建置統計；[`run`] 不算，由呼叫端填。略過時是 `None`。
+    pub words_hk: Option<WordsHkSummary>,
+    /// 來源出問題而略過的可選資料包，不算失敗；[`run`] 不算，由呼叫端填。
+    pub skipped: Vec<Skipped>,
     /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
     pub language_model: Option<bigram::Summary>,
     pub checks: Vec<Check>,
@@ -219,6 +226,43 @@ impl fmt::Display for LexiconSummary {
     }
 }
 
+/// 來源出問題（sha256 不符、下載失敗）而沒建的可選資料包；其他資料包照建（plan §4.2）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Skipped {
+    pub id: String,
+    /// 來源的錯誤訊息。
+    pub reason: String,
+    /// 怎麼修，例如重釘哪個來源。
+    pub fix: String,
+}
+
+impl fmt::Display for Skipped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "略過 {}：{}；{}", self.id, self.reason, self.fix)
+    }
+}
+
+/// 粵典詞庫資料包（`quick-lexicon-words-hk`）的建置統計。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WordsHkSummary {
+    /// 粵典兩字以上的不重複詞頭數（`words_hk::headwords`）。
+    pub headwords: usize,
+    /// 和預設詞庫同樣的步驟，多補粵典的詞（[`lexicon::Counts::headwords`]）。
+    pub counts: lexicon::Counts,
+}
+
+impl fmt::Display for WordsHkSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let c = &self.counts;
+        write!(
+            f,
+            "粵典詞庫：兩字以上的詞頭 {} 個，其他來源都沒收、字都在連打字集的補上 {} 詞；\
+             收 {} 詞，並存寫法另收 {} 種寫法；碼 {} 個、詞條 {} 個",
+            self.headwords, c.headwords, c.words, c.spellings, c.codes, c.indexed
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnihanSummary {
     /// 兩邊都有碼的字數。
@@ -244,6 +288,12 @@ impl fmt::Display for Report {
         writeln!(f, "速成碼：{} 個", self.codes)?;
         if let Some(lexicon) = &self.lexicon {
             writeln!(f, "{lexicon}")?;
+        }
+        if let Some(words_hk) = &self.words_hk {
+            writeln!(f, "{words_hk}")?;
+        }
+        for skipped in &self.skipped {
+            writeln!(f, "{skipped}")?;
         }
         if let Some(language_model) = &self.language_model {
             writeln!(f, "{language_model}")?;
@@ -301,6 +351,8 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
         english: None,
         emoji: None,
         lexicon: None,
+        words_hk: None,
+        skipped: Vec::new(),
         language_model: None,
         checks: Vec::new(),
         unihan: None,
@@ -865,6 +917,45 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
         } else {
             format!("對照表 {pairs}，換掉的寫法還在 train：{}", left.join("、"))
         },
+    }
+}
+
+/// 粵典詞庫 `words_hk` 收了預設詞庫 `default` 的每個詞條（同碼、同詞頻），並多了詞：它只是預設詞庫
+/// 再補詞，拿掉它就回到預設詞庫（plan §4.2）。
+pub fn words_hk_lexicon(default: &Lexicon, words_hk: &Lexicon) -> Check {
+    let mut missing = Vec::new();
+    for (code, words) in default.iter() {
+        let theirs = words_hk.lookup(code);
+        for word in words {
+            if !theirs
+                .iter()
+                .any(|w| w.text == word.text && w.frequency == word.frequency)
+            {
+                missing.push(format!("{code} {} {}", word.text, word.frequency));
+            }
+        }
+    }
+    let count = |lexicon: &Lexicon| lexicon.iter().map(|(_, w)| w.len()).sum::<usize>();
+    let (before, after) = (count(default), count(words_hk));
+    let passed = missing.is_empty() && after > before;
+    let detail = if missing.is_empty() {
+        format!("詞條 {before} → {after}")
+    } else {
+        format!(
+            "少了或詞頻不同的詞條 {} 個：{}",
+            missing.len(),
+            missing
+                .iter()
+                .take(10)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("、")
+        )
+    };
+    Check {
+        id: CheckId::WordsHkLexicon,
+        passed,
+        detail,
     }
 }
 

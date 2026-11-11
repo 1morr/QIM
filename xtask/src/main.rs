@@ -10,7 +10,7 @@ mod web;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask pack-release [--previous <index.json>] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask pack-release [--previous <index.json>] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -35,6 +35,9 @@ fn main() -> ExitCode {
         ["bench", "--learning"] => release_run("qim-bench", &["--learning"]),
         // dev 模式只量正確率，不量每鍵延遲，不必重編 WebAssembly 綁定。
         ["bench", "--dev", ..] => release_run("qim-bench", &args[1..]),
+        // 換掉方案指名的詞庫（M3 票 24）；qim-bench 自己擋不合的組合。
+        ["bench", "--lexicon", _, "--dev", ..] => release_run("qim-bench", &args[1..]),
+        ["bench", "--lexicon", _, ..] => bench(&args[1..]),
         ["web"] => {
             let root = repo_root();
             if web::wasm_bindings(&root) && web::serve_data_outputs(&root) {

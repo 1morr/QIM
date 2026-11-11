@@ -189,8 +189,22 @@ fn inputs_of(fixed: &[Item], corpora: &[(String, Vec<Item>)]) -> Vec<String> {
 }
 
 /// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
-pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> {
-    let (engine, packs, _) = load_engine(root, &[])?;
+/// `lexicon` 是另一份詞庫資料包的 id（`--lexicon`），換掉方案指名的那份；baseline 是預設詞庫的數字，
+/// 所以換了詞庫不能 [`Mode::UpdateBaseline`]，`--check` 照樣和它比（「不變差」）。
+pub fn run(
+    root: &Path,
+    mode: Mode,
+    lexicon: Option<&str>,
+    wasm: WasmTimer,
+) -> Result<Outcome, String> {
+    if mode == Mode::UpdateBaseline
+        && let Some(id) = lexicon
+    {
+        return Err(format!(
+            "--lexicon {id} 不能 --update-baseline：baseline 是方案指名的詞庫的數字"
+        ));
+    }
+    let (engine, packs, _) = load_engine(root, &[], lexicon)?;
     let fixed_items =
         parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let fixed = score::score(&engine, "fixed", &fixed_items, false);
@@ -273,8 +287,12 @@ impl DevOutcome {
 }
 
 /// dev 模式：照 [`run`] 的方式打各集合的 dev 切分（[`dev_items`]）與固定題。`overrides` 是
-/// `<鍵>=<值>`，暫時蓋掉方案檔 `[ranking]` 的同名欄位，資料包不變。
-pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> {
+/// `<鍵>=<值>`，暫時蓋掉方案檔 `[ranking]` 的同名欄位，資料包不變；`lexicon` 同 [`run`]。
+pub fn run_dev(
+    root: &Path,
+    overrides: &[String],
+    lexicon: Option<&str>,
+) -> Result<DevOutcome, String> {
     let overrides = overrides
         .iter()
         .map(|o| {
@@ -282,7 +300,7 @@ pub fn run_dev(root: &Path, overrides: &[String]) -> Result<DevOutcome, String> 
                 .ok_or_else(|| format!("覆寫要寫成 key=value：{o}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (engine, packs, lexicon) = load_engine(root, &overrides)?;
+    let (engine, packs, lexicon) = load_engine(root, &overrides, lexicon)?;
     let lexicon = lexicon.unwrap_or_default();
     let is_word = |item: &Item| {
         let text = item.expected();
@@ -468,7 +486,7 @@ impl Learning {
 /// `UserModel`）與學習開（整個集合共用一個 `UserModel`，打完一題學一題）的修正次數。
 /// 只報不擋，不讀也不寫 baseline。
 pub fn run_learning(root: &Path) -> Result<Learning, String> {
-    let (engine, packs, _) = load_engine(root, &[])?;
+    let (engine, packs, _) = load_engine(root, &[], None)?;
     let mut sets: Vec<LearningSet> = load_corpora(root)?
         .into_iter()
         .map(|(name, items)| score::learning(&engine, &name, &items, false))
@@ -491,11 +509,12 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]、[`EMOJI_PACK`]，建 `Engine`；
-/// `overrides` 蓋掉方案的打分參數。
+/// `overrides` 蓋掉方案的打分參數，`lexicon` 是換掉方案指名的那份詞庫的另一份 id（`--lexicon`）。
 /// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
 pub fn load_engine(
     root: &Path,
     overrides: &[(&str, &str)],
+    lexicon: Option<&str>,
 ) -> Result<(Engine, Vec<LoadedPack>, Option<Lexicon>), String> {
     let load = |rel: String| -> Result<(Vec<u8>, LoadedPack), String> {
         let path = root.join(&rel);
@@ -529,7 +548,10 @@ pub fn load_engine(
         packs.push(loaded);
         Ok(Some((bytes, path)))
     };
-    let lexicon = named(&pack.scheme.packs.lexicon)?
+    let lexicon_id = lexicon
+        .map(String::from)
+        .or(pack.scheme.packs.lexicon.clone());
+    let lexicon = named(&lexicon_id)?
         .map(|(bytes, path)| LexiconPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}")))
         .transpose()?;
     let language_model = named(&pack.scheme.packs.language_model)?

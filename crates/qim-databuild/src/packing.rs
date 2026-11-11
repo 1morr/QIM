@@ -8,6 +8,7 @@ use crate::emoji::{CLDR, EMOJI_TEST};
 use crate::lexicon;
 use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, SCOWL, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
+use crate::words_hk::WORDS_HK;
 
 /// 進資料包的一個來源：經 `sources.toml` 下載的，或 QIM 自己整理、存在 repo 裡的。
 pub(crate) enum PackSource {
@@ -106,6 +107,18 @@ pub(crate) fn lexicon_sources() -> Vec<PackSource> {
         .map(PackSource::Upstream)
         .chain([PackSource::Repo(COLLOQUIAL)])
         .collect()
+}
+
+/// 可選的粵典詞庫資料包：預設詞庫的來源，再加粵典的詞頭表與詞頻（plan §4.2，M3 票 24）。
+pub(crate) fn words_hk_lexicon_sources() -> Vec<PackSource> {
+    let mut sources = lexicon_sources();
+    sources.push(PackSource::Upstream(UpstreamSource {
+        name: "words.hk (粵典)",
+        source_id: WORDS_HK,
+        used: "wordslist.csv: the headwords of two or more characters; existingwordcount.csv: \
+               how often each headword occurs in the words.hk Cantonese corpus",
+    }));
+    sources
 }
 
 /// QIM 自己整理、存在 repo 裡的資料：不經 `sources.toml` 下載，授權全文也在 repo。

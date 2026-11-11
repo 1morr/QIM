@@ -33,13 +33,21 @@ impl BuiltPack {
     }
 }
 
-/// 清單裡 `P` 那種資料包。每種資料包在一次建置裡只有一份；同種的有兩份時取第一份，要分開就得
-/// 改用 id 找。
+/// 清單裡 `P` 那種資料包的第一份。詞庫有兩份（預設的在前、粵典的在後），其餘每種一份；要後面那份
+/// 用 [`find_id`]。
 pub fn find<P: Pack>(packs: &[BuiltPack]) -> Result<&BuiltPack, String> {
     packs
         .iter()
         .find(|p| p.magic == P::MAGIC)
         .ok_or_else(|| format!("沒有魔數 {} 的資料包", String::from_utf8_lossy(&P::MAGIC)))
+}
+
+/// 清單裡 id 是 `id` 的資料包。
+pub fn find_id<'a>(packs: &'a [BuiltPack], id: &str) -> Result<&'a BuiltPack, String> {
+    packs
+        .iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("沒有 id {id} 的資料包"))
 }
 
 /// 取出清單裡 `P` 那種資料包並解開。
