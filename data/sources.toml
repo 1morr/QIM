@@ -273,7 +273,8 @@ sha256 = "8f3735cda1f92a779d78af67cf86066bb1f07143dc22f2ac29394d9bc57ab21a"
 # 規則在 crates/qim-databuild/src/words_hk.rs 與 lexicon.rs。CSV 是 CRLF、沒有引號，首行是「Source,<頁面網址>」。
 # 釘版本：網址沒有版本、內容隨詞典更新，version 填下載日期，sha256 釘住那天的內容（頁面標的更新日：wordslist 2026-10-08、
 # existingwordcount 2026-03-30）。上游更新後乾淨建置報 sha256 不符：重新下載、核對後改 version 與兩個 sha256，
-# 重跑 bench 再更新 plan §4.2 的詞數。CI 不建資料包，不受影響。
+# 重跑 bench 再更新 plan §4.2 的詞數。對不上（或下載失敗）時只略過粵典詞庫，其他資料包照建、結束碼仍是 0，
+# 警告印在 stderr（crates/qim-databuild/src/pipeline.rs 的 load_headwords）。CI 不建資料包，不受影響。
 [source.words_hk]
 repository = "https://words.hk/faiman/analysis/"
 version = "2026-11-11"

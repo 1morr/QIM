@@ -82,3 +82,4 @@ Blocked by: 18, 20
   - 「預設詞庫要在前」靠順序（Standards）：沒改。順序錯了 `verify::decode` 的方案指名檢查會失敗（「方案指名的詞庫是 quick-lexicon，建出的是 …」），網頁同理由 `BUILTIN_IDS` 註解寫明。
   - e2e 裡 `getByLabel("使用 quick-lexicon", { exact: true })` 重複約 10 次、`--lexicon` 的 CLI 解析沒有測試、`--lexicon x --learning` 先編 WebAssembly 才被擋（Standards，判斷題）：沒改，既有的 CLI 分派也沒有測試，`qim-bench` 的 `run`／`run_dev` 有測換詞庫與擋 `--update-baseline`。
   - 「本票唯一准 `--update-baseline`」與程式擋 `--lexicon --update-baseline`（Spec）：不衝突，預設詞庫沒變，baseline 不必更新。
+- 收尾後協調者要求（2026-11-11）：粵典網址沒有版本，詞典一更新、沒有快取的建置就 sha256 不符，原本整個 `cargo xtask data` 失敗、所有資料包都建不出來。改成粵典 sha256 不符或下載失敗時只略過粵典詞庫：其他資料包照建、結束碼 0，stderr 印警告與重釘步驟（`verify::Skipped`），`--verify` 列出略過的那份、不算失敗，並刪掉上次建出的粵典詞庫（免得殼讀到用舊來源建的那份）；CSV 格式不對照樣失敗。網頁把它當可以缺的內建資料包（`OPTIONAL_IDS`）：Vite 開發伺服器對沒有的檔回 200 的 `index.html`（實測），所以看 manifest 是不是 JSON，不只看 404。測試：`tests/run.rs` 兩個（sha256 不符、離線各一，另驗別的來源出錯照樣失敗），e2e 兩個（Vite 的 fallback 與 404），都做過變異（傳出錯誤、只認 404）會紅。不用 Wayback Machine、不在別人網站存檔。

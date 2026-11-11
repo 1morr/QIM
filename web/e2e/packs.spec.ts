@@ -229,6 +229,34 @@ test("粵典詞庫：切過去打得出只在粵典詞頭表的詞，切回預�
 	await page.keyboard.press("Escape");
 });
 
+// 建置略過粵典詞庫時 `build/packs/` 沒有它：Vite 開發伺服器對沒有的檔回 200 的 index.html（SPA
+// fallback，實測），其他靜態伺服器回 404，兩種都要照樣載入。
+for (const [served, missing] of [
+	[
+		"Vite 回 index.html",
+		{ status: 200, contentType: "text/html", body: "<!doctype html>" },
+	],
+	["回 404", { status: 404 }],
+] as const) {
+	test(`建置略過了粵典詞庫（${served}）時，網頁照樣載入，選過它的改用預設詞庫`, async ({
+		page,
+	}) => {
+		await ready(page);
+		await page.getByLabel("使用 quick-lexicon-words-hk").check();
+		expect(await firstOf(page, "lfov")).toBe("襟食");
+		await page.route("**/packs/quick-lexicon-words-hk/**", (route) =>
+			route.fulfill(missing),
+		);
+		await page.reload();
+		await expect(rows(page)).toHaveCount(7);
+		await expect(
+			page.getByLabel("使用 quick-lexicon", { exact: true }),
+		).toBeChecked();
+		expect(await firstOf(page, "anr")).toBe("門口");
+		expect(await candidatesOf(page, "lfov")).not.toContain("襟食");
+	});
+}
+
 test("學習資料與開關在換資料包後還在", async ({ page }) => {
 	await ready(page);
 	// 手動加的使用者詞：「雲口」不在任何詞庫。

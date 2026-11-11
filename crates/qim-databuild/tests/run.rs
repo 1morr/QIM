@@ -1699,8 +1699,8 @@ fn builds_an_optional_lexicon_pack_with_the_words_hk_headwords_under_their_own_t
             );
         }
     }
-    assert_eq!(outcome.words_hk.counts.headwords, 2);
-    assert_eq!(outcome.words_hk.headwords, 4);
+    assert_eq!(outcome.words_hk.unwrap().counts.headwords, 2);
+    assert_eq!(outcome.words_hk.unwrap().headwords, 4);
     assert_eq!(default.char_frequency('日'), words_hk.char_frequency('日'));
 
     let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
@@ -1769,4 +1769,63 @@ fn a_words_hk_lexicon_missing_a_default_entry_fails_the_check() {
     assert!(!verify::words_hk_lexicon(&more, &default).passed);
     // 一個詞都沒多（粵典沒接上）也算失敗。
     assert!(!verify::words_hk_lexicon(&default, &default).passed);
+}
+
+/// 粵典的來源和釘的 sha256 對不上（上游更新了）時，只略過粵典詞庫：其他資料包照建、`--verify` 照過、
+/// 報告列出略過的那份；上次建出的粵典詞庫刪掉，免得殼讀到和預設詞庫對不上的舊版。
+#[test]
+fn a_words_hk_source_that_changed_upstream_only_skips_the_words_hk_pack() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let sources = root.path().join("data/sources.toml");
+    let pinned = std::fs::read_to_string(&sources).unwrap();
+    let changed = pinned.replace(&sha256_hex(WORDSLIST.as_bytes()), &"0".repeat(64));
+    assert_ne!(pinned, changed);
+    std::fs::write(&sources, changed).unwrap();
+    let stale = root.path().join("build/packs/quick-lexicon-words-hk");
+    std::fs::create_dir_all(&stale).unwrap();
+    std::fs::write(stale.join("quick-lexicon-words-hk.pack"), b"old").unwrap();
+
+    let outcome = run(root.path(), &upstream(README), true).unwrap();
+    assert_eq!(outcome.packs.len(), 7);
+    assert!(
+        outcome
+            .packs
+            .iter()
+            .all(|p| p.id != "quick-lexicon-words-hk")
+    );
+    assert!(path(&outcome, "詞庫").exists());
+    assert!(!stale.exists(), "上次建出的粵典詞庫要刪掉");
+    assert_eq!(outcome.words_hk, None);
+    let [skipped] = outcome.skipped.as_slice() else {
+        panic!("應該只略過粵典詞庫：{:?}", outcome.skipped);
+    };
+    assert_eq!(skipped.id, "quick-lexicon-words-hk");
+    assert!(skipped.reason.contains("sha256"), "{}", skipped.reason);
+    let report = outcome.report.unwrap();
+    assert!(report.passed(), "{report}");
+    let shown = report.to_string();
+    assert!(shown.contains("略過 quick-lexicon-words-hk"), "{shown}");
+    assert!(shown.contains("[source.words_hk]"), "{shown}");
+}
+
+/// 下載不到粵典（離線、網址掛了）時同樣只略過粵典詞庫；其他來源已在快取。
+#[test]
+fn a_words_hk_source_that_cannot_be_downloaded_only_skips_the_words_hk_pack() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    run(root.path(), &upstream(README), false).unwrap();
+    std::fs::remove_dir_all(root.path().join("cache/sources/words_hk")).unwrap();
+
+    let outcome = run(root.path(), &Offline, false).unwrap();
+    assert_eq!(outcome.packs.len(), 7);
+    assert_eq!(outcome.skipped.len(), 1);
+    assert!(
+        outcome.skipped[0].reason.contains("離線"),
+        "{}",
+        outcome.skipped[0].reason
+    );
+    // 別的來源出錯照樣失敗：只有可選的粵典能略過。
+    std::fs::remove_dir_all(root.path().join("cache/sources/rime_essay")).unwrap();
+    assert!(run(root.path(), &Offline, false).is_err());
 }

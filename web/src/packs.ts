@@ -27,6 +27,11 @@ const BUILTIN_IDS = [
 	"scowl-en-us",
 	"cldr-emoji-yue-hant",
 ] as const;
+/**
+ * 可以缺的內建資料包：粵典的來源和釘的 sha256 對不上時，`cargo xtask data` 只略過粵典詞庫、不建它
+ * （plan §4.2），網頁照樣用其他的。
+ */
+const OPTIONAL_IDS: ReadonlySet<string> = new Set(["quick-lexicon-words-hk"]);
 /** manifest 在資料包目錄裡的檔名（`qim_core::MANIFEST_FILE`）。 */
 const MANIFEST_FILE = "manifest.json";
 /** 每種用哪份：`{ 種類: id }`，沒選的種類用內建那份。 */
@@ -45,19 +50,30 @@ interface Loaded extends Stored {
 	entry: PackEntry;
 }
 
-/** `cargo xtask web` 放到 `web/public/` 的檔；沒有就叫人先跑它。 */
-async function fetchOk(url: string): Promise<Response> {
-	const response = await fetch(url);
+/** 回應不是 2xx 時丟錯：`cargo xtask web` 放到 `web/public/` 的檔，沒有就叫人先跑它。 */
+function ensureOk(url: string, response: Response): Response {
 	if (!response.ok) {
 		throw new Error(`${url}：${response.status}，先跑 cargo xtask web`);
 	}
 	return response;
 }
 
-async function fetchBuiltin(id: string): Promise<Loaded> {
-	const manifest = await (
-		await fetchOk(`/packs/${id}/${MANIFEST_FILE}`)
-	).text();
+async function fetchOk(url: string): Promise<Response> {
+	return ensureOk(url, await fetch(url));
+}
+
+/**
+ * 內建的一份；可以缺的那幾份沒建時是 `undefined`。沒有那個檔時靜態伺服器回 404，Vite 開發伺服器卻回
+ * 200 的 `index.html`（SPA fallback），所以看 manifest 是不是 JSON。
+ */
+async function fetchBuiltin(id: string): Promise<Loaded | undefined> {
+	const manifestUrl = `/packs/${id}/${MANIFEST_FILE}`;
+	const response = await fetch(manifestUrl);
+	const isJson = (response.headers.get("content-type") ?? "").includes("json");
+	if (OPTIONAL_IDS.has(id) && (!response.ok || !isJson)) {
+		return undefined;
+	}
+	const manifest = await ensureOk(manifestUrl, response).text();
 	const bytes = new Uint8Array(
 		await (await fetchOk(`/packs/${id}/${id}.pack`)).arrayBuffer(),
 	);
@@ -93,7 +109,9 @@ export class PackLibrary {
 
 	/** 讀內建的與 IndexedDB 裡匯入的；IndexedDB 裡讀不懂的那筆略過。 */
 	static async open(): Promise<PackLibrary> {
-		const builtin = await Promise.all(BUILTIN_IDS.map(fetchBuiltin));
+		const builtin = (await Promise.all(BUILTIN_IDS.map(fetchBuiltin))).filter(
+			(pack) => pack !== undefined,
+		);
 		const imported = new Map<string, Loaded>();
 		for (const [id, value] of await entries<string, Stored>(store)) {
 			try {

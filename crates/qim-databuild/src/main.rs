@@ -52,6 +52,10 @@ fn build(verify: bool) -> ExitCode {
                 println!("{} sha256：{}", pack.name, pack.sha256);
             }
             println!("佈局：{}", shown(&outcome.layout_path));
+            // 可選資料包的來源出問題時只略過那份、結束碼照樣是 0，警告印到 stderr 免得被埋在報告裡。
+            for skipped in &outcome.skipped {
+                eprintln!("警告：{skipped}");
+            }
             // 個人集只印數字（plan §5.2）。
             match outcome.personal {
                 Some(c) => println!(
@@ -75,7 +79,9 @@ fn build(verify: bool) -> ExitCode {
                 }
                 None => {
                     println!("{}", outcome.lexicon);
-                    println!("{}", outcome.words_hk);
+                    if let Some(words_hk) = &outcome.words_hk {
+                        println!("{words_hk}");
+                    }
                     println!("{}", outcome.language_model);
                     println!(
                         "{}",

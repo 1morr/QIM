@@ -132,8 +132,10 @@ pub struct Report {
     pub emoji: Option<emoji::Counts>,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
-    /// 粵典詞庫的建置統計；[`run`] 不算，由呼叫端填。
+    /// 粵典詞庫的建置統計；[`run`] 不算，由呼叫端填。略過時是 `None`。
     pub words_hk: Option<WordsHkSummary>,
+    /// 來源出問題而略過的可選資料包，不算失敗；[`run`] 不算，由呼叫端填。
+    pub skipped: Vec<Skipped>,
     /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
     pub language_model: Option<bigram::Summary>,
     pub checks: Vec<Check>,
@@ -224,6 +226,22 @@ impl fmt::Display for LexiconSummary {
     }
 }
 
+/// 來源出問題（sha256 不符、下載失敗）而沒建的可選資料包；其他資料包照建（plan §4.2）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Skipped {
+    pub id: String,
+    /// 來源的錯誤訊息。
+    pub reason: String,
+    /// 怎麼修，例如重釘哪個來源。
+    pub fix: String,
+}
+
+impl fmt::Display for Skipped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "略過 {}：{}；{}", self.id, self.reason, self.fix)
+    }
+}
+
 /// 粵典詞庫資料包（`quick-lexicon-words-hk`）的建置統計。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WordsHkSummary {
@@ -273,6 +291,9 @@ impl fmt::Display for Report {
         }
         if let Some(words_hk) = &self.words_hk {
             writeln!(f, "{words_hk}")?;
+        }
+        for skipped in &self.skipped {
+            writeln!(f, "{skipped}")?;
         }
         if let Some(language_model) = &self.language_model {
             writeln!(f, "{language_model}")?;
@@ -331,6 +352,7 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
         emoji: None,
         lexicon: None,
         words_hk: None,
+        skipped: Vec::new(),
         language_model: None,
         checks: Vec::new(),
         unihan: None,
