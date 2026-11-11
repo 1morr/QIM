@@ -3,7 +3,7 @@
   python3 llm.py prompts --style one --choices merge <要求.jsonl>… -o <提示.jsonl> [--sample N]
   python3 llm.py cloud --model deepseek-flash <提示.jsonl> <回覆.jsonl> [--workers 4]
   python3 llm.py orders <提示.jsonl> <回覆.jsonl> -o <結果.jsonl> [--deadline-ms 3000]
-  python3 llm.py stats <回覆.jsonl>… [--model deepseek-flash]
+  python3 llm.py stats <回覆.jsonl>… [--model deepseek-flash] [--by set|context]
   python3 llm.py tail-stats <回覆.jsonl>…
   python3 llm.py estimate <提示.jsonl>…
   python3 llm.py subset <提示.jsonl> <逐題結果目錄 A> <逐題結果目錄 B>
@@ -13,6 +13,7 @@ Foundation Models 的回覆由 `fm/fm-rerank.swift` 產生，格式與 `cloud` �
 """
 
 import argparse
+import http.client
 import json
 import math
 import os
@@ -20,7 +21,6 @@ import random
 import re
 import sys
 import time
-import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -153,6 +153,13 @@ def percentile(values, p):
     return s[rank - 1]
 
 
+def context_group(set_name):
+    """`stats --by context` 的分組：有前文的集合依前文長度，其餘合成一組。"""
+    if "·前文" not in set_name:
+        return "不給前文（維基、口語集）"
+    return "前文 " + set_name.rsplit("·前文", 1)[1]
+
+
 def cost_per_thousand(usages, model):
     """每千次請求的人民幣費用（高峰價）。"""
     price = PRICES[model]
@@ -248,11 +255,19 @@ def call(model, prompt, timeout, max_tokens):
             data = json.load(resp)
         out["reply"] = data["choices"][0]["message"].get("content") or ""
         out["usage"] = data.get("usage", {})
-    except (urllib.error.URLError, TimeoutError, KeyError, ValueError) as e:
+    # HTTP 錯誤（含 429、5xx）、逾時、斷線都記成出錯列，續跑時重送（`resume`）。
+    except (OSError, http.client.HTTPException, KeyError, ValueError) as e:
         out["reply"] = ""
         out["error"] = f"{type(e).__name__}: {e}"
     out["ms"] = round((time.perf_counter() - start) * 1000, 1)
     return out
+
+
+def resume(prompts, previous):
+    """續跑：留下已有回答的列，出錯的列丟掉、重送，免得統計重複算。回 (留下的列, 要送的提示)。"""
+    kept = [r for r in previous if not r.get("error")]
+    done = {key(r) for r in kept}
+    return kept, [p for p in prompts if key(p) not in done]
 
 
 def cmd_cloud(a):
@@ -260,11 +275,10 @@ def cmd_cloud(a):
         sys.exit("沒有 DEEPSEEK_API_KEY：跳過雲端（spec〈共同規則〉）")
     prompts = read_jsonl(a.prompts)
     check_personal(prompts, a.allow_personal)
-    done = set()
-    if Path(a.replies).exists():
-        done = {key(r) for r in read_jsonl(a.replies) if not r.get("error")}
-    todo = [p for p in prompts if key(p) not in done]
-    print(f"送 {len(todo)} 題（已有 {len(done)}）", file=sys.stderr)
+    previous = read_jsonl(a.replies) if Path(a.replies).exists() else []
+    kept, todo = resume(prompts, previous)
+    write_jsonl(a.replies, kept)
+    print(f"送 {len(todo)} 題（已有 {len(kept)}）", file=sys.stderr)
     with open(a.replies, "a", encoding="utf-8") as f, ThreadPoolExecutor(a.workers) as pool:
         for n, r in enumerate(
             pool.map(lambda p: call(a.model, p, a.timeout, a.max_tokens), todo), 1
@@ -287,11 +301,12 @@ def fmt(v):
 
 def cmd_stats(a):
     replies = [r for path in a.replies for r in read_jsonl(path)]
+    group = context_group if a.by == "context" else (lambda name: name)
     groups = {}
-    for r in replies:
-        groups.setdefault(r["set"], []).append(r)
+    for r in sorted(replies, key=lambda r: group(r["set"])):
+        groups.setdefault(group(r["set"]), []).append(r)
     groups["合計"] = replies
-    head = "| 集合 | 請求 | 出錯 | 沒有序號 | p50 ms | p95 ms | 最慢 ms | > 2 s | > 3 s |"
+    head = "| 集合 | 請求 | 出錯 | 沒有數字 | p50 ms | p95 ms | 最慢 ms | > 2 s | > 3 s |"
     if a.model:
         head += " 每千次（元） |"
     print(head)
@@ -328,6 +343,9 @@ def cmd_tail_stats(a):
     if first:
         over = sum(m > 2000 for m in first)
         print(f"\n停頓後第一個請求：{len(first)} 次，超過 2 s 的 {over} 次（{over / len(first):.1%}）")
+    cold = [r["ms"] for r in rows if r.get("processFirst")]
+    if cold:
+        print(f"程序的第一個請求（{len(cold)} 次，ms）：" + "、".join(f"{m:.0f}" for m in cold))
 
 
 def cmd_estimate(a):
@@ -390,6 +408,7 @@ def main(argv=None):
     p = sub.add_parser("stats")
     p.add_argument("replies", nargs="+")
     p.add_argument("--model", choices=PRICES)
+    p.add_argument("--by", choices=["set", "context"], default="set")
     p.set_defaults(func=cmd_stats)
     p = sub.add_parser("tail-stats")
     p.add_argument("replies", nargs="+")

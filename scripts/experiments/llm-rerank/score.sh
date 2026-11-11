@@ -3,6 +3,7 @@
 #   score.sh <dev|test> <提示.jsonl> <回覆.jsonl> <名> [逾時 ms]
 # 在 repo 根目錄執行；逐題結果寫到 build/model-ladder/<切分>/<名>/。
 set -eu
+[ $# -ge 4 ] || { echo "用法：score.sh <dev|test> <提示.jsonl> <回覆.jsonl> <名> [逾時 ms]" >&2; exit 2; }
 split=$1 prompts=$2 replies=$3 name=$4 deadline=${5:-}
 here=$(dirname "$0")
 orders=build/llm-rerank/orders/$split-$name.jsonl

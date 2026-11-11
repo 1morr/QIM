@@ -102,6 +102,11 @@ class Stats(unittest.TestCase):
         self.assertEqual(llm.percentile([5, 1, 3, 2, 4], 50), 3)
         self.assertEqual(llm.percentile(list(range(1, 101)), 95), 95)
 
+    def test_context_group_reads_the_set_suffix(self):
+        self.assertEqual(llm.context_group("hkcancor"), "不給前文（維基、口語集）")
+        self.assertEqual(llm.context_group("zh-wiki·前文0"), "前文 0")
+        self.assertEqual(llm.context_group("yue-wiki·前文200"), "前文 200")
+
     def test_cost_per_thousand_uses_peak_prices(self):
         usage = [
             {"prompt_cache_hit_tokens": 100, "prompt_cache_miss_tokens": 200, "completion_tokens": 2}
@@ -141,6 +146,33 @@ class Subset(unittest.TestCase):
         self.assertEqual(r["total"], 2)
         self.assertEqual((r["top2_a"], r["top2_b"]), (1, 1))
         self.assertEqual((r["better"], r["worse"]), (1, 1))
+
+
+class Cloud(unittest.TestCase):
+    PROMPT = {"split": "dev", "set": "s", "line": 1, "instructions": "i", "prompt": "p"}
+
+    def test_connection_errors_become_error_rows(self):
+        import http.client
+        import os
+        from unittest import mock
+
+        for exc in (http.client.RemoteDisconnected("x"), http.client.IncompleteRead(b""),
+                    ConnectionResetError(), TimeoutError()):
+            with self.subTest(type(exc).__name__), mock.patch.dict(os.environ, {"DEEPSEEK_API_KEY": "k"}), \
+                    mock.patch("urllib.request.urlopen", side_effect=exc):
+                r = llm.call("deepseek-flash", self.PROMPT, 1, 8)
+            self.assertEqual(r["reply"], "")
+            self.assertIn(type(exc).__name__, r["error"])
+
+    def test_resume_keeps_answered_rows_and_resends_errors(self):
+        prompts = [dict(self.PROMPT, line=i) for i in (1, 2, 3)]
+        previous = [
+            {"split": "dev", "set": "s", "line": 1, "reply": "2", "ms": 1},
+            {"split": "dev", "set": "s", "line": 2, "reply": "", "ms": 1, "error": "HTTPError"},
+        ]
+        kept, todo = llm.resume(prompts, previous)
+        self.assertEqual([r["line"] for r in kept], [1])
+        self.assertEqual([p["line"] for p in todo], [2, 3])
 
 
 if __name__ == "__main__":

@@ -8,42 +8,57 @@
 
 | 路徑 | 內容 |
 | --- | --- |
-| `llm.py` | 組提示、送 DeepSeek、回覆換回文字、延遲與費用統計、費用估計 |
-| `test_llm.py` | `llm.py` 的測試：`python3 -m unittest test_llm` |
+| `llm.py` | 組提示（`prompts`）、送 DeepSeek（`cloud`）、回覆換回文字（`orders`）、延遲與費用（`stats`、`tail-stats`）、費用估計（`estimate`）、只比調參那批題（`subset`） |
+| `test_llm.py` | `llm.py` 的測試：在本目錄 `python3 -m unittest test_llm` |
 | `fm/fm-rerank.swift` | Foundation Models 的命令列：逐題送出（`run`）、停頓後第一個請求的延遲（`tail`） |
+| `score.sh` | 一種寫法的回覆打分：`orders` → `model-ladder eval` → `subset` |
 
 ## 怎麼重跑
 
-在 repo 根目錄：
+在 repo 根目錄。輸出都在 `build/llm-rerank/`，不進 git。
 
 ```sh
 cargo xtask data                                       # 題目與長前文題
+ln -s <主 checkout>/bench/personal bench/personal      # worktree 裡要個人集時
 (cd scripts/experiments/model-ladder && cargo run --release -- eval && cargo run --release -- export)
 swiftc -O -swift-version 6 scripts/experiments/llm-rerank/fm/fm-rerank.swift -o build/llm-rerank/fm-rerank
-L=scripts/experiments/llm-rerank/llm.py; R=build/model-ladder/dev/requests; T=build/llm-rerank/tune
+build/llm-rerank/fm-rerank info                        # 要是 available
+L=scripts/experiments/llm-rerank/llm.py; S=scripts/experiments/llm-rerank/score.sh
+R=build/model-ladder/dev/requests; T=build/llm-rerank/tune; mkdir -p $T build/llm-rerank/fm build/llm-rerank/flash
 
-# dev 調參的題：口語 dev 不給前文 300 題 + 口語前文 200 字 200 題（種子 1），每種寫法一份
-python3 $L prompts --style one --choices merge --sample 300 $R/common-voice-yue.jsonl $R/hkcancor.jsonl -o $T/plain-one-merge.jsonl
-python3 $L prompts --style one --choices merge --sample 200 "$R/common-voice-yue·前文200.jsonl" "$R/hkcancor·前文200.jsonl" -o $T/ctx-one-merge.jsonl
-cat $T/plain-one-merge.jsonl $T/ctx-one-merge.jsonl > $T/one-merge.jsonl
+# dev 調參：每種寫法（<st> 是 one、two、hint、hint2，<ch> 是 cand、merge、paths）同一批 500 題
+#   口語 dev 不給前文 300 題 + 口語前文 200 字 200 題，種子 1
+python3 $L prompts --style <st> --choices <ch> --sample 300 $R/common-voice-yue.jsonl $R/hkcancor.jsonl -o $T/plain-<st>-<ch>.jsonl
+python3 $L prompts --style <st> --choices <ch> --sample 200 "$R/common-voice-yue·前文200.jsonl" "$R/hkcancor·前文200.jsonl" -o $T/ctx-<st>-<ch>.jsonl
+cat $T/plain-<st>-<ch>.jsonl $T/ctx-<st>-<ch>.jsonl > $T/<st>-<ch>.jsonl
+build/llm-rerank/fm-rerank run $T/<st>-<ch>.jsonl build/llm-rerank/fm/tune-<st>-<ch>.jsonl
+(set -a; . ~/.config/qim/deepseek.env; python3 $L cloud --workers 6 --model deepseek-flash $T/<st>-<ch>.jsonl build/llm-rerank/flash/tune-<st>-<ch>.jsonl)
+$S dev $T/<st>-<ch>.jsonl build/llm-rerank/fm/tune-<st>-<ch>.jsonl fm-tune-<st>-<ch>        # 印出和基線比的表
+python3 $L stats build/llm-rerank/fm/tune-<st>-<ch>.jsonl
 
-# Foundation Models
-build/llm-rerank/fm-rerank info
-build/llm-rerank/fm-rerank run $T/one-merge.jsonl build/llm-rerank/fm/one-merge.replies.jsonl
-build/llm-rerank/fm-rerank tail $T/one-merge.jsonl build/llm-rerank/fm/tail.jsonl --gaps 2,5,10,30,60,120,300 --repeat 3
+# test：定案的寫法各跑一次（調參只看 dev，README〈調參與報數〉）
+(cd scripts/experiments/model-ladder && cargo run --release -- eval --split test && cargo run --release -- export --split test --include-personal)
+P=build/model-ladder/test/requests; O=build/llm-rerank/test; mkdir -p $O
+ls $P | grep -v personal | sed "s|^|$P/|" | tr '\n' '\0' | xargs -0 python3 $L prompts --style hint --choices paths -o $O/cloud-hint-paths.jsonl
+ls $P | sed "s|^|$P/|" | tr '\n' '\0' | xargs -0 python3 $L prompts --style one --choices paths -o $O/fm-one-paths.jsonl
+(set -a; . ~/.config/qim/deepseek.env; python3 $L cloud --workers 6 --model deepseek-flash $O/cloud-hint-paths.jsonl build/llm-rerank/flash/test-hint-paths.jsonl)
+build/llm-rerank/fm-rerank run $O/fm-one-paths.jsonl build/llm-rerank/fm/test-one-paths.jsonl
+$S test $O/cloud-hint-paths.jsonl build/llm-rerank/flash/test-hint-paths.jsonl flash-hint-paths 3000
+$S test $O/fm-one-paths.jsonl build/llm-rerank/fm/test-one-paths.jsonl fm-one-paths
+(cd scripts/experiments/model-ladder && cargo run --release -- compare ../../../build/model-ladder/test/baseline ../../../build/model-ladder/test/flash-hint-paths)
+python3 $L stats --by context --model deepseek-flash build/llm-rerank/flash/test-hint-paths.jsonl
+python3 $L stats --by context build/llm-rerank/fm/test-one-paths.jsonl
 
-# DeepSeek（key 在 repo 外的檔，只進這個指令的環境變數）
-(set -a; . ~/.config/qim/deepseek.env; python3 $L cloud --model deepseek-flash $T/one-merge.jsonl build/llm-rerank/flash/one-merge.replies.jsonl)
-
-# 回覆換成結果、交給框架
-python3 $L orders $T/one-merge.jsonl <回覆.jsonl> -o <結果.jsonl> [--deadline-ms 3000]
-(cd scripts/experiments/model-ladder && cargo run --release -- eval --orders ../../../<結果.jsonl> --name <名>)
-python3 $L stats <回覆.jsonl> [--model deepseek-flash]
+# Foundation Models 停頓後第一個請求：機器上沒有別的 fm-rerank 在跑時量
+build/llm-rerank/fm-rerank tail $O/fm-one-paths.jsonl build/llm-rerank/fm/tail.jsonl --gaps 5,10,20,30,60,120 --repeat 8
+for i in 1 2 3 4 5 6; do sleep 60; build/llm-rerank/fm-rerank tail $O/fm-one-paths.jsonl build/llm-rerank/fm/tail-cold.jsonl --gaps 0 --repeat 1; done
 python3 $L tail-stats build/llm-rerank/fm/tail.jsonl
+python3 $L tail-stats build/llm-rerank/fm/tail-cold.jsonl
 ```
 
-- `cloud` 拒收個人集的提示，除非加 `--allow-personal`（每次先問使用者，plan §5.2）；回覆檔已有的題不重送。
-- `eval --orders` 只算結果檔裡有的題；調參的子集合用 `eval` 的各集合列不準（沒回的題照原順序），所以 dev 的子集合直接用 `model-ladder` 的逐題結果算（下面〈dev 調參〉）。
+- `cloud` 沒有 `DEEPSEEK_API_KEY` 時印一行就結束（跳過雲端）；拒收個人集的提示，除非加 `--allow-personal`（每次先問使用者，plan §5.2）。續跑時已有回答的題不重送，出錯的列丟掉重送。`fm-rerank run` 的出錯（安全過濾）每次都一樣，算做過、不重送。
+- 調參那批題只是 dev 的一部分，`eval` 的各集合列會把沒送的題照原順序算進去，所以 `score.sh` 最後用 `subset` 只比提示檔裡的題（下面〈dev 調參〉）。
+- 付費：每次真的呼叫前把估計的請求數與費用告訴使用者（spec〈共同規則〉）；`estimate` 用字數保守估，第一批送完改用 `stats --model` 的實測每千次費用。
 
 ## 模型與環境
 
@@ -120,7 +135,7 @@ spec 的寫法：上下文 + 輸入碼 + 編號的選項，只回序號（afm-im
 
 ## test 結果（採用門檻看這份）
 
-設定在 dev 定案後各跑一次：DeepSeek flash `hint-paths` 在 2026-11-11 11:52–12:24（北京時間，平日高峰時段）送 test 的 15,713 題；Foundation Models `one-paths` 跑 test 的 20,230 題（含個人集，只在本機）。基線在同一個 commit 重量，和 `../model-ladder/README.md` 的數字相同。
+設定在 dev 定案後各跑一次：DeepSeek flash `hint-paths` 在 2026-11-11 11:52–12:24（北京時間；高峰時段到 12 時，之後是離峰）送 test 的 15,713 題；Foundation Models `one-paths` 跑 test 的 20,230 題（含個人集，只在本機）。基線在同一個 commit 重量，和 `../model-ladder/README.md` 的數字相同。
 
 ### DeepSeek flash（`hint-paths`）
 
@@ -142,7 +157,7 @@ spec 的寫法：上下文 + 輸入碼 + 編號的選項，只回序號（afm-im
 
 個人集沒送：使用者 2026-11-11 決定不把個人集送 DeepSeek（plan §5.2）。
 
-延遲與費用（每千次照高峰價；實際送出時正好是高峰時段）：
+延遲與費用（`stats --by context --model deepseek-flash`；每千次照高峰價算，spec〈採用門檻〉照高峰價）：
 
 | 前文 | 請求 | p50 ms | p95 ms | 最慢 ms | 每千次（元） |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -152,4 +167,4 @@ spec 的寫法：上下文 + 輸入碼 + 編號的選項，只回序號（afm-im
 | 前文 200 | 3025 | 764 | 1094 | 2069 | 0.509 |
 | 合計 | 15713 | 742 | 1083 | 2397 | 0.430 |
 
-沒有出錯、沒有沒序號的回覆，超過 3 s 的 0 題（超過 2 s 的 3 題）。快取命中只有 2.5%（84,509 / 3,400,529 個輸入 token）：每題的 system 訊息相同，但 DeepSeek 的快取要偵測到共同前綴才建，命中是盡力而為。test 實花 6.76 元，加上調參約 1.1 元，合計約 7.9 元。
+沒有出錯、沒有不含數字的回覆，超過 3 s 的 0 題（超過 2 s 的 3 題）。快取命中只有 2.5%（84,509 / 3,400,529 個輸入 token）：每題的 system 訊息相同，但 DeepSeek 的快取要偵測到共同前綴才建，命中是盡力而為。照高峰價算 test 是 6.76 元，加上調參約 1.1 元，合計約 7.9 元；12 時後送出的部分實付半價，實際花費較少。

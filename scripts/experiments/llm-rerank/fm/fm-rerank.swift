@@ -2,7 +2,7 @@
 //
 //   fm-rerank info
 //   fm-rerank run <提示.jsonl> <回覆.jsonl> [--max-tokens N]
-//   fm-rerank tail <提示.jsonl> <回覆.jsonl> [--gaps 2,5,10] [--repeat N] [--follow N]
+//   fm-rerank tail <提示.jsonl> <回覆.jsonl> [--gaps 2,5,10] [--repeat N] [--follow N] [--max-tokens N]
 //
 // 提示檔由 `llm.py prompts` 產生，一行一題；回覆檔一行一個請求，`llm.py orders` 把它換回文字。
 // 每個請求新開 `LanguageModelSession`（同 IME 每次停鍵送一個獨立請求，同 M2 票 10 的 ModelProbe）。
@@ -109,7 +109,7 @@ func flag(_ args: [String], _ name: String) -> String? {
     return args[i + 1]
 }
 
-/// 逐題送出；回覆檔已有的題跳過（中斷後重跑接著做）。
+/// 逐題送出；回覆檔已有的題跳過（中斷後重跑接著做）。安全過濾的出錯每次都一樣，也算做過、不重送。
 func run(_ args: [String]) async {
     guard args.count >= 2 else { fail("用法：fm-rerank run <提示.jsonl> <回覆.jsonl>") }
     requireModel()
@@ -138,6 +138,7 @@ func tail(_ args: [String]) async {
     let gaps = (flag(args, "--gaps") ?? "2,5,10,30,60,120,300").split(separator: ",").compactMap { Int($0) }
     let repeats = Int(flag(args, "--repeat") ?? "3") ?? 3
     let follow = Int(flag(args, "--follow") ?? "2") ?? 2
+    let maxTokens = Int(flag(args, "--max-tokens") ?? "8") ?? 8
     let prompts = readLines(args[0], as: PromptLine.self)
     guard !prompts.isEmpty else { fail("沒有提示") }
     let out = Output(args[1])
@@ -146,7 +147,7 @@ func tail(_ args: [String]) async {
         for gap in gaps {
             try? await Task.sleep(for: .seconds(gap))
             for k in 0...follow {
-                var r = await request(prompts[next % prompts.count], maxTokens: 8)
+                var r = await request(prompts[next % prompts.count], maxTokens: maxTokens)
                 next += 1
                 r.gap = gap
                 r.burstIndex = k
