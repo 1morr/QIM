@@ -1,6 +1,8 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+# 詞表匯入的固定檔要保留 `\r\n`，測的就是它（M3 票 17）。
+crates/qim-core/tests/fixtures/word-list/plain.txt -text
 *.png binary
 *.jpg binary
 *.ico binary

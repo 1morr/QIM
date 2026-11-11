@@ -3,10 +3,13 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{CodeTable, EnglishWords, LanguageModel, Lexicon, RadicalHints, Scheme, Simplifier};
+use crate::{
+    CodeTable, EmojiTable, EnglishWords, LanguageModel, Lexicon, Manifest, PackKind, RadicalHints,
+    Scheme, Simplifier,
+};
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 
 /// 各種資料包共用的位元組格式：魔數 [`Pack::MAGIC`]、postcard 的 [`FORMAT_VERSION`]、
 /// postcard 的本體。
@@ -14,8 +17,25 @@ pub trait Pack: Serialize + DeserializeOwned {
     /// 檔頭的魔數，每種資料包不同。
     const MAGIC: [u8; 4];
 
+    /// manifest 的 `kind`。
+    const KIND: PackKind;
+
     /// 資料包的 id；方案資料包是方案的 id。
     fn id(&self) -> &str;
+
+    /// 殼載入資料包的入口：照 `manifest` 核對最低核心版本、種類、大小與 sha256，解開後再核對 id
+    /// （plan §4.6）。[`Pack::from_bytes`] 不核對，給建置端與測試讀剛建好的資料包。
+    fn open(manifest: &Manifest, bytes: &[u8]) -> Result<Self, PackError> {
+        manifest.check::<Self>(bytes)?;
+        let pack = Self::from_bytes(bytes)?;
+        if pack.id() != manifest.id {
+            return Err(PackError::IdMismatch {
+                manifest: manifest.id.clone(),
+                pack: pack.id().to_string(),
+            });
+        }
+        Ok(pack)
+    }
 
     fn to_bytes(&self) -> Result<Vec<u8>, PackError> {
         let mut bytes = Self::MAGIC.to_vec();
@@ -91,6 +111,14 @@ pub struct EnglishPack {
     pub words: EnglishWords,
 }
 
+/// emoji 資料包：字詞 → emoji（plan §4.4），由 [`crate::Engine::with_emoji`] 掛上，不由方案指名，
+/// 各方案共用。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmojiPack {
+    pub id: String,
+    pub emoji: EmojiTable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackError {
     /// 檔頭不是這種資料包的魔數。
@@ -101,21 +129,57 @@ pub enum PackError {
     },
     /// 版本對，但內容解不開、被截斷或有多餘的位元組。
     Malformed(String),
-    /// 給的詞庫資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
+    /// 方案指名了詞庫卻沒給，或沒指名卻給了；`None` 是方案沒指名或沒給。
     LexiconMismatch {
         expected: Option<String>,
         found: Option<String>,
     },
-    /// 給的語言模型資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
+    /// 方案指名了語言模型卻沒給，或沒指名卻給了；`None` 是方案沒指名或沒給。
     LanguageModelMismatch {
         expected: Option<String>,
         found: Option<String>,
     },
-    /// 給的字根提示資料包不是方案指名的那份；`None` 是方案沒指名或沒給。
+    /// 方案指名了字根提示卻沒給，或沒指名卻給了；`None` 是方案沒指名或沒給。
     RadicalHintMismatch {
         expected: Option<String>,
         found: Option<String>,
     },
+    /// manifest 不是合格的 JSON、少了欄位或欄位的值不合格式。
+    InvalidManifest(String),
+    /// 更新索引（`index.json`）不是合格的 JSON、格式版本不對、有一項的 manifest 欄位不合格式或
+    /// id 重複。
+    InvalidIndex(String),
+    /// manifest 要求比這個核心新的版本。
+    CoreTooOld {
+        required: String,
+        current: String,
+    },
+    /// manifest 說的種類不是要載入的那種。
+    KindMismatch {
+        expected: PackKind,
+        found: PackKind,
+    },
+    /// 資料包檔的大小和 manifest 不同：多半是下載或複製不完整。
+    SizeMismatch {
+        expected: u64,
+        found: u64,
+    },
+    /// 資料包檔的 sha256 和 manifest 不同：檔案損壞或被改過。
+    ChecksumMismatch {
+        expected: String,
+        found: String,
+    },
+    /// manifest 的 id 和資料包裡的不同。
+    IdMismatch {
+        manifest: String,
+        pack: String,
+    },
+    /// 交給 [`crate::Engine::open`] 的資料包裡同一種有兩份。
+    DuplicateKind(PackKind),
+    /// 這種資料包不交給 [`crate::Engine::open`]（字根提示由殼另外載入）。
+    NotForEngine(PackKind),
+    /// 少了一定要有的那種資料包。
+    Missing(PackKind),
 }
 
 impl fmt::Display for PackError {
@@ -145,6 +209,29 @@ impl fmt::Display for PackError {
                 name(expected),
                 name(found)
             ),
+            Self::InvalidManifest(reason) => write!(f, "manifest 不合格式：{reason}"),
+            Self::InvalidIndex(reason) => write!(f, "更新索引不合格式：{reason}"),
+            Self::CoreTooOld { required, current } => write!(
+                f,
+                "資料包要核心 {required} 以上，這個核心是 {current}：先更新 App"
+            ),
+            Self::KindMismatch { expected, found } => {
+                write!(f, "要的是 {expected} 資料包，manifest 寫的是 {found}")
+            }
+            Self::SizeMismatch { expected, found } => write!(
+                f,
+                "資料包檔 {found} 位元組，manifest 寫 {expected}：檔案不完整"
+            ),
+            Self::ChecksumMismatch { expected, found } => write!(
+                f,
+                "資料包檔的 sha256 是 {found}，manifest 寫 {expected}：檔案損壞或被改過"
+            ),
+            Self::IdMismatch { manifest, pack } => {
+                write!(f, "manifest 的 id 是 {manifest}，資料包裡是 {pack}")
+            }
+            Self::DuplicateKind(kind) => write!(f, "給了兩份 {kind} 資料包"),
+            Self::NotForEngine(kind) => write!(f, "{kind} 資料包不交給 Engine"),
+            Self::Missing(kind) => write!(f, "沒有 {kind} 資料包"),
         }
     }
 }
@@ -157,6 +244,7 @@ fn malformed(e: postcard::Error) -> PackError {
 
 impl Pack for SchemePack {
     const MAGIC: [u8; 4] = *b"QIMP";
+    const KIND: PackKind = PackKind::Scheme;
 
     fn id(&self) -> &str {
         &self.scheme.id
@@ -165,6 +253,7 @@ impl Pack for SchemePack {
 
 impl Pack for LexiconPack {
     const MAGIC: [u8; 4] = *b"QIML";
+    const KIND: PackKind = PackKind::Lexicon;
 
     fn id(&self) -> &str {
         &self.id
@@ -173,6 +262,7 @@ impl Pack for LexiconPack {
 
 impl Pack for LanguageModelPack {
     const MAGIC: [u8; 4] = *b"QIMB";
+    const KIND: PackKind = PackKind::LanguageModel;
 
     fn id(&self) -> &str {
         &self.id
@@ -181,6 +271,7 @@ impl Pack for LanguageModelPack {
 
 impl Pack for SimplifierPack {
     const MAGIC: [u8; 4] = *b"QIMS";
+    const KIND: PackKind = PackKind::Simplifier;
 
     fn id(&self) -> &str {
         &self.id
@@ -189,6 +280,7 @@ impl Pack for SimplifierPack {
 
 impl Pack for RadicalHintPack {
     const MAGIC: [u8; 4] = *b"QIMH";
+    const KIND: PackKind = PackKind::RadicalHint;
 
     fn id(&self) -> &str {
         &self.id
@@ -197,6 +289,16 @@ impl Pack for RadicalHintPack {
 
 impl Pack for EnglishPack {
     const MAGIC: [u8; 4] = *b"QIME";
+    const KIND: PackKind = PackKind::English;
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl Pack for EmojiPack {
+    const MAGIC: [u8; 4] = *b"QIMJ";
+    const KIND: PackKind = PackKind::Emoji;
 
     fn id(&self) -> &str {
         &self.id

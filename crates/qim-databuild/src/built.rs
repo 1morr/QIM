@@ -1,6 +1,6 @@
 //! 一次建置建出的資料包清單：`pipeline` 依它寫檔、印 sha256，`verify` 依它比對兩次建置與解開。
 
-use qim_core::{Pack, PackError};
+use qim_core::{Pack, PackError, PackKind};
 
 use crate::sources::sha256_hex;
 
@@ -10,6 +10,8 @@ pub struct BuiltPack {
     /// 給人看的種類名（`速成`、`詞庫`…），印在建置輸出與驗證報告。
     pub name: &'static str,
     pub id: String,
+    /// manifest 的種類（[`Pack::KIND`]）。
+    pub kind: PackKind,
     /// 這種資料包的魔數（[`Pack::MAGIC`]）；[`find`] 依它取出資料包，不看 `bytes` 的內容。
     pub magic: [u8; 4],
     pub bytes: Vec<u8>,
@@ -20,6 +22,7 @@ impl BuiltPack {
         Ok(Self {
             name,
             id: pack.id().into(),
+            kind: P::KIND,
             magic: P::MAGIC,
             bytes: pack.to_bytes()?,
         })

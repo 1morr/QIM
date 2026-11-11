@@ -16,11 +16,18 @@ test("設定區列出改核心選項的開關，預設值照 brief §7", async (
 	await expect(
 		settings.getByRole("checkbox", { name: "無痕" }),
 	).not.toBeChecked();
+	await expect(settings.getByRole("checkbox", { name: "學習" })).toBeChecked();
 	await expect(
 		settings.getByRole("checkbox", { name: "簡體" }),
 	).not.toBeChecked();
 	await expect(
+		settings.getByRole("checkbox", { name: "繁體字優先" }),
+	).toBeChecked();
+	await expect(
 		settings.getByRole("checkbox", { name: "英文候選" }),
+	).toBeChecked();
+	await expect(
+		settings.getByRole("checkbox", { name: "emoji 候選" }),
 	).toBeChecked();
 	await expect(
 		settings.getByRole("checkbox", { name: "數字後半形" }),

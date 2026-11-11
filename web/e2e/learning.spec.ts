@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // 學習（M1 票 13）：同一個碼選同一個非首選兩次，它就成首選；無痕模式下不學。
+// 學習開關（M3 票 12）：關掉時不學，已學的照用。
 
 async function ready(page: Page) {
 	await page.goto("/");
@@ -11,6 +12,7 @@ async function ready(page: Page) {
 		text,
 		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		incognito: page.getByRole("checkbox", { name: "無痕" }),
+		learning: page.getByRole("checkbox", { name: "學習" }),
 	};
 }
 
@@ -61,4 +63,35 @@ test("開無痕後同樣選兩次，首選不變", async ({ page }, testInfo) =>
 	await page.keyboard.type("a");
 	await expect(items.first()).toHaveText(`1${top}`);
 	await page.screenshot({ path: testInfo.outputPath("incognito-top.png") });
+});
+
+test("關掉學習後選兩次同一候選，它不成首選", async ({ page }, testInfo) => {
+	const { text, items, learning } = await ready(page);
+	await learning.uncheck();
+	await expect(text).toBeFocused();
+	await page.keyboard.type("a");
+	const [top, second] = await shown(page);
+	await page.keyboard.press("Escape");
+
+	await choose(page, "a", second);
+	await choose(page, "a", second);
+	await expect(text).toHaveValue(second + second);
+
+	await page.keyboard.type("a");
+	await expect(items.first()).toHaveText(`1${top}`);
+	await page.screenshot({ path: testInfo.outputPath("learning-off-top.png") });
+});
+
+test("學過的在關掉學習後照用", async ({ page }) => {
+	const { text, items, learning } = await ready(page);
+	await page.keyboard.type("a");
+	const [, second] = await shown(page);
+	await page.keyboard.press("Escape");
+	await choose(page, "a", second);
+	await choose(page, "a", second);
+
+	await learning.uncheck();
+	await expect(text).toBeFocused();
+	await page.keyboard.type("a");
+	await expect(items.first()).toHaveText(`1${second}`);
 });

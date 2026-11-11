@@ -28,6 +28,7 @@ fn engine() -> Engine {
     let entry = |text| CodeEntry {
         text,
         extension: false,
+        simplified: false,
     };
     let code_table = CodeTable::from_entries([
         ("a".to_string(), vec![entry('甲'), entry('乙'), entry('丁')]),
@@ -145,4 +146,151 @@ fn context_set_while_composing_is_used_by_the_next_composition() {
     assert!(snapshot.candidates.is_empty());
     let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
     assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 殼沒給前文時，核心自己上屏的字就是前文（同 librime 的 commit history，plan §2.1）。
+#[test]
+fn without_context_from_the_host_the_next_composition_follows_the_last_commit() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.handle(&engine, &mut user, Key::Letter('b'));
+    let snapshot = session.handle(&engine, &mut user, Key::Space);
+    assert_eq!(snapshot.commit.as_deref(), Some("天"));
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 交還宿主的可見字元與空白接在前文後面：「天」之後打了空白，下一個字是句首。
+#[test]
+fn a_space_passed_to_the_host_extends_the_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_context("天");
+    assert!(!session.handle(&engine, &mut user, Key::Space).handled);
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "丁");
+}
+
+/// 交還宿主的退格、Enter、方向鍵改了游標前的字或移走游標：前文不知道了，照沒有前文打，
+/// 等殼再給。
+#[test]
+fn keys_passed_to_the_host_that_edit_or_move_forget_the_context() {
+    let engine = engine();
+    for key in [Key::Backspace, Key::Enter, Key::Left, Key::Other] {
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        session.set_context("今天");
+        assert!(!session.handle(&engine, &mut user, key).handled);
+        let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+        assert_eq!(snapshot.candidates[0].text, "甲", "{key:?} 後");
+    }
+}
+
+/// 不送字元的修飾鍵沒改輸入框，前文照舊。
+#[test]
+fn a_modifier_key_keeps_the_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_context("今天");
+    session.handle(&engine, &mut user, Key::Modifier);
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 無痕打開時丟掉殼給過的前文（brief §8：不讀上下文），關掉後也不會回來。
+#[test]
+fn turning_incognito_on_forgets_the_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_context("今天");
+    let incognito = Options {
+        incognito: true,
+        ..Options::default()
+    };
+    session.set_options(incognito);
+    session.set_options(Options::default());
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "甲");
+}
+
+fn incognito() -> Options {
+    Options {
+        incognito: true,
+        ..Options::default()
+    }
+}
+
+/// 無痕期間上屏的字不接進前文（brief §8：不讀上下文、不送雲端）：關掉無痕後、殼還沒給前文時，
+/// 組字開頭的字照不知道前文打，不接無痕時上屏的「天」。
+#[test]
+fn commits_made_in_incognito_never_become_context() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(incognito());
+    session.handle(&engine, &mut user, Key::Letter('b'));
+    assert_eq!(
+        session
+            .handle(&engine, &mut user, Key::Space)
+            .commit
+            .as_deref(),
+        Some("天")
+    );
+    session.set_options(Options::default());
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "甲");
+}
+
+/// 無痕時殼給的前文也不收，關掉後不會冒出來。
+#[test]
+fn context_given_in_incognito_is_ignored() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(incognito());
+    session.set_context("今天");
+    session.set_options(Options::default());
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "甲");
+}
+
+/// 關掉無痕之後上屏的字照常是前文（不含無痕期間的）。
+#[test]
+fn commits_after_leaving_incognito_are_context_again() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(incognito());
+    session.set_options(Options::default());
+    session.handle(&engine, &mut user, Key::Letter('b'));
+    session.handle(&engine, &mut user, Key::Space);
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
+}
+
+/// 換欄位或失焦時殼呼叫 `clear_context`：上一個欄位上屏的字不再是前文。殼給新的前文時整份取代，
+/// 自己記的也不留。
+#[test]
+fn clearing_or_replacing_the_context_drops_the_commits_recorded_so_far() {
+    let engine = engine();
+    let commit_heaven = |session: &mut Session, user: &mut UserModel| {
+        session.handle(&engine, user, Key::Letter('b'));
+        session.handle(&engine, user, Key::Space);
+    };
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    commit_heaven(&mut session, &mut user);
+    session.clear_context(&mut user);
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "甲");
+
+    let mut session = Session::default();
+    commit_heaven(&mut session, &mut user);
+    session.set_context("。");
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "丁");
 }

@@ -26,6 +26,7 @@ fn engine() -> Engine {
             .map(|text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect()
     };
@@ -201,7 +202,7 @@ fn paths_list_the_best_whole_paths_with_scores() {
         .iter()
         .filter(|c| c.text.chars().count() == 2)
         .count();
-    assert_eq!(whole, Ranking::default().sentences.into());
+    assert_eq!(whole, usize::from(Ranking::default().sentences));
 }
 
 /// 選了開頭一段之後，路徑只蓋剩下的輸入碼。

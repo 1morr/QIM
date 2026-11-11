@@ -1,35 +1,49 @@
-//! QIM 的核心：輸入方案、資料包讀取（碼表、詞庫、語言模型、字根提示、簡繁與英文）、候選與 `Session`。
+//! QIM 的核心：輸入方案、資料包讀取（碼表、詞庫、語言模型、字根提示、簡繁、英文與 emoji）、候選與 `Session`。
 //!
 //! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
 
+mod association;
 mod code_table;
+mod emoji;
 mod engine;
 mod english;
 mod language_model;
 mod lattice;
 mod lexicon;
+mod manifest;
 mod pack;
+mod pack_index;
 mod punctuation;
 mod radical_hint;
+mod remembered;
 mod scheme;
 mod session;
 mod simplifier;
 mod user;
+mod word_list;
 
 pub use code_table::{CodeEntry, CodeTable};
+pub use emoji::{EMOJI_LIMIT, EmojiTable};
 pub use engine::Engine;
 pub use english::EnglishWords;
 pub use language_model::{CLAUSE_START, CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
+pub use manifest::{CORE_VERSION, MANIFEST_FILE, MANIFEST_VERSION, Manifest, PackKind};
 pub use pack::{
-    EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError, RadicalHintPack,
-    SchemePack, SimplifierPack,
+    EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError,
+    RadicalHintPack, SchemePack, SimplifierPack,
 };
+pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex};
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
-pub use scheme::{Packs, Ranking, SEPARATOR, Scheme};
+pub use remembered::{REMEMBERED_LIMIT, REMEMBERED_STRINGS_MAX};
+pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
-    Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT, RerankRequest,
-    ScoredPath, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
+    CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT,
+    RerankRequest, ScoredPath, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{ImportError, Phrase, UserModel, UserWordError};
+pub use word_list::{
+    Shortcuts, SkipReason, SkippedLine, TriggerShortcut, UnusedShortcut, WordListError,
+    WordListFormat, WordListReport,
+};

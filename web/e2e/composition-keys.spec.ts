@@ -64,10 +64,12 @@ test("組字中按 z、←、→ 吃下不動作", async ({ page }, testInfo) =>
 test("組字中按 Tab、Delete、↑、↓、Home、End，輸入框與組字不變", async ({
 	page,
 }) => {
-	const { text, composition } = ui(page);
+	const { text, composition, items } = ui(page);
 	await page.keyboard.type("日月");
 	await page.keyboard.press("ArrowLeft");
 	await page.keyboard.type("anr");
+	// 首選接前文「日」（M3 票 05），按這些鍵前後都一樣。
+	const top = (await items.first().textContent())?.slice(1);
 	for (const key of ["Tab", "Delete", "ArrowUp", "ArrowDown", "Home", "End"]) {
 		await page.keyboard.press(key);
 		await expect(text, key).toBeFocused();
@@ -75,7 +77,7 @@ test("組字中按 Tab、Delete、↑、↓、Home、End，輸入框與組字不
 		await expect(composition, key).toHaveText("日弓口");
 	}
 	await page.keyboard.type(" ");
-	await expect(text).toHaveValue("日門口月");
+	await expect(text).toHaveValue(`日${top}月`);
 });
 
 test("組字中按標點，先上屏首選再接全形標點", async ({ page }, testInfo) => {

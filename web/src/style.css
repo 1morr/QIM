@@ -27,6 +27,8 @@ body {
 
 main {
 	display: grid;
+	/* 欄寬不被內容撐開（資料包清單這類寬表格自己橫向捲動），手機上頁面才不會變寬。 */
+	grid-template-columns: minmax(0, 1fr);
 	gap: 0.5rem;
 	max-width: 40rem;
 }
@@ -132,7 +134,9 @@ textarea {
 	font-size: 1rem;
 }
 
-#phrases h2 {
+#phrases h2,
+#remembered h2,
+#word-list h2 {
 	margin: 0.5rem 0 0;
 	font-size: 1rem;
 }
@@ -159,6 +163,29 @@ textarea {
 	text-overflow: ellipsis;
 }
 
+/* 記住的 email（remembered.ts）：同常用語的清單，一列一條加刪除鍵。 */
+#remembered-list {
+	display: grid;
+	gap: 0.25rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+#remembered-list li {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+#remembered-list .remembered-text {
+	overflow-wrap: anywhere;
+}
+
+#remembered-list .empty {
+	color: gray;
+}
+
 #phrase-form {
 	display: flex;
 	flex-wrap: wrap;
@@ -173,7 +200,49 @@ textarea {
 	max-width: 100%;
 }
 
-#phrases .note {
+#phrases .note,
+#remembered .note,
+#word-list .note {
+	margin: 0;
+	color: gray;
+	font-size: 0.875rem;
+}
+
+/* 資料包清單（pack-settings.ts）：窄螢幕時只有表格橫向捲動，說明照常換行。 */
+#packs {
+	display: grid;
+	gap: 0.5rem;
+}
+
+#packs .pack-table {
+	overflow-x: auto;
+}
+
+#packs h2 {
+	margin: 0.5rem 0 0;
+	font-size: 1rem;
+}
+
+#packs table {
+	border-collapse: collapse;
+	font-size: 0.875rem;
+}
+
+#packs th,
+#packs td {
+	padding: 0.125rem 0.5rem;
+	text-align: left;
+	white-space: nowrap;
+}
+
+#packs .pack-updates {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1rem;
+	align-items: center;
+}
+
+#packs .note {
 	margin: 0;
 	color: gray;
 	font-size: 0.875rem;
@@ -339,4 +408,45 @@ body:has(#keyboard:not([hidden])) {
 
 #confirm-import p {
 	margin: 0 0 0.5rem;
+}
+
+/* 匯入詞庫前的確認：是加進去、不取代，所以不用警告的紅色。 */
+#confirm-word-list {
+	margin: 0;
+	padding: 0.5rem;
+	border: 1px solid gray;
+	border-radius: 0.25rem;
+}
+
+#confirm-word-list[hidden] {
+	display: none;
+}
+
+#confirm-word-list p {
+	margin: 0 0 0.5rem;
+}
+
+#word-list-shortcuts[hidden] {
+	display: none;
+}
+
+#word-list-shortcuts {
+	margin-bottom: 0.5rem;
+}
+
+/* 設了會搶走速成既有碼的首選的快捷鍵。 */
+#word-list-triggers .displacing {
+	color: #d93025;
+}
+
+#word-list-triggers .displacing::before {
+	content: "⚠ ";
+}
+
+#word-list-skipped,
+#word-list-unused,
+#word-list-triggers {
+	margin: 0;
+	padding-left: 1.25rem;
+	font-size: 0.875rem;
 }

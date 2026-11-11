@@ -58,6 +58,17 @@ const ROWS: readonly Row[] = [
 		},
 	},
 	{
+		// 關掉時不寫學習資料，已學的照用；和無痕不同，前文照用（brief §4.5）。
+		kind: "checkbox",
+		id: "learning",
+		label: "學習",
+		checked: true,
+		apply: (session, on) => {
+			session.setLearning(on);
+			return undefined;
+		},
+	},
+	{
 		kind: "checkbox",
 		id: "simplified",
 		label: "簡體",
@@ -65,11 +76,43 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setSimplified(on),
 	},
 	{
+		// 繁體模式的簡體字（门、农）排在同碼的繁體字之後，同 macOS 速成。
+		kind: "checkbox",
+		id: "simplified-after-traditional",
+		label: "繁體字優先",
+		checked: true,
+		apply: (session, on) => session.setSimplifiedAfterTraditional(on),
+	},
+	{
 		kind: "checkbox",
 		id: "english-candidates",
 		label: "英文候選",
 		checked: true,
 		apply: (session, on) => session.setEnglishCandidates(on),
+	},
+	{
+		// 整串的字詞後面接它的 emoji（M3 票 16）。
+		kind: "checkbox",
+		id: "emoji-candidates",
+		label: "emoji 候選",
+		checked: true,
+		apply: (session, on) => session.setEmojiCandidates(on),
+	},
+	{
+		// 記下用英文打過的 email，打它開頭的字母時排在候選第 2 位起（M3 票 15）。
+		kind: "checkbox",
+		id: "remembered-strings",
+		label: "記住 email",
+		checked: true,
+		apply: (session, on) => session.setRememberedStrings(on),
+	},
+	{
+		// 上屏之後候選列給接下來可能要打的字詞（M3 票 13），數字鍵或點選選。
+		kind: "checkbox",
+		id: "association",
+		label: "聯想",
+		checked: true,
+		apply: (session, on) => session.setAssociation(on),
 	},
 	{
 		// 數字後的句點、冒號用半形；逗號照舊全形。

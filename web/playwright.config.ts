@@ -19,16 +19,29 @@ function e2ePort(): number {
 
 const port = e2ePort();
 const url = `http://localhost:${port}`;
+/**
+ * 扮演 GitHub release 的本機靜態伺服器（`e2e/static-server.ts`）放 `e2e/fixtures/pack-release/`；埠是
+ * e2e 的埠加 10000，同樣每個 worktree 固定一個。開發伺服器的 `/pack-updates/` 轉發到這裡。
+ */
+const releasePort = port + 10000;
 
 export default defineConfig({
 	testDir: "e2e",
 	forbidOnly: true,
 	use: { baseURL: url },
 	projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-	webServer: {
-		command: `npm run dev -- --port ${port} --strictPort`,
-		url,
-		// 埠已被佔用時直接失敗，不接手別人起的伺服器：那可能是別的 worktree，跑到的是別張票的程式碼。
-		reuseExistingServer: false,
-	},
+	webServer: [
+		{
+			command: `node e2e/static-server.ts e2e/fixtures/pack-release ${releasePort}`,
+			url: `http://localhost:${releasePort}/index.json`,
+			reuseExistingServer: false,
+		},
+		{
+			command: `npm run dev -- --port ${port} --strictPort`,
+			url,
+			env: { QIM_PACK_UPDATE_URL: `http://localhost:${releasePort}/` },
+			// 埠已被佔用時直接失敗，不接手別人起的伺服器：那可能是別的 worktree，跑到的是別張票的程式碼。
+			reuseExistingServer: false,
+		},
+	],
 });

@@ -24,6 +24,7 @@ fn engine() -> Engine {
             let entry = CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             };
             (code.to_string(), vec![entry])
         },
@@ -32,8 +33,23 @@ fn engine() -> Engine {
 }
 
 /// 手寫的檔，列依輸入碼排：`mir` 分段選「一」「台」上屏一次（自動造詞），再手動加「口口」、觸發詞 `kk`。
+/// 分段選字記下個人 bigram「一 → 台」：方案欄是空的（各方案共用），tick 是不帶方案的 `#@/tick`。
 const ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD: &str = "\
 # qim-userdict v2
+#@/tick\t1
+#@/tick/quick\t1
+# scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger
+quick\t台\tir\t0\t0\t1\t1\tlearned\t
+quick\t一\tm\t0\t0\t1\t1\tlearned\t
+quick\t一台\tmir\t1\t1\t1\t1\tauto\t
+quick\t口口\trr\t0\t0\t0\t0\tmanual\tkk
+# \tprevious\tword\tdecayed\tlast_tick
+\t一\t台\t1\t1
+";
+
+/// M1 票 14 定稿的 v1 檔（固定、不隨匯出改）：同上一份去掉個人 bigram。
+const V1_FILE: &str = "\
+# qim-userdict v1
 #@/tick/quick\t1
 # scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger
 quick\t台\tir\t0\t0\t1\t1\tlearned\t
@@ -121,11 +137,55 @@ fn a_file_that_is_not_userdict_v1_or_v2_or_has_a_bad_row_is_an_error_with_its_li
 }
 
 #[test]
-fn a_v1_file_imports_the_same_learning_and_exports_as_v2() {
-    let v1 = ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD.replace("# qim-userdict v2", "# qim-userdict v1");
+fn a_v1_file_imports_the_same_learning_without_bigrams_and_exports_as_v2() {
+    let expected = V1_FILE.replace("# qim-userdict v1", "# qim-userdict v2");
+    assert_eq!(UserModel::import(V1_FILE).unwrap().export(), expected);
+}
+
+#[test]
+fn a_bad_bigram_row_is_an_error_with_its_line() {
+    let line_of = |text: &str| UserModel::import(text).unwrap_err().line;
+    let header = "# qim-userdict v2\n";
+    let bad_rows = [
+        "\t一\t台\t1",       // 少一欄
+        "\t一\t台\t1\t1\t",  // 多一欄
+        "\t\t台\t1\t1",      // 前一個字詞是空的是記住的字串，台不是 email
+        "\t一\t\t1\t1",      // 這一段是空的
+        "\t一\t台\t0\t1",    // 衰減值要是正的
+        "\t一\t台\tNaN\t1",  // 衰減值不是有限數
+        "\t一\t台\t1\tx",    // tick 不是整數
+        "\t一\\x\t台\t1\t1", // 沒有這種跳脫
+    ];
+    for row in bad_rows {
+        assert_eq!(line_of(&format!("{header}{row}\n")), 2, "{row:?}");
+    }
+    let row = "\t一\t台\t1\t1\n";
+    assert_eq!(line_of(&format!("{header}{row}{row}")), 3, "重複");
     assert_eq!(
-        UserModel::import(&v1).unwrap().export(),
-        ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD
+        line_of(&format!("{header}#@/tick\t0\n{row}")),
+        3,
+        "最後 tick 比 tick 大"
+    );
+    assert_eq!(
+        line_of(&format!("{header}#@/tick\tx\n")),
+        2,
+        "tick 不是整數"
+    );
+    assert_eq!(
+        line_of(&format!("# qim-userdict v1\n{row}")),
+        2,
+        "v1 沒有個人 bigram"
+    );
+}
+
+/// 個人 bigram 的前一個字詞與這一段照詞欄跳脫；沒有 tick 行時 tick 取最大的最後 tick。
+#[test]
+fn bigram_rows_unescape_and_without_a_tick_line_the_tick_is_the_latest() {
+    let text = "# qim-userdict v2\n\t九龍\\n\t3 樓\t2.5\t7\n";
+    let user = UserModel::import(text).unwrap();
+    assert_eq!(
+        user.export(),
+        "# qim-userdict v2\n#@/tick\t7\n# scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger\n# \tprevious\tword\tdecayed\tlast_tick\n\t九龍\\n\t3 樓\t2.5\t7\n"
     );
 }
 
@@ -145,6 +205,7 @@ fn a_backslash_in_a_v1_word_is_literal() {
 /// 另是一列 `learned`。
 const TWO_PHRASES: &str = "\
 # qim-userdict v2
+#@/tick\t1
 #@/tick/quick\t1
 # scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger
 quick\tC:\\\\ 與\\t\t\t0\t0\t0\t0\tphrase\t
@@ -186,4 +247,30 @@ fn a_bad_phrase_row_or_escape_is_an_error_with_its_line() {
     }
     let v1_phrase = "# qim-userdict v1\nquick\t一\t\t0\t0\t0\t0\tphrase\t\n";
     assert_eq!(line_of(v1_phrase), 2, "v1 沒有常用語");
+}
+
+/// tick 行寫在列後面、又比列的最後 tick 小，也整份不收（照順序讀時列先過了檢查）。
+#[test]
+fn a_tick_line_after_rows_smaller_than_their_last_tick_is_an_error() {
+    let line_of = |text: &str| UserModel::import(text).unwrap_err().line;
+    let header = "# qim-userdict v2\n";
+    assert_eq!(
+        line_of(&format!("{header}\t一\t台\t1\t5\n#@/tick\t3\n")),
+        3,
+        "個人 bigram"
+    );
+    assert_eq!(
+        line_of(&format!(
+            "{header}quick\t一\tm\t0\t0\t1\t5\tlearned\t\n#@/tick/quick\t3\n"
+        )),
+        3,
+        "方案"
+    );
+}
+
+/// v1 沒有共用的 tick：`#@/tick` 行和其他 `#` 開頭的行一樣是註解。
+#[test]
+fn a_shared_tick_line_in_v1_is_a_comment() {
+    let text = V1_FILE.replace("#@/tick/quick\t1\n", "#@/tick/quick\t1\n#@/tick\tx\n");
+    assert!(UserModel::import(&text).is_ok());
 }

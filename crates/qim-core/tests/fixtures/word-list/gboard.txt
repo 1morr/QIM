@@ -1,0 +1,7 @@
+# Gboard Dictionary version:1
+kk	口口	zh-HK
+	STRAY
+IIRC	台口	en-US
+	一台	zh-HK
+broken-row
+m	口台	zh-HK

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -66,8 +67,9 @@ pub struct Packs {
     pub radical_hint: Option<String>,
 }
 
-/// 連打的打分參數（方案檔的 `[ranking]`，plan §2.3）。
+/// 連打的打分參數（方案檔的 `[ranking]`，plan §2.3）。方案檔照它讀，欄位都必填、不收別的欄位。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Ranking {
     /// β：路徑裡每個詞庫的段加的分。
     pub word_bonus: f64,
@@ -91,3 +93,42 @@ impl Default for Ranking {
         }
     }
 }
+
+impl Ranking {
+    /// 參數合不合用：beam 至少 1（0 時一條部分路徑都不留），β、γ 是有限的數。方案檔
+    /// （`qim-databuild`）、`bench --set` 與 [`crate::Engine::new`] 都經這裡。
+    pub fn check(&self) -> Result<(), RankingError> {
+        if self.beam == 0 {
+            return Err(RankingError::ZeroBeam);
+        }
+        for (field, value) in [
+            ("word_bonus", self.word_bonus),
+            ("segment_penalty", self.segment_penalty),
+        ] {
+            if !value.is_finite() {
+                return Err(RankingError::NotFinite { field, value });
+            }
+        }
+        Ok(())
+    }
+}
+
+/// [`Ranking::check`] 不收的參數；訊息用方案檔 `[ranking]` 的欄位名。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RankingError {
+    ZeroBeam,
+    NotFinite { field: &'static str, value: f64 },
+}
+
+impl fmt::Display for RankingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ZeroBeam => write!(f, "ranking.beam 至少是 1，給的是 0"),
+            Self::NotFinite { field, value } => {
+                write!(f, "ranking.{field} 要是有限的數，給的是 {value}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for RankingError {}

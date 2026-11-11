@@ -25,7 +25,8 @@ test("開簡體後打 anr，首選與空白上屏都是「门口」", async ({
 
 	await page.keyboard.type(" ");
 	await expect(text).toHaveValue("门口");
-	await expect(items).toHaveCount(0);
+	// 候選列換成「门口」的聯想（M3 票 13），不再是「门口」。
+	await expect(items.first()).not.toHaveText("1门口");
 	await page.screenshot({ path: testInfo.outputPath("simplified-commit.png") });
 });
 

@@ -11,6 +11,7 @@ use ferrous_opencc::config::BuiltinConfig;
 use crate::common_forms::CommonForms;
 use crate::corpus::{BENCH_SENTENCES, CONTEXT_CLAUSES, CONTEXT_SENTENCES};
 use crate::sources::Source;
+use crate::transcode::Transcoder;
 use crate::{Error, hkcancor, wiki};
 
 /// 基準檔放哪個目錄（plan §5.2）：維基防退步，口語是品質判斷的主要依據（brief §9）。
@@ -210,6 +211,32 @@ impl Corpus {
     ) -> Result<(), Error> {
         let converter = Converter::new(self.conversion, forms.clone())?;
         self.raw_texts(paths, |raw| text(&converter.convert(raw)))
+    }
+
+    /// 來源已分詞（HKCanCor），詞庫另取它的詞。
+    pub fn segmented(&self) -> bool {
+        matches!(self.format, Format::HkCanCor)
+    }
+
+    /// 已分詞的語料（HKCanCor）train 切分裡兩字以上的詞與次數（[`hkcancor::TrainWords`]）；
+    /// 沒分詞的語料是空的。詞庫用它補詞（plan §4.2）。
+    pub fn train_words(
+        &self,
+        paths: &[PathBuf],
+        forms: &CommonForms,
+        transcoder: &Transcoder,
+    ) -> Result<hkcancor::WordCounts, Error> {
+        if !self.segmented() {
+            return Ok(hkcancor::WordCounts::default());
+        }
+        let converter = Converter::new(self.conversion, forms.clone())?;
+        let convert = |raw: &str| converter.convert(raw);
+        let mut words = hkcancor::TrainWords::new(&convert, transcoder);
+        for path in paths {
+            let zip = std::fs::read(path).map_err(Error::io(path))?;
+            hkcancor::archive_tagged(&zip, |utterance| words.add(utterance))?;
+        }
+        Ok(words.counts)
     }
 
     /// 逐段交出來源抽出、還沒轉換的文字。

@@ -7,9 +7,9 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::{
-    CangjieVersion, CodeTable, Engine, EnglishPack, Key, LanguageModel, LanguageModelPack, Lexicon,
-    LexiconPack, Options, RadicalHintPack, RadicalHints, SchemePack, Session, SimplifierPack,
-    UserModel,
+    CangjieVersion, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, Key, LanguageModel,
+    LanguageModelPack, Lexicon, LexiconPack, Manifest, Options, RadicalHintPack, RadicalHints,
+    SchemePack, Session, SimplifierPack, UserModel,
 };
 
 use crate::built::{self, BuiltPack};
@@ -17,7 +17,7 @@ use crate::common_forms::{BothForms, CommonForms, ONE_WAY_DISTINCT, REVERSED_ONE
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::transcode::Transcoder;
-use crate::{bigram, english, lexicon};
+use crate::{bigram, emoji, english, lexicon};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
@@ -48,16 +48,24 @@ pub enum CheckId {
     SimplifiedMenKou,
     /// 中文狀態打 `the`，第 2 個候選是 `the`：英文資料包接得上核心（排位規則 4）。
     EnglishThe,
+    /// 繁簡同形與本身是正規繁體字的字（[`NOT_SIMPLIFIED`]）沒有標成簡體字（brief §4.1，M3 票 19）。
+    NotSimplified,
+    /// 繁體模式 `ls` 的「门」排在同碼的所有繁體字之後（M3 票 19）。
+    MenAfterTraditional,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
     /// 同樣的來源建兩次，每份資料包的 sha256 都相同、清單一樣。
     Deterministic,
+    /// 每份資料包旁的 manifest 讀得回，核心照它載入得了資料包（plan §4.6）。
+    Manifests,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
     /// 基準句沒有一句原樣出現在任何語料的 train（plan §5.2 的防洩漏；bigram 用所有 train 訓練）。
     CorpusNoLeak,
     /// 同樣的來源建兩次，基準句、訓練切分與字頻的 sha256 相同。
     CorpusDeterministic,
+    /// 經 `Session` 打「笑」的碼 `hk`，「笑」後面緊接它的 emoji（M3 票 16）。
+    EmojiAfterLaugh,
     /// 前處理保留的粵語用字（`corpora::CANTONESE_KEPT`）在 train 的字頻都大於 0（M1 票 17b）。
     KeptCharacters,
     /// 字形對照表（`common_forms`）換掉的香港寫法、並存寫法的另一種寫法在 train 的字頻都是 0
@@ -84,8 +92,12 @@ impl fmt::Display for CheckId {
             Self::RadicalHintByVersion => "抽查：字根提示的三代與五代碼",
             Self::SimplifiedMenKou => "抽查：簡體模式 anr 有「门口」",
             Self::EnglishThe => "抽查：the 的第 2 個候選是 the",
+            Self::NotSimplified => "抽查：正規繁體字不是簡體字",
+            Self::MenAfterTraditional => "抽查：ls 的「门」在繁體字之後",
+            Self::EmojiAfterLaugh => "抽查：hk 的「笑」後面接著它的 emoji",
             Self::LanguageModelSize => "bigram 資料包大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
+            Self::Manifests => "manifest 核對得過",
             Self::CorpusTranscodes => "語料轉碼",
             Self::CorpusNoLeak => "語料不洩漏",
             Self::CorpusDeterministic => "語料決定性",
@@ -113,6 +125,8 @@ pub struct Report {
     pub codes: usize,
     /// 英文詞表的建置統計；[`run`] 不算，由呼叫端填。
     pub english: Option<english::Counts>,
+    /// emoji 對照表的建置統計；[`run`] 不算，由呼叫端填。
+    pub emoji: Option<emoji::Counts>,
     /// 詞庫的建置統計與有字頻的字數；[`run`] 不算，由呼叫端填。
     pub lexicon: Option<LexiconSummary>,
     /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
@@ -165,6 +179,10 @@ pub struct LexiconSummary {
     pub counts: lexicon::Counts,
     /// 有字頻的字數。
     pub characters: usize,
+    /// 已分詞語料（HKCanCor）train 切分裡兩字以上的不重複詞數。
+    pub corpus_seen: usize,
+    /// 轉換改了字數、對不上詞位置而略過的話輪數。
+    pub unaligned: usize,
 }
 
 impl fmt::Display for LexiconSummary {
@@ -174,7 +192,7 @@ impl fmt::Display for LexiconSummary {
             f,
             "詞庫：rime-essay {} 列，單字 {} 列不收；換成常見寫法 {} 詞（其中 {} 詞和別的詞合併）；\
              詞頻 < {} 濾掉 {} 詞、含連打字集以外的字濾掉 {} 詞；\
-             粵語口語詞表補上 {} 詞；\
+             粵語口語詞表補上 {} 詞；HKCanCor train 切分的詞 {} 個（略過對不上的話輪 {} 個），出現 ≥ {} 次的補上 {} 詞；\
              收 {} 詞，並存寫法另收 {} 種寫法；碼 {} 個、詞條 {} 個（{} 詞的碼組合超過 {} 個，只收前 {} 個）\n\
              字頻：{} 字（各語料 train 切分乘上權重相加，並存寫法兩字共用）",
             c.entries,
@@ -185,6 +203,10 @@ impl fmt::Display for LexiconSummary {
             c.below_threshold,
             c.outside_continuous,
             c.colloquial,
+            self.corpus_seen,
+            self.unaligned,
+            lexicon::CORPUS_MIN_COUNT,
+            c.corpus,
             c.words,
             c.spellings,
             c.codes,
@@ -229,6 +251,9 @@ impl fmt::Display for Report {
         if let Some(english) = &self.english {
             writeln!(f, "{}", english_summary(english))?;
         }
+        if let Some(emoji) = &self.emoji {
+            writeln!(f, "{}", emoji_summary(emoji))?;
+        }
         if let Some(u) = &self.unihan {
             writeln!(
                 f,
@@ -250,6 +275,14 @@ impl fmt::Display for Report {
     }
 }
 
+/// emoji 對照表的統計一行；`cargo xtask data` 不驗證時也印。
+pub fn emoji_summary(c: &emoji::Counts) -> String {
+    format!(
+        "emoji：CLDR 標註 {} 個，太泛的關鍵字 {} 個、方框漢字 {} 個、有字打不出的字詞 {} 個不收；收 {} 個字詞、{} 個 emoji",
+        c.annotations, c.broad, c.buttons, c.untypable, c.words, c.emoji
+    )
+}
+
 /// 英文詞表的統計一行；`cargo xtask data` 不驗證時也印。
 pub fn english_summary(c: &english::Counts) -> String {
     format!(
@@ -266,6 +299,7 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
         extension: 0,
         codes: 0,
         english: None,
+        emoji: None,
         lexicon: None,
         language_model: None,
         checks: Vec::new(),
@@ -278,7 +312,8 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
             lexicon,
             engine,
             hints,
-        }) => pack_checks(&mut report, rows, &pack, &lexicon, &engine, &hints),
+            emoji,
+        }) => pack_checks(&mut report, rows, &pack, &lexicon, &engine, &hints, &emoji),
         Err(detail) => report.checks.push(Check {
             id: CheckId::Decodes,
             passed: false,
@@ -328,25 +363,44 @@ struct Decoded {
     lexicon: Lexicon,
     engine: Engine,
     hints: RadicalHints,
+    /// 掛在 `engine` 上的那份，抽查 emoji 候選時比對。
+    emoji: EmojiTable,
 }
 
 fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
     let pack = built::decode::<SchemePack>(packs)?;
     let lexicon = built::decode::<LexiconPack>(packs)?;
     let language_model = built::decode::<LanguageModelPack>(packs)?;
-    let hints = RadicalHints::for_scheme(built::decode::<RadicalHintPack>(packs)?, &pack.scheme)
-        .map_err(|e| e.to_string())?;
+    let radical_hint = built::decode::<RadicalHintPack>(packs)?;
+    // 核心接受方案指名以外的同種資料包（殼的切換，plan §4.6），建出的預設那份要剛好是指名的。
+    let named = &pack.scheme.packs;
+    for (what, expected, found) in [
+        ("詞庫", &named.lexicon, &lexicon.id),
+        ("語言模型", &named.language_model, &language_model.id),
+        ("字根提示", &named.radical_hint, &radical_hint.id),
+    ] {
+        if expected.as_deref() != Some(found.as_str()) {
+            return Err(format!(
+                "方案指名的{what}是 {}，建出的是 {found}",
+                expected.as_deref().unwrap_or("（沒有）")
+            ));
+        }
+    }
+    let hints = RadicalHints::for_scheme(radical_hint, &pack.scheme).map_err(|e| e.to_string())?;
     let simplifier = built::decode::<SimplifierPack>(packs)?;
     let english = built::decode::<EnglishPack>(packs)?;
+    let emoji = built::decode::<EmojiPack>(packs)?;
     let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))
         .map_err(|e| e.to_string())?
         .with_simplifier(simplifier)
-        .with_english(english);
+        .with_english(english)
+        .with_emoji(emoji.clone());
     Ok(Decoded {
         pack,
         lexicon: lexicon.lexicon,
         engine,
         hints,
+        emoji: emoji.emoji,
     })
 }
 
@@ -358,6 +412,7 @@ fn pack_checks(
     lexicon: &Lexicon,
     engine: &Engine,
     hints: &RadicalHints,
+    emoji: &EmojiTable,
 ) {
     let mut continuous = BTreeSet::new();
     let mut extension = BTreeSet::new();
@@ -402,7 +457,7 @@ fn pack_checks(
             id: CheckId::Decodes,
             passed: true,
             detail: format!(
-                "格式版本 {}，速成、詞庫、bigram、字根提示、簡繁與英文",
+                "格式版本 {}，速成、詞庫、bigram、字根提示、簡繁、英文與 emoji",
                 qim_core::FORMAT_VERSION
             ),
         },
@@ -439,11 +494,81 @@ fn pack_checks(
         hint_by_version(hints),
         simplified_men_kou(engine),
         english_the(engine),
+        not_simplified(&pack.code_table),
+        men_after_traditional(&pack.code_table, engine),
+        emoji_after_laugh(engine, emoji),
     ]);
 }
 
-/// 中文狀態（預設選項）經 `Session` 打 `the`，看第 2 個候選。
-fn english_the(engine: &Engine) -> Check {
+/// 不能標成簡體字的字：繁簡同形的人、日，與本身是正規繁體字、又是別的字的簡體寫法的字
+/// （M3 票 19 列的台（臺）、后（後）、里（裡）…）。
+pub const NOT_SIMPLIFIED: [char; 17] = [
+    '人', '日', '台', '后', '里', '干', '面', '系', '云', '松', '只', '范', '谷', '斗', '制', '准',
+    '几',
+];
+
+/// 碼表裡標成簡體字的字都不在 [`NOT_SIMPLIFIED`]；細節列簡體字的字數。
+fn not_simplified(code_table: &CodeTable) -> Check {
+    let simplified: BTreeSet<char> = code_table
+        .iter()
+        .flat_map(|(_, entries)| entries.iter().filter(|e| e.simplified).map(|e| e.text))
+        .collect();
+    let wrong: String = NOT_SIMPLIFIED
+        .iter()
+        .filter(|c| simplified.contains(c))
+        .collect();
+    Check {
+        id: CheckId::NotSimplified,
+        passed: wrong.is_empty(),
+        detail: if wrong.is_empty() {
+            format!(
+                "簡體字 {} 個，不含 {}",
+                simplified.len(),
+                NOT_SIMPLIFIED.iter().collect::<String>()
+            )
+        } else {
+            format!("簡體字 {} 個，誤標 {wrong}", simplified.len())
+        },
+    }
+}
+
+/// 繁體模式（`Engine::candidates`）的 `ls`：「门」在，而且排在碼表裡 `ls` 每個沒標成簡體字的
+/// 連打字集的字之後。
+fn men_after_traditional(code_table: &CodeTable, engine: &Engine) -> Check {
+    let listed = engine.candidates(&UserModel::default(), "ls");
+    let at = |text: char| listed.iter().position(|c| *c == text.to_string());
+    let traditional = code_table
+        .lookup("ls")
+        .iter()
+        .filter(|e| !e.extension && !e.simplified)
+        .map(|e| at(e.text));
+    let passed = match at('门') {
+        Some(men) => traditional.into_iter().all(|t| t.is_some_and(|t| t < men)),
+        None => false,
+    };
+    // 只列到「门」為止：後面是只蓋住 `l` 的字。
+    let shown = at('门').map_or(listed.len(), |men| men + 1);
+    Check {
+        id: CheckId::MenAfterTraditional,
+        passed,
+        detail: format!("ls：{}", listed[..shown].join(" ")),
+    }
+}
+
+/// 預設選項經 `Session` 打「笑」的碼 `hk`：「笑」在第一頁，下一個候選是資料包裡它的第一個 emoji。
+fn emoji_after_laugh(engine: &Engine, emoji: &EmojiTable) -> Check {
+    let texts = first_page(engine, "hk");
+    let laugh = texts.iter().position(|t| t == "笑");
+    let next = laugh.and_then(|i| texts.get(i + 1));
+    Check {
+        id: CheckId::EmojiAfterLaugh,
+        passed: next.is_some_and(|t| emoji.lookup("笑").first() == Some(t)),
+        detail: format!("第一頁：{}", texts.join(" ")),
+    }
+}
+
+/// 預設選項（無痕）經 `Session` 打 `code`，回傳第一頁的候選文字。
+fn first_page(engine: &Engine, code: &str) -> Vec<String> {
     let mut session = Session::default();
     session.set_options(Options {
         incognito: true,
@@ -451,13 +576,18 @@ fn english_the(engine: &Engine) -> Check {
     });
     let mut user = UserModel::default();
     let mut candidates = Vec::new();
-    for c in "the".chars() {
+    for c in code.chars() {
         candidates = session.handle(engine, &mut user, Key::Letter(c)).candidates;
     }
-    let texts: Vec<&str> = candidates.iter().map(|c| c.text.as_str()).collect();
+    candidates.into_iter().map(|c| c.text).collect()
+}
+
+/// 中文狀態（預設選項）經 `Session` 打 `the`，看第 2 個候選。
+fn english_the(engine: &Engine) -> Check {
+    let texts = first_page(engine, "the");
     Check {
         id: CheckId::EnglishThe,
-        passed: texts.get(1) == Some(&"the"),
+        passed: texts.get(1).map(String::as_str) == Some("the"),
         detail: format!("第一頁：{}", texts.join(" ")),
     }
 }
@@ -881,5 +1011,32 @@ fn spot(id: CheckId, passed: bool) -> Check {
         id,
         passed,
         detail: if passed { "符合" } else { "不符" }.into(),
+    }
+}
+
+/// 寫出的每份資料包：`(manifest.json 的內容, 資料包檔的位元組)`，照殼的路經
+/// [`Manifest::verify`] 載入一次（plan §4.6）。
+pub fn manifests(packs: &[(String, Vec<u8>)]) -> Check {
+    let failures: Vec<String> = packs
+        .iter()
+        .filter_map(|(json, bytes)| {
+            let manifest = match Manifest::from_json(json) {
+                Ok(manifest) => manifest,
+                Err(e) => return Some(e.to_string()),
+            };
+            manifest
+                .verify(bytes)
+                .err()
+                .map(|e| format!("{}：{e}", manifest.id))
+        })
+        .collect();
+    Check {
+        id: CheckId::Manifests,
+        passed: failures.is_empty(),
+        detail: if failures.is_empty() {
+            format!("{} 份", packs.len())
+        } else {
+            failures.join("；")
+        },
     }
 }

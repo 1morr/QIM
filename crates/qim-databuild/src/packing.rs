@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::Error;
 use crate::corpora::CORPORA;
+use crate::emoji::{CLDR, EMOJI_TEST};
 use crate::lexicon;
 use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, SCOWL, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
@@ -24,8 +25,8 @@ pub(crate) struct UpstreamSource {
     pub used: &'static str,
 }
 
-/// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序（plan §4.1）。
-pub(crate) const QUICK: [PackSource; 2] = [
+/// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序，OpenCC 判定簡體字（plan §4.1）。
+pub(crate) const QUICK: [PackSource; 3] = [
     PackSource::Upstream(UpstreamSource {
         name: "libcangjie",
         source_id: LIBCANGJIE,
@@ -34,7 +35,13 @@ pub(crate) const QUICK: [PackSource; 2] = [
     PackSource::Upstream(UpstreamSource {
         name: "Unihan",
         source_id: UNIHAN,
-        used: "field kGradeLevel of Unihan_DictionaryLikeData.txt",
+        used: "fields kGradeLevel and kHKGlyph of Unihan_DictionaryLikeData.txt",
+    }),
+    PackSource::Upstream(UpstreamSource {
+        name: "OpenCC",
+        source_id: OPENCC,
+        used: "data/dictionary/STCharacters.txt, TSCharacters.txt and HKVariants.txt: which \
+               characters are marked as simplified",
     }),
 ];
 
@@ -54,6 +61,20 @@ pub(crate) const ENGLISH: [PackSource; 1] = [PackSource::Upstream(UpstreamSource
            American English speller dictionary",
 })];
 
+/// emoji 資料包：CLDR 的標註給字詞與 emoji，emoji-test.txt 給 emoji 的完整寫法（plan §4.4）。
+pub(crate) const EMOJI: [PackSource; 2] = [
+    PackSource::Upstream(UpstreamSource {
+        name: "Unicode CLDR",
+        source_id: CLDR,
+        used: "common/annotations/yue.xml and zh_Hant.xml: emoji keywords and short names",
+    }),
+    PackSource::Upstream(UpstreamSource {
+        name: "Unicode emoji-test.txt",
+        source_id: EMOJI_TEST,
+        used: "emoji-test.txt: the code points of fully-qualified emoji",
+    }),
+];
+
 /// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。
 pub(crate) const RADICAL_HINT: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "libcangjie",
@@ -68,14 +89,19 @@ const ESSAY: UpstreamSource = UpstreamSource {
     used: "essay.txt: words and their frequencies",
 };
 
-/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻，最後是粵語口語詞表
-/// （plan §4.2）。
+/// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻（已分詞的 HKCanCor
+/// 另給詞），最後是粵語口語詞表（plan §4.2）。
 pub(crate) fn lexicon_sources() -> Vec<PackSource> {
     std::iter::once(ESSAY)
         .chain(CORPORA.iter().map(|corpus| UpstreamSource {
             name: corpus.title,
             source_id: corpus.source_id,
-            used: "character counts of the training split of the extracted text",
+            used: if corpus.segmented() {
+                "character counts of the training split of the extracted text, and the words of \
+                 two or more characters in that split with their counts"
+            } else {
+                "character counts of the training split of the extracted text"
+            },
         }))
         .map(PackSource::Upstream)
         .chain([PackSource::Repo(COLLOQUIAL)])
@@ -255,6 +281,17 @@ fn check_statement(source: &Source, file: &str, quote: &str, upstream: &str) -> 
             ),
         ))
     }
+}
+
+/// manifest 的 `license`（plan §4.6）：各來源的 SPDX 識別碼依來源順序以 ` AND ` 接起，重複的只寫一次。
+pub(crate) fn license_expression(packed: &[Packed]) -> String {
+    let mut ids: Vec<&str> = Vec::new();
+    for p in packed {
+        if !ids.contains(&p.license_id.as_str()) {
+            ids.push(&p.license_id);
+        }
+    }
+    ids.join(" AND ")
 }
 
 /// 在 `dir` 寫 `<id>.pack`、`LICENSE`、`NOTICE`；`about` 是 NOTICE 最後說明怎麼用來源的一段。

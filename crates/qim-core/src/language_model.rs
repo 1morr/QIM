@@ -128,6 +128,20 @@ impl LanguageModel {
         f64::from(model(i).backoff) + f64::from(model(j).continuation)
     }
 
+    /// 留下的 bigram 裡接在 `prev` 後面的字與 `ln P(c | prev)`，依碼位；沒留下的（退回式算的）不列。
+    /// 聯想（plan §2.3）用它找下一個字。
+    pub fn following(&self, prev: char) -> impl Iterator<Item = (char, f64)> + '_ {
+        let range = self
+            .index(prev)
+            .map_or(0..0, |i| self.rows[i] as usize..self.rows[i + 1] as usize);
+        range.map(|k| {
+            (
+                self.chars[self.next[k] as usize],
+                dequantize(self.log_prob[k]),
+            )
+        })
+    }
+
     /// `c` 有統計：當前一字時接得上它自己的 bigram 與退回權重。
     pub fn has_statistics(&self, c: char) -> bool {
         self.index(c).is_some()

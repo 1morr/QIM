@@ -1,14 +1,15 @@
 use std::cmp::Reverse;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
-use crate::lattice::{self, Lattice};
+use crate::lattice::{self, Lattice, Listing, Preceding};
+use crate::lexicon::WordsByText;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{
-    CLAUSE_START, CodeEntry, CodeTable, EnglishPack, EnglishWords, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, PackError, Scheme, SchemePack, Simplifier,
-    SimplifierPack, UserModel, Word,
+    CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
+    SchemePack, Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -29,6 +30,12 @@ pub struct Engine {
     simplifier: Option<Simplifier>,
     /// 英文候選的詞表；沒掛上英文資料包時是空的，沒有英文候選。
     english: EnglishWords,
+    /// emoji 候選的對照表；沒掛上 emoji 資料包時是空的，沒有 emoji 候選。
+    emoji: EmojiTable,
+    /// 詞庫的詞依文字排序和它的 ln unigram（詞頻 ÷ 總和），聯想用（[`Engine::words_starting_with`]）。
+    words_by_text: WordsByText,
+    /// 連打字集的字（碼表裡不是擴展區的字）：聯想只給連打打得出的字。
+    continuous_chars: HashSet<char>,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -44,24 +51,43 @@ pub(crate) struct Edge {
     rest: f64,
     /// 個人機率（plan §2.3 的 `personal`）；沒學過是 0。
     personal: f64,
+    /// 碼表標成簡體字的字（[`CodeEntry::simplified`]）；詞不是。
+    simplified: bool,
+}
+
+/// [`Engine::span`] 的一項：剛好是一段輸入碼的一個字或詞。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Spanned {
+    /// 在組字開頭的分數。
+    pub score: f64,
+    pub text: String,
+    /// 碼表標成簡體字的字：繁體模式排在同一段的其他字詞之後（brief §4.1）。
+    pub simplified: bool,
 }
 
 impl Engine {
-    /// `lexicon`、`language_model` 要剛好是方案 [`crate::Packs`] 指名的那份；方案沒指名時要是 `None`。
+    /// 方案 [`crate::Packs`] 指名詞庫、語言模型時要給，沒指名時要是 `None`。方案指名的是預設的那份，
+    /// 殼可以換成同種的另一份（設定頁的切換，plan §4.6），所以不核對 id。
     pub fn new(
         scheme_pack: SchemePack,
         lexicon: Option<LexiconPack>,
         language_model: Option<LanguageModelPack>,
     ) -> Result<Self, PackError> {
+        // 資料包可以從檔案匯入、不一定經 `qim-databuild`，載入時再驗一次。
+        scheme_pack
+            .scheme
+            .ranking
+            .check()
+            .map_err(|e| PackError::Malformed(e.to_string()))?;
         let found = lexicon.as_ref().map(|l| l.id.clone());
-        if scheme_pack.scheme.packs.lexicon != found {
+        if scheme_pack.scheme.packs.lexicon.is_some() != found.is_some() {
             return Err(PackError::LexiconMismatch {
                 expected: scheme_pack.scheme.packs.lexicon,
                 found,
             });
         }
         let found = language_model.as_ref().map(|m| m.id.clone());
-        if scheme_pack.scheme.packs.language_model != found {
+        if scheme_pack.scheme.packs.language_model.is_some() != found.is_some() {
             return Err(PackError::LanguageModelMismatch {
                 expected: scheme_pack.scheme.packs.language_model,
                 found,
@@ -80,8 +106,22 @@ impl Engine {
             .filter(|w| seen.insert(w.text.as_str()))
             .map(|w| w.frequency)
             .sum();
+        let word_log_total = (word_total.max(1) as f64).ln();
+        // 同文字留碼的字典序最前的那個，和上面的詞頻總和取的相同。
+        let words_by_text = WordsByText::new(&lexicon, |w| {
+            (w.frequency.max(1) as f64).ln() - word_log_total
+        });
+        let continuous_chars = scheme_pack
+            .code_table
+            .iter()
+            .flat_map(|(_, entries)| entries)
+            .filter(|e| !e.extension)
+            .map(|e| e.text)
+            .collect();
         Ok(Self {
-            word_log_total: (word_total.max(1) as f64).ln(),
+            word_log_total,
+            words_by_text,
+            continuous_chars,
             code_table: by_frequency(&scheme_pack.code_table, &lexicon),
             scheme: scheme_pack.scheme,
             language_model: language_model.map(|m| m.model).unwrap_or_default(),
@@ -89,6 +129,7 @@ impl Engine {
             lexicon,
             simplifier: None,
             english: EnglishWords::default(),
+            emoji: EmojiTable::default(),
         })
     }
 
@@ -102,6 +143,17 @@ impl Engine {
     pub fn with_english(mut self, pack: EnglishPack) -> Self {
         self.english = pack.words;
         self
+    }
+
+    /// 掛上 emoji 資料包，emoji 候選（[`crate::Options::emoji_candidates`]）才有作用。
+    pub fn with_emoji(mut self, pack: EmojiPack) -> Self {
+        self.emoji = pack.emoji;
+        self
+    }
+
+    /// 字詞 `word`（繁體原文）的 emoji，好的在前。
+    pub(crate) fn emoji(&self, word: &str) -> &[String] {
+        self.emoji.lookup(word)
     }
 
     /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan §2.4）：剛好是詞表裡的完整單字、又長過
@@ -138,23 +190,61 @@ impl Engine {
         )
     }
 
+    /// 殼載入資料包的入口（plan §4.6）：每份照它的 manifest 經 [`Pack::open`] 核對，依種類放到該放
+    /// 的位置，順序不拘。方案資料包一定要有，詞庫、語言模型照方案要不要（[`Engine::new`]），簡繁、
+    /// 英文、emoji 可有可無；同一種兩份、或給了字根提示時拒絕。
+    pub fn open(packs: &[(&Manifest, &[u8])]) -> Result<Self, PackError> {
+        let mut by_kind = BTreeMap::new();
+        for &(manifest, bytes) in packs {
+            if manifest.kind == PackKind::RadicalHint {
+                return Err(PackError::NotForEngine(manifest.kind));
+            }
+            if by_kind.insert(manifest.kind, (manifest, bytes)).is_some() {
+                return Err(PackError::DuplicateKind(manifest.kind));
+            }
+        }
+        fn open<P: Pack>(file: Option<&(&Manifest, &[u8])>) -> Result<Option<P>, PackError> {
+            file.map(|(manifest, bytes)| P::open(manifest, bytes))
+                .transpose()
+        }
+        let scheme =
+            open(by_kind.get(&PackKind::Scheme))?.ok_or(PackError::Missing(PackKind::Scheme))?;
+        let mut engine = Self::new(
+            scheme,
+            open(by_kind.get(&PackKind::Lexicon))?,
+            open(by_kind.get(&PackKind::LanguageModel))?,
+        )?;
+        if let Some(pack) = open(by_kind.get(&PackKind::Simplifier))? {
+            engine = engine.with_simplifier(pack);
+        }
+        if let Some(pack) = open(by_kind.get(&PackKind::English))? {
+            engine = engine.with_english(pack);
+        }
+        if let Some(pack) = open(by_kind.get(&PackKind::Emoji))? {
+            engine = engine.with_emoji(pack);
+        }
+        Ok(engine)
+    }
+
     pub fn scheme(&self) -> &Scheme {
         &self.scheme
     }
 
-    /// 整串輸入碼在 `user` 之下的全部候選，從頭建 lattice；順序見 [`lattice::candidates`]。
-    /// 不含英文候選：它是 [`crate::Session`] 的選項。
+    /// 整串輸入碼在 `user` 之下、預設選項（繁體模式、簡體字排後）的全部候選，從頭建 lattice；
+    /// 順序見 [`lattice::candidates`]。不含英文候選、emoji 與記住的字串：它們是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
-        lattice::candidates(
-            self,
-            user,
-            &Lattice::from_input(self, user, None, input),
-            false,
-        )
-        .into_iter()
-        .map(|c| c.text)
-        .collect()
+        let lattice = Lattice::from_input(self, user, Preceding::default(), input);
+        let listing = Listing {
+            english_candidates: false,
+            emoji_candidates: false,
+            remembered_strings: false,
+            simplified_last: true,
+        };
+        lattice::candidates(self, user, &lattice, listing)
+            .into_iter()
+            .map(|c| c.text)
+            .collect()
     }
 
     pub(crate) fn beam(&self) -> usize {
@@ -162,15 +252,16 @@ impl Engine {
     }
 
     /// 碼 `code` 的一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
-    fn char_edge(&self, user: &SchemeModel, code: &str, start: usize, c: char) -> Edge {
-        let text = c.to_string();
+    fn char_edge(&self, user: &SchemeModel, code: &str, start: usize, entry: &CodeEntry) -> Edge {
+        let text = entry.text.to_string();
         Edge {
             start,
             personal: user.personal_probability(code, &text),
             text,
-            first: c,
+            first: entry.text,
             inner: -self.scheme.ranking.segment_penalty,
             rest: 0.0,
+            simplified: entry.simplified,
         }
     }
 
@@ -189,6 +280,7 @@ impl Engine {
             first,
             inner: rest + ranking.word_bonus - ranking.segment_penalty,
             rest,
+            simplified: false,
         }
     }
 
@@ -207,6 +299,7 @@ impl Engine {
             first,
             inner: rest - self.scheme.ranking.segment_penalty,
             rest,
+            simplified: false,
         }
     }
 
@@ -239,10 +332,11 @@ impl Engine {
     }
 
     /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
-    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）。
-    pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge) -> f64 {
+    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）；`bigram` 是這條邊接在
+    /// 前一個字詞後面的個人 bigram（[`crate::user::Following::probability`]），沒有是 0。
+    pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge, bigram: f64) -> f64 {
         let first = self.language_model.log_prob(prev, edge.first);
-        first + edge.inner + personal_bonus(first + edge.rest, edge.personal)
+        first + edge.inner + personal_bonus(first + edge.rest, edge.personal, bigram)
     }
 
     /// 組字接在前文 `before` 後面時，開頭的字要接的前一字（plan §2.3）。bigram 只在句內訓練
@@ -256,6 +350,28 @@ impl Engine {
             .filter(|c| c.is_alphanumeric())
             .unwrap_or(CLAUSE_START);
         self.language_model.has_statistics(last).then_some(last)
+    }
+
+    /// 詞庫裡以 `prefix` 開頭、比它長的詞與它的 ln unigram，依文字排序（聯想用，plan §2.3）。
+    pub(crate) fn words_starting_with<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Iterator<Item = (&'a str, f64)> + 'a {
+        self.words_by_text.starting_with(prefix)
+    }
+
+    /// 詞庫的詞 `text` 的 ln unigram（詞頻 ÷ 每個詞的詞頻總和）；不是詞庫的詞時是 `None`。
+    pub(crate) fn word_log_prob(&self, text: &str) -> Option<f64> {
+        self.words_by_text.log_prob(text)
+    }
+
+    pub(crate) fn language_model(&self) -> &LanguageModel {
+        &self.language_model
+    }
+
+    /// `c` 在連打字集裡：碼表有它、不是擴展區的字。
+    pub(crate) fn is_continuous(&self, c: char) -> bool {
+        self.continuous_chars.contains(&c)
     }
 
     pub(crate) fn sentences(&self) -> usize {
@@ -314,7 +430,7 @@ impl Engine {
             .filter(move |&(i, e)| {
                 i < limit || user.has_learned(code, e.text.encode_utf8(&mut [0; 4]))
             })
-            .map(move |(_, e)| self.char_edge(user, code, start, e.text));
+            .map(move |(_, e)| self.char_edge(user, code, start, e));
         let words = self
             .lexicon
             .lookup(code)
@@ -382,22 +498,25 @@ impl Engine {
             .collect()
     }
 
-    /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面（`None` 是組字開頭沒有
-    /// 前一字）的分數，依分數由高到低（同分照碼表、詞庫的順序）；`input` 中間的分隔記號見
-    /// [`Engine::exact`]。
-    pub(crate) fn span(
-        &self,
-        user: &UserModel,
-        before: Option<char>,
-        input: &str,
-    ) -> Vec<(f64, String)> {
-        let user = user.for_scheme(&self.scheme.id);
-        let mut edges: Vec<(f64, String)> = self
-            .exact(user, input, 0, usize::MAX)
+    /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面的分數，依分數由高到低
+    /// （同分照碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
+    pub(crate) fn span(&self, user: &UserModel, before: &Preceding, input: &str) -> Vec<Spanned> {
+        let following = before.word.as_deref().and_then(|w| user.bigrams_after(w));
+        let scheme_user = user.for_scheme(&self.scheme.id);
+        let mut edges: Vec<Spanned> = self
+            .exact(scheme_user, input, 0, usize::MAX)
             .into_iter()
-            .map(|e| (self.edge_score(before, &e), e.text))
+            .map(|e| Spanned {
+                score: self.edge_score(
+                    before.character,
+                    &e,
+                    following.map_or(0.0, |f| f.probability(&e.text)),
+                ),
+                simplified: e.simplified,
+                text: e.text,
+            })
             .collect();
-        edges.sort_by(|a, b| b.0.total_cmp(&a.0));
+        edges.sort_by(|a, b| b.score.total_cmp(&a.score));
         edges
     }
 

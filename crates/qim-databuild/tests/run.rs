@@ -3,11 +3,12 @@ use std::io::Write;
 use std::path::Path;
 
 use qim_core::{
-    CangjieVersion, Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack,
-    SchemePack, SimplifierPack,
+    CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, MANIFEST_FILE,
+    Manifest, Pack, PackKind, RadicalHintPack, SchemePack, SimplifierPack,
 };
 use qim_databuild::sources::{Fetch, sha256_hex};
-use qim_databuild::{Error, Outcome, WrittenPack};
+use qim_databuild::verify::{self, CheckId};
+use qim_databuild::{Error, Outcome, WrittenPack, lexicon};
 
 const TABLE: &str = "\
 日 日 1 1 0 0 1 0 0 0 0 a a NA 23061
@@ -43,6 +44,8 @@ const TABLE: &str = "\
 顯 显 1 1 0 0 1 0 0 0 0 afmbc afmbc NA 0
 臺 台 1 1 0 0 1 0 0 0 0 grmbg grmbg NA 0
 台 台 1 1 0 0 1 0 0 0 0 ir ir NA 0
+门 门 1 0 1 0 1 0 0 0 0 ls lis NA 0
+笑 笑 1 1 0 0 1 0 0 0 0 hhhk hhhk NA 0
 ";
 
 /// 聲明原文在上游檔裡換了行，sources.toml 照抄成一行。
@@ -106,7 +109,8 @@ const LGPL: &str = "\
 ";
 
 /// OpenCC 的字典（檔名, 內容）：只有「門」「問」有簡體，香港異體「綫」先轉回「線」。
-const OPENCC_DICTIONARIES: [(&str, &str); 5] = [
+/// STCharacters 只給速成碼表判定簡體字，不進簡繁資料包。
+const OPENCC_DICTIONARIES: [(&str, &str); 6] = [
     (
         "data/dictionary/CJK_Compatibility_Ideographs.txt",
         "# File\n",
@@ -118,6 +122,7 @@ const OPENCC_DICTIONARIES: [(&str, &str); 5] = [
     ),
     ("data/dictionary/HKVariants.txt", "線\t綫\n"),
     ("data/dictionary/HKVariantsRevPhrases.txt", ""),
+    ("data/dictionary/STCharacters.txt", "门\t門\n问\t問\n"),
 ];
 
 /// OpenCC 的 `LICENSE`（這裡只取開頭）。
@@ -135,6 +140,28 @@ const EN_US_DIC: &str = "4\nthe\nwalk/D\ndamn/D!\nzoo\n";
 const SCOWL_COPYRIGHT: &str = "Copyright 2000-2026 by Kevin Atkinson\n";
 
 const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
+
+/// CLDR 的粵語標註：「笑」是 😂 的關鍵字，「門口」是 🚪 的短名，「臉」打不出（碼表沒有）。
+const CLDR_YUE: &str = r#"<?xml version="1.0" encoding="UTF-8" ?>
+<ldml><annotations>
+<annotation cp="😂">笑 | 臉</annotation>
+<annotation cp="😂" type="tts">有開心眼淚嘅臉</annotation>
+<annotation cp="🚪">門 | 門口</annotation>
+<annotation cp="🚪" type="tts">門口</annotation>
+</annotations></ldml>
+"#;
+/// CLDR 的繁中標註：「笑」另有 🤣，排在粵語的 😂 後面；❤ 的 cp 沒有 U+FE0F。
+const CLDR_ZH_HANT: &str = r#"<?xml version="1.0" encoding="UTF-8" ?>
+<ldml><annotations>
+<annotation cp="🤣">笑 | 大笑</annotation>
+<annotation cp="🤣" type="tts">笑到在地上打滾</annotation>
+<annotation cp="❤">日</annotation>
+<annotation cp="❤" type="tts">紅心</annotation>
+</annotations></ldml>
+"#;
+const CLDR_LICENSE: &str = "COPYRIGHT AND PERMISSION NOTICE\n\nAll other content in this repo is released under UNICODE LICENSE V3\n";
+const EMOJI_TEST: &str =
+    "2764 FE0F ; fully-qualified # ❤️ E0.6 red heart\n2764 ; unqualified # ❤ E0.6 red heart\n";
 
 fn scowl_zip() -> Vec<u8> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
@@ -266,7 +293,11 @@ fn hkcancor_transcript(utterances: &[String]) -> String {
     format!("<info>\n\t1-TN-107\n\tINFO-END\n</info>\n{sents}")
 }
 
+/// HKCanCor 分好詞的固件裡的兩字詞：rime-essay 與口語詞表都沒有，由 HKCanCor 補進詞庫。
+const HKCANCOR_WORD: &str = "丟曰";
+
 /// 長度 7 的前 2,000 句分成兩個轉寫檔；另有一個夾英文詞的話輪，整句丟掉。
+/// 第四個檔是分好詞的話輪（[`HKCANCOR_WORD`] 接一個標成人名的 5 字詞，湊成和其他話輪一樣的 7 字，各兩次），給詞庫補詞。
 fn hkcancor_zip() -> Vec<u8> {
     let mut utterances: Vec<String> = sentences_of_length(7).into_iter().take(2000).collect();
     let second = utterances.split_off(1000);
@@ -281,6 +312,16 @@ fn hkcancor_zip() -> Vec<u8> {
         zip.start_file(name, options).unwrap();
         zip.write_all(text.as_bytes()).unwrap();
     }
+    zip.start_file("utf8/FC-004_v", options).unwrap();
+    let segmented: String = sentences_of_length(5)
+        .iter()
+        .take(64)
+        .flat_map(|name| [name, name])
+        .map(|name| {
+            format!("<sent>\n<sent_tag>\n{HKCANCOR_WORD}/d/aa1/\n{name}/nr/aa1/\n。/w/VQ1/\n</sent_tag>\n</sent>\n")
+        })
+        .collect();
+    zip.write_all(segmented.as_bytes()).unwrap();
     zip.start_file("utf8/FC-003_v", options).unwrap();
     zip.write_all(
         "<sent>\n<sent_tag>\n日/v/aa1/\nOK/e/ou1kei1/\n</sent_tag>\n</sent>\n".as_bytes(),
@@ -383,6 +424,22 @@ fn upstream(readme: &str) -> Files {
                 "https://example.invalid/scowl-Copyright".into(),
                 SCOWL_COPYRIGHT.into(),
             ),
+            (
+                "https://example.invalid/cldr-yue.xml".into(),
+                CLDR_YUE.into(),
+            ),
+            (
+                "https://example.invalid/cldr-zh_Hant.xml".into(),
+                CLDR_ZH_HANT.into(),
+            ),
+            (
+                "https://example.invalid/cldr-LICENSE".into(),
+                CLDR_LICENSE.into(),
+            ),
+            (
+                "https://example.invalid/emoji-test.txt".into(),
+                EMOJI_TEST.into(),
+            ),
         ])
         .into_iter()
         .chain(OPENCC_DICTIONARIES.iter().map(|(path, text)| {
@@ -415,7 +472,7 @@ fn repo(root: &Path, statement: &str) {
 [source.libcangjie]
 repository = "https://example.invalid/libcangjie"
 version = "346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"
-license = "Public Domain"
+license = "LicenseRef-Public-Domain"
 
 [source.libcangjie.license_text.statement]
 file = "data/README.table.md"
@@ -533,6 +590,38 @@ sha256 = "{scowl}"
 path = "Copyright"
 url = "https://example.invalid/scowl-Copyright"
 sha256 = "{scowl_copyright}"
+
+[source.cldr]
+repository = "https://example.invalid/cldr"
+version = "96e54b273d2da4ec6fbad350ba19ff23fa24a588"
+license = "Unicode-3.0"
+license_text = {{ upstream_file = "LICENSE" }}
+
+[[source.cldr.files]]
+path = "common/annotations/yue.xml"
+url = "https://example.invalid/cldr-yue.xml"
+sha256 = "{cldr_yue}"
+
+[[source.cldr.files]]
+path = "common/annotations/zh_Hant.xml"
+url = "https://example.invalid/cldr-zh_Hant.xml"
+sha256 = "{cldr_zh_hant}"
+
+[[source.cldr.files]]
+path = "LICENSE"
+url = "https://example.invalid/cldr-LICENSE"
+sha256 = "{cldr_license}"
+
+[source.emoji_test]
+repository = "https://example.invalid/emoji/"
+version = "18.0"
+license = "Unicode-3.0"
+license_text = {{ repo_file = "{UNICODE_LICENSE_PATH}" }}
+
+[[source.emoji_test.files]]
+path = "emoji-test.txt"
+url = "https://example.invalid/emoji-test.txt"
+sha256 = "{emoji_test}"
 "#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
@@ -547,6 +636,10 @@ sha256 = "{scowl_copyright}"
         apache = sha256_hex(APACHE.as_bytes()),
         scowl = sha256_hex(&scowl_zip()),
         scowl_copyright = sha256_hex(SCOWL_COPYRIGHT.as_bytes()),
+        cldr_yue = sha256_hex(CLDR_YUE.as_bytes()),
+        cldr_zh_hant = sha256_hex(CLDR_ZH_HANT.as_bytes()),
+        cldr_license = sha256_hex(CLDR_LICENSE.as_bytes()),
+        emoji_test = sha256_hex(EMOJI_TEST.as_bytes()),
         opencc = OPENCC_DICTIONARIES
             .iter()
             .map(|(path, text)| {
@@ -578,6 +671,8 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     assert!(license.contains(STATEMENT), "{license}");
     assert!(license.contains("Unicode-3.0"), "{license}");
     assert!(license.contains(UNICODE_LICENSE), "{license}");
+    // OpenCC 判定簡體字（plan §4.1）。
+    assert!(license.contains(APACHE.trim_end()), "{license}");
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
     assert!(
         notice.contains("346026b8ccf4ffdfbe424400edb6a588c0c5ba8e"),
@@ -585,10 +680,89 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     );
     assert!(notice.contains(&sha256_hex(TABLE.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&unihan_zip())), "{notice}");
+    assert!(notice.contains("STCharacters.txt"), "{notice}");
 
     let report = outcome.report.unwrap();
     assert!(report.passed(), "{report}");
-    assert_eq!((report.continuous, report.extension), (32, 1));
+    assert_eq!((report.continuous, report.extension), (34, 1));
+}
+
+/// 每份資料包旁有 manifest（plan §4.6）：描述旁邊的資料包檔，授權是各來源的 SPDX 識別碼以 AND 接起、
+/// 不重複；`--verify` 讀回來核對。
+#[test]
+fn every_pack_has_a_manifest_next_to_it() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), true).unwrap();
+    assert_eq!(outcome.packs.len(), 7);
+    let manifest_of = |name: &str| {
+        let pack = written(&outcome, name);
+        let dir = pack.path.parent().unwrap();
+        let manifest =
+            Manifest::from_json(&std::fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap())
+                .unwrap();
+        let bytes = std::fs::read(&pack.path).unwrap();
+        assert_eq!(manifest.id, pack.id, "{name}");
+        assert_eq!(manifest.file_name(), format!("{}.pack", pack.id), "{name}");
+        assert_eq!(manifest.sha256, pack.sha256, "{name}");
+        assert_eq!(manifest.size, bytes.len() as u64, "{name}");
+        assert_eq!(manifest.version, "1.0.0", "{name}");
+        (manifest, bytes)
+    };
+    for name in [
+        "速成",
+        "詞庫",
+        "語言模型",
+        "字根提示",
+        "簡繁",
+        "英文",
+        "emoji",
+    ] {
+        manifest_of(name);
+    }
+    let (quick, _) = manifest_of("速成");
+    assert_eq!(quick.kind, PackKind::Scheme);
+    assert_eq!(
+        quick.license,
+        "LicenseRef-Public-Domain AND Unicode-3.0 AND Apache-2.0"
+    );
+    let (lexicon, bytes) = manifest_of("詞庫");
+    assert_eq!(lexicon.kind, PackKind::Lexicon);
+    // 兩份維基都是 CC-BY-SA-4.0，口語詞表與 Common Voice 都是 CC0-1.0：各只寫一次。
+    assert_eq!(
+        lexicon.license,
+        "LGPL-3.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND CC0-1.0"
+    );
+    assert_eq!(
+        LexiconPack::open(&lexicon, &bytes).unwrap().id,
+        "quick-lexicon"
+    );
+    assert_eq!(manifest_of("emoji").0.kind, PackKind::Emoji);
+
+    let report = outcome.report.unwrap();
+    let check = report
+        .checks
+        .iter()
+        .find(|c| c.id == CheckId::Manifests)
+        .expect("verify 核對 manifest");
+    assert!(check.passed, "{report}");
+}
+
+/// manifest 和旁邊的資料包對不上時 `--verify` 失敗。
+#[test]
+fn manifest_not_matching_its_pack_fails_the_check() {
+    let pack = LexiconPack {
+        id: "l".into(),
+        lexicon: qim_core::Lexicon::default(),
+    };
+    let bytes = pack.to_bytes().unwrap();
+    let good = Manifest::new(PackKind::Lexicon, "l", &bytes, "1.0.0", "CC0-1.0");
+    assert!(verify::manifests(&[(good.to_json(), bytes.clone())]).passed);
+    let mut bad = good.clone();
+    bad.sha256 = "0".repeat(64);
+    let check = verify::manifests(&[(good.to_json(), bytes.clone()), (bad.to_json(), bytes)]);
+    assert!(!check.passed);
+    assert!(check.detail.contains("sha256"), "{}", check.detail);
 }
 
 #[test]
@@ -614,6 +788,15 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert_eq!(words("aa"), ["日日"]);
     assert_eq!(words("ran"), ["口門"]);
     assert!(lexicon.lexicon.char_frequency('日') > 0);
+    // HKCanCor train 切分的兩字詞補進來，詞頻是次數乘上換算值；標成人名的不收。
+    let corpus_word = lexicon
+        .lexicon
+        .iter()
+        .flat_map(|(_, words)| words.iter())
+        .find(|w| w.text == HKCANCOR_WORD)
+        .unwrap_or_else(|| panic!("詞庫沒有 {HKCANCOR_WORD}"));
+    assert_eq!(corpus_word.frequency % lexicon::CORPUS_WORD_FREQUENCY, 0);
+    assert!(corpus_word.frequency >= lexicon::CORPUS_MIN_COUNT * lexicon::CORPUS_WORD_FREQUENCY);
     let c = outcome.lexicon.counts;
     assert_eq!(
         (
@@ -623,9 +806,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
             c.outside_continuous,
             c.words,
             c.colloquial,
+            c.corpus,
         ),
-        (14, 1, 1, 1, 11, 1)
+        (14, 1, 1, 1, 12, 1, 1)
     );
+    assert_eq!(outcome.lexicon.unaligned, 0);
     // 速成資料包指名它，和語言模型資料包合起來建得出 Engine。
     let quick = std::fs::read(path(&outcome, "速成")).unwrap();
     let language_model = std::fs::read(path(&outcome, "語言模型")).unwrap();
@@ -643,6 +828,11 @@ fn builds_lexicon_pack_named_by_the_scheme_with_its_own_license_and_notice() {
     assert!(notice.contains(&sha256_hex(ESSAY.as_bytes())), "{notice}");
     assert!(notice.contains(&sha256_hex(&zh_dump())), "{notice}");
     assert!(notice.contains("Common Voice"), "{notice}");
+    assert!(
+        notice.contains("words of two or more characters in that split"),
+        "{notice}"
+    );
+    assert!(notice.contains("personal\nnames left out"), "{notice}");
     // LGPL 要寫明對來源做了什麼：錯字「顯着」改寫併進「顯著」、同頻只算一次、單向的例外（M1 票 17d）。
     for expected in ["顯着 went into 顯著", "equal frequencies", "except 合着"] {
         assert!(notice.contains(expected), "缺 {expected}：{notice}");
@@ -841,6 +1031,43 @@ fn builds_the_english_pack_with_its_own_license_and_notice() {
     assert!(notice.contains("rel-2026.02.25"), "{notice}");
     assert!(notice.contains(&sha256_hex(&scowl_zip())), "{notice}");
     assert!(notice.contains("NOSUGGEST"), "{notice}");
+}
+
+#[test]
+fn builds_the_emoji_pack_with_its_own_license_and_notice() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let dir = root.path().join("build/packs/cldr-emoji-yue-hant");
+    assert_eq!(
+        path(&outcome, "emoji"),
+        dir.join("cldr-emoji-yue-hant.pack")
+    );
+    let bytes = std::fs::read(path(&outcome, "emoji")).unwrap();
+    assert_eq!(written(&outcome, "emoji").sha256, sha256_hex(&bytes));
+    let pack = EmojiPack::from_bytes(&bytes).unwrap();
+    assert_eq!(pack.id, "cldr-emoji-yue-hant");
+    // 粵語在前；短名在關鍵字前；❤ 換回完整寫法；「臉」打不出不收。
+    assert_eq!(pack.emoji.lookup("笑"), ["😂", "🤣"]);
+    assert_eq!(pack.emoji.lookup("門口"), ["🚪"]);
+    assert_eq!(pack.emoji.lookup("日"), ["\u{2764}\u{FE0F}"]);
+    assert!(pack.emoji.lookup("臉").is_empty());
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains(CLDR_LICENSE.trim_end()), "{license}");
+    assert!(license.contains(UNICODE_LICENSE.trim_end()), "{license}");
+    assert!(!license.contains("LicenseRef-SCOWL"), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(
+        notice.contains("96e54b273d2da4ec6fbad350ba19ff23fa24a588"),
+        "{notice}"
+    );
+    assert!(
+        notice.contains(&sha256_hex(EMOJI_TEST.as_bytes())),
+        "{notice}"
+    );
+    assert!(notice.contains("than 6 emoji"), "{notice}");
 }
 
 #[test]

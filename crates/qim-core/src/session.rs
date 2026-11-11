@@ -4,12 +4,18 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::lattice::{self, CandidateSpan, Lattice};
+use crate::association::{self, ASSOCIATION_TAIL};
+use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
+use crate::remembered::TypedRun;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
+
+/// 核心留著的游標前文字最多幾個字（[`Session::set_context`]）：送雲端的上限（brief §8），bigram
+/// 只看最後一字。殼可以給更長的，核心只留最後這麼多。
+pub const CONTEXT_LIMIT: usize = 200;
 
 /// 重排要求最多帶幾個候選：第一頁。重排只動第一頁，翻到後面的頁時看得到的不會變。
 pub const RERANK_LIMIT: usize = PAGE_SIZE;
@@ -34,22 +40,57 @@ pub struct ScoredPath {
     pub score: f64,
 }
 
+/// 上屏的組字的最後一段（[`Session::context_word`]）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LastWord {
+    /// 原文（繁體），學習記的。
+    original: String,
+    /// 顯示、上屏的字：簡體模式下是轉換後的，前文裡是它。
+    shown: String,
+}
+
+/// 聯想（plan §2.1，M3 票 13）在接什麼：候選列是聯想時才有。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Association {
+    /// 剛上屏的各段（繁體原文）：這次組字上屏的分段，接著選過的聯想，最多留到蓋住最後
+    /// [`ASSOCIATION_TAIL`] 字。最後一段是個人 bigram 的前一個字詞。
+    segments: Vec<String>,
+    /// 這次上屏顯示的字（簡體模式是轉換後的）：殼之後給的前文不以它結尾，就是游標移走了。
+    shown: String,
+}
+
 /// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
     /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體（plan §2.2 的後處理）；
     /// 引擎要掛上簡繁資料包（[`Engine::with_simplifier`]）。
     pub simplified: bool,
-    /// 無痕模式：不寫任何學習資料（plan §2.4）。
+    /// 無痕模式：不寫任何學習資料、不用前文（plan §2.4、brief §8）。
     pub incognito: bool,
+    /// 學習（brief §4.5、§7）：關掉時不寫任何學習資料，已學的照用、前文照用（和無痕不同）。
+    /// 預設開。
+    pub learning: bool,
     /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
     /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
     pub english_candidates: bool,
-    /// 數字後的 `.` `:` 用半形（brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，同 librime
+    /// 數字後的 `.` `:` 用半形（brief §4.7）：前文以半形數字結尾時直接上屏半形（[`Session::set_context`]），同 librime
     /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
     pub digit_separators: bool,
+    /// emoji 候選（plan §2.4）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面；
+    /// 引擎要掛上 emoji 資料包（[`Engine::with_emoji`]）。預設開（brief §7，同 rime-emoji）。
+    pub emoji_candidates: bool,
     /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
+    /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
+    /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
+    pub simplified_after_traditional: bool,
+    /// 記住的字串（plan §2.4，M3 票 15）：記下經核心送出去的 email，之後在中文組字打它開頭的字母
+    /// （長過一個字的最長碼）時排在候選第 2 位起（排位規則 5）。關掉時不記也不給；無痕、學習關掉時
+    /// 不記、已記的照給。預設開（brief §7）。
+    pub remembered_strings: bool,
+    /// 聯想（brief §7，M3 票 13）：上屏組字或選了聯想之後、還沒打下一個字時，候選列給接下來可能要
+    /// 打的字詞（[`Session::select`] 或數字鍵選）。預設開（brief §7）。
+    pub association: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -103,9 +144,14 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體與英文候選影響候選，無痕、Shift、數字後半形都不影響。
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選、簡體字排後與記住的字串影響候選，
+    /// 無痕、學習、Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
-        self.simplified == other.simplified && self.english_candidates == other.english_candidates
+        self.simplified == other.simplified
+            && self.english_candidates == other.english_candidates
+            && self.emoji_candidates == other.emoji_candidates
+            && self.simplified_after_traditional == other.simplified_after_traditional
+            && self.remembered_strings == other.remembered_strings
     }
 }
 
@@ -114,9 +160,14 @@ impl Default for Options {
         Self {
             simplified: false,
             incognito: false,
+            learning: true,
             english_candidates: true,
             digit_separators: true,
+            emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
+            simplified_after_traditional: true,
+            remembered_strings: true,
+            association: true,
         }
     }
 }
@@ -372,11 +423,29 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
-    /// 輸入框游標前的文字（[`Session::set_context`]）；`None` 是殼沒給過。
+    /// 前文（plan §2.1，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
+    /// 接上之後核心送出去的字（上屏的、交還宿主打的可見字元與空白）。殼沒給過時只有核心送出去的，
+    /// 同 librime 的 commit history。`None` 是不知道：沒給過也還沒送出過字、交還宿主的鍵改了游標前的
+    /// 字或移走游標（[`Session::passed_to_host`]）、殼換了欄位（[`Session::clear_context`]），或在
+    /// 無痕中：無痕時一個字都不記，關掉後也不會冒出無痕期間的字（brief §8）。
     context: Option<String>,
-    /// 最近一次送出去的文字（上屏或交還宿主打的鍵）以半形數字結尾。只看核心自己經手的：
-    /// 還沒改看前文（M3 票 05 定），所以游標移到別處、宿主自己改了字都看不到。
+    /// 上一次上屏的組字的最後一段。前文以它結尾時，它是下一次組字的前一個字詞
+    /// （[`Session::context_word`]）。
+    last_word: Option<LastWord>,
+    /// 這次組字開頭時前文給的前一個字詞（[`Session::context_word`]）；學個人 bigram 用，和打分時
+    /// 接的相同：組字中再給的前文留到下一次組字（plan §2.1）。
+    composition_word: Option<String>,
+    /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
+    /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
+    /// 正在打的一串字（記住的字串，plan §2.1）：送出去的字的結尾連續的 email 字元。遇到其他字元、
+    /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，是 email 就記住
+    /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
+    typed: TypedRun,
+    /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
+    /// 其他鍵（不送字元的修飾鍵除外）、`text`、[`Session::clear_context`]、不以剛上屏的字結尾的
+    /// [`Session::set_context`] 收起它。
+    association: Option<Association>,
     /// 臨時英文（Rime `inline_ascii`）：組字中單按留碼的 Shift 切到的狀態，存的是英文。
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
     /// 中文的組字（選定的分段、lattice）留著，英文沒動過時切回不必重算。
@@ -388,16 +457,66 @@ impl Session {
     /// `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選再處理；重列前
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
+        // 無痕不讀上下文（brief §8）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
+        if options.incognito && !self.options.incognito {
+            self.forget_context();
+        }
         self.options = options;
     }
 
-    /// 輸入框游標前的文字（plan §2.1）：組字開頭的字接它最後一字的 bigram，以標點、空白、
-    /// 符號結尾或是空的時接句首，最後一字在語言模型裡沒有統計時用 unigram（plan §2.3、
-    /// [`Engine::context_char`]）。沒給過時開頭的字用 unigram。殼在聚焦、移動游標、上屏
-    /// 之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
-    /// 無痕模式不用它（brief §8）。
+    /// 輸入框游標前的文字（plan §2.1），取代核心記著的；只留最後 [`CONTEXT_LIMIT`] 字。組字開頭的
+    /// 字接它最後一字的 bigram，以標點、空白、符號結尾或是空的時接句首，最後一字在語言模型裡沒有
+    /// 統計時用 unigram（plan §2.3、[`Engine::context_char`]）；數字後半形看它的最後一字。殼在聚焦、
+    /// 移動游標、上屏之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
+    /// 之後上屏的字與交還宿主打的字元接在後面，殼不給時也知道游標前是什麼（同 librime 的 commit
+    /// history）。無痕模式殼不給，給了也不收（brief §8）。
     pub fn set_context(&mut self, before: &str) {
-        self.context = Some(before.to_string());
+        if self.options.incognito {
+            return;
+        }
+        self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
+        self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
+        self.typed.sync(before);
+        // 游標前不是剛上屏的字：殼點了別處、移了游標，聯想接不上了。
+        if self
+            .association
+            .as_ref()
+            .is_some_and(|a| !before.ends_with(&a.shown))
+        {
+            self.end_association();
+        }
+    }
+
+    /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
+    /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
+    /// 離開欄位也是打完了一串字：正在打的是 email 就記進 `user`（記住的字串，plan §2.4）。
+    pub fn clear_context(&mut self, user: &mut UserModel) {
+        self.end_typed(user);
+        self.forget_context();
+    }
+
+    /// 不知道游標前是什麼了：前文與數字後半形的狀態都作廢；剛上屏的字不在游標前了，聯想也收起。
+    fn forget_context(&mut self) {
+        self.context = None;
+        self.after_digit = false;
+        self.end_association();
+    }
+
+    /// 正在打的一串字打完了：是整串看得到的 email 又記得住（[`Session::remembers_strings`]）時記進 `user`。
+    fn end_typed(&mut self, user: &mut UserModel) {
+        let done = self.typed.finish();
+        self.remember(user, done);
+    }
+
+    fn remember(&self, user: &mut UserModel, done: Option<String>) {
+        if let Some(text) = done.filter(|_| self.remembers_strings()) {
+            user.remember_string(&text);
+        }
+    }
+
+    /// 現在打的字記不記得住：在學習（不在無痕、學習沒關）、記住的字串開著。
+    fn remembers_strings(&self) -> bool {
+        self.writes_learning() && self.options.remembered_strings
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -410,6 +529,12 @@ impl Session {
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot {
         if self.composing_chinese() {
             self.refresh_candidates(engine, user);
+        } else if self.association.is_some() {
+            if self.options.association {
+                self.list_association(engine, user);
+            } else {
+                self.end_association();
+            }
         }
         with_radicals(engine, self.snapshot(engine, true, None))
     }
@@ -419,10 +544,14 @@ impl Session {
         self.apply_pending_options(engine, user);
         let snapshot = if self.composing() {
             self.select_at(engine, user, index)
+        } else if self.showing_association() {
+            self.select_association(engine, user, index)
         } else {
+            // 只呼叫 `set_options` 關掉聯想、還沒 `refresh` 時，照沒有聯想收起。
+            self.end_association();
             self.snapshot(engine, false, None)
         };
-        self.finish(engine, snapshot)
+        self.finish(engine, user, snapshot)
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有
@@ -464,9 +593,9 @@ impl Session {
     }
 
     /// 給背景模型的重排要求（plan §2.7）：目前的 `generation`、上下文與前 [`RERANK_LIMIT`]
-    /// 個候選。沒有組字、沒有候選，或換了選項還沒重列（候選列馬上會換）時是 `None`。
+    /// 個候選。沒有組字（聯想不重排）、沒有候選，或換了選項還沒重列（候選列馬上會換）時是 `None`。
     pub fn rerank_request(&self) -> Option<RerankRequest> {
-        if self.candidates.is_empty() || self.options_pending() {
+        if !self.composing() || self.candidates.is_empty() || self.options_pending() {
             return None;
         }
         // 上下文是候選所在的碼前面的分段：有目前分段時是它前面的，否則是選定的分段。
@@ -502,7 +631,7 @@ impl Session {
         generation: u64,
         order: &[usize],
     ) -> Option<Snapshot> {
-        if generation != self.generation || self.options_pending() {
+        if generation != self.generation || !self.composing() || self.options_pending() {
             return None;
         }
         let limit = self.rerank_limit();
@@ -530,12 +659,52 @@ impl Session {
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
         let snapshot = self.handle_key(engine, user, key);
-        // 交還宿主的鍵宿主照打：只有數字鍵讓下一個字緊接在數字後。其他鍵都當成數字結束；librime
-        // 只認可見字元、退格與 Enter，不學它：方向鍵也會把游標移離數字。不送字元的修飾鍵不動它。
-        if !snapshot.handled && key != Key::Modifier {
-            self.after_digit = matches!(key, Key::Digit(_));
+        if !snapshot.handled {
+            self.passed_to_host(user, key);
         }
-        self.finish(engine, snapshot)
+        self.finish(engine, user, snapshot)
+    }
+
+    /// 交還宿主的鍵宿主照打：可見字元與空白接在前文後面（librime 的 commit history 記這些
+    /// `thru` 的鍵）。其他鍵改了游標前的字或移走游標，前文就作廢了，等殼再給；librime
+    /// 只在退格與 Enter 清掉，不學它：方向鍵也把游標移走。不送字元的修飾鍵沒改輸入框，不動它。
+    /// 正在打的一串字（記住的字串）：退格刪它的最後一個字元；Enter 讓它打完；其他作廢前文的鍵（Tab、
+    /// 方向鍵…）也讓它打完，之後游標可能移走，接著打的到下一個分隔的字元才重新算。
+    fn passed_to_host(&mut self, user: &mut UserModel, key: Key) {
+        match key {
+            Key::Letter(c) | Key::Punct(c) => self.sent(user, c.encode_utf8(&mut [0; 4])),
+            Key::Digit(d) => self.sent(user, &d.to_string()),
+            Key::Space => self.sent(user, " "),
+            Key::Modifier => {}
+            Key::Backspace => {
+                self.typed.backspace();
+                self.forget_context();
+            }
+            Key::Enter => self.clear_context(user),
+            _ => {
+                self.clear_context(user);
+                self.typed.lose_track();
+            }
+        }
+    }
+
+    /// 核心送出去的字（上屏的、交還宿主打的字元）：記下游標前是不是數字；不在無痕中時接在前文後面，
+    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始，也接在正在打的一串字後面（遇到 email
+    /// 裡不會有的字元時那串打完，[`Session::end_typed`]）。
+    fn sent(&mut self, user: &mut UserModel, text: &str) {
+        self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
+        let recording = self.remembers_strings();
+        for c in text.chars() {
+            let done = self.typed.push(c, recording);
+            self.remember(user, done);
+        }
+        if self.options.incognito {
+            return;
+        }
+        let context = self.context.get_or_insert_with(String::new);
+        context.push_str(text);
+        let start = context.len() - last_chars(context, CONTEXT_LIMIT).len();
+        context.drain(..start);
     }
 
     /// 換了影響候選的選項、還沒重列（[`Session::set_options`] 後沒呼叫 [`Session::refresh`]）：
@@ -553,16 +722,21 @@ impl Session {
         }
     }
 
-    /// 會上屏的公開方法回傳前都經過這裡：記下上屏的字是不是以半形數字結尾
-    /// （[`Session::after_digit`]，沒上屏時不變，同 librime 的 commit history），再補分段的字根。
-    fn finish(&mut self, engine: &Engine, snapshot: Snapshot) -> Snapshot {
+    /// 會上屏的公開方法回傳前都經過這裡：上屏的字接在前文後面（[`Session::context`]，
+    /// 同 librime 的 commit history），再補分段的字根。
+    fn finish(&mut self, engine: &Engine, user: &mut UserModel, snapshot: Snapshot) -> Snapshot {
         if let Some(commit) = &snapshot.commit {
-            self.after_digit = commit.ends_with(|c: char| c.is_ascii_digit());
+            self.sent(user, commit);
         }
         with_radicals(engine, snapshot)
     }
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+        if self.association.is_some()
+            && let Some(snapshot) = self.handle_association(engine, user, key)
+        {
+            return snapshot;
+        }
         if let Key::ToggleAscii(shift) = key {
             return self.toggle_ascii(engine, user, shift);
         }
@@ -578,6 +752,9 @@ impl Session {
         {
             self.focus = None;
             if self.lattice.input().is_empty() {
+                if self.selected.is_empty() {
+                    self.composition_word = self.context_word();
+                }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
             self.lattice.push(engine, user, c);
@@ -674,6 +851,135 @@ impl Session {
             Key::Letter(_) | Key::ToggleAscii(_) | Key::Other | Key::Modifier => {
                 self.snapshot(engine, true, None)
             }
+        }
+    }
+
+    /// 聯想顯示中的鍵（plan §2.1），照 macOS 速成：數字鍵選這頁的聯想；Esc 與退格只收起聯想
+    /// （librime-predict、Gboard 的第一下退格也是），不交還宿主；不送字元的修飾鍵不動它。其他鍵
+    /// 收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，空白、Enter、方向鍵、沒有
+    /// 那個聯想的數字交還宿主，標點照常上屏。
+    fn handle_association(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        key: Key,
+    ) -> Option<Snapshot> {
+        if !self.showing_association() {
+            self.end_association();
+            return None;
+        }
+        match key {
+            Key::Modifier => Some(self.snapshot(engine, false, None)),
+            Key::Digit(digit) => match usize::from(digit).checked_sub(1) {
+                Some(index) if index < self.page_candidates().len() => {
+                    Some(self.select_association(engine, user, self.page * PAGE_SIZE + index))
+                }
+                _ => {
+                    self.end_association();
+                    None
+                }
+            },
+            Key::Escape | Key::Backspace => {
+                self.end_association();
+                Some(self.snapshot(engine, true, None))
+            }
+            _ => {
+                self.end_association();
+                None
+            }
+        }
+    }
+
+    /// 候選列是聯想、聯想的選項開著（殼只呼叫 `set_options` 關掉、還沒 `refresh` 時不算）。
+    fn showing_association(&self) -> bool {
+        self.association.is_some() && self.options.association
+    }
+
+    /// 選第 `index` 個聯想：上屏它，記個人 bigram「剛上屏的最後一段 → 它」（無痕、學習關掉時
+    /// 不記），接著給下一輪。沒有這個聯想時不動作、鍵照樣吃下。
+    fn select_association(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        index: usize,
+    ) -> Snapshot {
+        let Some(choice) = self.candidates.get(index).cloned() else {
+            return self.snapshot(engine, true, None);
+        };
+        let mut segments = self.association.take().expect("聯想顯示中").segments;
+        let original = choice.span.text.clone();
+        if self.writes_learning()
+            && let Some(previous) = segments.last()
+        {
+            user.learn_association(previous, &original);
+        }
+        self.remember_last_word(engine, Some(&Segment::new(String::new(), original.clone())));
+        let commit = Commit {
+            text: choice.text().to_string(),
+            original: original.clone(),
+        };
+        segments.push(original);
+        self.commit_and_associate(engine, user, commit, segments)
+    }
+
+    /// 上屏 `commit`、清空組字，接著給接在 `segments`（剛上屏的各段，原文）後面的聯想。聯想關掉、
+    /// 切到英文直通或無痕時不給：剛上屏的字是下一個字的前文，無痕不讀前文（brief §8）。
+    fn commit_and_associate(
+        &mut self,
+        engine: &Engine,
+        user: &UserModel,
+        commit: Commit,
+        mut segments: Vec<String>,
+    ) -> Snapshot {
+        self.clear();
+        if self.options.association && !self.ascii && !self.options.incognito {
+            // 留到蓋住最後 ASSOCIATION_TAIL 字的段，最後一段一定留。
+            let mut chars = 0;
+            let keep = segments
+                .iter()
+                .rev()
+                .take_while(|s| {
+                    let fits = chars < ASSOCIATION_TAIL;
+                    chars += s.chars().count();
+                    fits
+                })
+                .count();
+            segments.drain(..segments.len() - keep);
+            self.association = Some(Association {
+                segments,
+                shown: commit.text.clone(),
+            });
+            self.list_association(engine, user);
+        }
+        self.snapshot(engine, true, Some(commit))
+    }
+
+    /// 依目前的聯想與選項列候選；一個都沒有時收起。
+    fn list_association(&mut self, engine: &Engine, user: &UserModel) {
+        let Some(association) = &self.association else {
+            return;
+        };
+        let texts = association::associations(engine, user, &association.segments);
+        if texts.is_empty() {
+            self.end_association();
+            return;
+        }
+        let spans = texts
+            .into_iter()
+            .map(|text| CandidateSpan::single(text, ""))
+            .collect();
+        self.candidates = self.shown_candidates(engine, spans);
+        self.listed_with = self.options;
+        self.page = 0;
+        self.generation += 1;
+    }
+
+    /// 收起聯想；沒有聯想時不動作。
+    fn end_association(&mut self) {
+        if self.association.take().is_some() {
+            self.candidates.clear();
+            self.page = 0;
+            self.generation += 1;
         }
     }
 
@@ -820,6 +1126,7 @@ impl Session {
     /// （M1 票 27b）。文字照原樣、不轉全形，也不套數字後半形；簡體模式轉成簡體，原文留繁體（M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         self.apply_pending_options(engine, user);
+        self.end_association();
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
@@ -833,7 +1140,7 @@ impl Session {
             self.snapshot(engine, true, Some(text))
         };
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
-        self.finish(engine, snapshot)
+        self.finish(engine, user, snapshot)
     }
 
     /// 上屏整個組字再接 `tail`：選定的分段，接著和一直按空白相同，逐次取剩下的輸入碼的首選；
@@ -855,18 +1162,28 @@ impl Session {
             commit.original.push_str(&choice.text);
             segments.extend_from_slice(&choice.segments);
             rest.drain(..choice.len);
-            let before = choice.text.chars().next_back();
+            let before = Preceding {
+                character: choice.text.chars().next_back(),
+                word: choice.segments.last().map(|s| s.text.clone()),
+            };
             top = lattice::candidates(
                 engine,
                 user,
                 &Lattice::from_input(engine, user, before, &rest),
-                false,
+                self.listing(false),
             )
             .into_iter()
             .next();
         }
         if raw.is_empty() {
             self.learn(engine, user, &segments);
+            self.remember_last_word(engine, segments.last());
+        }
+        // 只上屏組字（目前分段時的空白）才接聯想；接了標點、文字或原樣的碼不接（同 librime-predict
+        // 遇到 `punct`、`raw` 的上屏就停）。
+        if raw.is_empty() && tail.text.is_empty() {
+            let texts = segments.iter().map(|s| s.text.clone()).collect();
+            return self.commit_and_associate(engine, user, commit, texts);
         }
         commit.text.push_str(&raw);
         commit.text.push_str(&tail.text);
@@ -875,24 +1192,39 @@ impl Session {
         self.commit(engine, commit)
     }
 
-    /// 學一次上屏（plan §2.4）；無痕模式不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
-    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。
+    /// 這次上屏要不要寫學習資料：無痕或學習關掉時不寫（plan §2.4）。
+    fn writes_learning(&self) -> bool {
+        self.options.learning && !self.options.incognito
+    }
+
+    /// 學一次上屏（plan §2.4）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
+    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。個人 bigram 的
+    /// 第一段接組字開頭時前文給的字詞（[`Session::composition_word`]）。
     fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
-        // 沒有分段時不取方案的個人模型：取了會建出空的一份，匯出多一行 tick。
-        if self.options.incognito || segments.is_empty() {
+        if !self.writes_learning() {
             return;
         }
         let segments: Vec<Segment> = segments
             .iter()
             .map(|s| Segment::new(without_separators(&s.code), s.text.clone()))
             .collect();
-        user.for_scheme_mut(&engine.scheme().id).learn(&segments);
+        let previous = self.composition_word.as_deref();
+        user.learn(&engine.scheme().id, previous, &segments);
+    }
+
+    /// 記下上屏的組字的最後一段 `last`，給下一次組字接前文用（[`Session::context_word`]）；學習
+    /// 關掉時也記，已學的照用。無痕不用前文，也不記。
+    fn remember_last_word(&mut self, engine: &Engine, last: Option<&Segment>) {
+        self.last_word = last.filter(|_| !self.options.incognito).map(|s| LastWord {
+            original: s.text.clone(),
+            shown: self.output(engine, &s.text),
+        });
     }
 
     /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
-    /// 詞，`docs/research/libime-user-model.md` §5）。無痕模式不記。
+    /// 詞，`docs/research/libime-user-model.md` §5）。無痕或學習關掉時不記。
     fn add_auto_phrase(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
-        if self.options.incognito {
+        if !self.writes_learning() {
             return;
         }
         let code: String = segments
@@ -903,6 +1235,18 @@ impl Session {
         if !engine.has_entry(&code, &text) {
             user.for_scheme_mut(&engine.scheme().id)
                 .add_auto_phrase(&code, &text);
+        }
+    }
+
+    /// 列候選的選項：簡體字排後照選項（簡體模式不排）；英文候選與 emoji 照選項，但只給剩下的
+    /// 整串輸入碼（`whole_input`），目前分段與逐段取首選時沒有。
+    fn listing(&self, whole_input: bool) -> Listing {
+        let options = &self.options;
+        Listing {
+            english_candidates: whole_input && options.english_candidates,
+            emoji_candidates: whole_input && options.emoji_candidates,
+            remembered_strings: whole_input && options.remembered_strings,
+            simplified_last: options.simplified_after_traditional && !options.simplified,
         }
     }
 
@@ -951,9 +1295,9 @@ impl Session {
         let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
             return self.snapshot(engine, true, None);
         };
-        // 英文候選蓋住剩下的整串（分段的候選列沒有它）：和 Enter 一樣，選定的分段上屏字詞、
-        // 其餘上屏英文字，整次不學也不造詞（plan §2.4）。
-        if choice.english_candidate {
+        // 英文候選、emoji 與記住的字串蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
+        // 上屏字詞、其餘上屏它，整次不學也不造詞（plan §2.4）。
+        if choice.kind.is_literal() {
             let mut commit = self.selected_commit(engine);
             commit.text.push_str(&choice.text);
             commit.original.push_str(&choice.text);
@@ -998,11 +1342,14 @@ impl Session {
         self.focus = None;
         if rest.is_empty() {
             self.learn(engine, user, &self.selected);
+            let last = self.selected.last().cloned();
+            self.remember_last_word(engine, last.as_ref());
             if auto_phrase {
                 self.add_auto_phrase(engine, user, &self.selected);
             }
             let commit = self.selected_commit(engine);
-            return self.commit(engine, commit);
+            let texts = self.selected.iter().map(|s| s.text.clone()).collect();
+            return self.commit_and_associate(engine, user, commit, texts);
         }
         self.recompose(engine, user, &rest);
         self.refresh_candidates(engine, user);
@@ -1015,14 +1362,41 @@ impl Session {
         self.lattice = Lattice::from_input(engine, user, before, input);
     }
 
-    /// 沒選定的輸入碼前面的一個字（plan §2.3）：最後選定的分段的最後一字；沒有選定的分段時
-    /// 看前文（[`Engine::context_char`]），沒給過前文或無痕時是 `None`。
-    fn before_unselected(&self, engine: &Engine) -> Option<char> {
+    /// 沒選定的輸入碼前面是什麼（plan §2.3）：最後選定的分段（它的最後一字與它）；沒有選定的
+    /// 分段時看前文（[`Engine::context_char`]、[`Session::context_word`]），不知道前文或無痕時沒有。
+    fn before_unselected(&self, engine: &Engine) -> Preceding {
         match (self.selected.last(), &self.context) {
-            (Some(segment), _) => segment.text.chars().next_back(),
-            (None, Some(context)) if !self.options.incognito => engine.context_char(context),
-            (None, _) => None,
+            (Some(segment), _) => Preceding {
+                character: segment.text.chars().next_back(),
+                word: Some(segment.text.clone()),
+            },
+            (None, Some(context)) if !self.options.incognito => Preceding {
+                character: engine.context_char(context),
+                word: self.context_word(),
+            },
+            (None, _) => Preceding::default(),
         }
+    }
+
+    /// 前文給的前一個字詞（個人 bigram，plan §2.3）：前文以上一次上屏的組字的最後一段結尾時是
+    /// 那一段（原文；簡體模式下前文是顯示的字，也認），否則是前文的最後一字（字母或數字才算，
+    /// 標點、空白之後沒有）。不知道前文或無痕時沒有。前文由 `Session` 接上上屏的字（[`Session::context`]），
+    /// 所以剛上屏的那段接在前文結尾。
+    fn context_word(&self) -> Option<String> {
+        if self.options.incognito {
+            return None;
+        }
+        let context = self.context.as_deref()?;
+        if let Some(last) = &self.last_word
+            && (context.ends_with(&last.original) || context.ends_with(&last.shown))
+        {
+            return Some(last.original.clone());
+        }
+        context
+            .chars()
+            .next_back()
+            .filter(|c| c.is_alphanumeric())
+            .map(String::from)
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
@@ -1041,30 +1415,34 @@ impl Session {
                 lattice::candidates(
                     engine,
                     user,
-                    &Lattice::from_input(engine, user, None, code),
-                    false,
+                    &Lattice::from_input(engine, user, Preceding::default(), code),
+                    self.listing(false),
                 )
             }
-            None => {
-                lattice::candidates(engine, user, &self.lattice, self.options.english_candidates)
-            }
+            None => lattice::candidates(engine, user, &self.lattice, self.listing(true)),
         };
-        // 排序時已去掉原文重複的，沒轉換的不必再比。
+        self.candidates = self.shown_candidates(engine, spans);
+        self.listed_with = self.options;
+        self.page = 0;
+        self.generation += 1;
+    }
+
+    /// 候選經過後處理（plan §2.2）：簡體模式轉成簡體，轉換後文字重複的只留第一個。排序時已去掉
+    /// 原文重複的，沒轉換的不必再比。
+    fn shown_candidates(&self, engine: &Engine, spans: Vec<CandidateSpan>) -> Vec<ShownCandidate> {
         let mut seen = HashSet::new();
-        self.candidates = spans
+        spans
             .into_iter()
             .map(|span| ShownCandidate {
                 converted: self.options.simplified.then(|| self.display(engine, &span)),
                 span,
             })
             .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
-            .collect();
-        self.listed_with = self.options;
-        self.page = 0;
-        self.generation += 1;
+            .collect()
     }
 
     fn clear(&mut self) {
+        self.association = None;
         self.selected.clear();
         self.lattice = Lattice::default();
         self.focus = None;
@@ -1143,4 +1521,39 @@ fn with_radicals(engine: &Engine, mut snapshot: Snapshot) -> Snapshot {
         segment.radicals = engine.scheme().radicals_of(&segment.code);
     }
     snapshot
+}
+
+/// `text` 的最後 `limit`（≥ 1）個字（Unicode 純量值）；不到 `limit` 個時是整串。
+fn last_chars(text: &str, limit: usize) -> &str {
+    match text.char_indices().nth_back(limit - 1) {
+        Some((start, _)) => &text[start..],
+        None => text,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_chars_keeps_the_tail_by_characters() {
+        assert_eq!(last_chars("今天天氣", 2), "天氣");
+        assert_eq!(last_chars("今天", 5), "今天");
+        assert_eq!(last_chars("", 3), "");
+    }
+
+    /// 前文與之後送出去的字合起來只留最後 [`CONTEXT_LIMIT`] 字。
+    #[test]
+    fn the_context_keeps_only_the_last_limit_characters() {
+        let mut session = Session::default();
+        session.set_context(&"天".repeat(CONTEXT_LIMIT + 5));
+        assert_eq!(
+            session.context.as_deref().map(|c| c.chars().count()),
+            Some(CONTEXT_LIMIT)
+        );
+        session.sent(&mut UserModel::default(), "今日");
+        let context = session.context.as_deref().unwrap();
+        assert_eq!(context.chars().count(), CONTEXT_LIMIT);
+        assert!(context.ends_with("天今日"));
+    }
 }

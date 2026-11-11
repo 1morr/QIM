@@ -119,6 +119,7 @@ fn engine_for(
             .map(|&text| CodeEntry {
                 text,
                 extension: false,
+                simplified: false,
             })
             .collect();
         (code.clone(), entries)
@@ -164,6 +165,20 @@ fn other_scheme(
         .map(|(code, texts)| (code.clone(), texts.iter().rev().cloned().collect()))
         .collect();
     (table, words)
+}
+
+/// 匯出檔的這一行是方案 `scheme` 的列或 tick 行。
+fn is_row_of(line: &str, scheme: &str) -> bool {
+    line.starts_with(&format!("{scheme}\t")) || line.starts_with(&format!("#@/tick/{scheme}\t"))
+}
+
+/// 匯出檔裡方案 `scheme` 的列與 tick 行。
+fn rows_of(exported: &str, scheme: &str) -> Vec<String> {
+    exported
+        .lines()
+        .filter(|line| is_row_of(line, scheme))
+        .map(String::from)
+        .collect()
 }
 
 /// `text` 能拆成一串字詞（`pieces` 的「文字, 碼」），碼接起來是 `input` 開頭的一段（至少一碼）；
@@ -231,6 +246,10 @@ proptest! {
         let mut session = Session::default();
         for action in actions {
             let snapshot = act(&mut session, &engine, &mut user, action);
+            // 沒有組字時的候選是聯想（M3 票 13），不由輸入碼打出。
+            if snapshot.composition.input.is_empty() {
+                continue;
+            }
             let input = listed_input(&snapshot);
             for candidate in &snapshot.candidates {
                 prop_assert!(
@@ -253,6 +272,10 @@ proptest! {
         let mut session = Session::default();
         for action in actions {
             let snapshot = act(&mut session, &engine, &mut user, action);
+            // 沒有組字時的候選是聯想（M3 票 13），不是輸入碼的候選。
+            if snapshot.composition.input.is_empty() {
+                continue;
+            }
             let from_scratch = engine.candidates(&user, listed_input(&snapshot));
             let page: Vec<String> = from_scratch
                 .into_iter()
@@ -323,13 +346,36 @@ proptest! {
         }
     }
 
-    /// 同一個 `UserModel` 交替用在兩個同碼不同字的方案，各方案的候選和只用那個方案時相同
-    /// （plan §2.4）。
+    /// 學習關掉時怎麼打、選、上屏都不寫學習資料（brief §4.5），之前學過的也不動。
     #[test]
-    fn two_schemes_sharing_a_user_model_do_not_affect_each_other(
+    fn learning_off_leaves_the_user_model_unchanged(
+        table in random_table(),
+        words in random_words(),
+        learning in prop::collection::vec(action(), 0..40),
+        actions in prop::collection::vec(action(), 0..40),
+    ) {
+        let engine = engine(&table, &words);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for action in learning {
+            act(&mut session, &engine, &mut user, action);
+        }
+        let before = user.clone();
+        session.set_options(Options { learning: false, ..Options::default() });
+        for action in actions {
+            act(&mut session, &engine, &mut user, action);
+            prop_assert_eq!(&user, &before, "{:?} 後", action);
+        }
+    }
+
+    /// 同一個 `UserModel` 交替用在兩個同碼不同字的方案：一個方案的上屏不寫另一個方案的學習計數與
+    /// 使用者詞，候選也不讀它們（plan §2.4）。個人 bigram 只看文字、各方案共用，不在此列。
+    #[test]
+    fn one_scheme_neither_writes_nor_reads_the_other_schemes_learning(
         table in random_table(),
         words in random_words(),
         actions in prop::collection::vec((any::<bool>(), action()), 0..100),
+        inputs in prop::collection::vec("[abc]{1,4}", 1..5),
     ) {
         let (other_table, other_words) = other_scheme(&table, &words);
         let engines = [
@@ -337,23 +383,39 @@ proptest! {
             engine_for("cangjie", &other_table, &other_words),
         ];
         let mut shared = UserModel::default();
-        let mut alone = [UserModel::default(), UserModel::default()];
         let mut sessions = [Session::default(), Session::default()];
-        let mut alone_sessions = [Session::default(), Session::default()];
         for (second, action) in actions {
             let i = usize::from(second);
-            let together: Snapshot = act(&mut sessions[i], &engines[i], &mut shared, action);
-            let by_itself = act(&mut alone_sessions[i], &engines[i], &mut alone[i], action);
-            prop_assert_eq!(together, by_itself, "方案 {} 做 {:?} 後", engines[i].scheme().id, action);
+            let other = &engines[1 - i].scheme().id;
+            let before = rows_of(&shared.export(), other);
+            act(&mut sessions[i], &engines[i], &mut shared, action);
+            prop_assert_eq!(rows_of(&shared.export(), other), before, "方案 {} 做 {:?} 後", engines[i].scheme().id, action);
+        }
+        for i in 0..2 {
+            let other = &engines[1 - i].scheme().id;
+            let exported = shared.export();
+            let without: String = exported
+                .lines()
+                .filter(|line| !is_row_of(line, other))
+                .map(|line| format!("{line}\n"))
+                .collect();
+            let without = UserModel::import(&without).unwrap();
+            for input in &inputs {
+                prop_assert_eq!(
+                    engines[i].candidates(&shared, input),
+                    engines[i].candidates(&without, input),
+                    "方案 {} 的 `{}`", engines[i].scheme().id, input
+                );
+            }
         }
     }
 
-    /// 匯出後匯入等價（plan §5.1）：學過的計數、自動造詞、手動加的詞與觸發詞、常用語都還在。
+    /// 匯出後匯入等價（plan §5.1）：學過的計數、個人 bigram、自動造詞、手動加的詞與觸發詞、常用語都還在。
     #[test]
     fn exporting_then_importing_gives_an_equal_user_model(
         table in random_table(),
         words in random_words(),
-        keys in prop::collection::vec((any::<bool>(), key()), 0..100),
+        keys in prop::collection::vec((any::<bool>(), key(), prop::option::weighted(0.1, r"[一a\\\t，]{0,3}")), 0..100),
         added in prop::collection::vec(("[一-十]{1,3}", prop::option::of("[abc]{1,3}")), 0..5),
         phrases in prop::collection::vec((r"[一a \\\n\t]{1,6}", prop::option::of("[abc]{1,3}")), 0..5),
     ) {
@@ -364,8 +426,12 @@ proptest! {
         ];
         let mut user = UserModel::default();
         let mut sessions = [Session::default(), Session::default()];
-        for (second, key) in keys {
+        for (second, key, context) in keys {
             let i = usize::from(second);
+            // 前文給個人 bigram 的前一個字詞（含要跳脫的字）。
+            if let Some(context) = context {
+                sessions[i].set_context(&context);
+            }
             sessions[i].handle(&engines[i], &mut user, key);
         }
         for (text, trigger) in &added {
