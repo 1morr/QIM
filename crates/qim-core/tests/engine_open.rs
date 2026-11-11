@@ -3,8 +3,9 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Manifest, Pack, PackError, PackKind,
-    Packs, RadicalHintPack, RadicalHints, Ranking, Scheme, SchemePack, Session, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Manifest, ModelPack, Pack, PackError,
+    PackKind, Packs, RadicalHintPack, RadicalHints, Ranking, Scheme, SchemePack, Session,
+    UserModel, Word,
 };
 
 fn scheme_pack() -> SchemePack {
@@ -110,6 +111,22 @@ fn radical_hints_are_not_for_the_engine() {
     assert_eq!(
         open(&[file(&scheme_pack()), file(&lexicon("a", "x")), file(&hints)]).err(),
         Some(PackError::NotForEngine(PackKind::RadicalHint))
+    );
+}
+
+#[test]
+fn model_packs_are_not_for_the_engine() {
+    // 停鍵層的模型由殼交給 qim-neural（plan §2.7），不經 Engine。
+    let model = ModelPack {
+        id: "zh-hant-neural-rerank".into(),
+        vocab: vec!['我'],
+        unknown_chars: 1,
+        lambda: 2.0,
+        weights: vec![1, 2, 3],
+    };
+    assert_eq!(
+        open(&[file(&scheme_pack()), file(&lexicon("a", "x")), file(&model)]).err(),
+        Some(PackError::NotForEngine(PackKind::Model))
     );
 }
 

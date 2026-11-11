@@ -1,0 +1,9 @@
+# cargo xtask neural-import 寫的，不要手改（docs/development.md〈停鍵層的模型〉）
+lambda = 2.0
+unknown_chars = 966
+
+[trained]
+name = "lstm-c0.5"
+commit = "c325e3b"
+safetensors_sha256 = "d0c033a9b3c712a2306fae3f8b6781158b7a8be76f73f027350fde1beab92dbc"
+reference_max_difference = 0.00004124641418457031

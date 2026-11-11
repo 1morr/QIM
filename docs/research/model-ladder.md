@@ -87,7 +87,11 @@ DeepSeek flash（`hint-paths`）口語前 2 名 59.5%，比基線多 10.4 點、
 - 成本（Mac，真實的題，2 條執行緒）：神經打分 p95 口語 4.3 ms、有前文·前文50 5.6 ms，q8 檔 1.62 MB，載入 4.5 ms；都在門檻內。
 - 結果：個人集前 2 名退步超過當時的門檻，照 spec〈採用門檻〉的共同規則不採用（使用者 2026-11-11 選照門檻停下，沒放寬、也沒重訓再量）。同一天票 25 時使用者改了門檻：個人集取自 Rime 的學習資料，Rime 不看上下文，使用者在 Rime 多半只打短詞，QIM 要能一下打長句、用上下文，不該被這個習慣卡住；模型階梯的「個人集不退步」改成只報不擋（`cargo xtask bench --check` 的個人集 baseline 照舊守核心），1.4M 照新門檻**採用**，下面的收回由票 25 `git revert`。增益比對字級 bigram 時小：口語 +8.5 → +5.5 點，個人集 +0.4 → −0.5 點；新基線的路徑分已把一部分答案排上來，模型多出的翻轉在個人集（使用者自己的詞）上翻壞比翻好多。
 - 跟著收回（票 25 已恢復）：票 11c、11d、11e wontfix；plan §1.3、§1.4 的 `qim-neural` 與 candle 兩列、`xtask` 的 `RULES`；plan §2.1、§2.7、§8，brief §1.5（移到「不做」）、§7（停鍵重排的開關）、§8、§11、§12.5；spec〈範圍〉〈驗收〉〈票序〉；票 23 的 Blocked by 拿掉 11c、11d、11e，票 25 的改成 11b（票 25 恢復時這條留著：票 25 已做完，不再被 11d 擋）。
-- 重跑：`cargo xtask data`；在 `scripts/experiments/neural-rerank/` 照 README 跑 `prepare` 與 `lstm-c0.5` 那行；在 `../model-ladder/` 跑 `quantize`、`neural --lambdas 0.5,1,2`（dev）、`eval --split test`、`neural --split test --lambdas 2`、`compare`（README〈怎麼重跑〉）。
+- 重跑：`cargo xtask data`；照 `scripts/experiments/neural-rerank/README.md` 跑 `prepare` 與 `lstm-c0.5` 那行（`train.py` 票 11d 搬到 `scripts/neural-rerank/`）；在 `scripts/experiments/model-ladder/` 跑 `quantize`、`neural --lambdas 0.5,1,2`（dev）、`eval --split test`、`neural --split test --lambdas 2`、`compare`（README〈怎麼重跑〉）。
+
+## 停鍵層的產品實作（票 11d）
+
+2026-11-11，在 `e181d56` 加票 11d：採用的 `lstm-c0.5` 匯入 `data/neural-rerank/`（`cargo xtask neural-import`，q8 位元組和這裡量的 `model.gguf` 相同），由 `crates/qim-neural` 推論。用產品的模型檔重跑 test 一次，數字和上一節相同：口語前 2 名 56.5% → 62.0%（198／52）、維基 63.4% → 66.4%（249／129）、個人集 85.76% → 85.23%（133／157，只報不擋）。這台 Mac 上產品的重排一次（9 條 × 18 字、前文 50 字）p95 約 6 ms。細節在票 11d 的 Comments。
 
 ## 依句長分組與口語長前文（票 25）
 

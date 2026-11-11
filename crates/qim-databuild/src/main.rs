@@ -1,15 +1,17 @@
 //! `qim-databuild [--verify]`：在 repo 根目錄建資料包；平常由 `cargo xtask data` 呼叫。
 //! `qim-databuild --pack-release [--previous <index.json>]`：把建好的資料包整理成線上更新的 release
 //! 目錄（plan §4.7）；平常由 `cargo xtask pack-release` 呼叫。
+//! `qim-databuild --neural-import <訓練目錄> --lambda <λ>`：把 `train.py` 訓練好的停鍵層模型匯入
+//! `data/neural-rerank/`（plan §2.7）；平常由 `cargo xtask neural-import` 呼叫。
 
 use std::path::Path;
 use std::process::ExitCode;
 
 use qim_core::PackIndex;
 use qim_databuild::sources::{CACHE_ENV, Http, default_cache_dir};
-use qim_databuild::{PACKS_DIR, personal, release};
+use qim_databuild::{PACKS_DIR, neural, personal, release};
 
-const USAGE: &str = "用法：qim-databuild [--verify] | qim-databuild --pack-release [--previous <index.json>]（在 repo 根目錄執行）";
+const USAGE: &str = "用法：qim-databuild [--verify] | qim-databuild --pack-release [--previous <index.json>] | qim-databuild --neural-import <訓練目錄> --lambda <λ>（在 repo 根目錄執行）";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -19,6 +21,13 @@ fn main() -> ExitCode {
         ["--verify"] => build(true),
         ["--pack-release"] => pack_release(None),
         ["--pack-release", "--previous", previous] => pack_release(Some(Path::new(previous))),
+        ["--neural-import", dir, "--lambda", lambda] => match lambda.parse::<f64>() {
+            Ok(lambda) => neural_import(Path::new(dir), lambda),
+            Err(_) => {
+                eprintln!("λ 要是數字：{lambda}");
+                ExitCode::from(2)
+            }
+        },
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)
@@ -135,6 +144,33 @@ fn pack_release(previous: Option<&Path>) -> ExitCode {
         }
         Err(e) => {
             eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// 匯入 `dir`（`build/neural-rerank/<名>/`）的模型；字表在它旁邊的 `data/vocab.txt`。
+fn neural_import(dir: &Path, lambda: f64) -> ExitCode {
+    let vocab = dir.join("../data/vocab.txt");
+    let out = Path::new(neural::NEURAL_DIR);
+    match neural::import(dir, &vocab, lambda, out) {
+        Ok(imported) => {
+            println!(
+                "核對 reference.json {} 組：candle（f32）和 PyTorch 最多差 {:.6} nat",
+                imported.cases, imported.reference_max_difference
+            );
+            println!(
+                "寫到 {}：q8 權重 {} 位元組，λ {}，字表外的字 {} 個",
+                out.display(),
+                imported.weights_bytes,
+                imported.config.lambda,
+                imported.config.unknown_chars
+            );
+            println!("接著跑 cargo xtask data 建模型資料包");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("匯入失敗：{e}");
             ExitCode::FAILURE
         }
     }

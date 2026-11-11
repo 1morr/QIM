@@ -471,6 +471,22 @@ fn upstream(readme: &str) -> Files {
     )
 }
 
+/// 在 `root` 放停鍵層的模型：複製 repo 的 `data/neural-rerank/`（`--verify` 抽查它的排序）。
+fn neural_model(root: &Path) {
+    let dir = root.join(qim_databuild::neural::NEURAL_DIR);
+    std::fs::create_dir_all(&dir).unwrap();
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(qim_databuild::neural::NEURAL_DIR);
+    for name in [
+        qim_databuild::neural::WEIGHTS,
+        qim_databuild::neural::VOCAB,
+        qim_databuild::neural::CONFIG,
+    ] {
+        std::fs::copy(repo.join(name), dir.join(name)).unwrap();
+    }
+}
+
 /// 在 `root` 放 sources.toml、repo 裡的速成方案檔與 Unicode 授權全文。
 fn repo(root: &Path, statement: &str) {
     std::fs::create_dir_all(root.join("data/licenses")).unwrap();
@@ -481,6 +497,7 @@ fn repo(root: &Path, statement: &str) {
     }
     std::fs::create_dir_all(root.join("data/lexicon")).unwrap();
     std::fs::write(root.join("data/lexicon/yue-colloquial.tsv"), COLLOQUIAL).unwrap();
+    neural_model(root);
     std::fs::create_dir_all(root.join("data/schemes")).unwrap();
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/schemes/quick.toml"),
@@ -732,7 +749,7 @@ fn every_pack_has_a_manifest_next_to_it() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), true).unwrap();
-    assert_eq!(outcome.packs.len(), 10);
+    assert_eq!(outcome.packs.len(), 11);
     let manifest_of = |name: &str| {
         let pack = written(&outcome, name);
         let dir = pack.path.parent().unwrap();
@@ -758,9 +775,24 @@ fn every_pack_has_a_manifest_next_to_it() {
         "簡繁",
         "英文",
         "emoji",
+        "停鍵層模型",
     ] {
         manifest_of(name);
     }
+    // 停鍵層的模型由 data/neural-rerank/ 包起來，授權是訓練語料的（brief §11）。
+    let (model, bytes) = manifest_of("停鍵層模型");
+    assert_eq!(model.kind, PackKind::Model);
+    assert_eq!(model.id, "zh-hant-neural-rerank");
+    assert_eq!(model.license, "CC-BY-SA-4.0 AND CC-BY-4.0 AND CC0-1.0");
+    assert_eq!(model.verify(&bytes), Ok(()));
+    let dir = written(&outcome, "停鍵層模型")
+        .path
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    assert!(notice.contains("CIFG-LSTM"), "{notice}");
+    assert!(notice.contains("9998 most frequent characters"), "{notice}");
     let (words, _) = manifest_of("詞級 trigram");
     assert_eq!(words.kind, PackKind::WordTrigram);
     assert_eq!(
@@ -1841,7 +1873,7 @@ fn a_words_hk_source_that_changed_upstream_only_skips_the_words_hk_pack() {
     std::fs::write(stale.join("quick-lexicon-words-hk.pack"), b"old").unwrap();
 
     let outcome = run(root.path(), &upstream(README), true).unwrap();
-    assert_eq!(outcome.packs.len(), 9);
+    assert_eq!(outcome.packs.len(), 10);
     assert!(
         outcome
             .packs
@@ -1872,7 +1904,7 @@ fn a_words_hk_source_that_cannot_be_downloaded_only_skips_the_words_hk_pack() {
     std::fs::remove_dir_all(root.path().join("cache/sources/words_hk")).unwrap();
 
     let outcome = run(root.path(), &Offline, false).unwrap();
-    assert_eq!(outcome.packs.len(), 9);
+    assert_eq!(outcome.packs.len(), 10);
     assert_eq!(outcome.skipped.len(), 1);
     assert!(
         outcome.skipped[0].reason.contains("離線"),

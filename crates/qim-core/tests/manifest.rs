@@ -1,8 +1,8 @@
 //! 資料包 manifest（plan §4.6）：載入時核對最低核心版本、大小、sha256、種類與 id。
 
 use qim_core::{
-    CORE_VERSION, EmojiPack, EmojiTable, Lexicon, LexiconPack, MANIFEST_VERSION, Manifest, Pack,
-    PackError, PackKind, Word,
+    CORE_VERSION, EmojiPack, EmojiTable, Lexicon, LexiconPack, MANIFEST_VERSION, Manifest,
+    ModelPack, Pack, PackError, PackKind, Word,
 };
 
 fn lexicon_pack() -> LexiconPack {
@@ -249,6 +249,7 @@ fn kind_names_match_the_manifest_json() {
         PackKind::Simplifier,
         PackKind::English,
         PackKind::Emoji,
+        PackKind::Model,
     ] {
         let json = Manifest::new(kind, "x", b"", "1.0.0", "CC0-1.0").to_json();
         assert!(
@@ -289,4 +290,34 @@ fn newer_compares_versions_as_semver() {
     // 讀不懂的版本兩邊都不算較新。
     assert!(!at("one").is_newer_than(&at("1.0.0")));
     assert!(!at("1.0.0").is_newer_than(&at("one")));
+}
+
+/// 停鍵層的模型資料包：核心只核對與解開，權重原樣交給殼（再交給 qim-neural）。
+#[test]
+fn model_packs_round_trip_and_open_by_manifest() {
+    let pack = ModelPack {
+        id: "zh-hant-neural-rerank".into(),
+        vocab: vec!['的', '我', '𠮩'],
+        unknown_chars: 966,
+        lambda: 2.0,
+        weights: (0..=255).collect(),
+    };
+    let bytes = pack.to_bytes().unwrap();
+    let manifest = Manifest::new(
+        PackKind::Model,
+        "zh-hant-neural-rerank",
+        &bytes,
+        "1.0.0",
+        "CC-BY-SA-4.0",
+    );
+    assert!(manifest.to_json().contains(r#""kind": "model""#));
+    assert_eq!(ModelPack::open(&manifest, &bytes), Ok(pack));
+    assert_eq!(manifest.verify(&bytes), Ok(()));
+    assert_eq!(
+        LexiconPack::open(&manifest, &bytes),
+        Err(PackError::KindMismatch {
+            expected: PackKind::Lexicon,
+            found: PackKind::Model,
+        })
+    );
 }

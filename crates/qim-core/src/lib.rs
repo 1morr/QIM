@@ -31,8 +31,8 @@ pub use language_model::{CLAUSE_START, CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
 pub use manifest::{CORE_VERSION, MANIFEST_FILE, MANIFEST_VERSION, Manifest, PackKind};
 pub use pack::{
-    EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, Pack, PackError,
-    RadicalHintPack, SchemePack, SimplifierPack, WordTrigramPack,
+    EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, ModelPack, Pack,
+    PackError, RadicalHintPack, SchemePack, SimplifierPack, WordTrigramPack,
 };
 pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex};
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};

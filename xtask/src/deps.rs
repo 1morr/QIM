@@ -45,7 +45,6 @@ const RULES: &[Rule] = &[
         external: Some(&["serde", "serde_json", "jsonschema"]),
         no_io: true,
     },
-    // 票 11d 建 `qim-neural`；建之前這條沒有對象（plan §1.3 先列了）。
     Rule {
         krate: "qim-neural",
         workspace: &[],
@@ -66,7 +65,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         krate: "qim-databuild",
-        workspace: &["qim-core", "qim-layout"],
+        workspace: &["qim-core", "qim-layout", "qim-neural"],
         external: None,
         no_io: false,
     },
