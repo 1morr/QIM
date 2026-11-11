@@ -3,6 +3,8 @@
 
 /** 不交給 `Session`、由 `RadicalHints` 另外載入的種類。 */
 export const RADICAL_HINT = "radical-hint";
+/** 停鍵層模型：不交給 `Session`，交給 Web Worker 的 `Reranker`（`neural-rerank.ts`）。 */
+export const MODEL = "model";
 
 /** 種類給人看的名字（manifest 的 `kind`，`qim_core::PackKind`）。 */
 const KIND_NAMES: Readonly<Record<string, string>> = {
@@ -14,6 +16,7 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
 	simplifier: "簡繁",
 	english: "英文",
 	emoji: "emoji",
+	[MODEL]: "停鍵層模型",
 };
 
 /** 種類給人看的名字；不認得的種類照 manifest 原樣顯示。 */

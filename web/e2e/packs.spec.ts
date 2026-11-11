@@ -7,7 +7,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 const FIXTURE = new URL("fixtures/e2e-lexicon/", import.meta.url);
 /** 內建資料包的列數（`web/src/packs.ts` 的 `BUILTIN_IDS`）。 */
-const BUILTIN_ROWS = 10;
+const BUILTIN_ROWS = 11;
 
 async function fixture(): Promise<{ manifest: string; pack: Buffer }> {
 	return {

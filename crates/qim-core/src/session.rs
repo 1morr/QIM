@@ -28,7 +28,8 @@ pub const RERANK_CONTEXT: usize = 50;
 pub struct RerankRequest {
     /// 結果交回 [`Session::apply_rerank`] 時帶著它；不是目前的就丟掉。
     pub generation: u64,
-    /// 路徑前面的字：前文接上選定的分段（繁體原文），最多 [`RERANK_CONTEXT`] 字。
+    /// 路徑前面的字：前文（簡體模式下逐字轉回繁體）接上選定的分段（繁體原文），最多
+    /// [`RERANK_CONTEXT`] 字。
     pub context: String,
     /// lattice 蓋滿沒選定的輸入碼的前 [`RERANK_PATHS`] 條路徑，依路徑分由高到低；結果的 `order` 是它的序號。
     pub paths: Vec<ScoredPath>,
@@ -603,7 +604,8 @@ impl Session {
     /// 給背景模型的重排要求（plan §2.1、§2.7）：目前的 `generation`、前文與 lattice 的前
     /// [`RERANK_PATHS`] 條整句路徑。沒有組字（聯想不重排）、臨時英文、移到某一段改字（候選是那一段
     /// 單打的字詞，整句插不進去）、沒有蓋滿的路徑，或換了選項還沒重列（候選列馬上會換）時是 `None`。
-    pub fn rerank_request(&self) -> Option<RerankRequest> {
+    /// 簡體模式下殼給的前文是簡體字，逐字轉回繁體（停鍵層模型的字表是繁體，M3 票 11e）。
+    pub fn rerank_request(&self, engine: &Engine) -> Option<RerankRequest> {
         if !self.can_rerank() {
             return None;
         }
@@ -613,6 +615,9 @@ impl Session {
         }
         // 路徑前面的字：前文（無痕時沒有）接上選定的分段。
         let mut context = self.context.clone().unwrap_or_default();
+        if self.options.simplified {
+            context = engine.traditional(&context);
+        }
         context.extend(self.selected.iter().map(|s| s.text.as_str()));
         Some(RerankRequest {
             generation: self.generation,

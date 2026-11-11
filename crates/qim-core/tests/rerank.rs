@@ -103,7 +103,7 @@ impl Ime {
 
     /// 要求裡文字是 `text` 的路徑的序號。
     fn path(&self, text: &str) -> usize {
-        let request = self.session.rerank_request().unwrap();
+        let request = self.session.rerank_request(&self.engine).unwrap();
         request
             .paths
             .iter()
@@ -113,7 +113,7 @@ impl Ime {
 
     /// 取目前的要求，模型把 `texts` 這幾條路徑排在最前（依序），套用回傳的快照。
     fn rerank(&mut self, texts: &[&str]) -> Snapshot {
-        let request = self.session.rerank_request().unwrap();
+        let request = self.session.rerank_request(&self.engine).unwrap();
         let order: Vec<usize> = texts.iter().map(|t| self.path(t)).collect();
         self.session
             .apply_rerank(&self.engine, request.generation, &order)
@@ -139,7 +139,7 @@ const AB: [&str; 9] = ["日月", "曰月", "昌月", "日", "曰", "昌", "晶",
 fn the_request_carries_the_best_nine_whole_paths_with_segments_and_scores() {
     let mut ime = Ime::new();
     let typed = ime.type_code("ab");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     assert_eq!(request.generation, typed.generation);
     let paths: Vec<&str> = request.paths.iter().map(|p| p.text.as_str()).collect();
     assert_eq!(
@@ -160,7 +160,7 @@ fn a_path_missing_from_the_candidates_is_inserted_second() {
     assert_eq!(texts(&ime.type_code("ab")), AB);
     let before = ime.all().len();
     assert!(!ime.all().contains(&"晶月".to_string()));
-    let asked = ime.session.rerank_request().unwrap().generation;
+    let asked = ime.session.rerank_request(&ime.engine).unwrap().generation;
 
     let reranked = ime.rerank(&["晶月"]);
     assert_eq!(
@@ -198,7 +198,7 @@ fn when_the_best_path_is_the_top_candidate_the_next_one_goes_second() {
 fn indices_outside_the_paths_or_repeated_are_ignored() {
     let mut ime = Ime::new();
     let typed = ime.type_code("ab");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     let reranked = ime
         .session
         .apply_rerank(&ime.engine, request.generation, &[40, 0, 0, 9, 5, 5])
@@ -208,7 +208,7 @@ fn indices_outside_the_paths_or_repeated_are_ignored() {
     ime.press(Key::Escape);
     let typed_again = ime.type_code("ab");
     assert_ne!(typed_again.generation, typed.generation);
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     let unchanged = ime
         .session
         .apply_rerank(&ime.engine, request.generation, &[0, 40, 0])
@@ -221,7 +221,7 @@ fn indices_outside_the_paths_or_repeated_are_ignored() {
 fn a_result_for_an_old_generation_is_dropped() {
     let mut ime = Ime::new();
     ime.type_code("ab");
-    let old = ime.session.rerank_request().unwrap().generation;
+    let old = ime.session.rerank_request(&ime.engine).unwrap().generation;
     ime.press(Key::Backspace);
     ime.press(Key::Letter('b'));
     assert_eq!(ime.session.apply_rerank(&ime.engine, old, &[3]), None);
@@ -232,7 +232,7 @@ fn a_result_for_an_old_generation_is_dropped() {
 fn a_result_that_changes_the_order_makes_the_request_stale() {
     let mut ime = Ime::new();
     ime.type_code("ab");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     let changed = ime
         .session
         .apply_rerank(&ime.engine, request.generation, &[3])
@@ -289,7 +289,7 @@ fn an_inserted_path_can_be_selected_by_position() {
 fn a_result_arriving_on_a_later_page_waits_for_the_first_page() {
     let mut ime = Ime::new();
     ime.type_code("ab");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     let turned = ime.press(Key::PageDown);
     let page = texts(&turned);
     let result = ime
@@ -310,7 +310,7 @@ fn a_result_arriving_on_a_later_page_waits_for_the_first_page() {
 fn a_waiting_result_is_dropped_when_the_candidates_change() {
     let mut ime = Ime::new();
     ime.type_code("ab");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     ime.press(Key::PageDown);
     ime.session
         .apply_rerank(&ime.engine, request.generation, &[3])
@@ -346,10 +346,10 @@ fn an_inserted_path_after_a_selected_beginning_commits_with_it() {
 #[test]
 fn there_is_nothing_to_rerank_without_a_composition() {
     let mut ime = Ime::new();
-    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
     ime.type_code("ab");
     ime.press(Key::Space);
-    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
 }
 
 /// 臨時英文沒有候選，不給要求。
@@ -358,7 +358,7 @@ fn inline_english_has_nothing_to_rerank() {
     let mut ime = Ime::new();
     ime.type_code("ab");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
-    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
 }
 
 /// 移到某一段改字時候選是那一段單打的字詞，整句插不進去：不給要求（使用者決定），也不套用。
@@ -366,10 +366,10 @@ fn inline_english_has_nothing_to_rerank() {
 fn a_focused_segment_is_not_reranked() {
     let mut ime = Ime::new();
     ime.type_code("ab");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     let focused = ime.press(Key::Left);
     assert_eq!(focused.composition.focus, 1);
-    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
     assert_eq!(
         ime.session
             .apply_rerank(&ime.engine, request.generation, &[3]),
@@ -383,11 +383,14 @@ fn the_context_is_the_text_before_the_cursor_and_the_selected_segments() {
     let mut ime = Ime::new();
     ime.session.set_context("今天");
     ime.type_code("ba");
-    assert_eq!(ime.session.rerank_request().unwrap().context, "今天");
+    assert_eq!(
+        ime.session.rerank_request(&ime.engine).unwrap().context,
+        "今天"
+    );
     // `ba` 的候選是「月日」「月曰」「月昌」「月」：選只蓋住 `b` 的「月」，剩下 `a`。
     let at = ime.all().iter().position(|t| t == "月").unwrap();
     ime.session.select(&ime.engine, &mut ime.user, at);
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     assert_eq!(request.context, "今天月");
     assert_eq!(request.paths[0].text, "日");
 
@@ -395,7 +398,7 @@ fn the_context_is_the_text_before_the_cursor_and_the_selected_segments() {
     let long = format!("開{}", "天".repeat(RERANK_CONTEXT));
     ime.session.set_context(&long);
     ime.type_code("ab");
-    let context = ime.session.rerank_request().unwrap().context;
+    let context = ime.session.rerank_request(&ime.engine).unwrap().context;
     assert_eq!(context.chars().count(), RERANK_CONTEXT);
     assert!(!context.contains('開'));
 }
@@ -405,7 +408,7 @@ fn the_context_is_the_text_before_the_cursor_and_the_selected_segments() {
 fn without_a_known_context_only_the_selected_segments_are_sent() {
     let mut ime = Ime::new();
     ime.type_code("ba");
-    assert_eq!(ime.session.rerank_request().unwrap().context, "");
+    assert_eq!(ime.session.rerank_request(&ime.engine).unwrap().context, "");
 }
 
 /// 規則 4 的英文候選在第 2 位：重排的整句排在它後面（使用者決定：規則 3、4、5 優先）。
@@ -414,7 +417,9 @@ fn the_english_candidate_keeps_second_and_the_reranked_path_goes_after_it() {
     let mut ime = Ime::new();
     let shown = texts(&ime.type_code("abba"));
     assert_eq!(shown[1], "abba");
-    let path = ime.session.rerank_request().unwrap().paths[5].text.clone();
+    let path = ime.session.rerank_request(&ime.engine).unwrap().paths[5]
+        .text
+        .clone();
     let reranked = ime.rerank(&[&path]);
     assert_eq!(texts(&reranked)[..3], [shown[0].as_str(), "abba", &path]);
 }
@@ -437,7 +442,9 @@ fn remembered_strings_keep_their_places_and_the_reranked_path_goes_after_them() 
 
     let shown = texts(&ime.type_code("abba"));
     assert_eq!(shown[1..3], ["abba", "abba@example.com"]);
-    let path = ime.session.rerank_request().unwrap().paths[5].text.clone();
+    let path = ime.session.rerank_request(&ime.engine).unwrap().paths[5]
+        .text
+        .clone();
     let reranked = ime.rerank(&[&path]);
     assert_eq!(
         texts(&reranked)[..4],

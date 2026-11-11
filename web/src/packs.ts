@@ -2,10 +2,12 @@
 // `localStorage`。交給核心的都是 manifest 加位元組（`Pack`），由核心核對。
 
 import { createStore, del, entries, set } from "idb-keyval";
+import type { PackSource } from "./neural-rerank.ts";
 import {
 	activeIds,
 	importConflict,
 	listPacks,
+	MODEL,
 	type PackEntry,
 	type PackOrigin,
 	parseManifest,
@@ -16,7 +18,7 @@ import { manifestIsNewer, Pack } from "./wasm/qim_wasm.js";
 /**
  * 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。同種的第一份是預設：
  * 粵典詞庫（非商業條款，plan §4.2）要排在預設詞庫之後、詞級 trigram 放寬版排在方案指名的預算版之後，
- * 使用者切換才用。
+ * 使用者切換才用。停鍵層模型不交給 `Session`，交給 Web Worker（`modelPack`）。
  */
 const BUILTIN_IDS = [
 	"quick",
@@ -29,12 +31,16 @@ const BUILTIN_IDS = [
 	"opencc-hk2s",
 	"scowl-en-us",
 	"cldr-emoji-yue-hant",
+	"zh-hant-neural-rerank",
 ] as const;
 /**
  * 可以缺的內建資料包：粵典的來源和釘的 sha256 對不上時，`cargo xtask data` 只略過粵典詞庫、不建它
- * （plan §4.2），網頁照樣用其他的。
+ * （plan §4.2），網頁照樣用其他的。沒有停鍵層模型時不重排，打字與候選照常（M3 票 11e）。
  */
-const OPTIONAL_IDS: ReadonlySet<string> = new Set(["quick-lexicon-words-hk"]);
+const OPTIONAL_IDS: ReadonlySet<string> = new Set([
+	"quick-lexicon-words-hk",
+	"zh-hant-neural-rerank",
+]);
 /** manifest 在資料包目錄裡的檔名（`qim_core::MANIFEST_FILE`）。 */
 const MANIFEST_FILE = "manifest.json";
 /** 每種用哪份：`{ 種類: id }`，沒選的種類用內建那份。 */
@@ -166,18 +172,30 @@ export class PackLibrary {
 			: this.imported.get(id);
 	}
 
+	/** 正在用的 `kind` 那份。 */
+	private active(kind: string): Loaded | undefined {
+		const id = activeIds(this.listedEntries(), this.chosen).get(kind);
+		return id === undefined ? undefined : this.find(id);
+	}
+
 	/** 正在用的 `kind` 那份，做成新的 `Pack`；交出去之後由收的一方負責（`Session` 會拿走）。 */
 	private pack(kind: string): Pack | undefined {
-		const id = activeIds(this.listedEntries(), this.chosen).get(kind);
-		const found = id === undefined ? undefined : this.find(id);
+		const found = this.active(kind);
 		return found && new Pack(found.manifest, found.bytes);
 	}
 
-	/** 交給 `Session` 的資料包：每種正在用的那份，字根提示除外。 */
+	/** 交給 `Session` 的資料包：每種正在用的那份，字根提示與停鍵層模型除外。 */
 	sessionPacks(): Pack[] {
 		const kinds = new Set(this.listedEntries().map((p) => p.kind));
 		kinds.delete(RADICAL_HINT);
+		kinds.delete(MODEL);
 		return [...kinds].flatMap((kind) => this.pack(kind) ?? []);
+	}
+
+	/** 正在用的停鍵層模型的原料（交給 Web Worker）；沒有時是 `undefined`。 */
+	modelPack(): PackSource | undefined {
+		const found = this.active(MODEL);
+		return found && { manifest: found.manifest, bytes: found.bytes };
 	}
 
 	/** 正在用的字根提示資料包；用完要 `free()`。 */

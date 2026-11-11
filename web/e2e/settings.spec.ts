@@ -32,8 +32,9 @@ test("設定區列出改核心選項的開關，預設值照 brief §7", async (
 	await expect(
 		settings.getByRole("checkbox", { name: "數字後半形" }),
 	).toBeChecked();
+	// 停鍵重排預設開，用神經模型（M3 票 11e）。
 	await expect(settings.getByRole("combobox", { name: "重排" })).toHaveValue(
-		"identity",
+		"neural",
 	);
 	await expect(
 		settings.getByRole("combobox", { name: "組字中單按 Shift" }),

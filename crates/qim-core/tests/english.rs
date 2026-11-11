@@ -402,12 +402,12 @@ fn selecting_after_turning_the_option_off_without_refresh_skips_the_english_word
 fn reranking_waits_for_the_list_of_the_new_option() {
     let mut ime = Ime::new();
     ime.type_code("the");
-    let request = ime.session.rerank_request().unwrap();
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
     ime.session.set_options(Options {
         english_candidates: false,
         ..Options::default()
     });
-    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
     assert_eq!(
         ime.session
             .apply_rerank(&ime.engine, request.generation, &[2, 1]),

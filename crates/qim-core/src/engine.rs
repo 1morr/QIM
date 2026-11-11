@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::lattice::{self, Lattice, Listing, Preceding};
 use crate::lexicon::WordsByText;
@@ -28,6 +28,9 @@ pub struct Engine {
     word_log_total: f64,
     /// 簡體模式的轉換；沒掛上簡繁資料包時是 `None`，簡體模式照原樣輸出。
     simplifier: Option<Simplifier>,
+    /// 逐字轉回繁體（[`Simplifier::traditional_chars`]，一對多取語言模型 unigram 最高的）；沒掛上
+    /// 簡繁資料包時是空的。
+    traditional_chars: HashMap<char, char>,
     /// 英文候選的詞表；沒掛上英文資料包時是空的，沒有英文候選。
     english: EnglishWords,
     /// emoji 候選的對照表；沒掛上 emoji 資料包時是空的，沒有 emoji 候選。
@@ -136,6 +139,7 @@ impl Engine {
             longest_word_code,
             lexicon,
             simplifier: None,
+            traditional_chars: HashMap::new(),
             english: EnglishWords::default(),
             emoji: EmojiTable::default(),
             word_trigram: None,
@@ -162,6 +166,8 @@ impl Engine {
 
     /// 掛上簡繁資料包，簡體模式（[`crate::Options::simplified`]）才有作用。
     pub fn with_simplifier(mut self, pack: SimplifierPack) -> Self {
+        let model = &self.language_model;
+        self.traditional_chars = pack.simplifier.traditional_chars(|c| model.unigram(c));
         self.simplifier = Some(pack.simplifier);
         self
     }
@@ -198,6 +204,13 @@ impl Engine {
             Some(simplifier) => simplifier.convert(text),
             None => text.to_string(),
         }
+    }
+
+    /// 簡體字逐字轉回繁體（[`Engine::traditional_chars`]），其他字照原樣；沒掛上簡繁資料包時照原樣。
+    pub(crate) fn traditional(&self, text: &str) -> String {
+        text.chars()
+            .map(|c| self.traditional_chars.get(&c).copied().unwrap_or(c))
+            .collect()
     }
 
     /// 由資料包的位元組建立；讀檔是呼叫端的事（plan §1.3）。

@@ -37,11 +37,12 @@ const RERANK: Select = {
 	id: "rerank",
 	label: "重排",
 	options: [
+		["neural", "神經模型"],
 		["off", "關"],
-		["identity", "原樣（假實作）"],
-		["raise-last", "最後一條路徑提前（測試）"],
+		["identity", "原樣（假實作，測試）"],
+		["raise-last", "最後一條路徑提前（假實作，測試）"],
 	],
-	selected: "identity",
+	selected: "neural",
 	apply: () => undefined,
 };
 

@@ -8,12 +8,17 @@ import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
 import { LoneShift, toKey } from "./keys.ts";
+import {
+	checkModelPack,
+	NeuralReranker,
+	type PackSource,
+} from "./neural-rerank.ts";
 import { mountPackSettings } from "./pack-settings.ts";
 import { PackLibrary } from "./packs.ts";
 import { mountPanel } from "./panel.ts";
 import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
-import { fakeReranker } from "./rerank.ts";
+import { fakeRank, rerankScheduler } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
 import { mountRemembered, type Remembered } from "./remembered.ts";
@@ -61,6 +66,17 @@ function composingChinese(): boolean {
 	return shown.composing && !shown.inlineAscii;
 }
 
+/**
+ * 結果回來後再等幾毫秒才套用（網址的 `?rerank-delay=<ms>`）：e2e 模擬慢的模型，驗重排回來前繼續打字時
+ * 舊結果不套用。平常沒有。
+ */
+function rerankDelay(): number {
+	const value = Number(
+		new URLSearchParams(location.search).get("rerank-delay"),
+	);
+	return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 async function start(): Promise<void> {
 	const [, library, layoutJson, numberRowLayoutJson] = await Promise.all([
 		init(),
@@ -80,6 +96,32 @@ async function start(): Promise<void> {
 		status.textContent = `匯入的資料包載入不了，這次只用內建的：${message(error)}`;
 		notice = true;
 	}
+	// 停鍵層模型在 Web Worker 裡載入，打字不等它；載入不了就不重排，打字與候選照常。
+	const neural = new NeuralReranker();
+	/** Worker 正在用的模型的 manifest；沒變就不重載，載入失敗時清掉，下次換資料包再試。 */
+	let loadedModel: string | undefined;
+	const loadModel = (model: PackSource | undefined): void => {
+		loadedModel = model?.manifest;
+		neural.load(model).catch((error: unknown) => {
+			loadedModel = undefined;
+			status.textContent = `停鍵層模型載入不了，不重排：${message(error)}`;
+		});
+	};
+	loadModel(library.modelPack());
+	/**
+	 * 換資料包時的模型：先在這裡核對（不收就丟錯，資料包的改動退回），核心也收下其他資料包之後才呼叫
+	 * 回傳的函式交給 Worker；沒換時是 `undefined`。
+	 */
+	const checkModel = (): (() => void) | undefined => {
+		const model = library.modelPack();
+		if (model?.manifest === loadedModel) {
+			return undefined;
+		}
+		if (model) {
+			checkModelPack(model);
+		}
+		return () => loadModel(model);
+	};
 	/** 正在用的字根提示資料包，查完提示就釋放。 */
 	const radicalHints = (): RadicalHints => {
 		const pack = library.radicalHintPack();
@@ -131,9 +173,29 @@ async function start(): Promise<void> {
 		panel.show(composingChinese());
 		phrases?.setComposing(shown.composing);
 	};
-	const requestRerank = fakeReranker(session, settings.rerank, (snapshot) => {
-		render(snapshot);
-		touchKeyboard?.refresh();
+	const candidateList = element<HTMLOListElement>("#candidates");
+	const requestRerank = rerankScheduler(session, {
+		mode: settings.rerank,
+		models: {
+			neural: neural.rank,
+			identity: fakeRank("identity"),
+			"raise-last": fakeRank("raise-last"),
+		},
+		show: (snapshot) => {
+			render(snapshot);
+			touchKeyboard?.refresh();
+		},
+		// 給 e2e 與量延遲讀：各種結果的次數、模型上次算了幾毫秒。
+		onResult: (outcome, ranked) => {
+			const key = `rerank${outcome[0].toUpperCase()}${outcome.slice(1)}`;
+			candidateList.dataset[key] = String(
+				Number(candidateList.dataset[key] ?? 0) + 1,
+			);
+			if (ranked) {
+				candidateList.dataset.rerankMs = ranked.ms.toFixed(2);
+			}
+		},
+		extraDelayMs: rerankDelay(),
 	});
 	/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。`chosen` 是這個鍵是不是選字（空白、數字鍵）。 */
 	const apply = (snapshot: Snapshot, chosen: boolean): void => {
@@ -215,7 +277,9 @@ async function start(): Promise<void> {
 	mountPackSettings(
 		library,
 		() => {
+			const changeModel = checkModel();
 			const snapshot = session.setPacks(library.sessionPacks());
+			changeModel?.();
 			candidateBar.setRadicalHints(radicalHints());
 			try {
 				render(snapshot);
