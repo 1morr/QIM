@@ -19,6 +19,7 @@ Blocked by: 11b
 - [x] 新基線的重量結果寫進 `docs/research/model-ladder.md` 與 brief §12.5（2026-11-11 做完，見 Comments）。
 - [ ] `qim-neural` 單元測試：和 `reference.json` 的分數差 ≤ 0.0001 nat、有沒有前綴快取同分、補齊遮罩（變異驗證拿掉會紅）、空路徑不 panic。
 - [ ] 這台 Mac 上重排一次（9 條路徑、前文 50 字）p95 ≤ 40 ms；模型資料包有 manifest、`LICENSE`、`NOTICE`。
+- [ ] 定案的模型跑 `model-ladder`（`neural --split test`、對新基線 `compare`，或等價指令），在 Comments 報口語、維基、個人集的前 2 名與翻好／翻壞數；個人集只列數字與題號、只報不擋（plan §2.7：`cargo xtask bench` 不跑重排，看不到停鍵層對個人集的影響）。
 - [ ] `cargo xtask check` 綠燈（含 plan §1.3 的依賴規則）。
 
 ## Comments
