@@ -156,6 +156,7 @@
 | [20](issues/20-pack-manifest.md) | 01, 02 | 資料包 manifest；設定頁列出、切換、刪除、從檔案匯入 |
 | [21](issues/21-pack-online-update.md) | 20 | 從 GitHub Releases 形式的索引線上更新（M3 用本機伺服器） |
 | [22](issues/22-cloud-rerank.md) | 05, 11 | 雲端重排：核心組提示、遮蔽、每日上限、排除規則；網頁經 Vite 轉發 |
-| [23](issues/23-m3-close.md) | 01–22（及票 11 補的票） | 里程碑 code-review、乾淨 checkout 重驗、v2 定稿、封存 |
+| [24](issues/24-words-hk-lexicon.md) | 18, 20 | 粵典詞頭表照非商業條款另建一份詞庫資料包，可切換（使用者 2026-11-11 決定） |
+| [23](issues/23-m3-close.md) | 01–22、24（及票 11 補的票） | 里程碑 code-review、乾淨 checkout 重驗、v2 定稿、封存 |
 
 可以同時開工的：01、02、03、04、06。票 11 依結論補的實作票編成 `11b`、`11c`…，加進本表並擋票 23。
