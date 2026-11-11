@@ -7,7 +7,7 @@ use crate::engine::Spanned;
 use crate::remembered::REMEMBERED_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Following, SchemeModel};
-use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel};
+use crate::{EMOJI_LIMIT, Engine, SEGMENT_HISTORY, ScoredPath, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -16,6 +16,8 @@ pub(crate) struct Lattice {
     input: String,
     /// 組字前面是什麼：開頭的字接它。
     before: Preceding,
+    /// `before.segment()`，實驗的語言模型用（[`Lattice::segments_before`]）。
+    before_segment: Option<String>,
     columns: Vec<Vec<Node>>,
 }
 
@@ -26,6 +28,18 @@ pub(crate) struct Preceding {
     pub character: Option<char>,
     /// 前一個字詞：開頭的一段接它的個人 bigram；`None` 是沒有。
     pub word: Option<String>,
+}
+
+impl Preceding {
+    /// 交給實驗的語言模型的前一段（[`crate::SegmentQuery::before`]）：前一個字詞以前一個字結尾時是它
+    /// （選定的分段、前文剛上屏的那一段），否則是前一個字（句首也是一個字）；不知道前一字時沒有。
+    pub fn segment(&self) -> Option<String> {
+        let character = self.character?;
+        match &self.word {
+            Some(word) if word.ends_with(character) => Some(word.clone()),
+            _ => Some(character.to_string()),
+        }
+    }
 }
 
 /// 一條部分路徑：從位置 0 到這一欄的字詞接起來。
@@ -106,6 +120,7 @@ impl Default for Lattice {
         Self {
             input: String::new(),
             before: Preceding::default(),
+            before_segment: None,
             columns: vec![vec![Node {
                 score: 0.0,
                 text: String::new(),
@@ -119,6 +134,7 @@ impl Lattice {
     /// 還沒有輸入碼、接在 `before` 後面的 lattice。
     pub fn starting_after(before: Preceding) -> Self {
         Self {
+            before_segment: before.segment(),
             before,
             ..Self::default()
         }
@@ -152,6 +168,8 @@ impl Lattice {
         // 沒學過個人 bigram 時不查（每鍵都走這裡）。
         let has_bigrams = user.has_bigrams();
         let mut following: BTreeMap<usize, Vec<Option<Following>>> = BTreeMap::new();
+        // 起點欄 → 每條部分路徑的前面幾段；只在掛上實驗的語言模型時算。
+        let mut histories: BTreeMap<usize, Vec<Vec<&str>>> = BTreeMap::new();
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
         for (e, edge) in edges.iter().enumerate() {
             let after = has_bigrams.then(|| {
@@ -164,12 +182,24 @@ impl Lattice {
                         .collect()
                 })
             });
+            let history = engine.has_segment_model().then(|| {
+                &*histories.entry(edge.start).or_insert_with(|| {
+                    (0..self.columns[edge.start].len())
+                        .map(|k| self.segments_before(edge.start, k))
+                        .collect()
+                })
+            });
             for (k, node) in self.columns[edge.start].iter().enumerate() {
                 let prev = node.text.chars().next_back().or(self.before.character);
                 let bigram = after
                     .and_then(|after| after[k])
                     .map_or(0.0, |f| f.probability(&edge.text));
-                extended.push((node.score + engine.edge_score(prev, edge, bigram), e, k));
+                let before = history.map_or(&[][..], |h| &h[k][..]);
+                extended.push((
+                    node.score + engine.edge_score(prev, before, edge, bigram),
+                    e,
+                    k,
+                ));
             }
         }
         // 同分時照邊的順序（起點由前到後、字在詞前）與前一欄的名次，結果才固定。
@@ -199,6 +229,28 @@ impl Lattice {
             Some((i, prev)) => Some(&node.text[self.columns[i][prev].text.len()..]),
             None => self.before.word.as_deref(),
         }
+    }
+
+    /// 結束在第 `j` 欄、在那一欄第 `k` 名的部分路徑的最後幾段（最多 [`SEGMENT_HISTORY`]，最近的在
+    /// 最後）；不夠時接組字前面的那一段（[`Preceding::segment`]）。
+    fn segments_before(&self, j: usize, k: usize) -> Vec<&str> {
+        let mut segments = Vec::with_capacity(SEGMENT_HISTORY);
+        let (mut j, mut k) = (j, k);
+        while segments.len() < SEGMENT_HISTORY {
+            let node = &self.columns[j][k];
+            match node.prev {
+                Some((i, prev)) => {
+                    segments.push(&node.text[self.columns[i][prev].text.len()..]);
+                    (j, k) = (i, prev);
+                }
+                None => {
+                    segments.extend(self.before_segment.as_deref());
+                    break;
+                }
+            }
+        }
+        segments.reverse();
+        segments
     }
 
     /// 刪掉最後一個字母和它的一欄。

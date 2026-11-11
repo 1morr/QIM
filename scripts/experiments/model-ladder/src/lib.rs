@@ -19,6 +19,7 @@ use qim_core::{
 use serde::{Deserialize, Serialize};
 
 pub mod neural;
+pub mod sync;
 
 /// 前文長度（字）：0 是不給前文（同基準的 `·前文·不給`），50、200 取長前文的最後幾個字。
 pub const CONTEXT_LENGTHS: [usize; 3] = [0, 50, 200];

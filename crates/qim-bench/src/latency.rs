@@ -108,7 +108,7 @@ pub fn measure(
     inputs: &[String],
     wasm: WasmTimer,
 ) -> Result<Latency, String> {
-    let native = native(engine, inputs);
+    let native = native_timing(engine, inputs);
     let wasm = wasm(packs, inputs)?;
     let shape = |timing: &Timing| timing.per_key_ms.iter().map(Vec::len).collect::<Vec<_>>();
     let keys: Vec<usize> = inputs.iter().map(|input| input.chars().count()).collect();
@@ -150,9 +150,10 @@ pub fn percentile(values: &[f64], p: u32) -> Option<f64> {
     sorted.get(rank - 1).copied()
 }
 
-/// 原生：每個輸入用新的 `Session` 與空白的 `UserModel`，只計 `Session::handle`（選開頭一段是
+/// 原生量一次 `inputs`（[`measure`] 的原生那一半；模型階梯也用它量換了語言模型的引擎，M3 票 08）：
+/// 每個輸入用新的 `Session` 與空白的 `UserModel`，只計 `Session::handle`（選開頭一段是
 /// `Session::select`）那一次呼叫。
-fn native(engine: &Engine, inputs: &[String]) -> Timing {
+pub fn native_timing(engine: &Engine, inputs: &[String]) -> Timing {
     let (per_key_ms, select_ms) = inputs
         .iter()
         .map(|input| {

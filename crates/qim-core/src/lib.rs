@@ -17,6 +17,7 @@ mod punctuation;
 mod radical_hint;
 mod remembered;
 mod scheme;
+mod segment_model;
 mod session;
 mod simplifier;
 mod user;
@@ -37,6 +38,7 @@ pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex}
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use remembered::{REMEMBERED_LIMIT, REMEMBERED_STRINGS_MAX};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
+pub use segment_model::{SEGMENT_HISTORY, SegmentModel, SegmentQuery};
 pub use session::{
     CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT,
     RerankRequest, ScoredPath, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,

@@ -4,6 +4,7 @@
 //! model-ladder eval [--split dev|test] [--n <N>] [--orders <結果.jsonl> --name <名>]
 //! model-ladder export [--split dev|test] [--n <N>] [--include-personal]
 //! model-ladder compare <逐題結果目錄 A> <逐題結果目錄 B>
+//! model-ladder sync [--split dev|test] [--no-latency] --model <規格> [--model <規格>]…
 //! model-ladder neural --model <權重> --vocab <字表> [--split dev|test] [--n <N>] [--lambdas <λ,…>] [--name <名>]
 //! model-ladder quantize <f32 的 .safetensors> <q8 的 .gguf>
 //! ```
@@ -15,10 +16,14 @@ use model_ladder::{
     DEFAULT_N, Identity, Orders, Reranker, Split, compare, export_set, language_model_cost,
     load_sets, report, run_set, write_rows,
 };
+use sync_cli::sync_command;
+
+mod sync_cli;
 
 const USAGE: &str = "用法：\n  model-ladder eval [--split dev|test] [--n <N>] [--orders <檔> --name <名>]\n  \
                      model-ladder export [--split dev|test] [--n <N>] [--include-personal]\n  \
                      model-ladder compare <目錄 A> <目錄 B>\n  \
+                     model-ladder sync [--split dev|test] [--no-latency] --model <規格>…\n  \
                      model-ladder neural --model <權重> --vocab <字表> [--split dev|test] [--n <N>] [--lambdas <λ,…>] [--name <名>]\n  \
                      model-ladder quantize <f32 的 .safetensors> <q8 的 .gguf>";
 
@@ -32,6 +37,7 @@ fn main() -> ExitCode {
         Some("eval") => eval(&args[1..]),
         Some("export") => export(&args[1..]),
         Some("compare") if args.len() == 3 => compare_dirs(&args[1], &args[2]),
+        Some("sync") => sync_command(&args[1..]),
         Some("neural") => neural(&args[1..]),
         Some("quantize") if args.len() == 3 => {
             model_ladder::neural::quantize(Path::new(&args[1]), Path::new(&args[2]))
