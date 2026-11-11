@@ -1,2 +1,7 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+
+# 網頁的 WebAssembly 開 SIMD128（各大瀏覽器都支援，Safari 自 16.4）：candle 的 q8 內積有 simd128 的實作，
+# 停鍵層模型在瀏覽器裡重排一次快很多（M3 票 11e，數字在票的 Comments）。
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

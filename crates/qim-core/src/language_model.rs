@@ -142,6 +142,13 @@ impl LanguageModel {
         })
     }
 
+    /// `c` 不看前一字的 ln 機率（KN 的 continuation 機率）；沒有統計的字是 `None`。比字常不常見用
+    /// （簡體字轉回繁體時挑寫法，[`crate::Session::rerank_request`]）。
+    pub(crate) fn unigram(&self, c: char) -> Option<f64> {
+        self.index(c)
+            .map(|i| f64::from(self.models[i].continuation))
+    }
+
     /// `c` 有統計：當前一字時接得上它自己的 bigram 與退回權重。
     pub fn has_statistics(&self, c: char) -> bool {
         self.index(c).is_some()

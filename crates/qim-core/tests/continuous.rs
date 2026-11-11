@@ -745,7 +745,7 @@ fn inline_english_is_one_raw_segment_without_radicals_or_candidates() {
     assert_eq!(segment[0].text, "anr");
     assert_eq!(segment[0].radicals, "");
     assert_eq!(ime.session.all_candidates(), []);
-    assert_eq!(ime.session.rerank_request(), None);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
 }
 
 #[test]

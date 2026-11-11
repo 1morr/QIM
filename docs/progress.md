@@ -52,9 +52,11 @@
 | 2026-11-11 | M3 25 | 口語長前文題（同段對話接前文）、`by-length`；200 字比 50 字沒多（50 字維持）；個人集改只報不擋，1.4M 採用、恢復 11c–11e；雲端比 1.4M +2.4 仍不做；見票 25 | 新 session 下 `/implement .scratch/m3/issues/11d-neural-rerank-crate.md` |
 | 2026-11-11 | M3 11d | `qim-neural`、模型資料包（`data/neural-rerank/` 進 git）、`neural-import`；Mac 重排 p95 約 6 ms，口語 62.0%；見票 11d | 新 session 下 `/implement .scratch/m3/issues/11c-rerank-paths.md` |
 | 2026-11-12 | M3 11c | 重排要求帶前文 50 字與 lattice 前 9 條路徑，結果可把路徑插到第 2 位；規則 3、4、5 優先、改分段時不重排（使用者決定）；見票 11c | 新 session 下 `/implement .scratch/m3/issues/11e-web-neural-rerank.md` |
+| 2026-11-12 | M3 11e | 網頁停鍵 80 ms 後在 Web Worker 跑 1.4M，結果插到第 2 位；預設開、可匯入模型；SIMD128 後實打 p95 45 ms，wasm 多 1.84 MB；見票 11e | 新 session 下 `/implement .scratch/m3/issues/23-m3-close.md` |
 
 ## 偏差與決定
 
+- 2026-11-12 M3 票 11e：簡體模式的重排前文由核心逐字轉回繁體（使用者決定，一對多取 unigram 高的；同步層前文沒改）；wasm 開 SIMD128；改 plan §2.7、§3.1；見票 11e。
 - 2026-11-12 M3 票 11c：排位規則 3、4、5 排在第 2 位起的候選不讓重排（使用者決定，定 M1 留下的先後）；改分段時不給重排；翻頁中收到的結果改成回第一頁才套用（原本照樣套用）；改 plan §2.1、§2.4、§2.7、§3.1；見票 11c。
 - 2026-11-11 M3 票 11d：採用的 1.4M（q8、字表、λ）進 git 的 `data/neural-rerank/`（訓練不是決定性的，使用者選），`qim-databuild` 加依賴 `qim-neural`、訓練程式搬到 `scripts/neural-rerank/`；改 plan §1.2、§1.3；見票 11d。
 - 2026-11-11 M3 票 25：模型階梯的「個人集不退步」改只報不擋（推翻看結果前定的門檻；個人集取自 Rime 學習資料多短詞，QIM 要打長句、用上下文），1.4M 採用，revert `30a043c` 恢復 11c–11e；見票 25。

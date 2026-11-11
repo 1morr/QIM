@@ -1,8 +1,9 @@
-//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core` 與 `qim-layout`，不放邏輯（plan §1.3）。
+//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, IndexEntry, Key, Manifest, Options, Pack, PackIndex, RadicalHintPack,
-    RadicalHints, Scheme, Session, ShiftKey, Shortcuts, Snapshot, UserModel, WordListReport,
+    CangjieVersion, Engine, IndexEntry, Key, Manifest, ModelPack, Options, Pack, PackIndex,
+    RadicalHintPack, RadicalHints, Scheme, Session, ShiftKey, Shortcuts, Snapshot, UserModel,
+    WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -404,12 +405,14 @@ impl WebSession {
     /// 給背景模型的重排要求（plan §2.1、§2.7）；沒有組字、移到某一段改字時是 `undefined`。
     #[wasm_bindgen(js_name = rerankRequest)]
     pub fn rerank_request(&self) -> Option<WebRerankRequest> {
-        self.session.rerank_request().map(|r| WebRerankRequest {
-            generation: r.generation,
-            context: r.context,
-            scores: r.paths.iter().map(|p| p.score).collect(),
-            paths: r.paths.into_iter().map(|p| p.text).collect(),
-        })
+        self.session
+            .rerank_request(&self.engine)
+            .map(|r| WebRerankRequest {
+                generation: r.generation,
+                context: r.context,
+                scores: r.paths.iter().map(|p| p.score).collect(),
+                paths: r.paths.into_iter().map(|p| p.text).collect(),
+            })
     }
 
     /// 套用重排結果：`order` 是要求的路徑的序號，好的在前；排出的路徑到第 2 位，候選列沒有就插入。
@@ -551,7 +554,7 @@ pub struct WebSnapshot {
 pub struct WebRerankRequest {
     #[wasm_bindgen(readonly)]
     pub generation: u64,
-    /// 路徑前面的字：前文接上選定的分段，最多 50 字。
+    /// 路徑前面的字：前文（簡體模式下逐字轉回繁體）接上選定的分段，最多 50 字。
     #[wasm_bindgen(readonly)]
     pub context: String,
     /// lattice 的前 9 條整句路徑的繁體原文，依路徑分由高到低；簡體模式下模型也看繁體。路徑分另放
@@ -561,6 +564,48 @@ pub struct WebRerankRequest {
     /// 各路徑的同步層路徑分，和 `paths` 同順序（神經模型的 `路徑分 + λ·神經分` 用）。
     #[wasm_bindgen(readonly)]
     pub scores: Vec<f64>,
+}
+
+/// 停鍵層的神經重排（`qim_neural::Reranker`，plan §2.7）：網頁在 Web Worker 裡建一個，主執行緒的
+/// `Session` 不碰它。JS 端叫 `Reranker`。
+#[wasm_bindgen(js_name = Reranker)]
+pub struct WebReranker(qim_neural::Reranker);
+
+#[wasm_bindgen(js_class = Reranker)]
+impl WebReranker {
+    /// 由模型資料包（種類 `model`）建立：核心核對 manifest 與位元組（`ModelPack`），權重與字表交給
+    /// `qim-neural`。資料包用完由 JS 端釋放。
+    #[wasm_bindgen(constructor)]
+    pub fn new(pack: &WebPack) -> Result<WebReranker, JsError> {
+        let model: ModelPack = pack.open()?;
+        qim_neural::Reranker::new(
+            &model.weights,
+            &model.vocab,
+            model.unknown_chars,
+            model.lambda,
+        )
+        .map(Self)
+        .map_err(js_error)
+    }
+
+    /// 重排要求（[`WebRerankRequest`]）的前文、路徑與路徑分 → 路徑的序號，好的在前；交給
+    /// [`WebSession::apply_rerank`]。`paths` 與 `scores` 長度不同時丟錯。
+    pub fn rank(
+        &self,
+        context: &str,
+        paths: Vec<String>,
+        scores: Vec<f64>,
+    ) -> Result<Vec<usize>, JsError> {
+        if paths.len() != scores.len() {
+            return Err(JsError::new(&format!(
+                "路徑 {} 條、路徑分 {} 個",
+                paths.len(),
+                scores.len()
+            )));
+        }
+        let paths: Vec<(&str, f64)> = paths.iter().map(String::as_str).zip(scores).collect();
+        self.0.rank(context, &paths).map_err(js_error)
+    }
 }
 
 impl From<Snapshot> for WebSnapshot {

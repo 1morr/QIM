@@ -338,3 +338,32 @@ fn text_after_switching_without_refresh_commits_with_the_new_option() {
     let shown = ime.session.text(&ime.engine, &mut ime.user, "！");
     assert_eq!(shown.commit.as_deref(), Some("門口們！"));
 }
+
+/// 重排要求的前文（M3 票 11e）：簡體模式下殼給的前文是簡體字，停鍵層模型的字表是繁體，逐字轉回
+/// 繁體再交出去；一對多的（干 ← 乾、幹、干）取語言模型 unigram 最高的，沒有統計的字照轉表的。
+#[test]
+fn the_rerank_context_is_turned_back_into_traditional_in_simplified_mode() {
+    let mut ime = Ime::simplified();
+    ime.session.set_context("谢谢们，干门丁");
+    ime.type_code("anr");
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
+    assert_eq!(request.context, "謝謝們，乾門丁");
+}
+
+/// 選定的分段本來就是繁體原文，不再轉；繁體模式的前文照原樣。
+#[test]
+fn the_rerank_context_is_unchanged_outside_simplified_mode_and_for_selected_segments() {
+    let mut ime = Ime::new(engine().with_simplifier(simplifier()), false);
+    ime.session.set_context("干门");
+    ime.type_code("anr");
+    assert_eq!(
+        ime.session.rerank_request(&ime.engine).unwrap().context,
+        "干门"
+    );
+
+    let mut ime = Ime::simplified();
+    ime.session.set_context("干");
+    ime.choose("anrcd", "门");
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
+    assert_eq!(request.context, "乾門");
+}

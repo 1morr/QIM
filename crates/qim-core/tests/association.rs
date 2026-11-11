@@ -263,7 +263,7 @@ fn the_char_bigram_offers_following_characters() {
 fn associations_are_not_sent_for_reranking() {
     let mut typing = Typing::new();
     typing.commit("an");
-    assert!(typing.session.rerank_request().is_none());
+    assert!(typing.session.rerank_request(&typing.engine).is_none());
     assert!(
         typing
             .session

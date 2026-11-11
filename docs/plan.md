@@ -131,7 +131,7 @@ flowchart LR
 | `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
 | `rustc-hash` | 2.1.3 | `qim-databuild` 數詞級 trigram 的次數（兩千萬種 trigram 的雜湊表，§4.3） | rustc 自己用的雜湊，比標準庫的 SipHash 快得多；建置端不必防碰撞攻擊；票 08 的實驗也用它 |
 | `strsim` | 0.11.1 | `qim-bench` 算字正確率的編輯距離（以字計的 Levenshtein） | 維護中、無依賴；不自己寫 |
-| `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU）與量化（`qim-databuild` 匯入模型時經 `qim-neural`） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
+| `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU；網頁經 `qim-wasm` 編成 WebAssembly、開 SIMD128，§3.1）與量化（`qim-databuild` 匯入模型時經 `qim-neural`） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
 | `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
@@ -446,7 +446,8 @@ sentences = 3         # 候選列最多放幾條多段路徑
 - 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法）。要求帶前文（最多 50 字）與 lattice 的前 9 條整句路徑，結果是路徑的名次，排出的路徑放第 2 位（規則 3、4、5 排在第 2 位起的在它前面），候選列沒有就插入（§2.1，M3 票 11c）；`Reranker::rank` 的輸入就是要求的前文與各路徑的文字、路徑分。
 - 重排結果只決定名次，不寫回分數：神經分數只在同一串按鍵內可比（青簡踩過，`docs/research/open-source-imes.md` §5）。
 - `cargo xtask bench` 只跑同步層，不跑停鍵層的重排：`bench --check` 的個人集 baseline 守不到重排把哪些詞翻好或翻壞。換掉或重訓停鍵層的模型時，要跑 `scripts/experiments/model-ladder/` 的 `neural --split test` 與 `compare`（README〈怎麼重跑〉），報口語、維基、個人集的前 2 名與翻盤數；個人集只列數字與題號、只報不擋（`.scratch/m3/spec.md`〈採用門檻〉，M3 票 25）。1.4M 在新基線上個人集前 2 名 85.76% → 85.23%（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。
-- `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。殼經 `ModelPack::open` 核對模型資料包（§4.6），把欄位交給 `Reranker::new(權重, 字表, 字表外的字數, λ)`，再呼叫 `Reranker::rank(前文, 路徑的文字與路徑分)` 拿到路徑序號（好的在前）；前文只取最後 50 字（`CONTEXT_CHARS`），標點、空白、符號連續的收成 `<sep>`，字表外的字母數字連續的收成 `<unk>`；路徑裡字表外的字當 `<unk>`、另扣 `ln(字表外的字數)`；前文只算一次、各路徑共用（前綴快取），路徑補齊成一樣長一批算、補的位置遮掉；空字串的路徑神經分是 0。這台 Mac 上重排一次（9 條 × 18 字、前文 50 字，2 條執行緒）p95 約 6 ms（M3 票 11d，`cargo run --release -p qim-neural --example latency`）。
+- `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。殼經 `ModelPack::open` 核對模型資料包（§4.6），把欄位交給 `Reranker::new(權重, 字表, 字表外的字數, λ)`，再呼叫 `Reranker::rank(前文, 路徑的文字與路徑分)` 拿到路徑序號（好的在前）；前文只取最後 50 字（`CONTEXT_CHARS`），標點、空白、符號連續的收成 `<sep>`，字表外的字母數字連續的收成 `<unk>`；路徑裡字表外的字當 `<unk>`、另扣 `ln(字表外的字數)`；前文只算一次、各路徑共用（前綴快取），路徑補齊成一樣長一批算、補的位置遮掉；空字串的路徑神經分是 0。這台 Mac 上重排一次（9 條 × 18 字、前文 50 字，2 條執行緒）p95 約 6 ms（M3 票 11d，`cargo run --release -p qim-neural --example latency`）；網頁在 Web Worker 裡單執行緒、開 SIMD128 是 p95 27 ms（M3 票 11e，§3.1）。
+- 簡體模式下殼給的前文是簡體字，模型的字表是繁體：`rerank_request` 把前文逐字轉回繁體（反查簡繁資料包的表，一對多取語言模型 unigram 最高的，`Simplifier::traditional_chars`），選定的分段本來就是繁體原文（M3 票 11e，使用者決定）。只看單字、不看詞，「头发」會轉成「頭發」；同步層 bigram 的前文還沒轉（簡體字沒有統計時退回 unigram）。
 - 模型的來源：`scripts/neural-rerank/train.py` 用 PyTorch 訓練（不是決定性的），`cargo xtask neural-import` 用 `reference.json` 核對 PyTorch 與 candle（f32 差 ≤ 0.0001 nat）後量化成 q8、寫進 `data/neural-rerank/`（進 git），`cargo xtask data` 只把它包成模型資料包（`docs/development.md`〈停鍵層的模型〉）。
 - 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 2·神經分`，λ 2 在 dev 定），在詞級 trigram 的新基線上口語 +5.5 點（票 11d；個人集 −0.53 點，模型階梯的個人集改成只報不擋後採用，票 25）；23M、Foundation Models、雲端 LLM 沒過門檻，不做（票 25 對新基線重量：23M 只因成本、flash 比 1.4M 只多 2.4 點）。
 
@@ -467,9 +468,10 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 常用語（M3 票 14）：設定區的「常用語」一段新增、編輯、刪除（`web/src/phrases.ts`）；候選列右側在沒有組字時有「常用語」鍵，叫出清單點一條就上屏，組字中藏起（和展開鍵不同時出現）。觸控與桌面共用，照 Gboard 工具列在沒有候選時給功能鍵、微信輸入法的常用語面板。
   - 記住的 email（M3 票 15）：設定區的「記住的 email」一段列出核心記住的字串、可逐條刪（`web/src/remembered.ts`），開關「記住 email」在設定表裡。學習資料除了上屏後存，交還瀏覽器的空白、標點、Enter、Tab 與失焦之後也存：核心這時可能剛記住打完的 email。
   - 上下文（M3 票 05，`web/src/context.ts`）：輸入框聚焦、`input`、`selectionchange` 時把游標前最多 `contextLimit()` 字交給 `setContext`、失焦時 `clearContext`，另外每個實體鍵送進核心前（沒有組字時）再給一次：交還瀏覽器的鍵讓核心作廢前文，游標沒動（結尾按 End）時不會有 `selectionchange` 補給。無痕時不給，改完設定區的開關後重給一次。
-  - 候選列左邊顯示中英狀態；「重排」選單是重排的開關（brief §7 的雲端候選）：關、原樣（預設）、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
+  - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
+  - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；沒有模型時不重排、打字與候選照常。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
 - 使用者資料存 `localStorage`；提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
-- LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 接雲端 LLM。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。網頁測試頁的 API key 只放開發機環境變數，由 Vite 開發伺服器轉發，不寫進瀏覽器儲存空間。
+- LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。網頁測試頁的 API key 只放開發機環境變數，由 Vite 開發伺服器轉發，不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。
 
 ### 3.2 macOS（M6）
@@ -586,7 +588,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 | `license` | SPDX 運算式：各來源 `sources.toml` 的 `license` 依序以 ` AND ` 接起、不重複；SPDX 沒有的用 `LicenseRef-`。全文在同目錄的 `LICENSE` | npm `license` |
 
 - 不認得的欄位略過（給之後加欄位）；少欄位、`manifest_version` 不是 1、`id`、`version` 或 `sha256` 不合格式時拒絕（`InvalidManifest`，不報成檔案損壞）。
-- 載入：殼交一組 manifest 加位元組給 `Engine::open`（依各自的種類放好，同種兩份、給了字根提示或模型、沒有方案資料包時拒絕），字根提示經 `RadicalHintPack::open`，模型經 `ModelPack::open`（核心只核對、解開，權重原樣交給 `qim-neural`，§2.7），不知道種類時用 `Manifest::verify`（匯入前檢查）；底下都是 `Pack::open(manifest, bytes)`，依序核對欄位格式、`min_core_version ≤ CORE_VERSION`、種類、大小、sha256，解開後再核對 id；不合時回 `PackError`（`CoreTooOld`、`ChecksumMismatch`…），訊息說明原因。`Pack::from_bytes` 不核對，給建置端與測試讀剛建好的檔。網頁經 `qim-wasm` 的 `Pack`；`qim-ffi` 還是只收位元組，M6 起的平台殼接資料包管理時改成同一條路。
+- 載入：殼交一組 manifest 加位元組給 `Engine::open`（依各自的種類放好，同種兩份、給了字根提示或模型、沒有方案資料包時拒絕），字根提示經 `RadicalHintPack::open`，模型經 `ModelPack::open`（核心只核對、解開，權重原樣交給 `qim-neural`，§2.7），不知道種類時用 `Manifest::verify`（匯入前檢查）；底下都是 `Pack::open(manifest, bytes)`，依序核對欄位格式、`min_core_version ≤ CORE_VERSION`、種類、大小、sha256，解開後再核對 id；不合時回 `PackError`（`CoreTooOld`、`ChecksumMismatch`…），訊息說明原因。`Pack::from_bytes` 不核對，給建置端與測試讀剛建好的檔。網頁經 `qim-wasm` 的 `Pack`，模型資料包另交給 Web Worker 的 `Reranker`（§3.1）；`qim-ffi` 還是只收位元組，M6 起的平台殼接資料包管理時改成同一條路。
 - 不照研究建議把 manifest 塞進 `.pack` 檔頭：那要改資料包格式、每份 sha256 都換，而且檔內放不了自己的 sha256；匯入改成 manifest 與 `.pack` 一起選。放上 GitHub Releases 時改名成不撞名的 asset（§4.7），安裝都走 manifest 加位元組這條路（brief §5.3）。
 - 使用中的資料包：方案 `[packs]` 指名的是預設；同一種可以裝好幾份，殼選一份交給核心（設定頁的切換）。所以 `Engine::new` 與 `RadicalHints::for_scheme` 只核對方案要不要那種資料包、不核對 id（推翻 M1 的「要剛好是指名的那份」）；建出的預設那份是不是指名的由 `--verify` 擋（§4.5）。
 - 網頁（plan §3.1）：內建的從 `/packs/<id>/` fetch，匯入的存 IndexedDB（`idb-keyval`，庫 `qim-packs`、表 `packs`、鍵是 id），每種用哪份存 `localStorage` 的 `qim.packs.active`。`localStorage` 每個網域約 5 MB、只能存字串，詞庫一份就 5 MB，所以用 IndexedDB。和內建同 id 的匯入取代內建那份，刪掉就回到內建的；內建的不能刪。匯入後那一種改用它（同 Firefox 裝字典後即可用）。換資料包時核心換掉 `Engine`，學習資料、選項與組字留著。匯入、刪除先在記憶體換、核心收下了才寫進 IndexedDB，切換也是核心收下才算，不收就退回原本的樣子；和已有的資料包同 id 但種類不同的匯入直接拒絕。載入時選的或匯入的資料包核心不收（例如 IndexedDB 裡的檔壞了），這次只用內建的、在狀態列說明，IndexedDB 裡的不刪。

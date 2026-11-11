@@ -105,6 +105,45 @@ impl Simplifier {
             .collect()
     }
 
+    /// 逐字轉回繁體的表（簡體字 → 繁體字）：轉換表裡每個單字的鍵，整個轉換後是另一個單字時，算
+    /// 那個字的繁體寫法。一個簡體字有幾個繁體寫法（干 ← 乾、幹、干）時，連它自己一起比 `weight`，
+    /// 取最大的，同分時取繁體寫法裡碼位最小的；選中它自己的不列。給停鍵層模型轉前文用
+    /// （[`crate::Session::rerank_request`]），不是 OpenCC 的 `s2t`：只看單字、不看詞。
+    pub(crate) fn traditional_chars(
+        &self,
+        weight: impl Fn(char) -> Option<f64>,
+    ) -> HashMap<char, char> {
+        let keys = self
+            .normalization
+            .iter()
+            .chain(&self.chain)
+            .flatten()
+            .chain([&self.segmentation])
+            .flat_map(|table| table.map.keys())
+            .filter_map(|key| single_char(key));
+        let mut forms: HashMap<char, Vec<char>> = HashMap::new();
+        for traditional in keys {
+            if let Some(simplified) = single_char(&self.convert(&traditional.to_string()))
+                && simplified != traditional
+            {
+                forms.entry(simplified).or_default().push(traditional);
+            }
+        }
+        forms
+            .into_iter()
+            .filter_map(|(simplified, mut traditional)| {
+                traditional.sort_unstable();
+                traditional.dedup();
+                let score = |c: char| weight(c).unwrap_or(f64::NEG_INFINITY);
+                // 先比繁體寫法（同分取碼位小的），再看它自己是不是更常見。
+                let best = traditional
+                    .into_iter()
+                    .reduce(|a, b| if score(b) > score(a) { b } else { a })?;
+                (score(best) >= score(simplified)).then_some((simplified, best))
+            })
+            .collect()
+    }
+
     /// 分段（OpenCC `MaxMatchSegmentation`）：分段詞表的詞自成一段，其餘相鄰的字併成一段。
     fn segments<'a>(&self, text: &'a str) -> Vec<&'a str> {
         let mut segments = Vec::new();
@@ -127,5 +166,52 @@ impl Simplifier {
             segments.push(&text[unmatched..]);
         }
         segments
+    }
+}
+
+/// `text` 剛好是一個字元時的那個字元。
+fn single_char(text: &str) -> Option<char> {
+    let mut chars = text.chars();
+    let c = chars.next()?;
+    chars.next().is_none().then_some(c)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn simplifier(entries: &[(&str, &str)]) -> Simplifier {
+        let table =
+            ConversionTable::new(entries.iter().map(|&(k, v)| (k.to_string(), v.to_string())));
+        Simplifier::new(vec![], ConversionTable::new([]), vec![vec![table]])
+    }
+
+    /// 一對多取 `weight` 最大的；簡體字本身（也是繁體字，如「后」）比各寫法都常見時不轉，不列。
+    #[test]
+    fn traditional_chars_pick_the_heaviest_form_and_skip_the_simplified_char_itself() {
+        let s = simplifier(&[("乾", "干"), ("幹", "干"), ("後", "后"), ("詞", "词")]);
+        let weight = |c: char| match c {
+            '乾' => Some(-1.0),
+            '幹' => Some(-2.0),
+            '干' => Some(-3.0),
+            '後' => Some(-5.0),
+            '后' => Some(-4.0),
+            _ => None,
+        };
+        let table = s.traditional_chars(weight);
+        assert_eq!(table.get(&'干'), Some(&'乾'));
+        assert_eq!(table.get(&'后'), None);
+        // 都沒有統計時照轉表的寫法。
+        assert_eq!(table.get(&'词'), Some(&'詞'));
+        assert_eq!(table.len(), 2);
+    }
+
+    /// 同分時取碼位小的繁體寫法，結果不隨雜湊表的順序變。
+    #[test]
+    fn ties_between_traditional_forms_take_the_smallest_code_point() {
+        let s = simplifier(&[("髮", "发"), ("發", "发")]);
+        let table = s.traditional_chars(|_| None);
+        assert!('發' < '髮');
+        assert_eq!(table.get(&'发'), Some(&'發'));
     }
 }
