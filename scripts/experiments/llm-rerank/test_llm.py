@@ -103,7 +103,7 @@ class Stats(unittest.TestCase):
         self.assertEqual(llm.percentile(list(range(1, 101)), 95), 95)
 
     def test_context_group_reads_the_set_suffix(self):
-        self.assertEqual(llm.context_group("hkcancor"), "不給前文（維基、口語集）")
+        self.assertEqual(llm.context_group("hkcancor"), "不給前文")
         self.assertEqual(llm.context_group("zh-wiki·前文0"), "前文 0")
         self.assertEqual(llm.context_group("yue-wiki·前文200"), "前文 200")
 

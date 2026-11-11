@@ -156,7 +156,7 @@ def percentile(values, p):
 def context_group(set_name):
     """`stats --by context` 的分組：有前文的集合依前文長度，其餘合成一組。"""
     if "·前文" not in set_name:
-        return "不給前文（維基、口語集）"
+        return "不給前文"
     return "前文 " + set_name.rsplit("·前文", 1)[1]
 
 

@@ -42,6 +42,7 @@
 | 2026-11-11 | M3 13 | 聯想：上屏後給下一個字詞（補完詞庫的詞、bigram、個人 bigram，同一把尺），按鍵照 macOS、開關預設開；bench 前後相同；黑箱 T6、T8 重跑；見票 13 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 15 | 記住 email：經 QIM 打過一次就記，中文組字打開頭 3 個字母起排第 2 位起（規則 5，開關預設開），設定區可刪，匯出 v2 加列；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 07 | `model-ladder` 框架與基線（合併 main 後口語 test 首選 36.3%、前 2 名 49.1%）、N = 9 條 lattice 路徑、採用門檻經使用者確認寫進 spec；見票 07 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
+| 2026-11-11 | M3 10 | FM 與 DeepSeek flash 重排（選項改給 9 條路徑）：flash 口語前 2 名 +10.4 點、每千次 0.43 元，過門檻；FM +1.3、停頓後 14.6% 超過 2 s，沒過；見票 10 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
 
 ## 偏差與決定
 
@@ -65,3 +66,5 @@
 - 2026-11-11 M3 票 18：完整粵語詞庫只補 HKCanCor 的詞；粵典 public domain 詞表與詞典本體授權對不上算查不清，留在之後待書面確認（使用者選），改 brief §1.5、§12.1、plan §4.2；見票 18。
 - 2026-11-11 M3 票 15：英文直通的鍵核心看得到（殼先交給 `handle`），記住 email 從送出去的字認；`clear_context` 改收 `UserModel`，記一次 email 讓共用 tick 加一；plan §2.1、§2.4；見票 15。
 - 2026-11-11 M3 票 21：沒建 GitHub release（使用者不在、只授權推 main），只驗本機流程，建前先問；來源用 tag `packs` 不用 `latest`（App 的 release 會搶）；plan §4.7；見票 21。
+- 2026-11-11 M3 票 10：LLM 重排的選項改給 lattice 前 9 條路徑（spec 只給候選列第一頁：上限 57% 對 68%，dev 上比基線差）；`apply_rerank` 插入路徑由票 11 定；見票 10。
+- 2026-11-11 M3 票 10：雲端只量 flash（使用者只同意其費用）、個人集不送；票 07 記 v4-pro 轉給 Flash 不對，V4 Pro 仍提供，改 brief §12.4；見票 10。
