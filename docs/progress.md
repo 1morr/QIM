@@ -48,9 +48,11 @@
 | 2026-11-11 | M3 24 | 可選詞庫 `quick-lexicon-words-hk`（預設詞庫加粵典詞頭 20,556 詞，非商業條款）、`bench --lexicon`；口語集修正 −10%，預設詞庫不變；見票 24 | 新 session 下 `/implement .scratch/m3/issues/11-ladder-conclusion.md` |
 | 2026-11-11 | M3 11 | 階梯結論：詞級 trigram、1.4M 採用（後者在新基線重量過才做），23M、FM、雲端不做，前文改 50 字；補票 11b–11e，票 22 wontfix；見票 11 | 新 session 下 `/implement .scratch/m3/issues/11b-word-trigram.md` |
 | 2026-11-11 | M3 11b | 詞級 trigram 進核心、刪 `with_segment_model`；口語首選 36.3% → 44.5%，更新 baseline；放寬版 iPhone 峰值 +71 MB，留預算版；見票 11b | 新 session 下 `/implement .scratch/m3/issues/11d-neural-rerank-crate.md` |
+| 2026-11-11 | M3 11d | 新基線重量 1.4M：口語前 2 名 +5.5 點，個人集 −0.53 點沒過門檻，照門檻停下；11c、11d、11e wontfix，收回 `qim-neural` 與文件；雲端不重量；見票 11d | 新 session 下 `/implement .scratch/m3/issues/25-ladder-long-context.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 11d：1.4M 在詞級 trigram 新基線上個人集前 2 名 −0.53 點（門檻 0.5）不採用（使用者照門檻），停鍵層不做、雲端不重量；改 brief §1.5、§7、§8、§11、§12.5、plan §1.3、§1.4、§2.1、§2.7、§8；見票 11d。
 - 2026-11-11 M3 票 11b：放寬版在 iPhone 峰值 +71 MB 超過 60 MB，預設留預算版、放寬版照建可切換；資料包格式升 v7（`[packs]` 加 `word_trigram`）；改 plan §2.1、§2.3、§2.7、§4.3、§4.5、§4.6、brief §9、§12.3；見票 11b。
 - 2026-11-11 M3 票 11b：bench 加「載入」一行（原本沒量）；粵典 e2e 改用「暗寸」（詞級 trigram 拼得出「襟食」）；個人集答錯 +1，更新共用 baseline（協調者同意）；見票 11b。
 - 2026-11-11 M3 票 11：同步層詞級 trigram、停鍵層 1.4M（新基線重量過才做）、雲端與 FM 不做、前文 200 → 50 字（使用者同意）；改 brief §1.5、§7、§8、§11、§12.5、plan §1.4、§2.1、§2.7、§8；見 `docs/research/model-ladder.md`。

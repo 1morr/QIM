@@ -93,9 +93,8 @@ flowchart LR
 | --- | --- | --- |
 | `qim-core` | `serde`、`postcard`、`serde_json`、`sha2`、`semver`（後三個給資料包 manifest，§4.6）；之後要加的依賴先改本表 | 任何 workspace crate（含綁定與平台 crate）；`std::fs`、`std::net`、`std::thread`、`std::time::SystemTime`（時間由殼以上屏次數傳入） |
 | `qim-layout` | `serde`、`serde_json`、`jsonschema` | `qim-core`；同上的 I/O |
-| `qim-neural` | `candle-core`、`candle-nn`（停鍵層的神經重排，M3 票 11 採用；模型由殼以位元組傳入，執行緒由殼開） | 任何 workspace crate；同上的 I/O |
-| `qim-wasm` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `wasm-bindgen` | 被 `qim-core` 或 `qim-layout` 依賴 |
-| `qim-ffi` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `uniffi` | 同上 |
+| `qim-wasm` | `qim-core`、`qim-layout`、綁定工具 `wasm-bindgen` | 被 `qim-core` 或 `qim-layout` 依賴 |
+| `qim-ffi` | `qim-core`、`qim-layout`、綁定工具 `uniffi` | 同上 |
 | `qim-databuild` | `qim-core`（資料包格式）、`qim-layout`（算出預設佈局）；外部 crate 不限（I/O 套件） | 被 `qim-core` 或 `qim-layout` 依賴 |
 | `qim-bench` | `qim-core`（資料包格式）；外部 crate 不限（I/O 套件） | 被 `qim-core` 依賴 |
 | `web/`、`platforms/*` | 只透過綁定呼叫核心與 `qim-layout` | 重寫排序、查碼或點擊判定邏輯 |
@@ -105,7 +104,7 @@ flowchart LR
 - 白名單在 `xtask/src/deps.rs` 的 `RULES`。改上表時兩邊同一 commit 改；`cargo test` 比對兩邊的「可以依賴」與「不可以」欄。「不可以」欄以「；」分子句，每句要是反引號包住的禁用路徑或 crate、`被 … 依賴`、`任何 workspace crate`、`同上`、`同上的 I/O` 之一，其他寫法測試會紅（`web/` 那類非 crate 的列不比）。
 - 讀 `cargo metadata`：一般與 build 依賴照「可以依賴」欄；dev 依賴不受白名單限制，但 workspace crate 不論哪種依賴都只能是欄內列的。
 - workspace 成員不在上表就紅，要先改表；`xtask` 是開發工具，例外。表上的 crate 還沒建立時跳過。
-- 掃 `qim-core`、`qim-layout`、`qim-neural` 的 `src/`（含 `#[cfg(test)]` 模組）找禁用路徑：斷詞後比對，註解與字串不算，`use` 的 `{..}` 與 `*` 會展開，`SystemTime` 這個名字出現就算。`build.rs`、`tests/`、`benches/`、`examples/` 不編進函式庫，不掃，整合測試可以讀檔。已知漏洞：把 `std` 本身改名（`use std as s`）後的路徑抓不到。
+- 掃 `qim-core`、`qim-layout` 的 `src/`（含 `#[cfg(test)]` 模組）找禁用路徑：斷詞後比對，註解與字串不算，`use` 的 `{..}` 與 `*` 會展開，`SystemTime` 這個名字出現就算。`build.rs`、`tests/`、`benches/`、`examples/` 不編進函式庫，不掃，整合測試可以讀檔。已知漏洞：把 `std` 本身改名（`use std as s`）後的路徑抓不到。
 - 測試做雙向變異：在暫存副本加入違規依賴或 `use std::fs` 會紅；改無關的格式或命名不紅。
 
 鍵盤擴充不做 Schema 驗證（M2 票 09）：佈局在主 App 與編輯器存檔時驗過，擴充只讀，驗一次 footprint 多約 3 MB、執行檔多 3.1 MB（Mac）。M7 iOS 殼要讀佈局、`qim-ffi` 加佈局介面時要做：`qim-layout` 的 `jsonschema` 改成預設開的 feature，關掉時只留型別與引用檢查的讀法；`qim-ffi` 給 iOS 鍵盤擴充的建置關掉它。上表不用改（關掉時 `jsonschema` 仍是可選依賴）。
@@ -130,7 +129,6 @@ flowchart LR
 | `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
 | `rustc-hash` | 2.1.3 | `qim-databuild` 數詞級 trigram 的次數（兩千萬種 trigram 的雜湊表，§4.3） | rustc 自己用的雜湊，比標準庫的 SipHash 快得多；建置端不必防碰撞攻擊；票 08 的實驗也用它 |
 | `strsim` | 0.11.1 | `qim-bench` 算字正確率的編輯距離（以字計的 Levenshtein） | 維護中、無依賴；不自己寫 |
-| `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
 | `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
 | Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
 | Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
@@ -218,12 +216,12 @@ impl Session {
   - 移到某一段時空白上屏整個組字，和組字中按標點相同。
 - 觸控機率（M4）：`Key` 加 `Weighted(Vec<(char, f32)>)`，由 `qim-layout` 依點擊位置與按鍵幾何算出，殼轉交；`qim-core` 不知道佈局。當時平台殼還沒開工，只改網頁綁定。
 - 欄位類型（M4）：`Options` 加 `field: FieldKind`（一般、email、網址、數字），由殼依平台的欄位資訊給。
-- 重排：`apply_rerank` 只接受目前的 `generation`，過期結果丟棄；重排過的候選最高只到第 2 位（afm-ime 做法，brief §1.3）。M1 只有介面與網頁的假實作；M3 階梯定停鍵層用小型神經模型、雲端不做（§2.7）。
+- 重排：`apply_rerank` 只接受目前的 `generation`，過期結果丟棄；重排過的候選最高只到第 2 位（afm-ime 做法，brief §1.3）。M1 只有介面與網頁的假實作；M3 階梯定停鍵層與雲端都不做（§2.7），網頁留著假實作。
   - `order` 是要求裡候選的位置、好的在前：首選不動，其餘照它排在第 2 位起，沒提到的照原順序接在後面。要求最多帶第一頁（`RERANK_LIMIT` = 9），所以重排只動第一頁。上下文是候選前面的分段的原文，M3 再接輸入框的前文。
   - 名次真的變了才算候選變動、`generation` +1：同一份要求的其他結果照舊順序排，要作廢；原樣回傳不作廢。殼只在按鍵等事件之後要求，不因套用了重排結果再要求。
   - 翻頁不是候選變動，`generation` 不加；翻頁中收到的結果照樣套用，因為只動第一頁，看得到的那頁不變。加的話結果在翻頁時作廢，殼重要求後仍在翻頁中套用，沒有保護到什麼（M1 票 23，M0 票 09 留下的問題）。
   - `apply_rerank` 要 `Engine` 才回得出快照（組字的簡繁與字根），比原本的簽章多一個參數。
-  - `paths(limit)`（M3 票 07）：lattice 蓋滿沒選定的輸入碼的前 `limit` 條路徑（最多 beam 條）與同步層的路徑分，繁體原文、不套排位規則。候選列只放 `ranking.sentences` 條多段路徑，答案常在 lattice 裡卻不在候選列（口語 dev：候選列 57%、前 9 條路徑 68%），模型階梯讀它看重排模型能從幾條裡挑；票 11 定：重排要求改帶這前 9 條路徑，結果可以把候選列沒有的路徑插到第 2 位（票 11c 改 `rerank_request` / `apply_rerank`，上面兩條隨之改寫）；只在第一頁內排時 1.4M 的增益剩 2.3～6.3 點（`docs/research/model-ladder.md`）。
+  - `paths(limit)`（M3 票 07）：lattice 蓋滿沒選定的輸入碼的前 `limit` 條路徑（最多 beam 條）與同步層的路徑分，繁體原文、不套排位規則。候選列只放 `ranking.sentences` 條多段路徑，答案常在 lattice 裡卻不在候選列（口語 dev：候選列 57%、前 9 條路徑 68%），模型階梯讀它看重排模型能從幾條裡挑。票 11 曾定重排要求改帶這前 9 條路徑、可插到第 2 位，但票 11d 在詞級 trigram 的新基線上 1.4M 沒過門檻、停鍵層不做，這個改動（票 11c）跟著不做，`rerank_request` / `apply_rerank` 維持上面兩條（`docs/research/model-ladder.md`）。
 
 ### 2.2 資料流
 
@@ -435,13 +433,13 @@ sentences = 3         # 候選列最多放幾條多段路徑
 | 層 | 時機 | 內容 | 能動到 |
 | --- | --- | --- | --- |
 | 同步 | 每按一鍵，在 Viterbi 內 | 碼表、詞庫、詞級 trigram（M3 票 11b）、個人模型、空間模型 | 首選 |
-| 停鍵 | 停鍵後在背景執行 | Gboard 級 1.4M 神經模型（`qim-neural`，M3 票 11d） | 最高第 2 位 |
+| 停鍵 | 停鍵後在背景執行 | 小型神經模型；M3 階梯沒過門檻，暫不做 | 最高第 2 位 |
 | 雲端 | 停鍵後，非同步 | 雲端 LLM，標示來源；M3 階梯沒過門檻，暫不做 | 最高第 2 位 |
 
 - 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法）。
 - 重排結果只決定名次，不寫回分數：神經分數只在同一串按鍵內可比（青簡踩過，`docs/research/open-source-imes.md` §5）。
-- `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。
-- 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 神經分`），在詞級 trigram 的新基線上重量過才做；23M、Foundation Models、雲端 LLM 沒過門檻，不做。
+- `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`。之後採用小型神經模型時另建 crate，並先改 §1.3 與 §1.4。
+- 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層不做：1.4M q8 在詞級 trigram 的新基線上口語前 2 名多 5.5 點，但個人集前 2 名掉 0.53 點、超過門檻的 0.5 點（票 11d）；23M、Foundation Models、雲端 LLM 也沒過門檻，不做。
 
 ## 3. 平台殼
 
@@ -800,13 +798,13 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | 使用者的 Rime 學習資料遲遲沒到，個人集是空的 | M1 的品質判斷只剩公開語料 | M1 票 04 開工時 | 停下問使用者；其他票照常 |
 | iPhone 版 Gboard 沒有速成 | 黑箱基線少一個對象 | M1 票 09 開頭 | 只測 Android 版，註明 |
 | 空間模型讓正確輸入被錯字蓋過 | M4 範圍 | M4 基準 | 改成只在無候選時啟動，或只用於觸控 |
-| 小型神經模型放不進鍵盤擴充或太慢（M3 票 11 採用 1.4M、不採用 23M；M2 票 11：candle 在擴充裡能跑；1.4M 級幾乎不佔；23M 級 q8 約 +47 MB、f32 約 +95 MB，q8 上下文 200 字 p95 55 ms，以前綴快取為前提；票 09 確認上限 177 MB、核心加六份資料包 79 MB，23M q8 合計約 126 MB、f32 約 174 MB 太貼上限，M3 上限定為峰值增量 ≤ 60 MB（§7.8）；M3 票 09 實量 9 條 × 18 字：23M q8 +75 MB、p95 84 ms 超標，1.4M q8 +2 MB、11 ms；旗艦機，brief §12.3） | M3 範圍、M7 | M2、§7.8 | 只在桌面與 Android 用，或不做，寫回 brief §1.5 |
+| 小型神經模型放不進鍵盤擴充或太慢（M3 票 11d 在新基線不採用 1.4M（個人集退步，不是成本）、票 11 不採用 23M；M2 票 11：candle 在擴充裡能跑；1.4M 級幾乎不佔；23M 級 q8 約 +47 MB、f32 約 +95 MB，q8 上下文 200 字 p95 55 ms，以前綴快取為前提；票 09 確認上限 177 MB、核心加六份資料包 79 MB，23M q8 合計約 126 MB、f32 約 174 MB 太貼上限，M3 上限定為峰值增量 ≤ 60 MB（§7.8）；M3 票 09 實量 9 條 × 18 字：23M q8 +75 MB、p95 84 ms 超標，1.4M q8 +2 MB、11 ms；旗艦機，brief §12.3） | M3 範圍、M7 | M2、§7.8 | 只在桌面與 Android 用，或不做，寫回 brief §1.5 |
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
 | iOS 鍵盤擴充放不下核心與資料包（M2 票 09：iPhone 18 Pro Max 放得下，79 MB／177 MB，格式不改；低階機沒量，§4） | M3 的模型大小、M7 | M2；低階機在 M7 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
 | `jsonschema` 讓程式碼變大（M1 票 19：網頁 WebAssembly 由 0.42 MB 變 4.6 MB，gzip 1.2 MB，多半是它帶的 regex 與大數） | iOS 鍵盤擴充的記憶體（brief §9） | M2 | 鍵盤擴充只讀存檔時驗過的佈局，Schema 驗證留在主 App 與編輯器（`qim-layout` 加 feature 關掉），改 §1.3、§1.4（M2 票 09 已決定、寫回 §1.3；實作在 M7） |
 | 免費佈建不能跑鍵盤擴充（M2 票 06：能跑，App Group 擴充只能讀；brief §11 已決） | M2、M7 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
 | 延遲超過預算（M2：iPhone 18 Pro Max 鍵盤擴充每鍵 p95 64 µs、選開頭一段 0.79 ms，brief §9；低階機沒量） | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
-| LLM 重排提升太小或太慢（M3 票 10、11：Foundation Models 口語前 2 名只 +1.3 點、停頓後第一個請求 14.6% 超過 2 s；雲端 flash +10.4 點但比 1.4M 只多 2.0 點，都不做；brief §1.5 已寫回） | M3 範圍 | §7.8 的實驗 | 1.4M 在新基線不採用時，雲端改和新基線比再量一次（票 22 的重評條件） |
+| LLM 重排提升太小或太慢（M3 票 10、11：Foundation Models 口語前 2 名只 +1.3 點、停頓後第一個請求 14.6% 超過 2 s；雲端 flash +10.4 點但比 1.4M 只多 2.0 點，都不做；brief §1.5 已寫回；票 11d 不採用 1.4M 後雲端改和新基線比要 +6.0 點，flash 對舊基線的 59.5% 只比新基線多 3.0 點，使用者 2026-11-11 決定不重量） | M3 範圍 | §7.8 的實驗 | 之後要做雲端時先在當時的基線上重量 |
 | iOS 鍵盤擴充不能用 Foundation Models（M2 票 10：能用，不需完整取用；但停頓後第一個請求偶爾 6–15 s，brief §12.3） | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
 | 瀏覽器呼叫雲端 LLM 被 CORS 擋 | M3 的網頁接入 | M3 開工時 | 用 Vite 開發伺服器轉發，只影響網頁測試頁 |
 | 內嵌網頁編輯器在手機主 App 手感不佳 | M7、M8 | M7 開工時 | 只把手機上手感差的操作改原生；要全改原生時記偏差 |
