@@ -28,6 +28,9 @@ class Choices(unittest.TestCase):
             llm.choices(QUERY, "merge", 10), ["門口", "問口", "閂口", "問", "閂", "門"]
         )
 
+    def test_paths_keeps_only_the_whole_input_alternatives(self):
+        self.assertEqual(llm.choices(QUERY, "paths", 10), ["門口", "問口", "閂口"])
+
     def test_choices_are_capped(self):
         self.assertEqual(llm.choices(QUERY, "merge", 4), ["門口", "問口", "閂口", "問"])
 

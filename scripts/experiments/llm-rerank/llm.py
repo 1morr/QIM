@@ -82,11 +82,13 @@ def key(row):
 
 def choices(query, mode, limit):
     """給模型看的選項。`cand`：候選列第一頁，依核心的順序。`merge`：lattice 路徑在前（整串的
-    備選），再補沒出現過的候選；第一頁只有 3 條整句，其餘是開頭幾個字的短詞。"""
+    備選），再補沒出現過的候選；第一頁只有 3 條整句，其餘是開頭幾個字的短詞。`paths`：只給路徑。"""
     if mode == "cand":
         texts = list(query["candidates"])
     elif mode == "merge":
         texts = [p["text"] for p in query["paths"]] + list(query["candidates"])
+    elif mode == "paths":
+        texts = [p["text"] for p in query["paths"]]
     else:
         raise ValueError(mode)
     seen = []
@@ -365,7 +367,7 @@ def main(argv=None):
     p.add_argument("requests", nargs="+")
     p.add_argument("-o", "--output", required=True)
     p.add_argument("--style", choices=STYLES, default="one")
-    p.add_argument("--choices", choices=["cand", "merge"], default="merge")
+    p.add_argument("--choices", choices=["cand", "merge", "paths"], default="merge")
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--sample", type=int)
     p.add_argument("--seed", type=int, default=1)
