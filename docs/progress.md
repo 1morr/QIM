@@ -43,9 +43,11 @@
 | 2026-11-11 | M3 15 | 記住 email：經 QIM 打過一次就記，中文組字打開頭 3 個字母起排第 2 位起（規則 5，開關預設開），設定區可刪，匯出 v2 加列；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 07 | `model-ladder` 框架與基線（合併 main 後口語 test 首選 36.3%、前 2 名 49.1%）、N = 9 條 lattice 路徑、採用門檻經使用者確認寫進 spec；見票 07 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
 | 2026-11-11 | M3 10 | FM 與 DeepSeek flash 重排（選項改給 9 條路徑）：flash 口語前 2 名 +10.4 點、每千次 0.43 元，過門檻；FM +1.3、停頓後 14.6% 超過 2 s，沒過；見票 10 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
+| 2026-11-11 | M3 08 | 同步層：字級 trigram、詞級 n-gram 預算版都過門檻（test 口語首選 36.3% → 42.3%、44.5%），放寬版剛過，標準 KN bigram 不過；核心加實驗接口；見票 08 | 新 session 下 `/implement .scratch/m3/issues/09-ladder-neural.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 08：核心加實驗用的 `Engine::with_segment_model`（沒掛上時打分不變），票 11 定去留；KN 比過：字級 bigram 照舊，高一階要各語料各算折扣，改 plan §2.1、§4.3；見票 08。
 - 2026-11-11 M3 票 13：數字鍵照 macOS 選聯想（不學 Microsoft 的 Shift＋數字），上屏後緊接著打數字要先按 Esc；聯想只看剛上屏的分段、從段的邊界補詞，無痕不出；改 plan §2.1、§2.3、§2.4；見票 13。
 - 2026-11-11 M3 票 17：Gboard 快捷鍵預設不設成觸發詞（原本是方案的鍵就設），確認框勾選才設、標出會搶首選的列：在別的鍵盤設的快捷鍵常撞速成的碼；改 plan §2.4；見票 17。
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。

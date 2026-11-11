@@ -4,6 +4,7 @@
 //! model-ladder eval [--split dev|test] [--n <N>] [--orders <結果.jsonl> --name <名>]
 //! model-ladder export [--split dev|test] [--n <N>] [--include-personal]
 //! model-ladder compare <逐題結果目錄 A> <逐題結果目錄 B>
+//! model-ladder sync [--split dev|test] [--no-latency] --model <規格> [--model <規格>]…
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -13,10 +14,14 @@ use model_ladder::{
     DEFAULT_N, Identity, Orders, Reranker, Split, compare, export_set, language_model_cost,
     load_sets, report, run_set, write_rows,
 };
+use sync_cli::sync_command;
+
+mod sync_cli;
 
 const USAGE: &str = "用法：\n  model-ladder eval [--split dev|test] [--n <N>] [--orders <檔> --name <名>]\n  \
                      model-ladder export [--split dev|test] [--n <N>] [--include-personal]\n  \
-                     model-ladder compare <目錄 A> <目錄 B>";
+                     model-ladder compare <目錄 A> <目錄 B>\n  \
+                     model-ladder sync [--split dev|test] [--no-latency] --model <規格>…";
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -28,6 +33,7 @@ fn main() -> ExitCode {
         Some("eval") => eval(&args[1..]),
         Some("export") => export(&args[1..]),
         Some("compare") if args.len() == 3 => compare_dirs(&args[1], &args[2]),
+        Some("sync") => sync_command(&args[1..]),
         _ => Err(USAGE.into()),
     };
     match result {
