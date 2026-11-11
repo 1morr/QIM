@@ -24,6 +24,27 @@ fn timing_output_has_keys_per_input_and_an_optional_select() {
     assert_eq!(timing.runtime, "Node v26");
     assert_eq!(timing.per_key_ms, vec![vec![0.1, 0.2], vec![0.3, 0.4, 0.5]]);
     assert_eq!(timing.select_ms, vec![None, Some(0.9)]);
+    assert_eq!(timing.load_ms, None);
+}
+
+/// 第 1 行 ` | ` 後是載入的毫秒數（Node 的腳本有量，Swift 的沒有）。
+#[test]
+fn timing_output_may_carry_the_load_time_on_the_first_line() {
+    let timing = qim_bench::parse_timing(
+        "Node v26 | 87.5
+0.1
+",
+    )
+    .unwrap();
+    assert_eq!(timing.runtime, "Node v26");
+    assert_eq!(timing.load_ms, Some(87.5));
+    let error = qim_bench::parse_timing(
+        "Node v26 | x
+0.1
+",
+    )
+    .unwrap_err();
+    assert!(error.contains("第 1 行"), "{error}");
 }
 
 #[test]

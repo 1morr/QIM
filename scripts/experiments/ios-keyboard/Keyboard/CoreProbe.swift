@@ -34,13 +34,14 @@ enum CoreProbe {
         return ([snapshot.input.isEmpty ? "—" : snapshot.input] + candidates).joined(separator: " ")
     }
 
-    static func load() {
+    /// `wordTrigram` 是 bundle 裡詞級 trigram 資料包的檔名（M3 票 11b）；`nil` 照票 08、09 的組合。
+    static func load(wordTrigram: String? = nil) {
         guard !active else { return }
         busy = true
         lines = ["core loading…"]
         onUpdate?()
         Task.detached(priority: .userInitiated) {
-            let (session, hints, lines) = loadSession()
+            let (session, hints, lines) = loadSession(wordTrigram: wordTrigram)
             await MainActor.run {
                 self.session = session
                 radicalHints = hints
@@ -95,7 +96,11 @@ enum CoreProbe {
     /// 每份資料包「讀檔 → 解開 → 丟掉檔案位元組」前後的 footprint 差，再建 `Engine` 與 `Session`。
     /// 資料包依票 04 的順序；字根提示（票 09 加）排在 `Session` 之後，前面各步與票 08 可以直接比；
     /// 佈局 `qim-ffi` 還沒有介面，不放（README〈接上核心（票 08）〉）。
-    nonisolated private static func loadSession() -> (Session?, RadicalHintPack?, [String]) {
+    ///
+    /// 給了 `wordTrigram`（票 11b）時改成：六份資料包（含字根提示）先載入，記 `model-before`，再載入
+    /// 詞級 trigram，記它的 footprint 增量與峰值增量（峰值 − `model-before` 的 footprint），最後建
+    /// `Engine` 與 `Session`。
+    nonisolated private static func loadSession(wordTrigram: String?) -> (Session?, RadicalHintPack?, [String]) {
         var lines = [Probe.memoryLine("core-before")]
         let loadStart = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
         func step<T>(_ name: String, _ body: () throws -> (T, Int?)) throws -> T {
@@ -123,13 +128,26 @@ enum CoreProbe {
             let languageModel = try pack("zh-hant-bigram", LanguageModelPack.init)
             let simplifier = try pack("opencc-hk2s", SimplifierPack.init)
             let english = try pack("scowl-en-us", EnglishPack.init)
+            var hints: RadicalHintPack? = nil
+            var words: WordTrigramPack? = nil
+            if let wordTrigram {
+                hints = try pack("cangjie-hint", RadicalHintPack.init)
+                let before = Probe.footprintMB() ?? 0
+                lines.append(String(format: "model-before footprint=%.2fMB peak=%.2fMB", before, Probe.footprintPeakMB() ?? 0))
+                words = try pack(wordTrigram, WordTrigramPack.init)
+                let after = Probe.footprintMB() ?? 0
+                let peak = Probe.footprintPeakMB() ?? 0
+                lines.append(String(format: "model %@ +%.2fMB peak=%.2fMB peak+%.2fMB", wordTrigram, after - before, peak, peak - before))
+            }
             let engine = try step("engine") {
                 (try Engine(scheme: scheme, lexicon: lexicon, languageModel: languageModel,
-                            simplifier: simplifier, english: english), nil as Int?)
+                            wordTrigram: words, simplifier: simplifier, english: english), nil as Int?)
             }
             let session = try step("session") { (Session(engine: engine), nil as Int?) }
-            let hints = try pack("cangjie-hint", RadicalHintPack.init)
-            lines.append(String(format: "core-loaded %.0fms ", ms(since: loadStart)) + Probe.memoryLine("footprint"))
+            if hints == nil {
+                hints = try pack("cangjie-hint", RadicalHintPack.init)
+            }
+            lines.append(String(format: "core-loaded %.0fms peak=%.2fMB ", ms(since: loadStart), Probe.footprintPeakMB() ?? 0) + Probe.memoryLine("footprint"))
             return (session, hints, lines)
         } catch {
             lines.append("core-failed \(error)")

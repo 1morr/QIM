@@ -7,6 +7,7 @@
 - M2 票 08：鍵盤擴充接上核心（`qim-ffi`），在備忘錄打 `anr` 讀回「門口」；資料包的常駐記憶體與每鍵延遲。結論在同一份文件的〈鍵盤擴充接上核心〉。
 - M2 票 11：candle 能不能在鍵盤擴充裡跑 1.4M、23M 參數的模型，載入、推論延遲與記憶體。量測程式在 `../neural-cost/`，結論在同一份文件的〈小型神經模型〉。
 - M2 票 09：系統在多少記憶體時終止鍵盤擴充、核心與資料包佔多少。結論在同一份文件的〈記憶體上限〉。
+- M3 票 11b：詞級 trigram 放寬版與預算版在擴充裡的 footprint 峰值增量。結論在同一份文件的〈詞級 trigram 的記憶體〉。
 
 ## 內容
 
@@ -19,7 +20,7 @@
 | `Keyboard/KeyboardViewController.swift` | 鍵盤擴充：「日」鍵送出「日」；每次載入量記憶體、讀 `from-app.txt`、試寫 `from-keyboard.txt`；票 10 的鍵（見下方〈Foundation Models 與上下文長度〉）；結果顯示在鍵盤上並寫 log |
 | `Keyboard/ContextProbe.swift` | 票 10：測試長文與 `documentContextBeforeInput` / `AfterInput` 的摘要 |
 | `Keyboard/ModelProbe.swift` | 票 10：Foundation Models 的可用性與每次請求的延遲 |
-| `Keyboard/CoreProbe.swift` | 票 08：載入資料包、建一個 `Engine` 與 `Session`、逐步量 footprint、打字、量每鍵延遲 |
+| `Keyboard/CoreProbe.swift` | 票 08：載入資料包、建一個 `Engine` 與 `Session`、逐步量 footprint、打字、量每鍵延遲；M3 票 11b 加詞級 trigram 的峰值 |
 | `Keyboard/StressProbe.swift` | 票 09：逐步佔用寫過的記憶體直到被終止，每步記進擴充自己的容器，下次載入時顯示上一輪 |
 | `core.sh` | 票 08：`cargo xtask ffi --ios`、寫出延遲的輸入、檢查資料包，再 `xcodegen generate` |
 | `neural.yml`、`Neural/` | 票 11：神經模型探針（`NeuralProbe.swift` 在背景執行緒呼叫 `../neural-cost` 的 Rust 靜態庫）；預設不併進專案，見下方〈小型神經模型（票 11）〉 |
@@ -286,3 +287,27 @@ M3 票 09（2026-11-11，同一台手機與系統，Xcode 27.1，repo 在 `fa07b
 kernel 寫的上限是 `ActiveHard 177 MB`。載入後 footprint 78.7–79.2 MB，其中字根提示 +14.3–14.5 MB。各輪的數字、log 摘錄與截圖清單見 `docs/research/ios-feasibility.md`〈記憶體上限〉。
 
 Mac 的 Xcode 升到 27.2 後，`devicectl` 與 iphone-use 的 runner 都會卡住，直到 Xcode 的首次啟動元件裝好為止（Mac 上會跳出要管理員密碼的視窗）。`xcodebuild -checkFirstLaunchStatus` 回 0 才算裝好。
+
+## 詞級 trigram（M3 票 11b）
+
+擴充的 bundle 另放 `zh-hant-word-trigram`（預算版）與 `zh-hant-word-trigram-large`（放寬版），`core.sh` 檢查它們在。`Probe.footprintPeakMB()` 讀 `ledger_phys_footprint_peak`（同 `../neural-cost/` 的峰值）。
+
+### 鍵
+
+| 鍵 | 做什麼 |
+| --- | --- |
+| 載入W、載入L | 先「讀檔 → 解開 → 丟掉檔案位元組」六份資料包（票 08 的五份加字根提示），記 `model-before`（footprint 與峰值），再載入預算版（W）或放寬版（L），記 `model <id> +留下的 MB peak=… peak+峰值增量`，最後建 `Engine`（掛上它）與 `Session`。「載入」照票 08、09 的組合不載入它 |
+| 結束 | `exit(0)`：每次量都要新程序，按完點一下輸入框叫出鍵盤，長按地球鍵切回「QIM 實驗鍵盤」 |
+
+### 量法
+
+1. 照〈建置與安裝〉建好、裝上（不開 `QIM_NEURAL`）；`Local.xcconfig` 照 `.example` 填。
+2. 備忘錄裡切到「QIM 實驗鍵盤」，確認 `pid=` 是新的、`loads=1`，按「載入L」，等 `session` 那行出現，截圖。
+3. 按「結束」，重新叫出鍵盤（新的 `pid`），按「載入W」，截圖。`prev` 那幾行會顯示上一個程序收到的記憶體警告。
+4. 峰值增量 = 峰值 − `model-before` 的 footprint。
+
+用 iphone-use 操作時這一列的鍵照樣要點座標（`taps=` 有加才算點到）。
+
+### 上次結果（2026-11-11）
+
+環境同〈記憶體上限〉：iPhone 18 Pro Max，iOS 27.2，Xcode 27.1，Debug 組態；repo 在 `a6b4550` 加上票 11b 的改動。放寬版留下 +23.39 MB、峰值 +71.31 MB（到 150.67 MB，收到兩次記憶體警告）；預算版留下 +5.63 MB、峰值 +20.38 MB，載入後 87.38 MB。詳見 `docs/research/ios-feasibility.md`〈詞級 trigram 的記憶體〉，截圖 `.scratch/m3/evidence/11b-iphone-word-trigram{-large,}.png`。

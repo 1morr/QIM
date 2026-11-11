@@ -16,7 +16,7 @@ func loadSession(_ paths: ArraySlice<String>) throws -> Session {
     for path in paths {
         guard let data = FileManager.default.contents(atPath: path) else { fail("讀不到 \(path)") }
         let magic = String(decoding: data.prefix(4), as: UTF8.self)
-        guard ["QIMP", "QIML", "QIMB", "QIME"].contains(magic), packs[magic] == nil else {
+        guard ["QIMP", "QIML", "QIMB", "QIMW", "QIME"].contains(magic), packs[magic] == nil else {
             fail("\(path)：不認得的資料包或同種給了兩份。\(usage)")
         }
         packs[magic] = data
@@ -24,7 +24,8 @@ func loadSession(_ paths: ArraySlice<String>) throws -> Session {
     guard let scheme = packs["QIMP"] else { fail(usage) }
     let engine = try Engine(
         scheme: SchemePack(bytes: scheme), lexicon: packs["QIML"].map(LexiconPack.init),
-        languageModel: packs["QIMB"].map(LanguageModelPack.init), simplifier: nil,
+        languageModel: packs["QIMB"].map(LanguageModelPack.init),
+        wordTrigram: packs["QIMW"].map(WordTrigramPack.init), simplifier: nil,
         english: packs["QIME"].map(EnglishPack.init))
     return Session(engine: engine)
 }

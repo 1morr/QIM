@@ -15,13 +15,16 @@ import { manifestIsNewer, Pack } from "./wasm/qim_wasm.js";
 
 /**
  * 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。同種的第一份是預設：
- * 粵典詞庫（非商業條款，plan §4.2）要排在預設詞庫之後，使用者切換才用。
+ * 粵典詞庫（非商業條款，plan §4.2）要排在預設詞庫之後、詞級 trigram 放寬版排在方案指名的預算版之後，
+ * 使用者切換才用。
  */
 const BUILTIN_IDS = [
 	"quick",
 	"quick-lexicon",
 	"quick-lexicon-words-hk",
 	"zh-hant-bigram",
+	"zh-hant-word-trigram",
+	"zh-hant-word-trigram-large",
 	"cangjie-hint",
 	"opencc-hk2s",
 	"scowl-en-us",

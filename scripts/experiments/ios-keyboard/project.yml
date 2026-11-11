@@ -60,6 +60,11 @@ targets:
         buildPhase: resources
       - path: ../../../build/packs/scowl-en-us/scowl-en-us.pack
         buildPhase: resources
+      # 票 11b：詞級 trigram 預算版與放寬版，量峰值增量。
+      - path: ../../../build/packs/zh-hant-word-trigram/zh-hant-word-trigram.pack
+        buildPhase: resources
+      - path: ../../../build/packs/zh-hant-word-trigram-large/zh-hant-word-trigram-large.pack
+        buildPhase: resources
       # 票 09：字根提示只為了量記憶體。
       - path: ../../../build/packs/cangjie-hint/cangjie-hint.pack
         buildPhase: resources

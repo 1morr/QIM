@@ -51,11 +51,18 @@ final class KeyboardViewController: UIInputViewController {
         candidates.accessibilityIdentifier = "qim-candidates"
         let coreRow = row([
             key("載入", id: "qim-key-load") { _ in CoreProbe.load() },
+            // 票 11b：先載入六份資料包，再載入詞級 trigram 預算版（W）或放寬版（L），量它的峰值增量。
+            key("載入W", id: "qim-key-load-word-trigram") { _ in CoreProbe.load(wordTrigram: "zh-hant-word-trigram") },
+            key("載入L", id: "qim-key-load-word-trigram-large") { _ in
+                CoreProbe.load(wordTrigram: "zh-hant-word-trigram-large")
+            },
         ] + ["a", "n", "r"].map { letter in
             key(letter, id: "qim-key-\(letter)") { $0.pressCore(letter, kind: "letter", value: letter) }
         } + [
             key("空白", id: "qim-key-space") { $0.pressCore("space", kind: "space", value: nil) },
             key("延遲", id: "qim-key-latency") { _ in CoreProbe.runLatency() },
+            // 每次量模型都要新程序（../neural-cost/README.md〈量法〉）：擴充自己結束，下次叫出鍵盤就是新程序。
+            key("結束", id: "qim-key-core-exit") { _ in exit(0) },
         ])
 
         let stressRow = row([

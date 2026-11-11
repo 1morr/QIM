@@ -19,6 +19,20 @@ enum Probe {
         return Double(info.phys_footprint) / 1_048_576
     }
 
+    /// `ledger_phys_footprint_peak`（`task_vm_info` REV3 起的欄位）：程序到讀數時為止 footprint 的最高點，
+    /// 單位 MB。iOS 會還回釋放的大塊配置，只看載入後的 footprint 會漏掉解開途中的峰值（M2 票 11）。
+    static func footprintPeakMB() -> Double? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return nil }
+        return Double(info.ledger_phys_footprint_peak) / 1_048_576
+    }
+
     /// 離系統終止還剩多少記憶體（`os_proc_available_memory`），單位 MB；0 表示系統不提供。
     static func availableMB() -> Double {
         Double(os_proc_available_memory()) / 1_048_576

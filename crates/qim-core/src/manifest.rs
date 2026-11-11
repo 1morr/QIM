@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, Pack, PackError, RadicalHintPack,
-    SchemePack, SimplifierPack,
+    SchemePack, SimplifierPack, WordTrigramPack,
 };
 
 /// 這個核心的版本（`qim-core` 的 crate 版本）；manifest 的 `min_core_version` 和它比。
@@ -27,6 +27,7 @@ pub enum PackKind {
     Scheme,
     Lexicon,
     LanguageModel,
+    WordTrigram,
     RadicalHint,
     Simplifier,
     English,
@@ -40,6 +41,7 @@ impl PackKind {
             Self::Scheme => "scheme",
             Self::Lexicon => "lexicon",
             Self::LanguageModel => "language-model",
+            Self::WordTrigram => "word-trigram",
             Self::RadicalHint => "radical-hint",
             Self::Simplifier => "simplifier",
             Self::English => "english",
@@ -132,6 +134,7 @@ impl Manifest {
             PackKind::Scheme => open::<SchemePack>(self, bytes),
             PackKind::Lexicon => open::<LexiconPack>(self, bytes),
             PackKind::LanguageModel => open::<LanguageModelPack>(self, bytes),
+            PackKind::WordTrigram => open::<WordTrigramPack>(self, bytes),
             PackKind::RadicalHint => open::<RadicalHintPack>(self, bytes),
             PackKind::Simplifier => open::<SimplifierPack>(self, bytes),
             PackKind::English => open::<EnglishPack>(self, bytes),

@@ -565,3 +565,55 @@ ReportSystemMemory[12475] (CoreDiagnostics) notice: Process QIMKeyboard [12609] 
 - jetsam 報告：「Search for the `reason` key to identify the jettisoned process and why the system jettisoned it.」「`per-process-limit`: The process crossed the resident memory limit imposed by the system on all apps. … extensions have a much lower per-process memory limit than foreground apps.」記憶體量是 `rpages × pageSize`。[Identifying high-memory use with jetsam event reports](https://developer.apple.com/documentation/xcode/identifying-high-memory-use-with-jetsam-event-reports)。
 - 報告在裝置的「設定 → 隱私權與安全性 → 分析與改進 → 分析資料」，jetsam 的檔名是 `JetsamEvent_<DateTime>`，也可以接上 Mac 從 Xcode 的 Devices and Simulators 取。[Acquiring crash reports and diagnostic logs](https://developer.apple.com/documentation/xcode/acquiring-crash-reports-and-diagnostic-logs)。官方沒寫每次 `per-process-limit` 都會產生報告；實測擴充被終止時沒有產生，以上是實測。
 - 上限不公布、隨機型而異、超過就終止：見本文〈免費佈建與 App Group〉〈官方說法〉的 Creating a custom keyboard。
+
+## 詞級 trigram 的記憶體
+
+M3 票 11b，2026-11-11。問題：同步層的詞級 trigram 放寬版（`zh-hant-word-trigram-large`，門檻 2:4，14.56 MB）在 iOS 鍵盤擴充裡的 footprint 峰值增量是否 ≤ 60 MB（連停鍵層 1.4M 的 +2 MB，`.scratch/m3/spec.md`〈採用門檻〉）；是就改成預設，否則留預算版（`zh-hant-word-trigram`，8:8，4.82 MB）。預算版同樣量一次當對照。實驗程式在 `scripts/experiments/ios-keyboard/Keyboard/CoreProbe.swift`（鍵「載入W」「載入L」），量法見該目錄 README〈詞級 trigram（M3 票 11b）〉。
+
+裝置：iPhone 18 Pro Max（iPhone19,7），iOS 27.2。Xcode 27.1，Swift 是 Debug 組態，Rust 靜態函式庫是 release（`cargo xtask ffi --ios`）；擴充沒有完整取用，沒開 `QIM_NEURAL`。資料包與程式在 `a6b4550` 加上票 11b 的改動。兩種各在一個新程序量一次（pid 14115 放寬版、14116 預算版）。
+
+### 結論
+
+- **放寬版不採用：峰值增量 +71.3 MB，超過 60 MB。** 六份資料包（速成、詞庫、bigram、簡繁、英文、字根提示）載入後 79.36 MB，再「讀檔 → 解開 → 丟掉檔案位元組」放寬版（檔案 13.89 MB）後 footprint 102.75 MB（留下 +23.39 MB），峰值（`ledger_phys_footprint_peak`）150.67 MB。那個程序收到兩次記憶體警告，第一次在 141.91 MB（同〈記憶體上限〉的約 142 MB 警告線）。
+- **預算版留預設：留下 +5.63 MB、峰值 +20.38 MB。** 79.41 MB → 85.03 MB，峰值 99.78 MB；之後建 `Engine` +2.34 MB、`Session` 0，載入後 87.38 MB。解開 21 ms（放寬版 50 ms）。
+- **放寬版的峰值比留下的多 48 MB。** 推論是解開途中同時存在的暫存：Swift 讀進的檔案位元組、uniffi 複製進 Rust 的那份、postcard 解出的差值格式陣列（`TableWire`）與詞表的 `Vec<String>`，再轉成查表用的陣列；沒逐項量。要讓放寬版過門檻，得先把解開改成就地轉換（差值就地累加、詞表直接接成一串），再量一次。
+- Mac 上的成本（`cargo xtask bench`，機器負載約 7）：預算版每鍵 p95 67 µs、選開頭一段 p95 1.24 ms、載入（解開加建 `Engine`）148 ms；WebAssembly 79 µs、1.49 ms、202 ms。都在 spec〈採用門檻〉的同步層成本內。
+
+### 原始輸出摘要
+
+鍵盤上方顯示的量測（截圖 `.scratch/m3/evidence/11b-iphone-word-trigram-large.png`、`11b-iphone-word-trigram.png`）：
+
+```text
+viewDidLoad footprint=6.85MB available=170.2MB pid=14115 loads=1
+core-before footprint=13.02MB available=164.0MB
+quick file=0.50MB +1.08MB → 14.10MB 8ms
+quick-lexicon file=4.96MB +41.75MB → 55.85MB 73ms
+zh-hant-bigram file=2.88MB +5.31MB → 61.16MB 9ms
+opencc-hk2s file=0.06MB +0.75MB → 61.91MB 2ms
+scowl-en-us file=0.76MB +2.52MB → 64.42MB 10ms
+cangjie-hint file=1.24MB +14.94MB → 79.36MB 8ms
+model-before footprint=79.36MB peak=79.36MB
+zh-hant-word-trigram-large file=13.89MB +23.39MB → 102.75MB 50ms
+model zh-hant-word-trigram-large +23.39MB peak=150.67MB peak+71.31MB
+engine +2.25MB → 105.00MB 47ms
+session +0.00MB → 105.00MB 0ms
+
+viewDidLoad footprint=6.99MB available=170.0MB pid=14116 loads=1
+prev run pid=14115 2026-11-11T08:57:25Z start footprint=144.00MB available=33.0MB
+prev warnings=2 first: warning allocated=0MB at footprint=141.91MB available=35.0MB
+core-before footprint=12.89MB available=164.1MB
+cangjie-hint file=1.24MB +14.94MB → 79.41MB 7ms
+model-before footprint=79.41MB peak=79.41MB
+zh-hant-word-trigram file=4.60MB +5.63MB → 85.03MB 21ms
+model zh-hant-word-trigram +5.63MB peak=99.78MB peak+20.38MB
+engine +2.34MB → 87.38MB 47ms
+session +0.00MB → 87.38MB 0ms
+```
+
+`prev run` 那兩行是記憶體上限實驗（`StressProbe`）記下的上一個程序：放寬版那個程序收到的警告。
+
+### 限制
+
+- 一台旗艦機、一次樣本；低階機的上限與警告線可能更低。
+- 峰值是程序到讀數為止的最高點：`model-before` 時峰值等於當時的 footprint，所以增量都算在詞級 trigram 的解開上。
+- 打字的延遲沒在 iPhone 重量（Mac 上的倍數見上）。

@@ -3,14 +3,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use qim_core::{
     CangjieCodes, CharModel, CodeEntry, CodeTable, ConversionTable, EmojiPack, EmojiTable,
     EnglishPack, EnglishWords, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack,
-    RadicalHintPack, RadicalHints, SchemePack, Simplifier, SimplifierPack, Word,
+    RadicalHintPack, RadicalHints, SchemePack, Simplifier, SimplifierPack, Word, WordTrigram,
+    WordTrigramPack,
 };
 use qim_databuild::built::BuiltPack;
 use qim_databuild::common_forms::BothForms;
 use qim_databuild::libcangjie::{self, Row};
 use qim_databuild::transcode::Transcoder;
 use qim_databuild::verify::{self, CheckId, Report};
-use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme};
+use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme, word_trigram};
 
 /// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字；
 /// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）；笑（`hk`）給 emoji 候選的抽查；门（HKSCS 收的簡體字）
@@ -43,6 +44,7 @@ max_code_length = 2
 [packs]
 lexicon = "t-lexicon"
 language_model = "t-bigram"
+word_trigram = "zh-hant-word-trigram"
 radical_hint = "t-hint"
 [radicals]
 a = "日"
@@ -64,8 +66,9 @@ sentences = 3
 
 const ESSAY: &str = "門口\t9435\n丟丟\t200\n";
 
-/// 照 pipeline 的順序排的七份資料包：速成、詞庫、語言模型、字根提示、簡繁、英文，最後接上
-/// [`emoji`] 的 emoji 資料包。位元組照給，可以是壞的；種類由位置決定。
+/// 照 pipeline 的順序排的八份資料包：速成、詞庫、語言模型，接上 [`word_trigram`] 的詞級 trigram
+/// 資料包，再來字根提示、簡繁、英文，最後接上 [`emoji`] 的 emoji 資料包。位元組照給，可以是壞的；
+/// 種類由位置決定。
 fn list(bytes: [&[u8]; 6]) -> Vec<BuiltPack> {
     fn built<P: Pack>(name: &'static str, bytes: &[u8]) -> BuiltPack {
         BuiltPack {
@@ -88,11 +91,30 @@ fn list(bytes: [&[u8]; 6]) -> Vec<BuiltPack> {
         built::<SchemePack>("速成", quick),
         built::<LexiconPack>("詞庫", lexicon),
         built::<LanguageModelPack>("語言模型", language_model),
+        word_trigram_built(&word_trigram().to_bytes().unwrap()),
         built::<RadicalHintPack>("字根提示", radical_hint),
         built::<SimplifierPack>("簡繁", simplifier),
         built::<EnglishPack>("英文", english),
         built::<EmojiPack>("emoji", &emoji().to_bytes().unwrap()),
     ]
+}
+
+/// 方案指名的詞級 trigram 預算版（id 照 pipeline，`--verify` 量它的大小）；沒有統計。
+fn word_trigram() -> WordTrigramPack {
+    WordTrigramPack {
+        id: word_trigram::BUDGET_ID.into(),
+        model: WordTrigram::new(vec!["\u{2}".into()], vec![], vec![]),
+    }
+}
+
+fn word_trigram_built(bytes: &[u8]) -> BuiltPack {
+    BuiltPack {
+        name: "詞級 trigram",
+        id: word_trigram::BUDGET_ID.into(),
+        kind: <WordTrigramPack as Pack>::KIND,
+        magic: <WordTrigramPack as Pack>::MAGIC,
+        bytes: bytes.to_vec(),
+    }
 }
 
 /// 「笑」接 😂 的 emoji 資料包。
@@ -339,6 +361,7 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::MenAfterTraditional,
             CheckId::EmojiAfterLaugh,
             CheckId::LanguageModelSize,
+            CheckId::WordTrigramSize,
             CheckId::Deterministic,
         ]
     );
@@ -733,9 +756,54 @@ fn language_model_over_the_size_limit_fails_the_size_check() {
     big.model = LanguageModel::new(chars.chain([('日', model(0.5))]), model(1e-7), []);
     let report = run_with_language_model(&pack(), &lexicon(), &big);
     assert!(big.to_bytes().unwrap().len() > bigram::MAX_BYTES);
-    assert_eq!(failed(&report), [CheckId::LanguageModelSize]);
+    // 詞級 trigram 預算版加上它也跟著超過。
+    assert_eq!(
+        failed(&report),
+        [CheckId::LanguageModelSize, CheckId::WordTrigramSize]
+    );
     // 剛建好的小模型不超過。
     assert_eq!(failed(&run(&pack())), []);
+}
+
+/// 預算版是「加上字級 bigram ≤ 8 MB」：bigram 自己沒超過，加上詞級 trigram 超過就紅。
+#[test]
+fn word_trigram_that_pushes_the_budget_over_the_limit_fails_its_size_check() {
+    // 每個詞存一個長度位元組加 7 個字母，110 萬詞就超過 8 MB。
+    let big = WordTrigramPack {
+        id: word_trigram::BUDGET_ID.into(),
+        model: WordTrigram::new(
+            (0..1_100_000).map(|i| format!("w{i:06}")).collect(),
+            vec![],
+            vec![],
+        ),
+    };
+    let bytes = big.to_bytes().unwrap();
+    assert!(bytes.len() > bigram::MAX_BYTES);
+    let mut packs = all_packs();
+    let at = packs
+        .iter()
+        .position(|p| p.magic == WordTrigramPack::MAGIC)
+        .unwrap();
+    packs[at] = word_trigram_built(&bytes);
+    let report = verify::run(&rows(), &packs, &packs);
+    assert_eq!(failed(&report), [CheckId::WordTrigramSize]);
+}
+
+/// 建出的預設詞級 trigram 要是方案指名的那份（核心接受別份，所以由建置端擋，plan §4.5）。
+#[test]
+fn word_trigram_other_than_the_named_one_fails_decoding() {
+    let mut packs = all_packs();
+    let at = packs
+        .iter()
+        .position(|p| p.magic == WordTrigramPack::MAGIC)
+        .unwrap();
+    let mut other = word_trigram();
+    other.id = "other".into();
+    packs[at].bytes = other.to_bytes().unwrap();
+    let report = verify::run(&rows(), &packs, &packs);
+    assert!(failed(&report).contains(&CheckId::Decodes));
+    let detail = &report.checks[0].detail;
+    assert!(detail.contains("詞級 trigram"), "{detail}");
 }
 
 #[test]

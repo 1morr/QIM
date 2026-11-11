@@ -12,11 +12,10 @@
 | `src/main.rs` | 命令列：`eval`、`export`、`compare` |
 | `tests/framework.rs` | 用小碼表確認首選不動、N 截斷、外部結果查表、前文截斷、McNemar |
 | `src/neural.rs`、`tests/neural.rs` | 票 09 的神經重排（candle）：`neural`、`quantize` 兩個指令，用法與結果在 `../neural-rerank/README.md` |
-| `src/sync.rs` | 同步層的模型（票 08）：字級 trigram、詞級 n-gram、字級 bigram 重訓，訓練與查表 |
-| `src/sync_cli.rs` | 命令列 `sync`：訓練、掛上核心、報正確率與成本 |
-| `tests/sync.rs` | 剪枝後機率加總、各語料各算折扣、α 夾在 1 以下、句首 trigram、切詞 |
 
-獨立的 crate（`Cargo.toml` 有空的 `[workspace]`），不在 repo 的 workspace 裡，`cargo xtask check` 不編它；它用路徑依賴 `qim-core`、`qim-bench`，同步層另依賴 `qim-databuild`（語料清單、權重、字級 bigram 的訓練）。改程式後自己跑 `cargo test --release`、`cargo clippy --release --all-targets -- -D warnings`、`cargo fmt --check`。輸出都寫到 repo 的 `build/model-ladder/`，不進 git。
+獨立的 crate（`Cargo.toml` 有空的 `[workspace]`），不在 repo 的 workspace 裡，`cargo xtask check` 不編它；它用路徑依賴 `qim-core`、`qim-bench`。
+
+同步層（票 08）的 `src/sync.rs`、`src/sync_cli.rs`、`tests/sync.rs` 與命令列 `sync` 在票 11b 刪掉：詞級 trigram 做成資料包、由核心直接打分（`qim-databuild` 的 `word_trigram.rs` 是 `sync.rs` 詞級那部分搬過去的），它們用的實驗接口 `Engine::with_segment_model` 也一起刪了。要重跑〈同步層〉的數字，在 `a6b4550`（票 11b 開工的 commit）checkout 這個目錄與核心，`sync` 只在那之前的 commit 建得起來。票 11b 起 `eval` 的基線（`qim_bench::load_engine`）掛著方案指名的詞級 trigram，比的是新基線。改程式後自己跑 `cargo test --release`、`cargo clippy --release --all-targets -- -D warnings`、`cargo fmt --check`。輸出都寫到 repo 的 `build/model-ladder/`，不進 git。
 
 ## 怎麼重跑
 
@@ -29,13 +28,12 @@ cargo run --release -- eval --split test            # test 切分加個人集：
 cargo run --release -- export [--split test] [--n 9] [--include-personal]
 cargo run --release -- eval --orders <結果.jsonl> --name <模型名>
 cargo run --release -- compare ../../../build/model-ladder/dev/baseline ../../../build/model-ladder/dev/<模型名>
-cargo run --release -- sync --model char3:10 --model word3:8:8 [--split test] [--no-latency]   # 同步層，見〈同步層〉
 ```
 
 - `eval` 印 Markdown 表，逐題結果寫到 `build/model-ladder/<切分>/<模型名>/<集合>.tsv`（只有行號與數字，個人集也一樣）。
 - `export` 把每題的重排要求寫成 `build/model-ladder/<切分>/requests/<集合>.jsonl`（下面〈給實驗票〉），不含答案。個人集要加 `--include-personal` 才匯出；它的內容只在本機、不送雲端，雲端實驗要跑個人集每次先問使用者（plan §5.2）。
 - `compare` 比兩個逐題結果目錄裡同名的集合：首選、前 2 名、可動首選各報翻好／翻壞與 McNemar 精確檢定（雙尾）的 p 值。
-- `sync` 的規格與輸出見〈同步層〉。除錯用的兩個環境變數：`SHOW=<集合>:<行>,<行>` 印那幾題的前文結尾、期望、前 3 個候選與前 4 條路徑分（個人集不印）；`EXPLAIN=甲乙丙,…` 在 `char3` 訓練完印這些 trigram 的查表結果與低一階的 ln P（`^` 代表句首）。
+- 票 08 的 `sync`（已刪，見上）另有兩個除錯用的環境變數 `SHOW`、`EXPLAIN`，要用時同樣 checkout `a6b4550`。
 
 ## 量法
 
@@ -164,11 +162,11 @@ cargo run --release -- sync --model char3:10 --model word3:8:8 [--split test] [-
 
 ### 怎麼接進核心
 
-核心加了實驗用的 `Engine::with_segment_model`（plan §2.1，`crates/qim-core/src/segment_model.rs`）：lattice 每條邊與整串字詞的靜態機率改問外部模型，它拿到前面最多 2 段、這一段與現行打分的靜態機率；β、γ、`personal`、候選列照核心。沒掛上時打分完全不變（`tests/segment_model.rs`；`cargo xtask bench --check` 13 個集合沒有翻盤）。所以首選、修正次數與延遲都是核心真的 Viterbi 量的，不是另寫一份。
+（票 11b 起已刪，見〈內容〉；以下記票 08 當時的做法。）核心加了實驗用的 `Engine::with_segment_model`（plan §2.1，`crates/qim-core/src/segment_model.rs`）：lattice 每條邊與整串字詞的靜態機率改問外部模型，它拿到前面最多 2 段、這一段與現行打分的靜態機率；β、γ、`personal`、候選列照核心。沒掛上時打分完全不變（`tests/segment_model.rs`；`cargo xtask bench --check` 13 個集合沒有翻盤）。所以首選、修正次數與延遲都是核心真的 Viterbi 量的，不是另寫一份。
 
 ### 模型
 
-都在 `src/sync.rs`，「高一階、退回現行打分」：留下的 n-gram 用 interpolated KN 的式子，沒留下的乘退回權重 α 接回低一階，所以沒有統計的地方和基線一樣。
+都在 `src/sync.rs`（票 11b 刪掉，見〈內容〉），「高一階、退回現行打分」：留下的 n-gram 用 interpolated KN 的式子，沒留下的乘退回權重 α 接回低一階，所以沒有統計的地方和基線一樣。
 
 | 規格 | 模型 | 低一階 |
 | --- | --- | --- |
@@ -298,7 +296,7 @@ cargo run --release -- sync --model char3:10 --model word3:8:8 [--split test] [-
 
 ## 給實驗票
 
-- 同步層（票 08，已做，見〈同步層〉）：`sync` 訓練模型並經 `Engine::with_segment_model` 掛上核心；看首選、修正次數與前 2 名，和基線 `compare`。
+- 同步層（票 08，已做，見〈同步層〉）：`sync` 訓練模型並經 `Engine::with_segment_model` 掛上核心（票 11b 刪掉，詞級 trigram 進了核心）；看首選、修正次數與前 2 名，和基線 `compare`。
 - 停鍵層的神經模型（票 09）：`src/neural.rs` 的 `Neural`（candle，照 `../neural-cost/`），訓練與結果在 `../neural-rerank/`。
 - Foundation Models、DeepSeek（票 10）：`export` 匯出 `Query`，外部程式（Swift 命令列、HTTP）一題回一行 `{"split": 切分, "set": 集合名, "line": 行號, "ranked": [文字…]}`，再 `eval [--split …] --orders <檔> --name <名>`。切分不符就報錯（dev 與 test 的集合名相同）；沒回的題照原順序、報告最後印題數。延遲請在外部程式量，框架內的計時只算 `rerank` 呼叫本身。
 - 模型回的文字不在這題的候選與路徑裡就不算（框架丟掉、報告印個數），LLM 憑空寫出答案不會灌高命中率。spec 的提示寫「前 10 個候選、只回序號」：`Query.candidates` 是第一頁 9 個（`RERANK_LIMIT`），序號換回文字由外部程式負責。

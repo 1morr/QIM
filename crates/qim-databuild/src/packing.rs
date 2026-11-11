@@ -158,6 +158,34 @@ pub(crate) fn language_model_sources() -> Vec<PackSource> {
         .collect()
 }
 
+/// 詞級 trigram 資料包的來源（plan §4.3）：每份語料的 train 切分給段的次數；切段用預設詞庫的詞與
+/// 詞頻（rime-essay、HKCanCor 補的詞、粵語口語詞表）與字級 bigram，所以詞庫的來源也列進來。
+pub(crate) fn word_trigram_sources() -> Vec<PackSource> {
+    let words = UpstreamSource {
+        name: "rime-essay",
+        source_id: RIME_ESSAY,
+        used: "essay.txt: words and their frequencies, used to split the training text into words",
+    };
+    std::iter::once(words)
+        .chain(CORPORA.iter().map(|corpus| UpstreamSource {
+            name: corpus.title,
+            source_id: corpus.source_id,
+            used: if corpus.segmented() {
+                "counts of word bigrams and trigrams in the training split of the extracted text, \
+                 and the words of two or more characters in that split, used to split the text"
+            } else {
+                "counts of word bigrams and trigrams in the training split of the extracted text"
+            },
+        }))
+        .map(PackSource::Upstream)
+        .chain([PackSource::Repo(RepoData {
+            used: "Cantonese colloquial words and their frequencies, used to split the training \
+                   text into words",
+            ..COLLOQUIAL
+        })])
+        .collect()
+}
+
 /// 一個進資料包的來源，授權已讀出並核對過。
 pub(crate) struct Packed {
     name: &'static str,

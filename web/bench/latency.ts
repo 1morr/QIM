@@ -1,9 +1,10 @@
 // WebAssembly 的每鍵延遲（plan §5.2）：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈首選字基準〉。
 //
 // 用法：node bench/latency.ts <資料包路徑>…，stdin 一行一個輸入碼。每份資料包旁要有它的 manifest.json
-// （plan §4.6），種類照 manifest、順序不拘：速成方案一份必給，詞庫、語言模型、英文、emoji 各至多一份。
-// stdout 第一行是 runtime，之後每個輸入一行、各鍵的毫秒數以空白分隔；打完有兩段以上時按 ← 到第一段
-// （不計時）再選它的首選，行尾接 ` | ` 與那一次的毫秒數（`qim_bench::lefts_to_first_segment`）。
+// （plan §4.6），種類照 manifest、順序不拘：速成方案一份必給，詞庫、語言模型、詞級 trigram、英文、emoji
+// 各至多一份。stdout 第一行是 runtime、` | ` 與 `new Session` 的毫秒數（載入：核對 manifest、解開、建
+// Engine），之後每個輸入一行、各鍵的毫秒數以空白分隔；打完有兩段以上時按 ← 到第一段（不計時）再選它的
+// 首選，行尾接 ` | ` 與那一次的毫秒數（`qim_bench::lefts_to_first_segment`）。
 // 用網頁同一份綁定（`web/src/wasm/`）；每鍵計時含網頁畫組字與候選要讀的欄位。
 
 import { readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import { dirname, join } from "node:path";
 import { initSync, Pack, Session } from "../src/wasm/qim_wasm.js";
 
 const USAGE =
-	"用法：node bench/latency.ts <資料包路徑>…（速成方案必給，詞庫、語言模型、英文、emoji 選給；旁邊要有 manifest.json），stdin 一行一個輸入碼";
+	"用法：node bench/latency.ts <資料包路徑>…（速成方案必給，詞庫、語言模型、詞級 trigram、英文、emoji 選給；旁邊要有 manifest.json），stdin 一行一個輸入碼";
 const paths = process.argv.slice(2);
 if (paths.length === 0) {
 	console.error(USAGE);
@@ -23,15 +24,16 @@ initSync({
 		new URL("../src/wasm/qim_wasm_bg.wasm", import.meta.url),
 	),
 });
-const session = new Session(
-	paths.map(
-		(path) =>
-			new Pack(
-				readFileSync(join(dirname(path), "manifest.json"), "utf8"),
-				readFileSync(path),
-			),
-	),
+const packs = paths.map(
+	(path) =>
+		new Pack(
+			readFileSync(join(dirname(path), "manifest.json"), "utf8"),
+			readFileSync(path),
+		),
 );
+const loadStart = performance.now();
+const session = new Session(packs);
+const loadMs = performance.now() - loadStart;
 const inputs = readFileSync(0, "utf8")
 	.split("\n")
 	.filter((line) => line.length > 0);
@@ -48,7 +50,7 @@ function read(snapshot: ReturnType<Session["select"]>): number {
 	return segments.length;
 }
 
-const lines = [`Node ${process.version}`];
+const lines = [`Node ${process.version} | ${loadMs}`];
 for (const input of inputs) {
 	const times: string[] = [];
 	let segments = 0;

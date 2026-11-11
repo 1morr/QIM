@@ -15,9 +15,11 @@ mod score;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use std::time::Instant;
+
 use qim_core::{
     EmojiPack, Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking,
-    SchemePack,
+    SchemePack, WordTrigramPack,
 };
 use sha2::{Digest, Sha256};
 
@@ -97,7 +99,8 @@ pub enum Mode {
 
 #[derive(Debug)]
 pub struct Outcome {
-    /// 讀進來的資料包：速成、方案指名的詞庫與語言模型、英文。前後對照時 sha256 一樣就是沒重建。
+    /// 讀進來的資料包：速成、方案指名的詞庫、語言模型與詞級 trigram、英文、emoji。前後對照時 sha256
+    /// 一樣就是沒重建。
     pub packs: Vec<LoadedPack>,
     pub fixed: SetResult,
     /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序；接著「有前文」的各批題，
@@ -204,7 +207,12 @@ pub fn run(
             "--lexicon {id} 不能 --update-baseline：baseline 是方案指名的詞庫的數字"
         ));
     }
-    let (engine, packs, _) = load_engine(root, &[], lexicon)?;
+    let LoadedEngine {
+        engine,
+        packs,
+        load_ms,
+        ..
+    } = load_engine(root, &[], lexicon)?;
     let fixed_items =
         parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
     let fixed = score::score(&engine, "fixed", &fixed_items, false);
@@ -221,7 +229,8 @@ pub fn run(
     let personal =
         load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
     let pack_paths: Vec<PathBuf> = packs.iter().map(|p| root.join(&p.path)).collect();
-    let latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
+    let mut latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
+    latency.native.load_ms = Some(load_ms);
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
     let tolerate_bad_format = mode == Mode::UpdateBaseline;
     let baseline = load_baseline(&root.join(BASELINE), tolerate_bad_format)?;
@@ -300,7 +309,12 @@ pub fn run_dev(
                 .ok_or_else(|| format!("覆寫要寫成 key=value：{o}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (engine, packs, lexicon) = load_engine(root, &overrides, lexicon)?;
+    let LoadedEngine {
+        engine,
+        packs,
+        lexicon,
+        ..
+    } = load_engine(root, &overrides, lexicon)?;
     let lexicon = lexicon.unwrap_or_default();
     let is_word = |item: &Item| {
         let text = item.expected();
@@ -486,7 +500,7 @@ impl Learning {
 /// `UserModel`）與學習開（整個集合共用一個 `UserModel`，打完一題學一題）的修正次數。
 /// 只報不擋，不讀也不寫 baseline。
 pub fn run_learning(root: &Path) -> Result<Learning, String> {
-    let (engine, packs, _) = load_engine(root, &[], None)?;
+    let LoadedEngine { engine, packs, .. } = load_engine(root, &[], None)?;
     let mut sets: Vec<LearningSet> = load_corpora(root)?
         .into_iter()
         .map(|(name, items)| score::learning(&engine, &name, &items, false))
@@ -508,14 +522,27 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型資料包，掛上 [`ENGLISH_PACK`]、[`EMOJI_PACK`]，建 `Engine`；
-/// `overrides` 蓋掉方案的打分參數，`lexicon` 是換掉方案指名的那份詞庫的另一份 id（`--lexicon`）。
-/// 另外交出詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
+/// [`load_engine`] 建好的 `Engine` 與讀了哪些資料包。
+#[derive(Debug)]
+pub struct LoadedEngine {
+    pub engine: Engine,
+    pub packs: Vec<LoadedPack>,
+    /// 詞庫的一份複本（方案沒指名時是 `None`），dev 模式挑詞用。
+    pub lexicon: Option<Lexicon>,
+    /// 解開每份資料包加建 `Engine` 的毫秒數，不含讀檔與算 sha256（報告的「載入」）。
+    pub load_ms: f64,
+}
+
+/// 讀 [`QUICK_PACK`] 與方案指名的詞庫、語言模型、詞級 trigram 資料包，掛上 [`ENGLISH_PACK`]、
+/// [`EMOJI_PACK`]，建 `Engine`；`overrides` 蓋掉方案的打分參數，`lexicon` 是換掉方案指名的那份詞庫的
+/// 另一份 id（`--lexicon`）。
 pub fn load_engine(
     root: &Path,
     overrides: &[(&str, &str)],
     lexicon: Option<&str>,
-) -> Result<(Engine, Vec<LoadedPack>, Option<Lexicon>), String> {
+) -> Result<LoadedEngine, String> {
+    // 解開、建 `Engine` 的毫秒數加總（[`timed`]）。
+    let mut load_ms = 0.0;
     let load = |rel: String| -> Result<(Vec<u8>, LoadedPack), String> {
         let path = root.join(&rel);
         let bytes = fs::read(&path).map_err(|e| {
@@ -528,7 +555,8 @@ pub fn load_engine(
         Ok((bytes, LoadedPack { path: rel, sha256 }))
     };
     let (bytes, loaded) = load(QUICK_PACK.into())?;
-    let mut pack = SchemePack::from_bytes(&bytes).map_err(|e| format!("{QUICK_PACK}：{e}"))?;
+    let mut pack = timed(&mut load_ms, || SchemePack::from_bytes(&bytes))
+        .map_err(|e| format!("{QUICK_PACK}：{e}"))?;
     for (key, value) in overrides {
         override_ranking(&mut pack.scheme.ranking, key, value)?;
     }
@@ -551,26 +579,49 @@ pub fn load_engine(
     let lexicon_id = lexicon
         .map(String::from)
         .or(pack.scheme.packs.lexicon.clone());
-    let lexicon = named(&lexicon_id)?
-        .map(|(bytes, path)| LexiconPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}")))
+    fn decode<P: Pack>(load_ms: &mut f64, bytes: &[u8], path: &str) -> Result<P, String> {
+        timed(load_ms, || P::from_bytes(bytes)).map_err(|e| format!("{path}：{e}"))
+    }
+    let lexicon: Option<LexiconPack> = named(&lexicon_id)?
+        .map(|(bytes, path)| decode(&mut load_ms, &bytes, &path))
         .transpose()?;
-    let language_model = named(&pack.scheme.packs.language_model)?
-        .map(|(bytes, path)| {
-            LanguageModelPack::from_bytes(&bytes).map_err(|e| format!("{path}：{e}"))
-        })
+    let language_model: Option<LanguageModelPack> = named(&pack.scheme.packs.language_model)?
+        .map(|(bytes, path)| decode(&mut load_ms, &bytes, &path))
+        .transpose()?;
+    let word_trigram: Option<WordTrigramPack> = named(&pack.scheme.packs.word_trigram)?
+        .map(|(bytes, path)| decode(&mut load_ms, &bytes, &path))
         .transpose()?;
     let copy = lexicon.as_ref().map(|l| l.lexicon.clone());
     let (bytes, loaded) = load(ENGLISH_PACK.into())?;
-    let english = EnglishPack::from_bytes(&bytes).map_err(|e| format!("{ENGLISH_PACK}：{e}"))?;
+    let english: EnglishPack = decode(&mut load_ms, &bytes, ENGLISH_PACK)?;
     packs.push(loaded);
     let (bytes, loaded) = load(EMOJI_PACK.into())?;
-    let emoji = EmojiPack::from_bytes(&bytes).map_err(|e| format!("{EMOJI_PACK}：{e}"))?;
+    let emoji: EmojiPack = decode(&mut load_ms, &bytes, EMOJI_PACK)?;
     packs.push(loaded);
-    let engine = Engine::new(pack, lexicon, language_model)
-        .map_err(|e| format!("{QUICK_PACK}：{e}"))?
-        .with_english(english)
-        .with_emoji(emoji);
-    Ok((engine, packs, copy))
+    let engine = timed(&mut load_ms, || {
+        let engine = Engine::new(pack, lexicon, language_model)?
+            .with_english(english)
+            .with_emoji(emoji);
+        Ok::<_, qim_core::PackError>(match word_trigram {
+            Some(pack) => engine.with_word_trigram(pack),
+            None => engine,
+        })
+    })
+    .map_err(|e| format!("{QUICK_PACK}：{e}"))?;
+    Ok(LoadedEngine {
+        engine,
+        packs,
+        lexicon: copy,
+        load_ms,
+    })
+}
+
+/// 跑 `f`，把花的毫秒數加進 `total`。
+fn timed<T>(total: &mut f64, f: impl FnOnce() -> T) -> T {
+    let start = Instant::now();
+    let value = f();
+    *total += start.elapsed().as_secs_f64() * 1000.0;
+    value
 }
 
 fn read(path: &Path) -> Result<String, String> {

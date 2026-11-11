@@ -7,11 +7,11 @@ use std::sync::Arc;
 
 use qim_core::{
     CangjieCodes, CodeEntry, CodeTable, Lexicon, LexiconPack, Pack, Packs, RadicalHintPack,
-    RadicalHints, Ranking, Scheme, SchemePack, Word,
+    RadicalHints, Ranking, Scheme, SchemePack, Word, WordTrigram, WordTrigramPack,
 };
 use qim_ffi::{
     Engine, LexiconPack as FfiLexiconPack, RadicalHintPack as FfiRadicalHintPack,
-    SchemePack as FfiSchemePack, Session, Snapshot,
+    SchemePack as FfiSchemePack, Session, Snapshot, WordTrigramPack as FfiWordTrigramPack,
 };
 
 fn entry(text: char) -> CodeEntry {
@@ -66,6 +66,7 @@ fn engine() -> Arc<Engine> {
     Engine::new(
         FfiSchemePack::new(scheme).unwrap(),
         Some(FfiLexiconPack::new(lexicon).unwrap()),
+        None,
         None,
         None,
         None,
@@ -176,11 +177,53 @@ fn a_pack_given_to_a_second_engine_is_an_error() {
     let (scheme, lexicon) = packs();
     let scheme = FfiSchemePack::new(scheme).unwrap();
     let lexicon = FfiLexiconPack::new(lexicon).unwrap();
-    Engine::new(scheme.clone(), Some(lexicon.clone()), None, None, None).unwrap();
-    let error = Engine::new(scheme, Some(lexicon), None, None, None)
+    Engine::new(
+        scheme.clone(),
+        Some(lexicon.clone()),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let error = Engine::new(scheme, Some(lexicon), None, None, None, None)
         .err()
         .unwrap();
     assert!(error.to_string().contains("SchemePack"), "{error}");
+}
+
+#[test]
+fn the_word_trigram_pack_goes_to_the_engine() {
+    let (scheme, lexicon) = packs();
+    let pack = WordTrigramPack {
+        id: "word-trigram".into(),
+        model: WordTrigram::new(vec!["門口".into()], vec![], vec![]),
+    };
+    let words = FfiWordTrigramPack::new(pack.to_bytes().unwrap()).unwrap();
+    let engine = Engine::new(
+        FfiSchemePack::new(scheme).unwrap(),
+        Some(FfiLexiconPack::new(lexicon).unwrap()),
+        None,
+        Some(words.clone()),
+        None,
+        None,
+    )
+    .unwrap();
+    let session = Session::new(engine);
+    assert_eq!(first(&type_letters(&session, "anr")), Some("門口"));
+    // 給過一個 Engine 就不能再給。
+    let (scheme, lexicon) = packs();
+    let error = Engine::new(
+        FfiSchemePack::new(scheme).unwrap(),
+        Some(FfiLexiconPack::new(lexicon).unwrap()),
+        None,
+        Some(words),
+        None,
+        None,
+    )
+    .err()
+    .unwrap();
+    assert!(error.to_string().contains("WordTrigramPack"), "{error}");
 }
 
 #[test]

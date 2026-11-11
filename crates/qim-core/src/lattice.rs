@@ -3,11 +3,11 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use crate::engine::Spanned;
+use crate::engine::{Spanned, WordHistory};
 use crate::remembered::REMEMBERED_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Following, SchemeModel};
-use crate::{EMOJI_LIMIT, Engine, SEGMENT_HISTORY, ScoredPath, Segment, UserModel};
+use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -16,7 +16,7 @@ pub(crate) struct Lattice {
     input: String,
     /// 組字前面是什麼：開頭的字接它。
     before: Preceding,
-    /// `before.segment()`，實驗的語言模型用（[`Lattice::segments_before`]）。
+    /// `before.segment()`，詞級 trigram 用（[`Lattice::history`]）。
     before_segment: Option<String>,
     columns: Vec<Vec<Node>>,
 }
@@ -31,7 +31,7 @@ pub(crate) struct Preceding {
 }
 
 impl Preceding {
-    /// 交給實驗的語言模型的前一段（[`crate::SegmentQuery::before`]）：前一個字詞以前一個字結尾時是它
+    /// 組字開頭的那一段的前一段，詞級 trigram 用：前一個字詞以前一個字結尾時是它
     /// （選定的分段、前文剛上屏的那一段），否則是前一個字（句首也是一個字）；不知道前一字時沒有。
     pub fn segment(&self) -> Option<String> {
         let character = self.character?;
@@ -168,8 +168,8 @@ impl Lattice {
         // 沒學過個人 bigram 時不查（每鍵都走這裡）。
         let has_bigrams = user.has_bigrams();
         let mut following: BTreeMap<usize, Vec<Option<Following>>> = BTreeMap::new();
-        // 起點欄 → 每條部分路徑的前面幾段；只在掛上實驗的語言模型時算。
-        let mut histories: BTreeMap<usize, Vec<Vec<&str>>> = BTreeMap::new();
+        // 起點欄 → 每條部分路徑的最後兩段在詞級 trigram 的編號；只在掛上詞級 trigram 時算。
+        let mut histories: BTreeMap<usize, Vec<WordHistory>> = BTreeMap::new();
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
         for (e, edge) in edges.iter().enumerate() {
             let after = has_bigrams.then(|| {
@@ -182,10 +182,10 @@ impl Lattice {
                         .collect()
                 })
             });
-            let history = engine.has_segment_model().then(|| {
+            let history = engine.has_word_trigram().then(|| {
                 &*histories.entry(edge.start).or_insert_with(|| {
                     (0..self.columns[edge.start].len())
-                        .map(|k| self.segments_before(edge.start, k))
+                        .map(|k| self.history(engine, edge.start, k))
                         .collect()
                 })
             });
@@ -194,7 +194,7 @@ impl Lattice {
                 let bigram = after
                     .and_then(|after| after[k])
                     .map_or(0.0, |f| f.probability(&edge.text));
-                let before = history.map_or(&[][..], |h| &h[k][..]);
+                let before = history.map_or([None, None], |h| h[k]);
                 extended.push((
                     node.score + engine.edge_score(prev, before, edge, bigram),
                     e,
@@ -231,12 +231,12 @@ impl Lattice {
         }
     }
 
-    /// 結束在第 `j` 欄、在那一欄第 `k` 名的部分路徑的最後幾段（最多 [`SEGMENT_HISTORY`]，最近的在
-    /// 最後）；不夠時接組字前面的那一段（[`Preceding::segment`]）。
-    fn segments_before(&self, j: usize, k: usize) -> Vec<&str> {
-        let mut segments = Vec::with_capacity(SEGMENT_HISTORY);
+    /// 結束在第 `j` 欄、在那一欄第 `k` 名的部分路徑的最後兩段在詞級 trigram 的編號（`[前一段之前,
+    /// 最後一段]`）；不夠時接組字前面的那一段（[`Preceding::segment`]），再不夠是 `None`。
+    fn history(&self, engine: &Engine, j: usize, k: usize) -> WordHistory {
+        let mut segments: Vec<&str> = Vec::with_capacity(2);
         let (mut j, mut k) = (j, k);
-        while segments.len() < SEGMENT_HISTORY {
+        while segments.len() < 2 {
             let node = &self.columns[j][k];
             match node.prev {
                 Some((i, prev)) => {
@@ -249,8 +249,8 @@ impl Lattice {
                 }
             }
         }
-        segments.reverse();
-        segments
+        let id = |n: usize| segments.get(n).and_then(|s| engine.word_id(s));
+        [id(1), id(0)]
     }
 
     /// 刪掉最後一個字母和它的一欄。
