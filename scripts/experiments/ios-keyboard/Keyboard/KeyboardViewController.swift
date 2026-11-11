@@ -164,10 +164,10 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     #if QIM_NEURAL
-    /// 票 11 的鍵：四個模型與結束程序。
+    /// 票 11 的鍵：四個模型、M3 票 09 的兩個 9 × 18 與結束程序。
     private func neuralRow() -> UIStackView {
-        row(NeuralProbe.models.map { name, file in
-            key(name, id: "qim-key-nc-\(name)") { _ in NeuralProbe.run(file) }
+        row(NeuralProbe.models.map { name, file, shape in
+            key(name, id: "qim-key-nc-\(name)") { _ in NeuralProbe.run(file, shape: shape) }
         } + [
             // 每個模型要在新程序量（釋放的頁會被下一個模型重用）：量完按這個結束程序，
             // 收起再叫出鍵盤就是新程序。

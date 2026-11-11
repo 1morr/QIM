@@ -212,6 +212,7 @@ xcodebuild ...                    # 同〈建置與安裝〉
 | --- | --- |
 | L32、L8 | 量 1.4M 參數的 CIFG-LSTM，f32 與 q8 |
 | G32、G8 | 量 23M 參數的字級 decoder，f32 與 q8 |
+| L8·9、G8·9 | M3 票 09：同 L8、G8，但路徑換成 9 條 × 18 字（在呼叫前設 `NC_PATHS`、`NC_PATH_LEN`）；其餘四鍵照 6 條 × 8 字 |
 | 結束 | `exit(0)`：擴充自己結束程序，下次叫出鍵盤就是新程序 |
 
 每個模型鍵在背景執行緒呼叫 `nc_run(<bundle 裡的 models/檔名>, 30, 2)`，跑完把結果顯示在鍵盤上方（取代上下文與 Foundation Models 那幾行）並寫 log。前後各加一行 Swift 這邊讀的 footprint（`nc-before`、`nc-after`，後者是模型丟掉之後）與整次的耗時 `wall=`。每行的意思見 `../neural-cost/README.md`〈指標〉。
@@ -230,6 +231,8 @@ xcodebuild ...                    # 同〈建置與安裝〉
 環境同上：iPhone 18 Pro Max（iPhone19,7），iOS 27.2（24B119）；Xcode 27.1，Debug 組態；candle 0.11.1，2 條執行緒；沒有完整取用。量測時 repo 在 `78ae0c2`，實驗碼即票 11 的 commit。
 
 candle 能在擴充裡跑。iPhone 上 23M q8 重排一次（6 條路徑各 8 字）上下文 200 字 p95 54.5 ms、峰值 +46.9 MB；23M f32 峰值 +94.9 MB；1.4M 兩種都在 9 ms、5 MB 內。完整表見 `../neural-cost/README.md`〈上次結果〉，截圖 `.scratch/m2/evidence/11-iphone-{L32,L8,G32,G8}.png`。
+
+M3 票 09（2026-11-11，同一台手機與系統，Xcode 27.1，repo 在 `fa07bd3` 加上票 09 的兩個鍵）用 9 條 × 18 字重量 q8：23M 上下文 200 字 p95 84.2、84.3 ms，峰值 +75.4、+74.4 MB（兩個程序）；1.4M p95 10.7 ms、峰值 +2.0 MB。結果與門檻比較在 `../neural-rerank/README.md`〈成本〉，截圖 `.scratch/m3/evidence/09-iphone-{G8-9x18,G8-9x18-run2,L8-9x18}.png`。
 
 合併票 08 之後（神經模型探針改成可選），開著 `QIM_NEURAL=YES` 建的擴充在備忘錄按「載入」、`a`、`n`、`r`、「空白」，仍上屏「門口」，同一個鍵盤上也有 L32 那一列（`.scratch/m2/evidence/11-merged-anr.png`）；神經模型的數字沒重量。
 

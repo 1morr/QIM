@@ -18,6 +18,8 @@ use qim_core::{
 };
 use serde::{Deserialize, Serialize};
 
+pub mod neural;
+
 /// 前文長度（字）：0 是不給前文（同基準的 `·前文·不給`），50、200 取長前文的最後幾個字。
 pub const CONTEXT_LENGTHS: [usize; 3] = [0, 50, 200];
 
@@ -521,7 +523,7 @@ pub fn percentile<T: Copy + PartialOrd>(values: &[T], p: usize) -> Option<T> {
 
 /// 合計列：同一組、同一前文長度的集合加起來；「有前文」依前文長度各一列，最後再加維基與口語合起來的
 /// 「有前文」各前文長度一列。
-fn group_totals(runs: &[SetRun]) -> Vec<(String, Summary)> {
+pub fn group_totals(runs: &[SetRun]) -> Vec<(String, Summary)> {
     let sum = |keep: &dyn Fn(&SetRun) -> bool| {
         runs.iter()
             .filter(|r| keep(r))

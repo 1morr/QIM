@@ -11,6 +11,7 @@
 | `src/lib.rs` | 讀集合、`Reranker` 介面、每題的候選與路徑、指標、報告、匯出、配對比較 |
 | `src/main.rs` | 命令列：`eval`、`export`、`compare` |
 | `tests/framework.rs` | 用小碼表確認首選不動、N 截斷、外部結果查表、前文截斷、McNemar |
+| `src/neural.rs`、`tests/neural.rs` | 票 09 的神經重排（candle）：`neural`、`quantize` 兩個指令，用法與結果在 `../neural-rerank/README.md` |
 
 獨立的 crate（`Cargo.toml` 有空的 `[workspace]`），不在 repo 的 workspace 裡，`cargo xtask check` 不編它；它用路徑依賴 `qim-core`、`qim-bench`。改程式後自己跑 `cargo test --release`、`cargo clippy --release --all-targets -- -D warnings`、`cargo fmt --check`。輸出都寫到 repo 的 `build/model-ladder/`，不進 git。
 
@@ -154,7 +155,7 @@ cargo run --release -- compare ../../../build/model-ladder/dev/baseline ../../..
 ## 給實驗票
 
 - 同步層（票 08）：換掉語言模型資料包或核心的打分，`eval` 照跑；看首選、修正次數與前 2 名，和基線 `compare`。
-- 停鍵層的神經模型（票 09）：在本 crate 加一個實作 `Reranker` 的模組（candle 照 `../neural-cost/`），或照外部模型的做法。
+- 停鍵層的神經模型（票 09）：`src/neural.rs` 的 `Neural`（candle，照 `../neural-cost/`），訓練與結果在 `../neural-rerank/`。
 - Foundation Models、DeepSeek（票 10）：`export` 匯出 `Query`，外部程式（Swift 命令列、HTTP）一題回一行 `{"split": 切分, "set": 集合名, "line": 行號, "ranked": [文字…]}`，再 `eval [--split …] --orders <檔> --name <名>`。切分不符就報錯（dev 與 test 的集合名相同）；沒回的題照原順序、報告最後印題數。延遲請在外部程式量，框架內的計時只算 `rerank` 呼叫本身。
 - 模型回的文字不在這題的候選與路徑裡就不算（框架丟掉、報告印個數），LLM 憑空寫出答案不會灌高命中率。spec 的提示寫「前 10 個候選、只回序號」：`Query.candidates` 是第一頁 9 個（`RERANK_LIMIT`），序號換回文字由外部程式負責。
 
