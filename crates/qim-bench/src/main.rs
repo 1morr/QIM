@@ -1,4 +1,4 @@
-//! `cargo xtask bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]`
+//! `cargo xtask bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]`
 //! 轉進來的 CLI，在 repo 根目錄執行。
 
 use std::path::Path;
@@ -6,13 +6,26 @@ use std::process::ExitCode;
 
 use qim_bench::{Mode, node_wasm_timer, run, run_dev};
 
-const USAGE: &str =
-    "用法：qim-bench [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：qim-bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // `--lexicon <id>`：換掉方案指名的詞庫（可選的粵典詞庫，M3 票 24），放在最前面。
+    let lexicon = match args.first().map(String::as_str) {
+        Some("--lexicon") if args.len() >= 2 => {
+            let id = args[1].clone();
+            args.drain(..2);
+            Some(id)
+        }
+        Some("--lexicon") => {
+            eprintln!("{USAGE}");
+            return ExitCode::from(2);
+        }
+        _ => None,
+    };
+    let lexicon = lexicon.as_deref();
     if args.first().map(String::as_str) == Some("--dev") {
-        return dev(&args[1..]);
+        return dev(&args[1..], lexicon);
     }
     let mode = match args
         .iter()
@@ -23,14 +36,14 @@ fn main() -> ExitCode {
         [] => Mode::Report,
         ["--check"] => Mode::Check,
         ["--update-baseline"] => Mode::UpdateBaseline,
-        ["--learning"] => return learning(),
+        ["--learning"] if lexicon.is_none() => return learning(),
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
         }
     };
     let root = Path::new(".");
-    let outcome = match run(root, mode, &node_wasm_timer(root)) {
+    let outcome = match run(root, mode, lexicon, &node_wasm_timer(root)) {
         Ok(outcome) => outcome,
         Err(error) => {
             eprintln!("{error}");
@@ -75,7 +88,7 @@ fn learning() -> ExitCode {
 }
 
 /// dev 模式：`--set <鍵>=<值>` 可重複，暫時蓋掉方案檔 `[ranking]` 的值（調參用，plan §2.3）。
-fn dev(args: &[String]) -> ExitCode {
+fn dev(args: &[String], lexicon: Option<&str>) -> ExitCode {
     let mut overrides = Vec::new();
     let mut rest = args.iter();
     while let Some(flag) = rest.next() {
@@ -87,7 +100,7 @@ fn dev(args: &[String]) -> ExitCode {
             }
         }
     }
-    match run_dev(Path::new("."), &overrides) {
+    match run_dev(Path::new("."), &overrides, lexicon) {
         Ok(outcome) => {
             println!("首選字基準（dev）\n");
             print!("{}", outcome.report());

@@ -99,6 +99,17 @@ const ESSAY: &str = "日\t71052\n門口\t9435\n問日\t300\n日日\t100\n丟丟\
                      羣組\t500\n喫飯\t400\n這裡\t300\n顯着\t300\n顯著\t200\n晒日\t500\n\
                      臺日\t500\n台口\t300\n";
 
+/// 粵典的詞頭表與詞頻（CRLF、首行 `Source,…`）：門日見過 7 次、曰曰沒見過，兩個都是別的來源沒收的；
+/// 門口 essay 已收、OK 打不出、單字不收。
+const WORDSLIST: &str = "Source,https://example.invalid/wordslist/\r\n門日,mun4 jat6\r\n曰曰*,jyut6 jyut6\r\n\
+                         門口,mun4 hau2\r\nOK,ou1 kei1\r\n日,jat6\r\n";
+const WORD_COUNT: &str =
+    "Source,https://example.invalid/existingwordcount/\r\n門日,7\r\n門口,99\r\n";
+/// repo 裡存的粵典授權全文（這裡只取開頭）。
+const WORDS_HK_LICENSE: &str =
+    "Copyright (c) 2015-2025, Hong Kong Lexicography Limited. All rights reserved.\n";
+const WORDS_HK_LICENSE_PATH: &str = "data/licenses/words-hk-NCODL-1.0.txt";
+
 /// repo 裡的粵語口語詞表：口門收進詞庫（rime-essay 沒有）。
 const COLLOQUIAL: &str = "# 粵語口語詞表\n\n口門\t300\n";
 
@@ -440,6 +451,14 @@ fn upstream(readme: &str) -> Files {
                 "https://example.invalid/emoji-test.txt".into(),
                 EMOJI_TEST.into(),
             ),
+            (
+                "https://example.invalid/wordslist.csv".into(),
+                WORDSLIST.into(),
+            ),
+            (
+                "https://example.invalid/existingwordcount.csv".into(),
+                WORD_COUNT.into(),
+            ),
         ])
         .into_iter()
         .chain(OPENCC_DICTIONARIES.iter().map(|(path, text)| {
@@ -456,6 +475,7 @@ fn upstream(readme: &str) -> Files {
 fn repo(root: &Path, statement: &str) {
     std::fs::create_dir_all(root.join("data/licenses")).unwrap();
     std::fs::write(root.join(UNICODE_LICENSE_PATH), UNICODE_LICENSE).unwrap();
+    std::fs::write(root.join(WORDS_HK_LICENSE_PATH), WORDS_HK_LICENSE).unwrap();
     for (path, text) in CC_LICENSES {
         std::fs::write(root.join(path), text).unwrap();
     }
@@ -622,6 +642,22 @@ license_text = {{ repo_file = "{UNICODE_LICENSE_PATH}" }}
 path = "emoji-test.txt"
 url = "https://example.invalid/emoji-test.txt"
 sha256 = "{emoji_test}"
+
+[source.words_hk]
+repository = "https://example.invalid/analysis/"
+version = "2026-11-11"
+license = "LicenseRef-words-hk-NCODL-1.0"
+license_text = {{ repo_file = "{WORDS_HK_LICENSE_PATH}" }}
+
+[[source.words_hk.files]]
+path = "wordslist.csv"
+url = "https://example.invalid/wordslist.csv"
+sha256 = "{wordslist}"
+
+[[source.words_hk.files]]
+path = "existingwordcount.csv"
+url = "https://example.invalid/existingwordcount.csv"
+sha256 = "{word_count}"
 "#,
         table = sha256_hex(TABLE.as_bytes()),
         readme = sha256_hex(README.as_bytes()),
@@ -640,6 +676,8 @@ sha256 = "{emoji_test}"
         cldr_zh_hant = sha256_hex(CLDR_ZH_HANT.as_bytes()),
         cldr_license = sha256_hex(CLDR_LICENSE.as_bytes()),
         emoji_test = sha256_hex(EMOJI_TEST.as_bytes()),
+        wordslist = sha256_hex(WORDSLIST.as_bytes()),
+        word_count = sha256_hex(WORD_COUNT.as_bytes()),
         opencc = OPENCC_DICTIONARIES
             .iter()
             .map(|(path, text)| {
@@ -694,7 +732,7 @@ fn every_pack_has_a_manifest_next_to_it() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), true).unwrap();
-    assert_eq!(outcome.packs.len(), 7);
+    assert_eq!(outcome.packs.len(), 8);
     let manifest_of = |name: &str| {
         let pack = written(&outcome, name);
         let dir = pack.path.parent().unwrap();
@@ -712,6 +750,7 @@ fn every_pack_has_a_manifest_next_to_it() {
     for name in [
         "速成",
         "詞庫",
+        "詞庫（粵典）",
         "語言模型",
         "字根提示",
         "簡繁",
@@ -736,6 +775,16 @@ fn every_pack_has_a_manifest_next_to_it() {
     assert_eq!(
         LexiconPack::open(&lexicon, &bytes).unwrap().id,
         "quick-lexicon"
+    );
+    let (words_hk, bytes) = manifest_of("詞庫（粵典）");
+    assert_eq!(words_hk.kind, PackKind::Lexicon);
+    assert_eq!(
+        words_hk.license,
+        "LGPL-3.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND CC0-1.0 AND LicenseRef-words-hk-NCODL-1.0"
+    );
+    assert_eq!(
+        LexiconPack::open(&words_hk, &bytes).unwrap().id,
+        "quick-lexicon-words-hk"
     );
     assert_eq!(manifest_of("emoji").0.kind, PackKind::Emoji);
 
@@ -1601,4 +1650,123 @@ fn personal_userdb_is_transcoded_next_to_it_and_removed_with_it() {
     std::fs::remove_file(root.path().join("bench/personal/rime-userdb.txt")).unwrap();
     run(root.path(), &fetch, false).unwrap();
     assert!(!root.path().join("bench/personal/rime-userdb.tsv").exists());
+}
+
+/// 粵典的詞另建一份可選的詞庫資料包（M3 票 24，plan §4.2）：預設詞庫的詞全在、再補粵典的詞頭；
+/// 預設詞庫沒有粵典的詞。授權照非商業條款，`LICENSE`、`NOTICE` 附版權告示、鳴謝與官網，寫明不得再授權、
+/// 不得商業使用。
+#[test]
+fn builds_an_optional_lexicon_pack_with_the_words_hk_headwords_under_their_own_terms() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), true).unwrap();
+
+    let dir = root.path().join("build/packs/quick-lexicon-words-hk");
+    assert_eq!(
+        path(&outcome, "詞庫（粵典）"),
+        dir.join("quick-lexicon-words-hk.pack")
+    );
+    let read = |name: &str| {
+        LexiconPack::from_bytes(&std::fs::read(path(&outcome, name)).unwrap())
+            .unwrap()
+            .lexicon
+    };
+    let (default, words_hk) = (read("詞庫"), read("詞庫（粵典）"));
+    let frequency = |lexicon: &qim_core::Lexicon, code: &str, word: &str| {
+        lexicon
+            .lookup(code)
+            .iter()
+            .find(|w| w.text == word)
+            .map(|w| w.frequency)
+    };
+    assert_eq!(
+        frequency(&words_hk, "ana", "門日"),
+        Some(7 * lexicon::HEADWORD_FREQUENCY)
+    );
+    assert_eq!(
+        frequency(&words_hk, "aa", "曰曰"),
+        Some(lexicon::MIN_FREQUENCY)
+    );
+    assert_eq!(frequency(&words_hk, "anr", "門口"), Some(9435));
+    assert_eq!(frequency(&default, "ana", "門日"), None);
+    for (code, words) in default.iter() {
+        for word in words {
+            assert_eq!(
+                frequency(&words_hk, code, &word.text),
+                Some(word.frequency),
+                "{code} {}",
+                word.text
+            );
+        }
+    }
+    assert_eq!(outcome.words_hk.counts.headwords, 2);
+    assert_eq!(outcome.words_hk.headwords, 4);
+    assert_eq!(default.char_frequency('日'), words_hk.char_frequency('日'));
+
+    let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+    assert!(license.contains(WORDS_HK_LICENSE), "{license}");
+    assert!(license.contains(LGPL.trim_end()), "{license}");
+    let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+    for expected in [
+        &sha256_hex(WORDSLIST.as_bytes()),
+        &sha256_hex(WORD_COUNT.as_bytes()),
+        "https://words.hk/",
+        "may not be sub-licensed",
+        "may not be used for commercial purposes",
+        "use quick-lexicon instead",
+        "Non-Commercial Open Data License",
+        // §1(b)(iii) 的告示要用實際取用的網址，兩個檔各一個。
+        "( https://words.hk/faiman/analysis/wordslist/ )",
+        "( https://words.hk/faiman/analysis/existingwordcount/ )",
+    ] {
+        assert!(notice.contains(expected), "缺 {expected}：{notice}");
+    }
+    // 預設詞庫的授權不混進粵典。
+    let default_license =
+        std::fs::read_to_string(root.path().join("build/packs/quick-lexicon/LICENSE")).unwrap();
+    assert!(
+        !default_license.contains(WORDS_HK_LICENSE),
+        "{default_license}"
+    );
+
+    let report = outcome.report.unwrap();
+    assert!(report.passed(), "{report}");
+    let check = report
+        .checks
+        .iter()
+        .find(|c| c.id == CheckId::WordsHkLexicon)
+        .expect("verify 比對兩份詞庫");
+    assert!(check.passed, "{report}");
+}
+
+/// 粵典詞庫少了預設詞庫的詞條、詞頻變了或沒多任何詞時，`--verify` 的比對失敗。
+#[test]
+fn a_words_hk_lexicon_missing_a_default_entry_fails_the_check() {
+    let word = |text: &str, frequency| qim_core::Word {
+        text: text.into(),
+        frequency,
+    };
+    let lexicon = |entries: Vec<(&str, Vec<qim_core::Word>)>| {
+        qim_core::Lexicon::new(
+            entries
+                .into_iter()
+                .map(|(code, words)| (code.to_string(), words))
+                .collect::<BTreeMap<_, _>>(),
+            BTreeMap::new(),
+        )
+    };
+    let default = lexicon(vec![("anr", vec![word("門口", 9435)])]);
+    let more = lexicon(vec![
+        ("anr", vec![word("門口", 9435)]),
+        ("ana", vec![word("門日", 700)]),
+    ]);
+    assert!(verify::words_hk_lexicon(&default, &more).passed);
+    let lower = lexicon(vec![
+        ("anr", vec![word("門口", 100)]),
+        ("ana", vec![word("門日", 700)]),
+    ]);
+    assert!(!verify::words_hk_lexicon(&default, &lower).passed);
+    assert!(!verify::words_hk_lexicon(&more, &default).passed);
+    // 一個詞都沒多（粵典沒接上）也算失敗。
+    assert!(!verify::words_hk_lexicon(&default, &default).passed);
 }

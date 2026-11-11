@@ -13,10 +13,14 @@ import {
 } from "./pack-choice.ts";
 import { manifestIsNewer, Pack } from "./wasm/qim_wasm.js";
 
-/** 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。 */
+/**
+ * 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。同種的第一份是預設：
+ * 粵典詞庫（非商業條款，plan §4.2）要排在預設詞庫之後，使用者切換才用。
+ */
 const BUILTIN_IDS = [
 	"quick",
 	"quick-lexicon",
+	"quick-lexicon-words-hk",
 	"zh-hant-bigram",
 	"cangjie-hint",
 	"opencc-hk2s",

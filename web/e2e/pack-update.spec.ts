@@ -115,13 +115,15 @@ test("按「檢查更新」換上新版；沒在用的資料包更新後也不�
 	page,
 }) => {
 	await importOld(page);
-	await page.getByLabel("使用 quick-lexicon").check();
+	await page.getByLabel("使用 quick-lexicon", { exact: true }).check();
 	expect(await firstOf(page, "anr")).toBe("門口");
 
 	await checkButton(page).click();
 	await expect(status(page)).toContainText(`已更新 ${ID} 1.0.0 → 1.1.0`);
 	await expect(row(page, ID)).toContainText("1.1.0");
-	await expect(page.getByLabel("使用 quick-lexicon")).toBeChecked();
+	await expect(
+		page.getByLabel("使用 quick-lexicon", { exact: true }),
+	).toBeChecked();
 	expect(await firstOf(page, "anr")).toBe("門口");
 
 	await page.getByLabel(`使用 ${ID}`).check();
@@ -158,7 +160,7 @@ test("下載的檔案 sha256 不符時拒絕，保留舊版", async ({ page }, t
 	expect(await firstOf(page, "anr")).toBe("舊版詞庫");
 
 	// 沒在用的那份（不交給核心）下載壞了也一樣拒絕，不存進 IndexedDB。
-	await page.getByLabel("使用 quick-lexicon").check();
+	await page.getByLabel("使用 quick-lexicon", { exact: true }).check();
 	await checkButton(page).click();
 	await expect(status(page)).toContainText("sha256");
 	await page.unroute(`**/pack-updates/${ID}.pack`);

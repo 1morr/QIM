@@ -10,7 +10,10 @@
 scripts/experiments/pack-memory/run.sh            # 有無 Schema 驗證各跑 3 次，最後另開程序跑 PROBE=hashset
 RUNS=1 scripts/experiments/pack-memory/run.sh     # 各 1 次
 scripts/experiments/pack-memory/run.sh <build 目錄> # 不用 repo 的 build/（相對路徑照目前目錄）
+LEXICON=quick-lexicon-words-hk scripts/experiments/pack-memory/run.sh   # 換成粵典詞庫（M3 票 24）
 ```
+
+表的最後一欄是每步的耗時（`Instant`，牆鐘時間，M3 票 24 加的），當作載入時間比較。
 
 這是獨立的 crate（`Cargo.toml` 有空的 `[workspace]`），不在 repo 的 workspace 裡，`cargo xtask check` 不編它；改程式後自己跑 `cargo clippy --release [--features schema] -- -D warnings`。`run.sh` 編兩個版本：預設版只用 `serde_json` 把佈局讀進型別；`--features schema` 版走 `qim_layout::validate`（含 JSON Schema 驗證）。release 組態開 `lto`、`codegen-units = 1`、`strip`，接近上架的組態。
 
@@ -73,6 +76,17 @@ PROBE=hashset：新程序裡對 257468 個詞建 HashSet<&str> 再丟掉後 foot
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 不驗證 | 0.67 MB | 1.70–1.77 MB | 1.19–1.20 MB | 0.20–0.28 MB | 0.12–0.20 MB | 0.40 MB | 95.6–95.8 MB |
 | Schema 驗證 | 3.75 MB | 1.88–1.92 MB | 1.33–1.34 MB | 4.66–4.86 MB | 2.92–3.14 MB | 0.84 MB | 98.7–98.9 MB |
+
+## 粵典詞庫對照（2026-11-11，M3 票 24）
+
+同一台 Mac（Apple M6，macOS 27.0.1），資料包由票 24 的工作樹建（預設詞庫 sha256 `25d53b1d…`、粵典詞庫 `058fa479…`），預設版各跑 3 次；機器上同時有別的工作，耗時只看相對。
+
+| | 檔案 | 詞庫步驟 footprint | 詞庫步驟耗時 | `Engine` 耗時 | 合計 footprint | 合計耗時 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `quick-lexicon` | 4.96 MB | 46.67–46.69 MB | 38.6–44.2 ms | 72.2–86.2 ms | 99.30–99.34 MB | 138–149 ms |
+| `quick-lexicon-words-hk` | 5.39 MB | 50.56–50.59 MB | 39.3–44.8 ms | 87.0–104.4 ms | 103.36–103.42 MB | 151–170 ms |
+
+粵典詞庫多 0.43 MB 檔案、約 4.1 MB footprint（+4%）、載入約多 15 ms（`Engine::new` 依字頻重排與算詞頻總和的部分變多）。
 
 ## 觀察
 

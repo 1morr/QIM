@@ -1,14 +1,15 @@
-//! M2 票 04：依序載入六份資料包、一個 `Engine` 與預設佈局，每步記常駐記憶體的增量。
+//! M2 票 04：依序載入六份資料包、一個 `Engine` 與預設佈局，每步記常駐記憶體的增量與耗時。
 //! 跑法與指標的意義見同目錄的 README.md。`--features schema` 時佈局走 `qim_layout::validate`
-//! （含 JSON Schema），否則只用 `serde_json` 讀進型別。
+//! （含 JSON Schema），否則只用 `serde_json` 讀進型別。環境變數 `LEXICON` 換詞庫（M3 票 24）。
 
 use std::fs;
 use std::hint::black_box;
 use std::mem::MaybeUninit;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use qim_core::{
-    Engine, EnglishPack, LanguageModelPack, LexiconPack, RadicalHintPack, SchemePack,
+    Engine, EnglishPack, LanguageModelPack, LexiconPack, Pack, RadicalHintPack, SchemePack,
     SimplifierPack, UserModel,
 };
 use qim_layout::Layout;
@@ -61,10 +62,11 @@ fn sample() -> Sample {
 }
 
 struct Row {
-    name: &'static str,
+    name: String,
     file: Option<u64>,
     before: Sample,
     after: Sample,
+    elapsed: Duration,
 }
 
 fn mb(bytes: u64) -> f64 {
@@ -78,16 +80,19 @@ fn delta_mb(after: u64, before: u64) -> f64 {
 /// 量 `step` 前後的差記成一列；`step` 回傳它的結果與讀了多少位元組的檔案。
 fn measure<T>(
     rows: &mut Vec<Row>,
-    name: &'static str,
+    name: impl Into<String>,
     step: impl FnOnce() -> (T, Option<u64>),
 ) -> T {
     let before = sample();
+    let started = Instant::now();
     let (value, file) = step();
+    let elapsed = started.elapsed();
     rows.push(Row {
-        name,
+        name: name.into(),
         file,
         before,
         after: sample(),
+        elapsed,
     });
     value
 }
@@ -95,7 +100,7 @@ fn measure<T>(
 /// 讀檔、解析、丟掉檔案位元組，量這整段；檔案的緩衝區沒還給系統的部分也算進去。
 fn load<T>(
     rows: &mut Vec<Row>,
-    name: &'static str,
+    name: impl Into<String>,
     path: &Path,
     parse: impl FnOnce(&[u8]) -> T,
 ) -> T {
@@ -138,7 +143,7 @@ fn parse_layout(text: &str) -> Layout {
 /// `PROBE=hashset`：在沒有別的垃圾頁的新程序裡，量 `Engine::new` 為詞頻總和建的那種 HashSet。
 /// 檔案位元組留到最後才丟，免得 HashSet 重用它釋放的頁。
 fn hashset_probe(build: &Path) {
-    let bytes = read(&pack(build, "quick-lexicon"));
+    let bytes = read(&pack(build, &lexicon_id()));
     let words = LexiconPack::from_bytes(&bytes).unwrap().lexicon;
     let before = sample();
     let texts = words
@@ -155,7 +160,13 @@ fn hashset_probe(build: &Path) {
     );
 }
 
+/// 要量的詞庫：`LEXICON` 環境變數，預設方案指名的 `quick-lexicon`。
+fn lexicon_id() -> String {
+    std::env::var("LEXICON").unwrap_or_else(|_| "quick-lexicon".into())
+}
+
 fn main() {
+    let lexicon_id = lexicon_id();
     let build = std::env::args().nth(1).map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../build"),
         PathBuf::from,
@@ -171,8 +182,8 @@ fn main() {
     });
     let lexicon = load(
         &mut rows,
-        "詞庫 `quick-lexicon`",
-        &pack(&build, "quick-lexicon"),
+        format!("詞庫 `{lexicon_id}`"),
+        &pack(&build, &lexicon_id),
         |b| LexiconPack::from_bytes(b).unwrap(),
     );
     let bigram = load(
@@ -224,7 +235,7 @@ fn main() {
     let relief = sample();
     // 以下都在量完之後，暫存的配置不混進上面的增量。
     // 另讀一次詞庫，數結構；同 `Engine::new` 算詞頻總和，對全部詞建一個 HashSet 再丟掉。
-    let words = LexiconPack::from_bytes(&read(&pack(&build, "quick-lexicon")))
+    let words = LexiconPack::from_bytes(&read(&pack(&build, &lexicon_id)))
         .unwrap()
         .lexicon;
     let word_codes = words.iter().count();
@@ -261,8 +272,8 @@ fn main() {
         mb(start.heap)
     );
     println!();
-    println!("| 步驟 | 檔案 | RSS 增加 | footprint 增加 | heap 增加 | footprint ÷ 檔案 |");
-    println!("| --- | ---: | ---: | ---: | ---: | ---: |");
+    println!("| 步驟 | 檔案 | RSS 增加 | footprint 增加 | heap 增加 | footprint ÷ 檔案 | 耗時 |");
+    println!("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
     for row in &rows {
         let footprint = delta_mb(row.after.footprint, row.before.footprint);
         let (file, ratio) = match row.file {
@@ -273,20 +284,23 @@ fn main() {
             None => ("—".into(), "—".into()),
         };
         println!(
-            "| {} | {file} | {:.2} MB | {footprint:.2} MB | {:.2} MB | {ratio} |",
+            "| {} | {file} | {:.2} MB | {footprint:.2} MB | {:.2} MB | {ratio} | {:.1} ms |",
             row.name,
             delta_mb(row.after.rss, row.before.rss),
             delta_mb(row.after.heap, row.before.heap),
+            row.elapsed.as_secs_f64() * 1000.0,
         );
     }
+    let elapsed: Duration = rows.iter().map(|r| r.elapsed).sum();
     let files: u64 = rows.iter().filter_map(|r| r.file).sum();
     let footprint = delta_mb(end.footprint, start.footprint);
     println!(
-        "| 合計 | {:.2} MB | {:.2} MB | {footprint:.2} MB | {:.2} MB | {:.1}× |",
+        "| 合計 | {:.2} MB | {:.2} MB | {footprint:.2} MB | {:.2} MB | {:.1}× | {:.1} ms |",
         mb(files),
         delta_mb(end.rss, start.rss),
         delta_mb(end.heap, start.heap),
         footprint / mb(files),
+        elapsed.as_secs_f64() * 1000.0,
     );
     println!();
     println!(

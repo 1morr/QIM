@@ -75,6 +75,7 @@ fn build(verify: bool) -> ExitCode {
                 }
                 None => {
                     println!("{}", outcome.lexicon);
+                    println!("{}", outcome.words_hk);
                     println!("{}", outcome.language_model);
                     println!(
                         "{}",

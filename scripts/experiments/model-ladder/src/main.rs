@@ -91,7 +91,7 @@ fn eval(args: &[String]) -> Result<(), String> {
     let split = split_of(&f);
     let n = f.n.unwrap_or(DEFAULT_N);
     let root = root();
-    let (engine, _, _) = qim_bench::load_engine(&root, &[])?;
+    let (engine, _, _) = qim_bench::load_engine(&root, &[], None)?;
     let sets = load_sets(&root, split)?;
     let mut orders = match (&f.orders, &f.name) {
         (Some(path), Some(name)) => {
@@ -134,7 +134,7 @@ fn export(args: &[String]) -> Result<(), String> {
     let split = split_of(&f);
     let n = f.n.unwrap_or(DEFAULT_N);
     let root = root();
-    let (engine, _, _) = qim_bench::load_engine(&root, &[])?;
+    let (engine, _, _) = qim_bench::load_engine(&root, &[], None)?;
     let dir = root
         .join("build/model-ladder")
         .join(split.name())
