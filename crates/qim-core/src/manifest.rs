@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, Pack, PackError, RadicalHintPack,
-    SchemePack, SimplifierPack, WordTrigramPack,
+    EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, ModelPack, Pack, PackError,
+    RadicalHintPack, SchemePack, SimplifierPack, WordTrigramPack,
 };
 
 /// 這個核心的版本（`qim-core` 的 crate 版本）；manifest 的 `min_core_version` 和它比。
@@ -32,6 +32,8 @@ pub enum PackKind {
     Simplifier,
     English,
     Emoji,
+    /// 停鍵層的神經重排模型（[`ModelPack`]），不交給 [`crate::Engine`]。
+    Model,
 }
 
 impl PackKind {
@@ -46,6 +48,7 @@ impl PackKind {
             Self::Simplifier => "simplifier",
             Self::English => "english",
             Self::Emoji => "emoji",
+            Self::Model => "model",
         }
     }
 }
@@ -139,6 +142,7 @@ impl Manifest {
             PackKind::Simplifier => open::<SimplifierPack>(self, bytes),
             PackKind::English => open::<EnglishPack>(self, bytes),
             PackKind::Emoji => open::<EmojiPack>(self, bytes),
+            PackKind::Model => open::<ModelPack>(self, bytes),
         }
     }
 

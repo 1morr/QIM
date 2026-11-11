@@ -158,6 +158,21 @@ pub(crate) fn language_model_sources() -> Vec<PackSource> {
         .collect()
 }
 
+/// 停鍵層模型資料包的來源（plan §2.7）：每份語料 train 切分的文字，訓練神經模型用。
+pub(crate) fn neural_sources() -> Vec<PackSource> {
+    CORPORA
+        .iter()
+        .map(|corpus| {
+            PackSource::Upstream(UpstreamSource {
+                name: corpus.title,
+                source_id: corpus.source_id,
+                used: "the training split of the extracted text, used to train the neural model \
+                       and to count the characters of its vocabulary",
+            })
+        })
+        .collect()
+}
+
 /// 詞級 trigram 資料包的來源（plan §4.3）：每份語料的 train 切分給段的次數；切段用預設詞庫的詞與
 /// 詞頻（rime-essay、HKCanCor 補的詞、粵語口語詞表）與字級 bigram，所以詞庫的來源也列進來。
 pub(crate) fn word_trigram_sources() -> Vec<PackSource> {

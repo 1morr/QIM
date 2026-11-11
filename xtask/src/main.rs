@@ -10,7 +10,7 @@ mod web;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask pack-release [--previous <index.json>] | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
+const USAGE: &str = "用法：cargo xtask check [--fast] | cargo xtask commit-msg <訊息檔> | cargo xtask data [--verify] | cargo xtask pack-release [--previous <index.json>] | cargo xtask neural-import <訓練目錄> --lambda <λ> | cargo xtask web | cargo xtask ffi [--ios] | cargo xtask bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -27,6 +27,19 @@ fn main() -> ExitCode {
             release_run(
                 "qim-databuild",
                 &["--pack-release", "--previous", &previous.to_string_lossy()],
+            )
+        }
+        ["neural-import", dir, "--lambda", lambda] => {
+            // 同上：qim-databuild 在 repo 根目錄跑。
+            let dir = std::path::absolute(dir).unwrap_or_else(|_| dir.into());
+            release_run(
+                "qim-databuild",
+                &[
+                    "--neural-import",
+                    &dir.to_string_lossy(),
+                    "--lambda",
+                    lambda,
+                ],
             )
         }
         ["bench"] => bench(&[]),

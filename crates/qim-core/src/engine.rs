@@ -220,11 +220,11 @@ impl Engine {
     /// 殼載入資料包的入口（plan §4.6）：每份照它的 manifest 經 [`Pack::open`] 核對，依種類放到該放
     /// 的位置，順序不拘。方案資料包一定要有，詞庫、語言模型照方案要不要（[`Engine::new`]），詞級
     /// trigram 也照方案要不要（只核對有沒有、不核對 id），簡繁、英文、emoji 可有可無；同一種兩份、
-    /// 或給了字根提示時拒絕。
+    /// 或給了字根提示、停鍵層的模型時拒絕。
     pub fn open(packs: &[(&Manifest, &[u8])]) -> Result<Self, PackError> {
         let mut by_kind = BTreeMap::new();
         for &(manifest, bytes) in packs {
-            if manifest.kind == PackKind::RadicalHint {
+            if matches!(manifest.kind, PackKind::RadicalHint | PackKind::Model) {
                 return Err(PackError::NotForEngine(manifest.kind));
             }
             if by_kind.insert(manifest.kind, (manifest, bytes)).is_some() {

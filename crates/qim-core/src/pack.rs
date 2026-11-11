@@ -127,6 +127,21 @@ pub struct EmojiPack {
     pub emoji: EmojiTable,
 }
 
+/// 停鍵層的模型資料包（plan §2.7、§4.6）：神經重排的權重與字表。核心只核對與解開，不跑模型：
+/// 殼把欄位交給 `qim-neural`（`Reranker::new`），在背景執行緒或 Web Worker 推論。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelPack {
+    pub id: String,
+    /// 字表裡兩個記號之後的字，依序是 token 2、3…（`scripts/neural-rerank/train.py prepare`）。
+    pub vocab: Vec<char>,
+    /// 訓練語料裡字表外的字數：一個字表外的字分到 `<unk>` 機率的這麼多分之一。
+    pub unknown_chars: u32,
+    /// `路徑分 + λ·神經分` 的 λ，在 dev 切分上調的。
+    pub lambda: f64,
+    /// GGUF 權重（q8）。
+    pub weights: Vec<u8>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackError {
     /// 檔頭不是這種資料包的魔數。
@@ -189,7 +204,7 @@ pub enum PackError {
     },
     /// 交給 [`crate::Engine::open`] 的資料包裡同一種有兩份。
     DuplicateKind(PackKind),
-    /// 這種資料包不交給 [`crate::Engine::open`]（字根提示由殼另外載入）。
+    /// 這種資料包不交給 [`crate::Engine::open`]（字根提示、停鍵層的模型由殼另外載入）。
     NotForEngine(PackKind),
     /// 少了一定要有的那種資料包。
     Missing(PackKind),
@@ -318,6 +333,15 @@ impl Pack for EnglishPack {
 impl Pack for EmojiPack {
     const MAGIC: [u8; 4] = *b"QIMJ";
     const KIND: PackKind = PackKind::Emoji;
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl Pack for ModelPack {
+    const MAGIC: [u8; 4] = *b"QIMN";
+    const KIND: PackKind = PackKind::Model;
 
     fn id(&self) -> &str {
         &self.id

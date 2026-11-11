@@ -2,14 +2,17 @@
 # requires-python = ">=3.12"
 # dependencies = ["torch==2.15.0", "safetensors==0.8.0", "numpy==2.5.4"]
 # ///
-"""M3 票 09：訓練停鍵層的兩個字級神經模型（README〈訓練〉）。
+"""停鍵層的字級神經模型的訓練（M3 票 09 寫、票 11d 搬來；docs/development.md〈停鍵層的模型〉）。
 
   uv run --script train.py prepare               # 語料 → 字表與 token 檔（build/neural-rerank/data/）
-  uv run --script train.py train --model lstm    # Gboard 級 CIFG-LSTM，約 1.4M 參數
-  uv run --script train.py train --model gpt     # 青簡級 GPT-2 式 decoder，約 23M 參數
+  uv run --script train.py train --model lstm    # Gboard 級 CIFG-LSTM，約 1.4M 參數（採用的停鍵層）
+  uv run --script train.py train --model gpt     # 青簡級 GPT-2 式 decoder，約 23M 參數（只給模型階梯）
+  uv run --script train.py fixture               # qim-neural 單元測試用的極小模型與 PyTorch 分數
 
-結構與權重名照 `../neural-cost/src/model.rs`（M2 票 11 量開銷的那兩個模型），推論由
-`../model-ladder` 的 candle 程式讀 `model.safetensors`。
+結構與權重名照 `scripts/experiments/neural-cost/src/model.rs`（M2 票 11 量開銷的那兩個模型）。
+產品的推論是 `crates/qim-neural`（只有 LSTM）；`cargo xtask neural-import` 核對 `reference.json`、
+量化後放進 `data/neural-rerank/`。模型階梯的 candle 程式（`scripts/experiments/model-ladder`）也讀
+`model.safetensors`。
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from safetensors.torch import save_file
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build" / "neural-rerank"
 WIKI = ["zh-wiki", "yue-wiki"]
 COLLOQUIAL = ["common-voice-yue", "hkcancor"]
@@ -304,6 +307,36 @@ def reference(model: nn.Module, data: Path, vocab: int) -> list[dict]:
     return out
 
 
+def fixture(args: argparse.Namespace) -> None:
+    """qim-neural 單元測試用：形狀很小的隨機 CIFG-LSTM 與 PyTorch 算的分數，核對 candle 的推論
+    （`crates/qim-neural/tests/fixtures/`）。權重放大一些，分數才不會每條都差不多。embedding 寬 32，
+    量化成 q8 時 embedding 與閘會量化、投影不會（內層維度要是 32 的倍數），同真的模型。"""
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    torch.manual_seed(args.seed)
+    vocab = 12
+    model = CifgLstm(vocab, embed=32, cells=8)
+    with torch.no_grad():
+        for p in model.parameters():
+            p.copy_(torch.randn_like(p) * 0.5)
+    model.eval()
+    rng = np.random.default_rng(args.seed)
+    cases = []
+    with torch.no_grad():
+        for ctx_len, path_len in [(0, 1), (0, 5), (3, 2), (7, 9), (20, 4)]:
+            # 前文不含句首記號（推論端自己加），路徑不含記號。
+            ctx = [int(t) for t in rng.integers(1, vocab, ctx_len)]
+            path = [int(t) for t in rng.integers(2, vocab, path_len)]
+            seq = torch.tensor([[SEP] + ctx + path])
+            lp = F.log_softmax(model(seq[:, :-1]).float(), -1)[0]
+            score = sum(lp[len(ctx) + i, t].item() for i, t in enumerate(path))
+            cases.append({"context": ctx, "path": path, "score": score})
+    tensors = {k: v.detach().float().contiguous() for k, v in model.export().items()}
+    save_file(tensors, out / "tiny-lstm.safetensors")
+    (out / "tiny-lstm-reference.json").write_text(json.dumps(cases, indent=1) + "\n", encoding="utf-8")
+    print(f"寫到 {out}")
+
+
 def git_commit() -> str:
     return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
 
@@ -414,6 +447,10 @@ def main() -> None:
     t.add_argument("--keep-best", action="store_true", help="匯出口語 dev 損失最低那次評估的權重")
     t.add_argument("--save-checkpoints", action="store_true", help="每次評估另存一份權重到 step<N>/")
     t.set_defaults(func=train)
+    f = sub.add_parser("fixture")
+    f.add_argument("--out", default=str(ROOT / "crates" / "qim-neural" / "tests" / "fixtures"))
+    f.add_argument("--seed", type=int, default=11)
+    f.set_defaults(func=fixture)
     args = ap.parse_args()
     args.func(args)
 

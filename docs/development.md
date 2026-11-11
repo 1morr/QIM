@@ -40,6 +40,7 @@ macOS 上 `npm ci` 會提示 `fsevents` 的 install script 未核准：它附預
 | `npm run --prefix web build` | 型別檢查後打包網頁到 `web/dist/` |
 | `cargo xtask data [--verify]` | 建資料包到 `build/packs/`、預設佈局到 `build/layouts/`，見〈資料建置〉 |
 | `cargo xtask pack-release [--previous <index.json>]` | 把 `build/packs/` 整理成線上更新的 release 目錄 `build/pack-release/`，見〈線上更新的 release〉 |
+| `cargo xtask neural-import <訓練目錄> --lambda <λ>` | 把訓練好的停鍵層模型核對、量化後匯入 `data/neural-rerank/`，見〈停鍵層的模型〉 |
 | `cargo xtask bench [--lexicon <id>] [--check \| --update-baseline \| --learning \| --dev [--set <鍵>=<值>]…]` | 首選字基準，見〈首選字基準〉；`--dev` 調參用，見〈dev 切分調參〉；`--lexicon` 換一份詞庫 |
 
 ## 資料建置
@@ -58,7 +59,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `upstream_file`：上游釘住 sha256 的授權檔（`files` 之一）整份寫進 `LICENSE`（rime-essay 的 `LICENSE`）。
   - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包、bigram 進語言模型資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
-- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`manifest.json`（id、種類、版本、最低核心版本、大小、sha256、授權，plan §4.6）、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。資料包的內容改了，就在 `pipeline.rs` 的 `build_packs` 加那份的 `version`。速成資料包的 `<id>` 是方案 id（`quick`），碼表的簡體字標記由 OpenCC 的字典判定（plan §4.1，`crates/qim-databuild/src/simplified.rs`），所以授權除了 libcangjie、Unihan 還有 OpenCC；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 與 repo 裡的粵語口語詞表 `data/lexicon/yue-colloquial.tsv` 的詞與詞頻、HKCanCor train 切分裡的詞（已分詞，`crates/qim-databuild/src/hkcancor.rs` 的 `TrainWords`），加上各語料 train 切分乘上語料權重相加的字頻（plan §4.2），在語料之後建；詞表不經 `sources.toml`，`NOTICE` 記它這次內容的 sha256，授權是 `data/licenses/CC0-1.0.txt`；另一份詞庫 `quick-lexicon-words-hk` 是同樣的詞再補粵典的詞頭（`crates/qim-databuild/src/words_hk.rs`，plan §4.2），可選、不是預設，授權多一段粵典的非商業條款（`data/licenses/words-hk-NCODL-1.0.txt`）；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建；字根提示資料包的 `<id>` 是 `[packs]` 的 `radical_hint`（`cangjie-hint`），是 libcangjie 每個漢字的倉頡三代 / 五代碼（plan §4.1 步驟 5，`crates/qim-databuild/src/radical_hint.rs`），授權只有 libcangjie，`Engine` 不載入它，由殼另外載入顯示（ADR 0003）；簡繁資料包 `opencc-hk2s` 不由方案指名、各方案共用，是 OpenCC 的 `hk2s` 轉換表（plan §4.4，讀字典的規則在 `crates/qim-databuild/src/opencc.rs`），由 `Engine::with_simplifier` 掛上；英文資料包 `scowl-en-us` 也不由方案指名、各方案共用，是 ESDB release 的 Hunspell en_US 字典展開後速成打得出的詞（plan §4.4，展開與篩選的規則在 `crates/qim-databuild/src/english.rs`），由 `Engine::with_english` 掛上；emoji 資料包 `cldr-emoji-yue-hant` 也不由方案指名、各方案共用，是 CLDR 粵語與繁中標註的「字詞 → emoji」（plan §4.4，規則與關鍵字門檻在 `crates/qim-databuild/src/emoji.rs`，門檻怎麼定見 `scripts/experiments/emoji-keywords/`），由 `Engine::with_emoji` 掛上。七種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（各自實作 `Pack` trait：魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。建哪些資料包只列在 `crates/qim-databuild/src/pipeline.rs` 的 `build_packs`：加一種資料包就在那裡加一項（建法、授權來源、`NOTICE` 的說明），寫檔、印路徑與 sha256、`--verify` 的決定性比對都跟著這份清單走；要它解得開、接得上核心的抽查另加在 `verify.rs`。
+- 產物：`build/packs/<id>/` 下的 `<id>.pack`、`manifest.json`（id、種類、版本、最低核心版本、大小、sha256、授權，plan §4.6）、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。資料包的內容改了，就在 `pipeline.rs` 的 `build_packs` 加那份的 `version`。速成資料包的 `<id>` 是方案 id（`quick`），碼表的簡體字標記由 OpenCC 的字典判定（plan §4.1，`crates/qim-databuild/src/simplified.rs`），所以授權除了 libcangjie、Unihan 還有 OpenCC；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 與 repo 裡的粵語口語詞表 `data/lexicon/yue-colloquial.tsv` 的詞與詞頻、HKCanCor train 切分裡的詞（已分詞，`crates/qim-databuild/src/hkcancor.rs` 的 `TrainWords`），加上各語料 train 切分乘上語料權重相加的字頻（plan §4.2），在語料之後建；詞表不經 `sources.toml`，`NOTICE` 記它這次內容的 sha256，授權是 `data/licenses/CC0-1.0.txt`；另一份詞庫 `quick-lexicon-words-hk` 是同樣的詞再補粵典的詞頭（`crates/qim-databuild/src/words_hk.rs`，plan §4.2），可選、不是預設，授權多一段粵典的非商業條款（`data/licenses/words-hk-NCODL-1.0.txt`）；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建；字根提示資料包的 `<id>` 是 `[packs]` 的 `radical_hint`（`cangjie-hint`），是 libcangjie 每個漢字的倉頡三代 / 五代碼（plan §4.1 步驟 5，`crates/qim-databuild/src/radical_hint.rs`），授權只有 libcangjie，`Engine` 不載入它，由殼另外載入顯示（ADR 0003）；簡繁資料包 `opencc-hk2s` 不由方案指名、各方案共用，是 OpenCC 的 `hk2s` 轉換表（plan §4.4，讀字典的規則在 `crates/qim-databuild/src/opencc.rs`），由 `Engine::with_simplifier` 掛上；英文資料包 `scowl-en-us` 也不由方案指名、各方案共用，是 ESDB release 的 Hunspell en_US 字典展開後速成打得出的詞（plan §4.4，展開與篩選的規則在 `crates/qim-databuild/src/english.rs`），由 `Engine::with_english` 掛上；emoji 資料包 `cldr-emoji-yue-hant` 也不由方案指名、各方案共用，是 CLDR 粵語與繁中標註的「字詞 → emoji」（plan §4.4，規則與關鍵字門檻在 `crates/qim-databuild/src/emoji.rs`，門檻怎麼定見 `scripts/experiments/emoji-keywords/`），由 `Engine::with_emoji` 掛上；停鍵層的模型資料包 `zh-hant-neural-rerank`（種類 `model`）不由方案指名，是 `data/neural-rerank/` 裡採用的 1.4M 神經模型原樣包起來（q8 權重、字表、λ，`crates/qim-databuild/src/neural.rs`，見〈停鍵層的模型〉），授權是訓練語料的，`Engine` 不載入它，由殼交給 `qim-neural`（plan §2.7）。九種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（各自實作 `Pack` trait：魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。建哪些資料包只列在 `crates/qim-databuild/src/pipeline.rs` 的 `build_packs`：加一種資料包就在那裡加一項（建法、授權來源、`NOTICE` 的說明），寫檔、印路徑與 sha256、`--verify` 的決定性比對都跟著這份清單走；要它解得開、接得上核心的抽查另加在 `verify.rs`。
 - 預設佈局：`build/layouts/gboard-quick.json`（設定的「數字列」打開時改讀 `gboard-quick-number-row.json`，字母頁上方多一排數字），Gboard 速成的手機直向與橫向，各有字母、符號、常用（自訂頁面的示範）三頁，由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式 `qim-layout/1` 的型別與 JSON Schema 在 `crates/qim-layout`（`schema/qim-layout-1.schema.json`）。不讀來源、沒有授權檔。內建佈局的嚴格檢查（plan §5.3）是 `crates/qim-databuild/tests/gboard.rs` 的測試，跟著 `cargo xtask check` 的 `test` 跑；網頁載入佈局時把驗證的警告印在瀏覽器 console。
 - 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，轉成香港繁體（中文維基 `s2hk`，其餘 `t2hk`）再換回常見寫法（字形對照表，plan §4.3）、切句、切分，寫出基準檔、「有前文」的題（各目錄下的 `context/<名>.tsv`）與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`dev.tsv`（dev 切分的調參題，取法與格式同基準檔，見〈首選字基準〉的〈dev 切分調參〉）、`dev-context.tsv`（dev 切分的「有前文」調參題，取法與格式同 `context/` 下的題）、`test-context-long.tsv` 與 `dev-context-long.tsv`（test、dev「有前文」的同一批題，前文換成同一段裡前面最多 200 字，模型階梯用，`scripts/experiments/model-ladder/`）、只有 `hkcancor` 有的 `test-dialogue.tsv` 與 `dev-dialogue.tsv`（口語長前文：test、dev 的句子配同一段對話裡前面的話輪，最多 200 字，模型階梯用）、`chars.tsv`（字頻，見〈語料〉），`build/` 下的都不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 75 秒（其中詞級 trigram 切段、訓練約 30 秒，峰值記憶體約 5 GB），`--verify` 把語料再建一次、bigram 與詞級 trigram 再訓練一次比 sha256，約 130 秒（Apple M6，release）。
 
@@ -118,6 +119,27 @@ cargo xtask pack-release --previous /tmp/prev/index.json
 ```
 
 資料包固定放在 tag `packs` 的 release（不用 `latest`，App 的 release 也在同一個 repo；plan §4.7），網頁與之後的平台殼讀 `releases/download/packs/index.json`。第一次 `gh release create packs build/pack-release/*`；之後換 asset 時先傳資料包、最後傳索引：`gh release upload packs build/pack-release/*.pack build/pack-release/*.manifest.json build/pack-release/*.LICENSE build/pack-release/*.NOTICE --clobber`，再 `gh release upload packs build/pack-release/index.json --clobber`。在 GitHub 建 release 會公開資料包，先問使用者（M3 還沒建過）。
+
+### 停鍵層的模型
+
+停鍵層用 Gboard 級 1.4M 的字級 CIFG-LSTM 重排 lattice 路徑（plan §2.7）。訓練不是決定性的（同設定重訓的分數會變），所以 `cargo xtask data` 不訓練：採用的那份放在 git 的 `data/neural-rerank/`（`model.gguf` 是 q8 權重、`vocab.txt` 是模型用到的字表、`model.toml` 是 λ、字表外的字數與訓練出處），`cargo xtask data` 只把它包成模型資料包，`--verify` 抽查 `qim-neural` 載入得了、排得出名次（`NeuralRerank`）。換模型的步驟：
+
+```sh
+cargo xtask data                                     # 語料的 train、dev 切分（build/corpus/）
+ln -s <主 checkout>/bench/personal bench/personal    # worktree 裡要剔除個人集的句子時（〈個人集〉）
+cd scripts/neural-rerank
+uv run --script train.py prepare                     # 字表與 token 檔到 build/neural-rerank/data/，約 15 秒
+uv run --script train.py train --model lstm --name lstm-c0.5 --steps 4000 --batch 128 --lr 2e-3 --weight-decay 0.01 --colloquial-frac 0.5   # 約 15 分鐘（Apple M6，MPS）
+cd ../..
+cargo xtask neural-import build/neural-rerank/lstm-c0.5 --lambda 2   # 核對 reference.json、量化成 q8、寫進 data/neural-rerank/
+cargo xtask data                                     # 建模型資料包
+```
+
+- `train.py`（PyTorch，PEP 723 的 inline 依賴，`train.py.lock` 釘版本，`uv run --script` 跑）在權重旁寫 `reference.json`：幾組前文與路徑和 PyTorch 算的分數。`neural-import` 用 candle 的 f32 重算，差超過 0.0001 nat 就不寫檔（模型結構或權重名和 `qim-neural` 對不上），過了才量化成 q8（`qim_neural::to_gguf`，同樣的權重得到同樣的位元組）。
+- λ 只在 dev 切分上挑（`scripts/experiments/model-ladder` 的 `neural --lambdas`），不看 test 與個人集；換了模型要照 plan §2.7 跑模型階梯報 test 的數字，`cargo xtask bench` 不跑重排。
+- `qim-neural` 的單元測試用 `train.py fixture` 產生的極小模型（`crates/qim-neural/tests/fixtures/`）核對 PyTorch 的分數，CI 也跑；本機有 `build/neural-rerank/lstm-c0.5/` 時另比真的模型。改了 `train.py` 的模型結構要重產這組檔。
+- 重排一次的延遲：`cargo run --release -p qim-neural --example latency`（9 條路徑 × 18 字、前文 50 字，2 條執行緒）。
+- 模型資料包和其他資料包一起進 `cargo xtask pack-release` 的索引（〈線上更新的 release〉）。
 
 ## 首選字基準
 

@@ -24,8 +24,8 @@ use crate::verify::{
     WordsHkSummary,
 };
 use crate::{
-    Error, bigram, build_scheme_pack, emoji, english, gboard, lexicon, libcangjie, opencc, packing,
-    personal, radical_hint, scheme, simplified, unihan, word_trigram, words_hk,
+    Error, bigram, build_scheme_pack, emoji, english, gboard, lexicon, libcangjie, neural, opencc,
+    packing, personal, radical_hint, scheme, simplified, unihan, word_trigram, words_hk,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -606,6 +606,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             id: EMOJI_ID.into(),
             emoji: built_emoji.table,
         };
+        // 訓練不是決定性的：採用的模型放在 git 裡（`cargo xtask neural-import`），這裡只包起來。
+        let model = neural::pack(&root.join(neural::NEURAL_DIR))?;
         let scheme = &quick.pack.scheme.id;
         let mut packs = vec![
             LicensedPack::new(
@@ -667,6 +669,13 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 "1.0.0",
                 packing::EMOJI.into(),
                 EMOJI_ABOUT.replace("{max}", &emoji::MAX_KEYWORD_EMOJI.to_string()),
+            )?,
+            LicensedPack::new(
+                "停鍵層模型",
+                &model,
+                "1.0.0",
+                packing::neural_sources(),
+                neural_about(&model),
             )?,
         ]);
         // 接在預設詞庫後面：`built::find` 取同種的第一份，預設詞庫要在前。
@@ -772,6 +781,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             })
             .collect::<Result<Vec<_>, Error>>()?;
         report.checks.push(verify::manifests(&written));
+        report.checks.push(verify::neural_rerank(&built));
         // Unihan 交叉比對的結果只寫報表，不影響通過與否。
         let check = unihan::compare(&quick.rows, &unihan::cangjie_codes(&quick.dictionary_like)?);
         let path = root.join(UNIHAN_REPORT);
@@ -952,6 +962,24 @@ fn language_model_about(id: &str) -> String {
          of each corpus by its weight ({weights}), and pruned to the pairs whose weighted\n\
          count is at least {min}. {CORPUS_PREPROCESSING}",
         min = bigram::MIN_COUNT,
+        weights = corpus_weights(),
+    )
+}
+
+/// 停鍵層模型資料包 NOTICE 最後一段：怎麼用來源。同字級 bigram，授權是否要求模型同授權散布是
+/// brief §11 的待決項。
+fn neural_about(model: &qim_core::ModelPack) -> String {
+    format!(
+        "{id} is a character-level neural language model (a CIFG-LSTM of about 1.4M\n\
+         parameters, weights quantized to 8 bits in GGUF) trained by QIM with\n\
+         scripts/neural-rerank/train.py of the QIM repository. QIM uses it to rerank\n\
+         candidate sentences after typing pauses. It was trained on windows of text from\n\
+         the training split of each corpus listed above, half of them from the two\n\
+         colloquial corpora; sentences used for evaluation were left out. Its vocabulary\n\
+         is the {chars} most frequent characters of those splits, the count in each\n\
+         corpus multiplied by its weight\n({weights}).\n{CORPUS_PREPROCESSING}",
+        id = model.id,
+        chars = model.vocab.len(),
         weights = corpus_weights(),
     )
 }

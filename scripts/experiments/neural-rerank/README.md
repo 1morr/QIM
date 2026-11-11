@@ -18,8 +18,7 @@
 
 | 路徑 | 內容 |
 | --- | --- |
-| `train.py` | 語料前處理（`prepare`）與訓練（`train`），PEP 723 的 inline 依賴，`uv run --script` 跑 |
-| `train.py.lock` | `uv lock --script` 釘的依賴版本 |
+| `../../neural-rerank/train.py` | 語料前處理（`prepare`）與訓練（`train`），PEP 723 的 inline 依賴，`uv run --script` 跑；票 11d 從本目錄搬去（`docs/development.md`〈停鍵層的模型〉），同目錄有 `uv lock --script` 釘的 `train.py.lock` |
 | `../model-ladder/src/neural.rs` | candle 推論：字表、兩個模型（形狀從權重讀）、前綴快取、路徑長度不一時補齊遮罩、q8 量化、`Reranker` |
 | `../model-ladder/src/main.rs` 的 `neural`、`quantize` | 打全部集合、掃 λ、印延遲；f32 轉 q8 |
 | `../model-ladder/tests/neural.rs` | 批次（前綴快取 + 補齊遮罩）的分數等於一條一條從句首算的分數，f32 與 q8 |
@@ -188,12 +187,12 @@ spec〈採用門檻〉的停鍵層（神經模型），看 test 的 q8 與 iPhon
 ```sh
 cargo xtask data                                  # repo 根目錄；語料的 train、dev 切分與長前文題
 ln -s <主 checkout>/bench/personal bench/personal # worktree 裡要個人集時（docs/development.md〈個人集〉）
-cd scripts/experiments/neural-rerank
+cd scripts/neural-rerank                          # 票 11d 起訓練程式在這裡
 uv run --script train.py prepare                  # 字表與 token 檔，約 15 秒
 uv run --script train.py train --model lstm --name lstm-c0.5 --steps 4000 --batch 128 --lr 2e-3 --weight-decay 0.01 --colloquial-frac 0.5
 uv run --script train.py train --model gpt --name gpt-c0.15 --steps 5000 --batch 64 --lr 6e-4 --dropout 0.1 --colloquial-frac 0.15 --save-checkpoints   # 用 step4000/
 # 調參的其他幾次：--colloquial-frac -1（自然比例）、0.1、0.3；LSTM 0.3 加 --steps 8000 --eval-every 1000 --save-checkpoints
-cd ../model-ladder
+cd ../experiments/model-ladder
 cargo build --release
 B=../../../build/neural-rerank
 ./target/release/model-ladder neural --model $B/<名>/model.safetensors --vocab $B/data/vocab.txt --lambdas 0.5,1,2   # dev 掃 λ

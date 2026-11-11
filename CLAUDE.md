@@ -15,7 +15,7 @@
 | 路徑 | 內容 |
 | --- | --- |
 | `crates/` | Rust crate；各 crate 的職責與依賴規則見 plan §1.2、§1.3 |
-| `data/` | 方案檔、來源清單 `sources.toml`、自行整理的詞表 `lexicon/`、進資料包的授權全文 `licenses/`；建置方式見 `docs/development.md`〈資料建置〉 |
+| `data/` | 方案檔、來源清單 `sources.toml`、自行整理的詞表 `lexicon/`、進資料包的授權全文 `licenses/`、停鍵層採用的模型 `neural-rerank/`；建置方式見 `docs/development.md`〈資料建置〉〈停鍵層的模型〉 |
 | `bench/` | 首選字基準的題目與語料（plan §5.2）；`corpus/`、`colloquial/` 由 `cargo xtask data` 產生，`personal/` 只在本機 |
 | `xtask/` | 閘門與開發指令（`cargo xtask check`），用法見 `docs/development.md` |
 | `web/` | 網頁 prototype（Vite + TypeScript + Biome） |
@@ -23,7 +23,7 @@
 | `.scratch/` | 里程碑的 spec 與票 |
 | `.githooks/` | git hook，啟用方式見 `docs/development.md` |
 | `.github/` | GitHub Actions 的 CI，跑什麼見 `docs/development.md`〈全部檢查〉 |
-| `scripts/` | 腳本；設計實驗在 `scripts/experiments/` |
+| `scripts/` | 腳本：停鍵層模型的訓練在 `scripts/neural-rerank/`，設計實驗在 `scripts/experiments/` |
 
 ## 每個 session 的流程
 

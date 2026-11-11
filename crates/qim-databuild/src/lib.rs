@@ -15,6 +15,7 @@ pub mod hkcancor;
 pub mod lexicon;
 pub mod libcangjie;
 pub mod mediawiki;
+pub mod neural;
 pub mod opencc;
 mod packing;
 pub mod personal;
