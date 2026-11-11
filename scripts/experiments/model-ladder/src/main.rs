@@ -106,7 +106,7 @@ fn eval(args: &[String]) -> Result<(), String> {
     let split = split_of(&f);
     let n = f.n.unwrap_or(DEFAULT_N);
     let root = root();
-    let (engine, _, _) = qim_bench::load_engine(&root, &[])?;
+    let (engine, _, _) = qim_bench::load_engine(&root, &[], None)?;
     let sets = load_sets(&root, split)?;
     let mut orders = match (&f.orders, &f.name) {
         (Some(path), Some(name)) => {
@@ -149,7 +149,7 @@ fn export(args: &[String]) -> Result<(), String> {
     let split = split_of(&f);
     let n = f.n.unwrap_or(DEFAULT_N);
     let root = root();
-    let (engine, _, _) = qim_bench::load_engine(&root, &[])?;
+    let (engine, _, _) = qim_bench::load_engine(&root, &[], None)?;
     let dir = root
         .join("build/model-ladder")
         .join(split.name())
@@ -232,7 +232,7 @@ fn neural(args: &[String]) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     pool.install(|| {
         let root = root();
-        let (engine, _, _) = qim_bench::load_engine(&root, &[])?;
+        let (engine, _, _) = qim_bench::load_engine(&root, &[], None)?;
         let sets = load_sets(&root, split)?;
         let start = std::time::Instant::now();
         let loaded = load(model_path).map_err(|e| e.to_string())?;

@@ -108,7 +108,7 @@ pub fn sync_command(args: &[String]) -> Result<(), String> {
         eprintln!("注意：test 切分只在設定定案後跑一次報數，調參只用 dev（README〈調參與報數〉）");
     }
     let root = super::root();
-    let (engine, _, lexicon) = qim_bench::load_engine(&root, &[])?;
+    let (engine, _, lexicon) = qim_bench::load_engine(&root, &[], None)?;
     let lexicon = lexicon.ok_or("方案沒有詞庫")?;
     let base = base_model(&root, &engine)?;
     let ranking = engine.scheme().ranking;

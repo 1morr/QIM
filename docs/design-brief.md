@@ -42,8 +42,8 @@ QIM（暫名）。
 
 依據 `docs/research/ime-primer.md` §5。
 
-- **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞、一份授權乾淨的小詞表與 HKCanCor 語料的詞）；簡繁切換；中文狀態下的英文候選；組字中修改分段；畫布模型的佈局（預設 Gboard 佈局、多頁、長按、直向與橫向、淺色與深色）；按鍵放大預覽；佈局編輯器；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
-- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序（同步層用詞級 trigram，M3 模型階梯採用）；停鍵後的小型神經模型重排（Gboard 級 1.4M，M3 模型階梯採用）；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題（鍵盤與桌面候選窗共用一份主題格式）；個人 bigram；空間模型；英文模式的預測與自動修正；依欄位類型切換；智慧標點；單手佈局；震動與按鍵音；觸控平台的實體鍵盤；Android 懸浮鍵盤；無障礙；萬用鍵（`z`：速成只用 a–y；macOS 倉頡也用 Z，`docs/research/closed-source-imes.md` §1.2）；容錯（§4.8）；譯詞（打中文出英文，可選資料包，詞表來源與授權開工時查）；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（M3 票 18 查過：rime-cantonese 授權鏈不明不用，粵典的 public domain 詞表與詞典本體的非商業授權對不上，待粵典書面確認，§12.1；先補 HKCanCor 的詞）。
+- **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞、一份授權乾淨的小詞表與 HKCanCor 語料的詞；另有可選的粵典詞庫資料包，見下面「完整粵語詞庫」）；簡繁切換；中文狀態下的英文候選；組字中修改分段；畫布模型的佈局（預設 Gboard 佈局、多頁、長按、直向與橫向、淺色與深色）；按鍵放大預覽；佈局編輯器；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
+- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；自動記住 email 這類字串；輸入框上下文配合 n-gram 排序（同步層用詞級 trigram，M3 模型階梯採用）；停鍵後的小型神經模型重排（Gboard 級 1.4M，M3 模型階梯採用）；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題（鍵盤與桌面候選窗共用一份主題格式）；個人 bigram；空間模型；英文模式的預測與自動修正；依欄位類型切換；智慧標點；單手佈局；震動與按鍵音；觸控平台的實體鍵盤；Android 懸浮鍵盤；無障礙；萬用鍵（`z`：速成只用 a–y；macOS 倉頡也用 Z，`docs/research/closed-source-imes.md` §1.2）；容錯（§4.8）；譯詞（打中文出英文，可選資料包，詞表來源與授權開工時查）；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（M3 票 18 查過：rime-cantonese 授權鏈不明不用，先補 HKCanCor 的詞；M3 票 24 照粵典較嚴的非商業條款，把它的詞頭另建成可選的詞庫資料包 `quick-lexicon-words-hk`，預設詞庫不含、可整份拿掉，§12.1；授權允許商用的完整粵語詞庫仍沒有）。
 - **待評估**：中文滑動輸入；語音輸入；多端檔案傳輸；句中英文混輸（§4.7）；腳本外掛（網頁版驗收後再定，理由見 `docs/research/cyime.md` §6）。
 - **不做**（M3 模型階梯量過、沒過門檻，理由與重評條件見 `docs/research/model-ladder.md`）：LLM 候選優化（雲端 LLM 與 Foundation Models 的重排）；青簡級 23M 神經模型；不設預算、可選下載的詞級 trigram。
 
@@ -184,7 +184,8 @@ QIM（暫名）。
 | 字序、碼表交叉驗證 | Unihan `kGradeLevel`、`kCangjie` | Unicode License v3 | `kGradeLevel` 排單字字序（有字頻前用，見 plan §4.1），進速成資料包；`kCangjie` 只用來抓錯碼，不打包 |
 | 詞頻 | rime-essay | LGPL-3.0 | 獨立的詞庫資料包；建置時設最低詞頻門檻；之後可換成自建詞頻。同一包另帶由口語與維基語料統計的字頻（plan §4.2），所以也帶語料的授權（CC BY-SA 4.0、CC BY 4.0、CC0） |
 | 粵語口語小詞表 | 自行整理 | CC0 | 不從 rime-cantonese、粵典複製 |
-| 粵語口語詞（語料） | HKCanCor train 切分的已分詞詞（M3 票 18，plan §4.2） | CC BY 4.0 | 只補 rime-essay 與小詞表沒收、出現 ≥ 2 次的兩字以上詞，不收人名；rime-cantonese、粵典不用（§12.1） |
+| 粵語口語詞（語料） | HKCanCor train 切分的已分詞詞（M3 票 18，plan §4.2） | CC BY 4.0 | 只補 rime-essay 與小詞表沒收、出現 ≥ 2 次的兩字以上詞，不收人名；rime-cantonese 不用（§12.1） |
+| 粵語詞頭（可選詞庫） | 粵典「細數據」頁的 `wordslist`（詞頭）與 `existingwordcount`（粵文庫次數）（M3 票 24，plan §4.2） | 照《非商業開放資料授權協議 1.0》處理（頁面另標 public domain，關係沒說明，取較嚴的；§12.1） | 只進可選的詞庫資料包 `quick-lexicon-words-hk`（預設詞庫加粵典的詞），預設詞庫不含；資料包附英文版權告示、免責聲明、特別鳴謝與官網連結；不得再授權、不得商業使用，商用改用預設詞庫 |
 | 口語語料 | HKCanCor（fcbond/hkcancor）、Common Voice 粵語句子（GitHub 的 Sentence Collector 句子檔，不用 Mozilla Data Collective 的資料集） | CC BY 4.0、CC0 1.0（§12.1） | 維基偏書面語，要補口語，訓練 bigram 與基準都用；Tatoeba 沒有版本化的下載又要逐句署名，M1 不用；LIHKG、OpenSubtitles 權利來源不清，不用 |
 | 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
 | 英文詞表 | ESDB（舊名 SCOWL）的 Hunspell en_US 字典（§12.1） | MIT 類寬鬆授權 | 中文狀態的英文候選用 |
@@ -257,6 +258,7 @@ QIM（暫名）。
 - LGPL 資料、以 CC BY-SA 語料統計的字頻（詞庫資料包，M1 票 06）與訓練的語言模型（字級 bigram；M3 票 08 量的字級 trigram 同樣只用 CC BY-SA 等語料，詞級 n-gram 另用 LGPL 的 rime-essay 切詞；M3 票 09 的神經模型也用同一批語料訓練）隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 已決（M2 票 06）：沒有付費帳號也能用免費佈建在實機跑 iOS 鍵盤擴充；App Group 在沒有完整取用時擴充只能讀、不能寫。M2 的 iOS 實驗都用免費佈建做，付費帳號照 §10 等上架前再申請（§12.3）。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
+- 平台 App（M6 起）的粵典詞庫 `quick-lexicon-words-hk`（非商業條款，§5.2、§12.1）要隨安裝檔內建，還是改成主 App 內另外下載（plan §4 的可選資料包，§5.3）。不設成預設不等於沒發佈：內建就是隨安裝檔散布。建議可選下載，讓安裝檔只帶授權可隨任何發佈方式出去的資料；QIM 開源、免費、無廣告、沒有商業打算（使用者 2026-11-11）。由使用者在 M6 開工時決定。網頁 prototype 只在本機跑，現在把它列為內建（M3 票 24）。
 
 ## 12. 查證過的事實
 
@@ -276,7 +278,7 @@ QIM（暫名）。
 - rime-essay `054920d`（2026-09-23）的 `essay.txt`：442,688 列「詞<TAB>詞頻」，單字 20,746 列；「簽合同」「簽押」「軟麪筋」各列兩次（「簽押」0 與 434）。兩字以上、詞頻 ≥ 100、字都在連打字集的有 250,202 詞，其中 99.4% 的速成碼組合不超過 4 個。`LICENSE` 是 LGPL-3.0 全文。[rime-essay](https://github.com/rime/rime-essay)；詞數為本機統計（`cargo xtask data --verify`），2026-11-04。
 - 繁體詞頻只找到 LGPL 來源：rime-essay（442,688 筆）、libchewing-data（160,462 筆）。教育部國語辭典為 CC BY-ND 3.0 台灣、無頻次。`docs/research/data-sources.md` §5。
 - rime-cantonese（`259f0e4`）與 rime-cantonese-upstream（`4cb67a4`）標 CC BY 4.0（`maps` 為 ODbL），但 repo 與 wiki 沒有授權鏈說明：詞條取自粵典（非商業）、志願者轉錄的紙本詞典、爬取的 LSHK 粵拼詞表與粵語審音配詞字庫、搜狗／QQ／百度用戶詞庫；upstream 的 `word.csv` 只有 `char,jyutping` 兩欄，沒有逐條來源，取不出乾淨的子集；`essay-cantonese.txt` 的頻次併入 GPL-3.0 的 Cifu。QIM 不用（M3 票 18）。[rime-cantonese](https://github.com/rime/rime-cantonese)、[upstream](https://github.com/CanCLID/rime-cantonese-upstream)；[`docs/research/cantonese-lexicon.md`](research/cantonese-lexicon.md) §1，2026-11-11 查。
-- 粵典詞典本體用《非商業開放資料授權協議 1.0》：收費、增值服務、網站廣告都明列為商業用途，不得再授權，沒有公開的全量下載。「細數據」頁（`words.hk/faiman/analysis/`）的 `wordslist`（全部詞頭與讀音，62,635 列，不只單字：兩字以上去星號去重 56,037 詞，約 2 萬個 rime-essay 沒有）與 `existingwordcount`（詞在粵文庫的出現次數）各標「Data License: public domain」，但詞典本體的授權頁沒提到這個例外、兩者關係沒說明；網址沒有版本，內容隨詞典更新。M3 票 18 算查不清、不用，不推翻小詞表「不從粵典複製」；待粵典（Hong Kong Lexicography Limited）書面確認，由使用者決定要不要去信。[粵典授權](https://words.hk/base/hoifong/)、[細數據](https://words.hk/faiman/analysis/)；[`docs/research/cantonese-lexicon.md`](research/cantonese-lexicon.md) §2，2026-11-11 查。
+- 粵典詞典本體用《非商業開放資料授權協議 1.0》：收費、增值服務、網站廣告都明列為商業用途，不得再授權，沒有公開的全量下載。「細數據」頁（`words.hk/faiman/analysis/`）的 `wordslist`（全部詞頭與讀音，62,635 列，不只單字：兩字以上去星號去重 56,037 詞，約 2 萬個 rime-essay 沒有）與 `existingwordcount`（詞在粵文庫的出現次數）各標「Data License: public domain」，但詞典本體的授權頁沒提到這個例外、兩者關係沒說明；網址沒有版本，內容隨詞典更新。M3 票 18 算查不清、不用；票 24 使用者決定不去信（QIM 開源、免費、無廣告，沒有商業打算），照較嚴的非商業條款處理，只進可選的詞庫資料包（plan §4.2），小詞表照舊不從粵典複製。[粵典授權](https://words.hk/base/hoifong/)、[細數據](https://words.hk/faiman/analysis/)；[`docs/research/cantonese-lexicon.md`](research/cantonese-lexicon.md) §2，2026-11-11 查。
 - 其他粵語詞表：維基詞典是 CC BY-SA 4.0／GFDL，粵語詞掛在 Chinese 詞條、沒有現成的粵語詞表；CC-Canto 是 CC BY-SA 3.0（24,059 個兩字以上詞，偏書面）；Cifu 是 GPL-3.0；開放詞典標 CC BY 3.0 但沒有資料下載；LSHK 粵拼詞表授權不明、原站已下線。[`docs/research/cantonese-lexicon.md`](research/cantonese-lexicon.md) §4、§5，2026-11-11 查。
 - Unihan `kHKGlyph`：字在香港《常用字字形表》2000 年修訂本（香港教育學院，收 4,759 字）的序號，同一條列了幾個寫法時共用序號。18.0.0 有 4,823 字；「够」0832 而「夠」沒有、「恆」1323 而「恒」沒有，「叙敘敍」同為 1715、「携攜」1694、「烟煙」2401、「踪蹤」4006、「迹跡蹟」3978、「韵韻」4492。[UAX #38](https://www.unicode.org/reports/tr38/)；本機統計，Unihan 18.0.0 `Unihan_DictionaryLikeData.txt`。《字形表》以「恆」為正字：[文匯報 2013-01-28〈正字異體各地有別〉](http://paper.wenweipo.com/2013/01/28/ED1301280009.htm)。字表有 2007、2012 年的修訂本（4,762 字），Unihan 對的是 2000 年本。[維基百科〈常用字字形表〉](https://zh.wikipedia.org/zh-hant/%E5%B8%B8%E7%94%A8%E5%AD%97%E5%AD%97%E5%BD%A2%E8%A1%A8)。
 - OpenCC（含字典）為 Apache-2.0；純 Rust 實作 ferrous-opencc 亦為 Apache-2.0。[OpenCC](https://github.com/BYVoid/OpenCC)。

@@ -1,7 +1,7 @@
-//! 詞庫資料包的內容（plan §4.2）：rime-essay、粵語口語詞表與 HKCanCor train 切分的多字詞展開成
-//! 速成碼索引，加上語料的字頻。
+//! 詞庫資料包的內容（plan §4.2）：rime-essay、粵語口語詞表與 HKCanCor train 切分的多字詞（可選詞庫
+//! 另加粵典的詞頭）展開成速成碼索引，加上語料的字頻。
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use qim_core::{CodeTable, Lexicon, Word};
 
@@ -22,6 +22,10 @@ pub const CORPUS_MIN_COUNT: u64 = 2;
 /// 語料的詞每出現一次算多少詞頻（rime-essay 的尺度）：兩邊都有的詞，詞頻比次數的下四分位，
 /// 怎麼定見 plan §4.2 與 M3 票 18 Comments。
 pub const CORPUS_WORD_FREQUENCY: u64 = 300;
+
+/// 粵典的詞頭在粵文庫每出現一次算多少詞頻（rime-essay 的尺度）；換算後低於 [`MIN_FREQUENCY`]
+/// 的（含沒見過的）用門檻。怎麼定見 plan §4.2 與 M3 票 24 Comments。
+pub const HEADWORD_FREQUENCY: u64 = 50;
 
 /// 建一次詞庫的統計，給 `--verify` 的報告。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -46,6 +50,8 @@ pub struct Counts {
     pub colloquial: usize,
     /// 語料的詞補進來的詞數（essay 與口語詞表沒收的）。
     pub corpus: usize,
+    /// 粵典的詞頭補進來的詞數（其他來源都沒收的）。
+    pub headwords: usize,
     /// rime-essay 的詞（兩字以上，重複的列算一個）經 [`Forms::normalize`] 換了寫法的詞數。
     pub converted: usize,
     /// 換了寫法之後和別的詞撞成同一個、詞頻相加的詞數。
@@ -73,13 +79,26 @@ impl Forms<'_> {
 /// 粵語口語詞表在 repo 裡的位置（plan §4.2、brief §5.2）：QIM 自行整理，CC0。
 pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 
-/// 由 rime-essay 的 `essay.txt`（一行「詞<TAB>詞頻」）與粵語口語詞表 `colloquial`（[`COLLOQUIAL_PATH`]，
-/// 同格式，`#` 開頭的行與空行略過）、語料 train 切分的詞與次數 `corpus`（`hkcancor::TrainWords`）建詞庫。
+/// 詞庫的詞從哪來。
+pub struct WordSources<'a> {
+    /// rime-essay 的 `essay.txt`，一行「詞<TAB>詞頻」。
+    pub essay: &'a str,
+    /// 粵語口語詞表（[`COLLOQUIAL_PATH`]），同格式，`#` 開頭的行與空行略過。
+    pub colloquial: &'a str,
+    /// 語料 train 切分的詞與次數（`hkcancor::TrainWords`）。
+    pub corpus: &'a BTreeMap<String, u64>,
+    /// 粵典的詞頭與粵文庫的次數（`words_hk::headwords`）；`None` 是預設詞庫，不收粵典的詞。
+    pub headwords: Option<&'a BTreeMap<String, u64>>,
+}
+
+/// 由 [`WordSources`] 建詞庫。
 ///
 /// - 口語詞表只補 essay 沒收的詞，是人工整理的：單字、詞頻低於 [`MIN_FREQUENCY`]、含連打字集以外
 ///   的字、重複、essay 已收（詞頻達門檻）的詞都算錯，不默默濾掉；essay 有但低於門檻的詞用詞表的詞頻。
 /// - 語料的詞只補 essay（達門檻）與口語詞表都沒收的詞：次數 ≥ [`CORPUS_MIN_COUNT`] 才收，詞頻是
 ///   次數乘 [`CORPUS_WORD_FREQUENCY`]；是機器抽的，含連打字集以外的字的詞默默略過、不算錯。
+/// - 粵典的詞頭只補以上都沒收的詞，詞頻是次數乘 [`HEADWORD_FREQUENCY`]、至少 [`MIN_FREQUENCY`]；
+///   含連打字集以外的字（英文、數字、標點）的默默略過。
 /// - 單字、詞頻低於 [`MIN_FREQUENCY`] 的詞、含連打字集以外的字的詞不收；同一個詞列了幾次取最大詞頻。
 /// - essay 與詞表的詞都經 `forms.normalize` 換成語料的寫法（「羣組」→「群組」）：換完撞成同一個詞的
 ///   照 [`combined`] 合併，門檻與字集看換完的詞；單向寫法反過來寫的錯字（「顯着」）改回原字。
@@ -90,9 +109,7 @@ pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 /// - 每個碼的詞依詞頻由高到低、同頻依碼位排。
 /// - `char_frequency`（[`char_frequency`]）放進詞庫，並存寫法的兩個字共用兩者的和。
 pub fn build(
-    essay: &str,
-    colloquial: &str,
-    corpus: &BTreeMap<String, u64>,
+    sources: &WordSources,
     code_table: &CodeTable,
     transcoder: &Transcoder,
     mut char_frequency: BTreeMap<char, u64>,
@@ -101,7 +118,7 @@ pub fn build(
     let codes = char_codes(code_table, transcoder);
     let mut counts = Counts::default();
     let mut essay_words: BTreeMap<&str, u64> = BTreeMap::new();
-    for (i, line) in essay.lines().enumerate() {
+    for (i, line) in sources.essay.lines().enumerate() {
         let invalid = |reason: &str| Error::invalid(format!("essay.txt 第 {} 行", i + 1), reason);
         let (text, frequency) = word_and_frequency(line, &invalid)?;
         counts.entries += 1;
@@ -127,7 +144,7 @@ pub fn build(
         .collect();
 
     let mut listed: BTreeSet<String> = BTreeSet::new();
-    for (i, line) in colloquial.lines().enumerate() {
+    for (i, line) in sources.colloquial.lines().enumerate() {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
@@ -157,20 +174,61 @@ pub fn build(
         counts.colloquial += 1;
     }
 
-    let mut corpus_counts: BTreeMap<String, u64> = BTreeMap::new();
-    for (text, count) in corpus {
-        *corpus_counts.entry(forms.common(text)).or_default() += count;
-    }
-    for (text, count) in corpus_counts {
-        let coded = text.chars().all(|ch| codes.contains_key(&ch));
-        if count < CORPUS_MIN_COUNT || !coded || listed.contains(&text) {
-            continue;
+    // 機器取的詞（語料、粵典）：換成語料的寫法後撞成同一個的次數相加，只補前面的來源沒收的。
+    // `by_spelling` 時收了的詞的任一種寫法（並存寫法，`forms.both`）也算收了：否則兩種寫法在下面
+    // 撞成同一個詞、詞頻相加，改到已收的詞（粵典的「開臺」生出「開台」）。語料的詞不這樣比：
+    // 撞上的只有台北、台灣、電視台，改了反而多錯（M3 票 24 Comments），預設詞庫維持原樣。
+    let mut fill_in = |found: &BTreeMap<String, u64>,
+                       frequency: &dyn Fn(u64) -> Option<u64>,
+                       by_spelling: bool| {
+        let mut merged: BTreeMap<String, u64> = BTreeMap::new();
+        for (text, count) in found {
+            *merged.entry(forms.common(text)).or_default() += count;
         }
-        let kept = words.entry(text).or_insert(0);
-        if *kept < MIN_FREQUENCY {
-            *kept = count * CORPUS_WORD_FREQUENCY;
-            counts.corpus += 1;
+        let taken: HashSet<String> = if by_spelling {
+            words
+                .iter()
+                .filter(|(_, f)| **f >= MIN_FREQUENCY)
+                .flat_map(|(text, _)| forms.both.spellings(text))
+                .collect()
+        } else {
+            HashSet::new()
+        };
+        let mut added = 0;
+        for (text, count) in merged {
+            let coded = text.chars().all(|ch| codes.contains_key(&ch));
+            let Some(frequency) = frequency(count) else {
+                continue;
+            };
+            let spelled_as_kept = || {
+                forms
+                    .both
+                    .spellings(&text)
+                    .iter()
+                    .any(|s| taken.contains(s))
+            };
+            if !coded || listed.contains(&text) || spelled_as_kept() {
+                continue;
+            }
+            let kept = words.entry(text).or_insert(0);
+            if *kept < MIN_FREQUENCY {
+                *kept = frequency;
+                added += 1;
+            }
         }
+        added
+    };
+    counts.corpus = fill_in(
+        sources.corpus,
+        &|count| (count >= CORPUS_MIN_COUNT).then_some(count * CORPUS_WORD_FREQUENCY),
+        false,
+    );
+    if let Some(headwords) = sources.headwords {
+        counts.headwords = fill_in(
+            headwords,
+            &|count| Some((count * HEADWORD_FREQUENCY).max(MIN_FREQUENCY)),
+            true,
+        );
     }
 
     let per_char = |text: &str| {

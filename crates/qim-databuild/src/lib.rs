@@ -30,6 +30,7 @@ pub mod unihan;
 pub mod verify;
 pub mod wiki;
 pub mod wikitext;
+pub mod words_hk;
 
 pub use error::Error;
 pub use pipeline::{Outcome, PACKS_DIR, WrittenPack, run};
