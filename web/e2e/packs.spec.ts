@@ -6,6 +6,8 @@ import { expect, type Page, test } from "@playwright/test";
 // `crates/qim-core/tests/web_fixture.rs` 產生）。
 
 const FIXTURE = new URL("fixtures/e2e-lexicon/", import.meta.url);
+/** 內建資料包的列數（`web/src/packs.ts` 的 `BUILTIN_IDS`）。 */
+const BUILTIN_ROWS = 10;
 
 async function fixture(): Promise<{ manifest: string; pack: Buffer }> {
 	return {
@@ -71,7 +73,7 @@ test.beforeEach(async ({ page }) => {
 
 test("列出內建的資料包：名稱、版本、大小、授權", async ({ page }) => {
 	await ready(page);
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	const lexicon = rows(page).and(page.locator(`[data-id="quick-lexicon"]`));
 	await expect(lexicon).toContainText("詞庫");
 	await expect(lexicon).toContainText("1.0.0");
@@ -91,6 +93,16 @@ test("列出內建的資料包：名稱、版本、大小、授權", async ({ pa
 	await expect(
 		rows(page).filter({ hasText: "quick-lexicon-words-hk" }),
 	).toContainText("LicenseRef-words-hk-NCODL-1.0");
+	// 詞級 trigram 內建兩份（M3 票 11b）：預設用方案指名的預算版，放寬版可選。
+	await expect(
+		page.getByLabel("使用 zh-hant-word-trigram", { exact: true }),
+	).toBeChecked();
+	await expect(
+		page.getByLabel("使用 zh-hant-word-trigram-large"),
+	).not.toBeChecked();
+	await expect(
+		rows(page).and(page.locator(`[data-id="zh-hant-word-trigram"]`)),
+	).toContainText("詞級 trigram");
 	// 每種只有一份時沒得選。
 	await expect(page.getByLabel("使用 zh-hant-bigram")).toBeChecked();
 	await expect(page.getByLabel("使用 zh-hant-bigram")).toBeDisabled();
@@ -119,7 +131,7 @@ test("匯入、切換、刪除，每步候選都換", async ({ page }, testInfo)
 
 	await importPack(page, manifest, pack);
 	await expect(status(page)).toContainText("已匯入 e2e-lexicon 1.0.0");
-	await expect(rows(page)).toHaveCount(9);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS + 1);
 	await expect(page.getByLabel("使用 e2e-lexicon")).toBeChecked();
 	expect(await firstOf(page, "anr")).toBe("測試詞庫");
 	await page.keyboard.type("anr");
@@ -148,7 +160,7 @@ test("匯入、切換、刪除，每步候選都換", async ({ page }, testInfo)
 
 	await page.getByRole("button", { name: "刪除 e2e-lexicon" }).click();
 	await expect(status(page)).toContainText("已刪除 e2e-lexicon");
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	await expect(
 		page.getByLabel("使用 quick-lexicon", { exact: true }),
 	).toBeChecked();
@@ -159,7 +171,7 @@ test("匯入、切換、刪除，每步候選都換", async ({ page }, testInfo)
 	});
 
 	await page.reload();
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	expect(await firstOf(page, "anr")).toBe("門口");
 });
 
@@ -199,15 +211,15 @@ async function candidatesOf(page: Page, code: string): Promise<string[]> {
 test("粵典詞庫：切過去打得出只在粵典詞頭表的詞，切回預設詞庫打不出", async ({
 	page,
 }, testInfo) => {
-	// 「襟食」（lfov）只在粵典的詞頭表：預設詞庫沒有，逐字拼也拼不出（M3 票 24）。
+	// 「暗寸」（aadi）只在粵典的詞頭表：預設詞庫沒有，逐字拼也拼不出（M3 票 24；票 11b 起詞級 trigram 拼得出原本用的「襟食」，換成它）。
 	await ready(page);
-	expect(await candidatesOf(page, "lfov")).not.toContain("襟食");
+	expect(await candidatesOf(page, "aadi")).not.toContain("暗寸");
 
 	await page.getByLabel("使用 quick-lexicon-words-hk").check();
 	await expect(status(page)).toContainText("詞庫改用 quick-lexicon-words-hk");
-	expect(await firstOf(page, "lfov")).toBe("襟食");
+	expect(await firstOf(page, "aadi")).toBe("暗寸");
 	expect(await firstOf(page, "anr")).toBe("門口");
-	await page.keyboard.type("lfov");
+	await page.keyboard.type("aadi");
 	await page.screenshot({
 		path: testInfo.outputPath("24-words-hk.png"),
 		fullPage: true,
@@ -216,12 +228,12 @@ test("粵典詞庫：切過去打得出只在粵典詞頭表的詞，切回預�
 
 	// 重新整理後還是用粵典那份。
 	await page.reload();
-	expect(await firstOf(page, "lfov")).toBe("襟食");
+	expect(await firstOf(page, "aadi")).toBe("暗寸");
 
 	await page.getByLabel("使用 quick-lexicon", { exact: true }).check();
 	await expect(status(page)).toContainText("詞庫改用 quick-lexicon");
-	expect(await candidatesOf(page, "lfov")).not.toContain("襟食");
-	await page.keyboard.type("lfov");
+	expect(await candidatesOf(page, "aadi")).not.toContain("暗寸");
+	await page.keyboard.type("aadi");
 	await page.screenshot({
 		path: testInfo.outputPath("24-default.png"),
 		fullPage: true,
@@ -243,17 +255,17 @@ for (const [served, missing] of [
 	}) => {
 		await ready(page);
 		await page.getByLabel("使用 quick-lexicon-words-hk").check();
-		expect(await firstOf(page, "lfov")).toBe("襟食");
+		expect(await firstOf(page, "aadi")).toBe("暗寸");
 		await page.route("**/packs/quick-lexicon-words-hk/**", (route) =>
 			route.fulfill(missing),
 		);
 		await page.reload();
-		await expect(rows(page)).toHaveCount(7);
+		await expect(rows(page)).toHaveCount(BUILTIN_ROWS - 1);
 		await expect(
 			page.getByLabel("使用 quick-lexicon", { exact: true }),
 		).toBeChecked();
 		expect(await firstOf(page, "anr")).toBe("門口");
-		expect(await candidatesOf(page, "lfov")).not.toContain("襟食");
+		expect(await candidatesOf(page, "aadi")).not.toContain("暗寸");
 	});
 }
 
@@ -289,7 +301,7 @@ test("改過 sha256 的資料包匯入被拒，候選不變", async ({ page }, t
 		path: testInfo.outputPath("20-rejected-sha256.png"),
 		fullPage: true,
 	});
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	expect(await firstOf(page, "anr")).toBe("門口");
 
 	// 資料包檔被改過一個位元組也一樣。
@@ -297,7 +309,7 @@ test("改過 sha256 的資料包匯入被拒，候選不變", async ({ page }, t
 	flipped[flipped.length - 1] ^= 1;
 	await importPack(page, manifest, flipped);
 	await expect(status(page)).toContainText("sha256");
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 });
 
 test("要求更新核心的資料包匯入被拒", async ({ page }) => {
@@ -311,7 +323,7 @@ test("要求更新核心的資料包匯入被拒", async ({ page }) => {
 	await importPack(page, newer, pack);
 	await expect(status(page)).toContainText("匯入失敗");
 	await expect(status(page)).toContainText("999.0.0");
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	expect(await firstOf(page, "anr")).toBe("門口");
 });
 
@@ -326,7 +338,7 @@ test("只選資料包檔、沒選 manifest 時說明要一起選", async ({ page
 		},
 	]);
 	await expect(status(page)).toContainText("manifest.json");
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 });
 
 test("和內建同 id 但種類不同的資料包匯入被拒", async ({ page }) => {
@@ -346,7 +358,7 @@ test("和內建同 id 但種類不同的資料包匯入被拒", async ({ page })
 	await expect(status(page)).toContainText("匯入失敗");
 	await expect(status(page)).toContainText("方案");
 	await page.reload();
-	await expect(rows(page)).toHaveCount(8);
+	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	expect(await firstOf(page, "anr")).toBe("門口");
 });
 

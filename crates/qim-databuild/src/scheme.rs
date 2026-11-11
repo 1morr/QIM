@@ -28,6 +28,7 @@ struct SchemeFile {
 struct PacksTable {
     lexicon: Option<String>,
     language_model: Option<String>,
+    word_trigram: Option<String>,
     radical_hint: Option<String>,
 }
 
@@ -73,6 +74,7 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
         packs: Packs {
             lexicon: file.packs.lexicon,
             language_model: file.packs.language_model,
+            word_trigram: file.packs.word_trigram,
             radical_hint: file.packs.radical_hint,
         },
         ranking: file.ranking,

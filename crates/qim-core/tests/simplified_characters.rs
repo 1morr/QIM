@@ -53,6 +53,7 @@ fn engine() -> Engine {
             lexicon: Some("lexicon".into()),
             language_model: Some("model".into()),
             radical_hint: None,
+            word_trigram: None,
         },
         ranking: Ranking::default(),
     };

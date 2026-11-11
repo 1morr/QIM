@@ -104,15 +104,15 @@ test.describe("實體鍵盤", () => {
 		const { text, first } = await ready(page);
 		const incognito = page.getByRole("checkbox", { name: "無痕" });
 		await text.focus();
-		// `wrht`：句首是「點算」，不知道前文（unigram）是「回血」。
-		await page.keyboard.type("wrht");
-		await expect(first).toHaveText("1點算");
+		// `hi`：句首是「我」，不知道前文是「的」（M3 票 11b 起詞級 trigram 讓原本的 `wrht` 兩者都是「回血」）。
+		await page.keyboard.type("hi");
+		await expect(first).toHaveText("1我");
 		await page.keyboard.press("Escape");
 
 		await incognito.check();
 		await expect(text).toBeFocused();
-		await page.keyboard.type("wrht");
-		await expect(first).toHaveText("1回血");
+		await page.keyboard.type("hi");
+		await expect(first).toHaveText("1的");
 		await page.screenshot({
 			path: testInfo.outputPath("context-incognito.png"),
 		});
@@ -130,8 +130,8 @@ test.describe("實體鍵盤", () => {
 		await expect(first).toHaveText("1你");
 		await page.keyboard.press("Escape");
 		await place(page, "");
-		await page.keyboard.type("wrht");
-		await expect(first).toHaveText("1點算");
+		await page.keyboard.type("hi");
+		await expect(first).toHaveText("1我");
 	});
 
 	test("無痕時不看前文的數字，只看自己送出去的字", async ({ page }) => {

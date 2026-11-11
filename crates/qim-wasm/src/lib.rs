@@ -139,7 +139,7 @@ fn engine(packs: &[WebPack]) -> Result<Engine, JsError> {
     Engine::open(&files).map_err(js_error)
 }
 
-/// 網頁的一個輸入框：速成、詞庫、語言模型、簡繁、英文與 emoji 資料包、一個個人模型、一個 `Session`。
+/// 網頁的一個輸入框：速成、詞庫、語言模型、詞級 trigram、簡繁、英文與 emoji 資料包、一個個人模型、一個 `Session`。
 /// JS 端叫 `Session`。
 #[wasm_bindgen(js_name = Session)]
 pub struct WebSession {
@@ -150,7 +150,7 @@ pub struct WebSession {
 
 #[wasm_bindgen(js_class = Session)]
 impl WebSession {
-    /// 由一組資料包建立：方案資料包，加上方案要的詞庫、語言模型，與可有可無的簡繁（沒有時簡體
+    /// 由一組資料包建立：方案資料包，加上方案要的詞庫、語言模型、詞級 trigram，與可有可無的簡繁（沒有時簡體
     /// 模式照原樣輸出）、英文（沒有時沒有英文候選）、emoji（沒有時沒有 emoji 候選）資料包，順序
     /// 不拘。資料包交給 `Session` 後在 JS 端就不能再用。
     #[wasm_bindgen(constructor)]

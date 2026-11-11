@@ -83,6 +83,9 @@ fn build(verify: bool) -> ExitCode {
                         println!("{words_hk}");
                     }
                     println!("{}", outcome.language_model);
+                    for summary in &outcome.word_trigrams {
+                        println!("{summary}");
+                    }
                     println!(
                         "{}",
                         qim_databuild::verify::english_summary(&outcome.english)

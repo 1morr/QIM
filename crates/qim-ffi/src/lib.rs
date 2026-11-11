@@ -77,6 +77,10 @@ pack!(
     LanguageModelPack
 );
 pack!(
+    /// 方案指名的詞級 trigram 資料包（同步層的語言模型，plan §4.3）。
+    WordTrigramPack
+);
+pack!(
     /// 簡繁資料包，各方案共用。
     SimplifierPack
 );
@@ -109,12 +113,14 @@ pub struct Engine(qim_core::Engine);
 
 #[uniffi::export]
 impl Engine {
-    /// 參數同核心的 `Engine::new` 加 `with_simplifier`、`with_english`；每份資料包只能給一個 `Engine`。
+    /// 參數同核心的 `Engine::new` 加 `with_word_trigram`、`with_simplifier`、`with_english`；每份資料包
+    /// 只能給一個 `Engine`。
     #[uniffi::constructor]
     pub fn new(
         scheme: Arc<SchemePack>,
         lexicon: Option<Arc<LexiconPack>>,
         language_model: Option<Arc<LanguageModelPack>>,
+        word_trigram: Option<Arc<WordTrigramPack>>,
         simplifier: Option<Arc<SimplifierPack>>,
         english: Option<Arc<EnglishPack>>,
     ) -> Result<Arc<Self>, QimError> {
@@ -124,6 +130,9 @@ impl Engine {
             language_model.map(|p| p.take()).transpose()?,
         )
         .map_err(core_error)?;
+        if let Some(pack) = word_trigram {
+            engine = engine.with_word_trigram(pack.take()?);
+        }
         if let Some(pack) = simplifier {
             engine = engine.with_simplifier(pack.take()?);
         }

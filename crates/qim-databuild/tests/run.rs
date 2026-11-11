@@ -4,7 +4,7 @@ use std::path::Path;
 
 use qim_core::{
     CangjieVersion, EmojiPack, Engine, EnglishPack, LanguageModelPack, LexiconPack, MANIFEST_FILE,
-    Manifest, Pack, PackKind, RadicalHintPack, SchemePack, SimplifierPack,
+    Manifest, Pack, PackKind, RadicalHintPack, SchemePack, SimplifierPack, WordTrigramPack,
 };
 use qim_databuild::sources::{Fetch, sha256_hex};
 use qim_databuild::verify::{self, CheckId};
@@ -732,7 +732,7 @@ fn every_pack_has_a_manifest_next_to_it() {
     let root = tempfile::tempdir().unwrap();
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), true).unwrap();
-    assert_eq!(outcome.packs.len(), 8);
+    assert_eq!(outcome.packs.len(), 10);
     let manifest_of = |name: &str| {
         let pack = written(&outcome, name);
         let dir = pack.path.parent().unwrap();
@@ -752,6 +752,8 @@ fn every_pack_has_a_manifest_next_to_it() {
         "詞庫",
         "詞庫（粵典）",
         "語言模型",
+        "詞級 trigram",
+        "詞級 trigram（放寬）",
         "字根提示",
         "簡繁",
         "英文",
@@ -759,6 +761,12 @@ fn every_pack_has_a_manifest_next_to_it() {
     ] {
         manifest_of(name);
     }
+    let (words, _) = manifest_of("詞級 trigram");
+    assert_eq!(words.kind, PackKind::WordTrigram);
+    assert_eq!(
+        words.license,
+        "LGPL-3.0 AND CC-BY-SA-4.0 AND CC-BY-4.0 AND CC0-1.0"
+    );
     let (quick, _) = manifest_of("速成");
     assert_eq!(quick.kind, PackKind::Scheme);
     assert_eq!(
@@ -987,6 +995,52 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
     assert!(notice.contains("Common Voice"), "{notice}");
     assert!(notice.contains("Kneser-Ney"), "{notice}");
     assert!(notice.contains("zh-wiki 1, hkcancor 64"), "{notice}");
+}
+
+/// 詞級 trigram（plan §4.3）：預算版與放寬版都建，方案指名的那份在前；授權含切詞用的詞庫來源。
+#[test]
+fn builds_both_word_trigram_packs_with_the_named_one_first() {
+    let root = tempfile::tempdir().unwrap();
+    repo(root.path(), STATEMENT);
+    let outcome = run(root.path(), &upstream(README), false).unwrap();
+
+    let ids: Vec<&str> = outcome
+        .packs
+        .iter()
+        .filter(|p| p.name.starts_with("詞級 trigram"))
+        .map(|p| p.id.as_str())
+        .collect();
+    assert_eq!(ids, ["zh-hant-word-trigram", "zh-hant-word-trigram-large"]);
+    for id in ids {
+        let dir = root.path().join("build/packs").join(id);
+        let pack =
+            WordTrigramPack::from_bytes(&std::fs::read(dir.join(format!("{id}.pack"))).unwrap())
+                .unwrap();
+        assert_eq!(pack.id, id);
+        // 句首一定在詞表裡；語料切出的段也有一些。
+        assert!(pack.model.id("\u{2}").is_some());
+        let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
+        assert!(license.contains("LGPL"), "{license}");
+        for (_, text) in CC_LICENSES {
+            assert!(license.contains(text), "{license}");
+        }
+        assert!(!license.contains(STATEMENT), "{license}");
+        let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
+        assert!(notice.contains("rime-essay"), "{notice}");
+        assert!(notice.contains("Common Voice"), "{notice}");
+        assert!(notice.contains("word trigram"), "{notice}");
+        assert!(notice.contains("zh-wiki 1, hkcancor 64"), "{notice}");
+    }
+    let summaries: Vec<&str> = outcome
+        .word_trigrams
+        .iter()
+        .map(|s| s.id.as_str())
+        .collect();
+    assert_eq!(
+        summaries,
+        ["zh-hant-word-trigram", "zh-hant-word-trigram-large"]
+    );
+    assert!(outcome.word_trigrams.iter().all(|s| s.segments > 1));
 }
 
 #[test]
@@ -1787,7 +1841,7 @@ fn a_words_hk_source_that_changed_upstream_only_skips_the_words_hk_pack() {
     std::fs::write(stale.join("quick-lexicon-words-hk.pack"), b"old").unwrap();
 
     let outcome = run(root.path(), &upstream(README), true).unwrap();
-    assert_eq!(outcome.packs.len(), 7);
+    assert_eq!(outcome.packs.len(), 9);
     assert!(
         outcome
             .packs
@@ -1818,7 +1872,7 @@ fn a_words_hk_source_that_cannot_be_downloaded_only_skips_the_words_hk_pack() {
     std::fs::remove_dir_all(root.path().join("cache/sources/words_hk")).unwrap();
 
     let outcome = run(root.path(), &Offline, false).unwrap();
-    assert_eq!(outcome.packs.len(), 7);
+    assert_eq!(outcome.packs.len(), 9);
     assert_eq!(outcome.skipped.len(), 1);
     assert!(
         outcome.skipped[0].reason.contains("離線"),

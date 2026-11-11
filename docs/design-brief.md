@@ -239,8 +239,8 @@ QIM（暫名）。
 
 【決定】
 
-- 延遲：在最低階目標裝置上，每按一鍵到候選更新，目標 ≤ 50 ms，上限 100 ms（研究推出的工程預算，`docs/research/ranking-techniques.md` §8.5）。M2 在 iPhone 18 Pro Max 的鍵盤擴充實測每鍵 p95 64 µs、最重的選開頭一段 p95 0.79 ms（§12.3）；低階機沒量。
-- 記憶體：iOS 鍵盤擴充的 footprint 峰值留在系統的記憶體警告線以下，不靠收到警告後釋放。M2 實測（只量了 iPhone 18 Pro Max、iOS 27.2）上限 177 MB、約 142 MB 收到警告；核心加六份資料包載入後 79 MB，M3 的模型峰值增量 ≤ 60 MB（plan §7.8）。旗艦機的上限可能比低階機高，低階機在 M7 量（§12.3）。
+- 延遲：在最低階目標裝置上，每按一鍵到候選更新，目標 ≤ 50 ms，上限 100 ms（研究推出的工程預算，`docs/research/ranking-techniques.md` §8.5）。M2 在 iPhone 18 Pro Max 的鍵盤擴充實測每鍵 p95 64 µs、最重的選開頭一段 p95 0.79 ms（§12.3）；低階機沒量。M3 加上詞級 trigram 後這台 Mac 每鍵 p95 約 1.4 倍（同一程序比 43 → 62 µs）、選開頭一段 0.75 → 1.2 ms（M3 票 11b），iPhone 上沒重量。
+- 記憶體：iOS 鍵盤擴充的 footprint 峰值留在系統的記憶體警告線以下，不靠收到警告後釋放。M2 實測（只量了 iPhone 18 Pro Max、iOS 27.2）上限 177 MB、約 142 MB 收到警告；核心加六份資料包載入後 79 MB，M3 的模型峰值增量 ≤ 60 MB（plan §7.8）。M3 加上詞級 trigram 預算版：載入後約 87 MB（再載入它留下 +5.6 MB、峰值 +20.4 MB，建 `Engine` +2.3 MB）；放寬版峰值 +71 MB 超過上限，沒用（M3 票 11b，§12.3）。旗艦機的上限可能比低階機高，低階機在 M7 量（§12.3）。
 - 首選正確率：首選字基準。把真實繁體 / 粵語句子機械轉成速成碼，讓核心連打，量整句首選正確率與字正確率；`mir` → 一台、`anr` → 門口等案例為固定必過題。改核心或資料包時必跑，答錯數不得上升。
 - 修正成本：長句首選常會錯（速成每字資訊少，§12.4 的拼音數字可參考），所以同時量打一句平均要選字和翻頁幾次、每字按鍵數，以及打字途中首選跳動多少；修正次數不得上升（plan §5.2）。
 - 基準語料：中文維基與粵語維基抽樣（CC BY-SA 4.0，基準檔單獨標註授權，只放測試資料、不打包進 App）；口語語料（§5.2）；使用者 Rime 的學習資料（詞與上屏次數，M1 就要有，只在本機）與選填的真實句子；使用者回報的案例為固定必過題，持續增加。品質判斷以口語與個人集為主，維基只防退步。
@@ -333,6 +333,7 @@ QIM（暫名）。
 - `phys_footprint` 是 XNU 的 ledger：匿名頁加被壓縮的匿名頁等，公式沒有檔案映射項（推論不含乾淨的檔案映射頁）；`top` 的 MEM 欄、活動監視器、Xcode 記憶體儀表都讀它。Mac18,5（macOS 27.0.1）實測：malloc 釋放的頁留在 footprint、只被之後的配置重用，`malloc_zone_pressure_relief` 也還不回來；M1 里程碑的六份資料包（檔案共 10.3 MB）加 `Engine` 與佈局載入後 footprint 約 96 MB，佈局走 `qim_layout::validate`（含 JSON Schema）讓執行檔多 3.1 MB。[`osfmk/kern/task.c`](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/task.c)、`man footprint`；`docs/research/ios-feasibility.md`〈Mac 上的資料包記憶體〉，2026-11-10。
 - uniffi 0.32.2 的 Swift 綁定（`qim-ffi`）在 Mac 上接得上核心，打 `anr` 上屏「門口」。每鍵延遲（Apple M6、macOS 27.0.1，同一批 123,330 鍵）p95：原生 42 µs、Swift 經綁定 58 µs、WebAssembly 在 Chromium 55 µs；最重的「選開頭一段」那一鍵 p95 0.74 / 0.76 / 0.89 ms，都遠低於 50 ms。uniffi 沒有 `char` 型別。[uniffi 手冊：Built-in types](https://mozilla.github.io/uniffi-rs/latest/types/builtin_types.html)；`docs/research/ios-feasibility.md`〈綁定開銷〉，2026-11-10。
 - iOS：核心經 `qim-ffi` 接進鍵盤擴充，在備忘錄打 `anr` 首選「門口」、空白上屏「門口」。資料包放擴充的 bundle，載入速成、詞庫、bigram、簡繁、英文五份加 `Engine`，footprint 多 51.4 MB（詞庫佔 41.4 MB），載入後共 64.4 MB，是 177 MB 上限的 36%，比 Mac 同組合少約 27 MB（推論 iOS 的 malloc 重用釋放的頁）；載入 120–138 ms。同一批 123,330 鍵每鍵 p50 45 µs、p95 64 µs，選開頭一段 p95 0.79 ms，比 Mac 慢 3.5–10%（iPhone 18 Pro Max、iOS 27.2；旗艦機，低階機可能更慢、上限更低）。`docs/research/ios-feasibility.md`〈鍵盤擴充接上核心〉，2026-11-10。
+- iOS：詞級 trigram 的記憶體（M3 票 11b，同一台 iPhone 18 Pro Max、iOS 27.2，Debug 組態的鍵盤擴充）：核心加速成、詞庫、bigram、簡繁、英文、字根提示六份資料包載入後 79.4 MB，再載入預算版（檔案 4.60 MB）footprint 留下 +5.6 MB、峰值 +20.4 MB；放寬版（13.89 MB）留下 +23.4 MB、峰值 +71.3 MB（到 150.7 MB），那個程序收到兩次記憶體警告（第一次在 141.9 MB）。各在新程序量一次。`docs/research/ios-feasibility.md`〈詞級 trigram 的記憶體〉，2026-11-11。
 - iOS：App Review 4.4.1 要求鍵盤在沒有 Full Access 時仍可用。[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)。
 - iOS：只能經 `textDocumentProxy` 讀游標前後文，長度上限官方未寫；沒有 marked text。`docs/research/platform-frameworks.md` §3.2。實測長度由宿主決定、大致按句子切、換行不截斷：備忘錄句中給所在句加前一整句、最多 300 字；Safari 的 `<textarea>` 句中只給所在句、句首給前一句、段首從上一句中間切，最多 100 字；每句 50 字的測試文字只讀得到一兩句，brief §8 的 200 字在 iOS 可能常拿不到（推論，真實文字未測；iPhone 18 Pro Max、iOS 27.2）。`docs/research/ios-feasibility.md`〈上下文長度〉，2026-11-10。
 - iOS：Foundation Models 在鍵盤擴充裡能用，沒有完整取用也行（官方沒寫 extension 能不能用，以上是實測）；iOS 27 起 Apple Intelligence 預設開啟、不能關，iPhone 18 Pro 系列跑 AFM Core Advanced（context 8192）。實測照 plan §7.8 的提示，連續請求約 190 ms，停頓後的第一個請求 8 次在 0.29–0.87 s、4 次要 6–15 s，`prewarm()` 擋不住；擴充的 footprint 第一輪多 3.8 MB（含 iphone-use 造成的畫面重建），推論模型不在擴充程序裡跑（iPhone 18 Pro Max、iOS 27.2；其他機型跑 Core 變體，延遲可能不同）。[Detecting available Apple foundation models](https://developer.apple.com/documentation/foundationmodels/detecting-available-apple-foundation-models)；`docs/research/ios-feasibility.md`〈Foundation Models〉，2026-11-10。
@@ -394,7 +395,7 @@ QIM（暫名）。
 
 M3 票 07–10 在 `fa07bd3` 量、票 11 對門檻（`.scratch/m3/spec.md`〈採用門檻〉）定的採用與否；基線是字級 bigram 加前文，數字是 test 切分的口語組（2,638 題）。細節與不採用的理由：`docs/research/model-ladder.md`，2026-11-11。
 
-- 同步層：詞級 trigram 預算版（資料包 7.84 MB）口語首選 36.3% → 44.5%、修正 2.421 → 2.046 次/句，比同預算的字級 trigram（42.3%）再多 2.2 點；放寬版（17.58 MB，常駐估計 35 MB）46.7%；不設預算版（152 MB）48.3%，比放寬版只多 1.6 點。每鍵 p95 都在 0.2 ms 內。字級 bigram 改成標準 KN 沒有比較好。
+- 同步層：詞級 trigram 預算版（資料包 7.84 MB）口語首選 36.3% → 44.5%、修正 2.421 → 2.046 次/句（M3 票 11b 做進核心後 `cargo xtask bench` 量到同樣的數字；放寬版在 iPhone 的峰值增量 +71 MB 超過 60 MB，預設留預算版，§12.3），比同預算的字級 trigram（42.3%）再多 2.2 點；放寬版（17.58 MB，常駐估計 35 MB）46.7%；不設預算版（152 MB）48.3%，比放寬版只多 1.6 點。每鍵 p95 都在 0.2 ms 內。字級 bigram 改成標準 KN 沒有比較好。
 - 停鍵層：重排 lattice 前 9 條路徑、只動第 2 位，口語前 2 名 49.1% → 1.4M 神經模型 57.5%、23M 59.0%、Foundation Models 50.4%；1.4M 的命中裡 6.2 點是候選列第一頁沒有的路徑。iPhone 18 Pro Max 上 9 條 × 18 字、前文 200 字：1.4M q8 p95 10.7 ms、峰值 +2.0 MB；23M q8 84 ms、+75 MB（§12.3）。
 - 雲端層：DeepSeek flash 重排口語前 2 名 59.5%，比 1.4M 只多 2.0 點；p95 1,083 ms、每千次 0.43 元（§12.4）。
 - 前文：送給重排模型 200 字比 50 字，有前文組的前 2 名只差 −0.1～+0.3 點。

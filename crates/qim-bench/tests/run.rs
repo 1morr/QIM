@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
 use qim_core::{
     CharModel, CodeEntry, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, EnglishWords, Key,
-    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Pack, Packs, Ranking, Scheme,
-    SchemePack, Session, Snapshot, UserModel, Word,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, NgramRow, Pack, Packs, Ranking, Scheme,
+    SchemePack, Session, Snapshot, UserModel, Word, WordTrigram, WordTrigramPack,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -43,6 +43,16 @@ fn pack_bytes_with(
     lexicon: Option<&str>,
     language_model: Option<&str>,
 ) -> Vec<u8> {
+    scheme_bytes(table, lexicon, language_model, None)
+}
+
+/// 同 [`pack_bytes_with`]，另指名詞級 trigram 資料包 `word_trigram`。
+fn scheme_bytes(
+    table: &[(&str, &str)],
+    lexicon: Option<&str>,
+    language_model: Option<&str>,
+    word_trigram: Option<&str>,
+) -> Vec<u8> {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
@@ -53,6 +63,7 @@ fn pack_bytes_with(
         packs: Packs {
             lexicon: lexicon.map(Into::into),
             language_model: language_model.map(Into::into),
+            word_trigram: word_trigram.map(Into::into),
             ..Packs::default()
         },
         ranking: Ranking::default(),
@@ -145,6 +156,7 @@ fn slow_wasm(packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
                 qim_bench::lefts_to_first_segment(&last).map(|_| 1000.0)
             })
             .collect(),
+        load_ms: Some(12.5),
     })
 }
 
@@ -695,6 +707,68 @@ fn language_model_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprint
     assert_ne!(before, pack_line(&repo), "換了語言模型，指紋要跟著變");
 }
 
+/// 詞級 trigram 資料包 `words`：「日」之後是 `next`。
+fn word_trigram_bytes(next: char) -> Vec<u8> {
+    WordTrigramPack {
+        id: "words".into(),
+        model: WordTrigram::new(
+            vec!["日".into(), "曰".into()],
+            vec![NgramRow {
+                context: 0,
+                backoff: 0.0,
+                next: vec![(u32::from(next == '曰'), 0.95f64.ln())],
+            }],
+            vec![],
+        ),
+    }
+    .to_bytes()
+    .unwrap()
+}
+
+#[test]
+fn word_trigram_named_by_the_scheme_is_loaded_next_to_the_pack_and_fingerprinted() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &scheme_bytes(TABLE, None, Some("bigram"), Some("words")),
+    );
+    write(
+        repo.path(),
+        "build/packs/bigram/bigram.pack",
+        &language_model_bytes('曰'),
+    );
+    const WORDS: &str = "build/packs/words/words.pack";
+    let err = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(err.contains(WORDS), "{err}");
+
+    // 字級 bigram 說「日」之後是「曰」，詞級 trigram 說是「日」：詞級的先用。
+    write(repo.path(), WORDS, &word_trigram_bytes('日'));
+    write(
+        repo.path(),
+        "bench/fixed.tsv",
+        "a\t日\t測試\naa\t日日\t測試\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    assert_eq!(outcome.fixed.failures.len(), 0, "{}", outcome.report());
+
+    let before = pack_line(&repo);
+    assert!(before.contains("words.pack"), "{before}");
+    write(repo.path(), WORDS, &word_trigram_bytes('曰'));
+    assert_ne!(before, pack_line(&repo), "換了詞級 trigram，指紋要跟著變");
+}
+
+#[test]
+fn report_gives_the_load_time_of_both_environments() {
+    let report = run(repo().path(), Mode::Report).unwrap().report();
+    let line = report
+        .lines()
+        .find(|line| line.starts_with("載入："))
+        .unwrap_or_else(|| panic!("報告沒有載入時間：{report}"));
+    assert!(line.contains("原生 ") && line.contains(" ms"), "{line}");
+    assert!(line.contains("WebAssembly 12.5 ms"), "{line}");
+}
+
 /// 「有前文」的集合（plan §5.2）：`bench/<目錄>/context/<名>.tsv`，一行「前文<TAB>逐字碼<TAB>句子」。
 /// 語言模型只有「日 → 曰」，所以前文以「日」結尾時 `a` 的首選是「曰」。
 fn repo_with_context() -> TempDir {
@@ -1126,6 +1200,7 @@ fn a_wasm_timer_that_misses_keys_is_an_error() {
                 runtime: "假".into(),
                 per_key_ms: vec![vec![1.0]],
                 select_ms: vec![None],
+                load_ms: None,
             })
         },
     )

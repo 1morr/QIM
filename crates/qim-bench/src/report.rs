@@ -5,7 +5,7 @@ use crate::baseline::SetBaseline;
 use crate::score::{LENGTH_GROUPS, Metrics, SetResult};
 use crate::{
     CONTEXT_SUFFIXES, DevOutcome, Latency, Learning, LoadedPack, Outcome, PERSONAL,
-    PERSONAL_USERDB, Personal, SHORT_INPUTS, WASM_BINDINGS,
+    PERSONAL_USERDB, Personal, SHORT_INPUTS, Timing, WASM_BINDINGS,
 };
 
 /// 「有前文」的每批題給前文與不給前文並列（plan §5.2）；沒有這種集合時是空字串。
@@ -270,6 +270,17 @@ fn latency(latency: &Latency) -> String {
             });
         }
     }
+    let load = |timing: &Timing| {
+        timing
+            .load_ms
+            .map_or_else(|| "沒量".to_string(), |ms| format!("{ms:.1} ms"))
+    };
+    out.push_str(&format!(
+        "\n載入：原生 {}（解開各資料包加建 Engine，不含讀檔）、WebAssembly {}（`new Session`：核對 manifest \
+         與 sha256、解開、建 Engine）\n",
+        load(&latency.native),
+        load(&latency.wasm)
+    ));
     out
 }
 

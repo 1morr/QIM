@@ -128,6 +128,7 @@ flowchart LR
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2 票 07 確認）；proc-macro 宣告介面，`uniffi-bindgen-swift` 從靜態函式庫產生綁定（library mode），它要的 `cli` feature 只在 `qim-ffi` 的 `bindgen` feature 開 | 一份介面產生兩種語言 |
 | `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
+| `rustc-hash` | 2.1.3 | `qim-databuild` 數詞級 trigram 的次數（兩千萬種 trigram 的雜湊表，§4.3） | rustc 自己用的雜湊，比標準庫的 SipHash 快得多；建置端不必防碰撞攻擊；票 08 的實驗也用它 |
 | `strsim` | 0.11.1 | `qim-bench` 算字正確率的編輯距離（以字計的 Levenshtein） | 維護中、無依賴；不自己寫 |
 | `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
 | `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
@@ -188,7 +189,7 @@ impl Session {
 - `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它（英文直通也是）；組字中和標點相同，先上屏整個組字再接它；臨時英文中和實體鍵盤的可見字元一樣接在英文後（M1 票 27b）。文字照原樣，不轉全形、不套數字後半形（M1 票 20、27b）；簡體模式下文字也轉簡體，原文留繁體（使用者決定，M1 票 23）。觸控的標點鍵也走這裡，照鍵上的字輸出（使用者決定，M1 票 27b）。
 - `ToggleAscii`（單按 Shift，brief §4.3）：沒有組字時切英文直通，`Snapshot.ascii` 跟著變；英文直通下每個鍵都 `handled` 為假，沒有組字。組字中照 `Options.shift_switch`：`commit_text` 先上屏整個組字再切；`inline_ascii` 進臨時英文，`ascii` 為真而組字還在，最後一段是 `Segment.raw` 的分段（Rime 的 `raw` 標記），各鍵的行為照目前發佈版 librime（≤ 1.17.0，空白接進英文，M1 票 25b），見 brief §4.3。預設 `Rime` 是左 Shift `inline_ascii`、右 Shift `commit_text`（M1 票 25，推翻票 23 的左右相同）。單按的判定（按下到放開 500 ms 內、中間沒有按下或放開別的鍵，librime 同值）與分辨左右在殼；網頁用 `KeyboardEvent.code`，觸控鍵盤的中英鍵（佈局動作 `toggleAscii`）當右 Shift；觸控的 ⇧ 是另一個動作 `shift`（§2.6），是大寫鍵，不送 `ToggleAscii`。臨時英文中 `-` / `=` 是字元，殼不轉成翻頁。
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
-- 實驗的語言模型（M3 票 08）：`Engine::with_segment_model(Arc<dyn SegmentModel>)` 讓 lattice 的邊與整串字詞的靜態機率改問外部模型（`SegmentQuery`：前面最多 2 段、這一段、現行打分的靜態機率），β、γ、`personal` 照舊，聯想仍用字級 bigram；組字開頭的前一段是選定的分段、前文剛上屏的那段，或前文的最後一字、句首。沒掛上時打分完全不變。模型階梯比同步層的模型用（`scripts/experiments/model-ladder/`）；票 11 定不留：票 11b 把詞級 trigram 做成資料包、由核心直接打分後，連同 `tests/segment_model.rs` 刪掉（`docs/research/model-ladder.md`）。
+- 詞級 trigram（M3 票 11b，§2.3、§4.3）：`Engine::with_word_trigram(WordTrigramPack)` 掛上，方案 `[packs]` 的 `word_trigram` 指名預設那份，`Engine::open` 照方案要不要核對（`WordTrigramMismatch`，同詞庫、語言模型只核對有沒有、不核對 id）。核心內建的打分、不經 `dyn` 介面：lattice 的邊與整串字詞的靜態機率改用它，前面兩段是部分路徑的最後兩段，組字開頭的前一段是選定的分段、前文剛上屏的那段，或前文的最後一字、句首（`Preceding::segment`）；β、γ、`personal` 照舊，聯想仍用字級 bigram。沒掛上時打分照字級 bigram。取代票 08 實驗用的 `Engine::with_segment_model`（`SegmentModel`、`SegmentQuery`，票 11b 刪掉；`scripts/experiments/model-ladder/` 的 `sync` 只在 `a6b4550` 以前建得起來）。
 - emoji 候選：`Engine::with_emoji` 掛上 emoji 資料包（不由方案指名，各方案共用，§4.4）；`Options.emoji_candidates`（預設開，brief §7）開著時，整串的字詞後面接它的 emoji（§2.4）。組字中換這個選項同英文候選，殼呼叫 `refresh`（M3 票 16）。
 - 記住的字串（M3 票 15，名詞表）：`Options.remembered_strings`（預設開，brief §7）開著時，`Session` 記下經核心送出去的 email，之後中文組字打它開頭的字母時給候選（§2.4 規則 5）。組字中換這個選項同英文候選，殼呼叫 `refresh`。
   - 從哪裡記：只記使用者經 QIM 打的字，也就是核心送出去的字（同前文，下面〈上下文〉）：上屏的字（含臨時英文 Enter 上屏的英文、選了的英文候選與記住的字串、`text` 動作的 `@` `.`），以及英文直通交還宿主的可見字元。英文直通時鍵雖然交還宿主，殼仍先把每個鍵交給 `handle`（`handled` 為假才交還，§2.1 開頭），所以核心看得到英文直通打的字；看不到的是換成別的鍵盤或輸入法打的、貼上的、autofill 填的與輸入框原有的字，這些不記（殼給的前文不當來源：回信引用的別人地址不該被記）。成熟做法：LatinIME 與 SwiftKey 都學上屏的字、不讀欄位原有的文字，LatinIME 另載入裝置帳號的 email；QIM 不讀通訊錄與剪貼簿（要平台權限，百度輸入法也因此拿掉通訊錄詞庫）。查證見 `docs/research/remember-strings.md`。
@@ -261,6 +262,7 @@ P_段內 = 1（單字）
 ```
 
 - `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看文字，所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比；同樣的文字當成一個詞或拆成單字，段內的分數不同（詞用詞頻）。方案沒指名語言模型時每個字都是 0 分。
+- 詞級 trigram（M3 票 11b，§4.3）：方案指名詞級 trigram 時，每段的靜態機率 `log P_bigram + log P_段內` 換成 `log P_詞(段 | 前兩段)`：留下的 trigram 直接用；沒留下、前兩段有列時乘 α 退到詞級 bigram，前兩段沒有列時直接用詞級 bigram；詞級 bigram 同樣退到上面的現行打分。前一段不在詞表時整個照現行打分，所以沒有統計的地方和只有字級 bigram 時一樣；不在詞表的段（使用者詞、並存寫法的另一種）前一段有列時乘 α。`personal` 的靜態機率 `P` 也換成它，β、γ 照舊。段由建置端用現行打分切訓練句（§4.3），和解碼時的切法一致。詞表查文字用載入時建的雜湊索引：lattice 每條邊都查一次，用二分搜尋時每鍵比只有字級 bigram 慢一倍（p50 31 → 64 µs），雜湊後 45 µs（票 11b Comments）。
 - 組字開頭的字的「前一字」（M3 票 04，`Engine::context_char`）：有選定的分段時是最後一段的最後一字，和 lattice 裡路徑的下一段一樣，沒有統計的字照退回式算；否則看前文（§2.1）。bigram 只在句內訓練（§4.3 照標點、空白、符號切句），所以照切句的規則：前文以字結尾時接那個字；以標點、空白或符號結尾，或是空的時接句首（`CLAUSE_START`，§4.3）；結尾的字在語言模型裡沒有統計（英文、數字、罕用字）或資料包沒有句首時、不知道前文時（殼沒給、也還沒上屏過，或交還宿主的鍵讓它作廢，§2.1）、無痕時，用字頻的 unigram。先試過略過結尾的標點、接上一句的最後一字：「有前文」集合給前文反而比不給答錯多 1–5%、修正多 0.3–4%（四個語料都是），bigram 接不過標點；改接句首後給前文較好（票 04 Comments）。規則先在 test 的「有前文」集合上看出，之後在 dev 切分的同樣題目上重比三種規則，結論相同（`scripts/experiments/context-rule/`）。「有前文」集合的前文都以標點結尾（題目是整句），所以首選正確率量到的是句首的增益；「接前文的最後一字」只在模擬上屏一段後重打剩下的字時走到，只影響修正次數。
 - 詞的段：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，前後文由字級 bigram 接，詞內由 rime-essay 的詞頻估（每個詞算一次的詞頻總和當分母）。詞內也用字級 bigram 時，同碼的詞分不出常用度，個人集答錯多 27%（M1 票 11 Comments）。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；由首選字基準的 dev 切分調出（`cargo xtask bench --dev`），寫進方案檔。方案檔、`bench --set` 與載入資料包都經 `Ranking::check` 驗：beam 至少 1，β、γ 是有限的數（M3 票 03）。速成是 β = 1、γ = 1（M1 票 12）：dev 偏好更小的 β，但個人集（多是兩字詞）答錯變多，個人集只當守門、不拿來調。
@@ -439,7 +441,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
 - 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法）。
 - 重排結果只決定名次，不寫回分數：神經分數只在同一串按鍵內可比（青簡踩過，`docs/research/open-source-imes.md` §5）。
 - `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。
-- 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram（先上預算版，iPhone 實量放寬版的峰值增量 ≤ 60 MB 就改用放寬版）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 神經分`），在詞級 trigram 的新基線上重量過才做；23M、Foundation Models、雲端 LLM 沒過門檻，不做。
+- 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 神經分`），在詞級 trigram 的新基線上重量過才做；23M、Foundation Models、雲端 LLM 沒過門檻，不做。
 
 ## 3. 平台殼
 
@@ -494,7 +496,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 粵典的詞頭（M3 票 24）：另建一份可選的詞庫資料包 `quick-lexicon-words-hk`，是預設詞庫的詞再補粵典的詞頭，預設詞庫不收粵典的詞；網頁內建兩份、預設用 `quick-lexicon`，設定區切換（§4.6，不改核心）。來源是粵典「細數據」頁的 `wordslist`（詞頭）與 `existingwordcount`（詞在粵文庫的次數），`words_hk.rs` 讀：去掉結尾的 `*`（含異體字的記號）、去重，單字不收。網址沒有版本、內容隨詞典更新：`sources.toml` 的 version 填下載日期、sha256 釘那天的內容，上游一改，沒有快取的建置 sha256 就對不上：這時（或下載失敗）只略過粵典詞庫、刪掉上次建出的那份，其他資料包照建、結束碼仍是 0，警告與重釘步驟印在 stderr，`--verify` 列出略過的那份、不算失敗；網頁把它當可以缺的內建資料包，沒有時照樣載入（`web/src/packs.ts` 的 `OPTIONAL_IDS`）。可選資料包的來源不能擋預設資料包；不改用 Wayback Machine 的存檔（最新只到 2025-04，存新的要在別人的網站留紀錄）。詞照同一套寫法轉換；只補前面各條都沒收的詞，而且詞的任一種並存寫法已收就算收了（粵典的「開臺」不收：它生出的「開台」essay 已有，兩者撞成同一個詞時詞頻會相加、改到預設詞庫的詞；HKCanCor 的詞不這樣比：撞上的只有台北、台灣、電視台，改了 zh-wiki 多錯 1 題、common-voice-yue 修正多 1，預設詞庫維持原樣）；含連打字集以外的字（英文、數字、標點）的默默略過。詞頻是粵文庫次數乘 50（`HEADWORD_FREQUENCY`），至少門檻 100（粵文庫沒見過的詞頭也收）；dev 切分掃 0、25、50、100、200、400 與上限 300／1,000／3,000，50、不設上限最好，見票 24 Comments。`existingwordcount` 是沒分詞的原始出現次數，短詞偏高，只當粗略排序。現在補 20,556 詞（兩字以上的詞頭 57,860 個，含英文、數字或標點的 1,819 個略過；brief §12.1 的 56,037 只數全是漢字的）。授權照較嚴的非商業條款（brief §12.1）：`LICENSE` 多一段 `data/licenses/words-hk-NCODL-1.0.txt`（授權頁的英文版權告示、免責聲明、授權全文與〈關於我哋〉的特別鳴謝，授權頁沒有版本化網址，全文存 repo），`NOTICE` 寫官網連結、§1(b)(iii) 的單一網址告示（兩個檔各用自己的網址）與「粵典的部分不得再授權、不得商業使用，商用改用 `quick-lexicon`」；manifest 的 `license` 多 `LicenseRef-words-hk-NCODL-1.0`。首選字基準用 `cargo xtask bench --lexicon quick-lexicon-words-hk` 換詞庫（`docs/development.md`〈首選字基準〉）。
 - 字頻：由 §4.3 各語料的 train 切分統計（`build/corpus/<名>/chars.tsv`，M1 票 03），與詞頻放同一個資料包；各語料的次數乘上和 bigram 同一個語料權重再相加（§4.3，M1 票 12）。雙向並存寫法的兩個字共用兩者的和。
 
-### 4.3 字級 bigram
+### 4.3 字級 bigram 與詞級 trigram
 
 - 語料：中文維基與粵語維基。用 Wikimedia 的 `pages-articles` dump 自己抽內文（`qim-databuild` 的 `wikitext` 模組：模板、表格、註腳、檔案連結、標題與列表整個丟掉；繁簡轉換標記取繁體那個變體），dump 日期與 sha256 釘在 `sources.toml`。CirrusSearch 內容 dump 雖是純文字，但只留最近約 5 週，釘了很快就下載不到（brief §12.1）。
 - 中文維基只取 Internet Archive 存檔的 `zhwiki-20220501` 第一個分片（page id 1–187712，約 204 MB），分片內每篇都用：dumps.wikimedia.org 對大站只留約 7 個月，archive.org 是唯一能長期重現的取法（brief §12.1）。
@@ -511,11 +513,17 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 訓練：字級 interpolated Kneser-Ney bigram（M1 票 11，`qim-databuild` 的 `bigram` 模組）：
   - 只數同一句內的相鄰字，不加句尾記號：不知道前文時組字多半不在句首，開頭的字用字頻 unigram `(c + 1) ÷ (N + V)`。
   - 句首（M3 票 04）：每句的第一字接在句首記號 `qim_core::CLAUSE_START`（U+0002）後面，算成語言模型裡一個前一字的一列，同樣的 KN 式子、`D` 與接續機率用句內的；它的次數不算進字次數、`N1+(•w)` 與 `D`，所以其他字的機率和沒有它時相同。前文以標點結尾時組字開頭的字接它（§2.3）。資料包格式不變：句首只是一個多出來的字與它的一列，舊的核心讀到也只是一個打不出的字。
-  - 單一折扣 `D = n1 ÷ (n1 + 2 n2)`；退回用接續機率 `(N1+(•w) + 1) ÷ (N1+(••) + V)`，`V` 是連打字集的字數。`n1`、`n2` 與 `D` 都在乘上語料權重後的次數上算：口語字對次數至少 64，進不了 `n1`、`n2`，口語前一字的退回權重近 0，口語幾乎不平滑；dev 上撐得住（M1 票 24 code-review）。M3 票 08 比照標準 KN 重訓（各語料在原始次數上算 `D`、次數依權重相加）：字級 bigram 沒有好處（test 口語首選 −0.1 點、修正 +2.0%），照舊；高一階的 trigram、詞級 n-gram 用現行做法比標準 KN 口語首選低 1.6–3.5 點（dev），採用的話用標準 KN（`scripts/experiments/model-ladder/` README〈同步層〉）。
+  - 單一折扣 `D = n1 ÷ (n1 + 2 n2)`；退回用接續機率 `(N1+(•w) + 1) ÷ (N1+(••) + V)`，`V` 是連打字集的字數。`n1`、`n2` 與 `D` 都在乘上語料權重後的次數上算：口語字對次數至少 64，進不了 `n1`、`n2`，口語前一字的退回權重近 0，口語幾乎不平滑；dev 上撐得住（M1 票 24 code-review）。M3 票 08 比照標準 KN 重訓（各語料在原始次數上算 `D`、次數依權重相加）：字級 bigram 沒有好處（test 口語首選 −0.1 點、修正 +2.0%），照舊；高一階的 trigram、詞級 n-gram 用現行做法比標準 KN 口語首選低 1.6–3.5 點（dev），所以下面的詞級 trigram 用標準 KN（`scripts/experiments/model-ladder/` README〈同步層〉）。
   - 剪枝：只留乘上語料權重後次數 ≥ 2 的相鄰字（2.9 MB；不剪約 4.6 MB），剪掉後重算每個前一字的退回權重，讓機率加總仍為 1。口語權重 64，口語的相鄰字都留下，剪掉的只有維基只出現一次的；不剪在 dev 上口語答錯只少約 1%（M1 票 12）。資料包 ≤ 8 MB（Gboard 文獻的 5–10 MB 預算，brief §12.4）。
   - 資料包存 ARPA 式的退回形式：留下的 bigram 機率量化成 `u8`（每級 1/12 nat），unigram 與退回權重存 `f32`。
   - 各語料的次數乘上權重再相加（`crates/qim-databuild/src/corpora.rs`），維基 1、口語 64：口語 train 只有維基的約 1/127 句。M1 票 12 在 dev 切分上掃 1–256，口語集修正次數隨權重一路降、維基集在 32 以上開始退，64 之後口語只再好一點；權重屬於共用的語言模型，不寫在方案檔（§2.5）。
-- 授權：語料是 CC BY-SA 4.0，這份模型隨 App 發佈是否要以相同授權散布，與 LGPL 資料並列 brief §11 的待決項，由使用者判斷。
+- 詞級 trigram（M3 票 11b，`qim-databuild` 的 `word_trigram.rs`；做法與 dev / test 數字在 `scripts/experiments/model-ladder/` README〈同步層〉，票 08 量過）：
+  - 段：用現行打分（預設詞庫的詞與詞頻、字級 bigram、方案的 β、γ）把四份 train 切分的每句切成段（文字已知的 Viterbi，前一字固定是句中的前一字），和解碼時的切法一致；每句前面接句首當一段。換了詞庫、bigram 或 β、γ 要重建，`cargo xtask data` 每次都重切。
+  - 機率：interpolated KN，折扣照標準 KN：每份語料在自己的原始次數上算 `D_k = n1 ÷ (n1 + 2 n2)`，一種 n-gram 扣 `Σ D_k × w_k`（出現在語料 k 的才算，權重同字級 bigram）。trigram 退回詞級 bigram（剪枝、量化後的那份），詞級 bigram 退回現行打分。剪枝只留乘上權重後次數 ≥ 門檻的，重算 α 讓機率加總為 1，α 夾在 1 以下（罕用的前文分母近 0，α 會爆大，票 08）。機率 `u8` 量化同字級 bigram、α 存 `f32`；詞表照第一次出現的順序編號（常見的段在前，差值的 varint 小；照文字排序重編時預算版大 0.35 MB、加上字級 bigram 超過 8 MB），只留留下的表用到的段。
+  - 兩份都建、都進資料包清單：預算版 `zh-hant-word-trigram`（門檻 bigram 8、trigram 8，4.82 MB，加上字級 bigram 7.84 MB ≤ 8 MB，`--verify` 擋），方案指名的預設；放寬版 `zh-hant-word-trigram-large`（2、4，14.56 MB），設定頁可以切換。
+  - iPhone 18 Pro Max（M3 票 11b，`docs/research/ios-feasibility.md`〈詞級 trigram 的記憶體〉）：核心加六份資料包載入後 79.4 MB，再載入放寬版 footprint 留下 +23.4 MB、峰值 +71.3 MB（到 150.7 MB，那個程序收到兩次記憶體警告），超過 M3 的 60 MB 上限，所以預設留預算版；預算版留下 +5.6 MB、峰值 +20.4 MB。峰值比留下的多 48 MB，推論是解開途中的暫存（檔案位元組、`qim-ffi` 複製進 Rust 的那份、差值格式的中間陣列，沒逐項量）；要改用放寬版得先把解開改成就地轉換、再在 iPhone 量一次。
+  - 建置：四份語料切段、數一次，兩種門檻各建一份，這台 Mac 多約 30 秒、峰值約 5 GB（`cargo xtask data` 約 75 秒）。
+- 授權：語料是 CC BY-SA 4.0，這份模型隨 App 發佈是否要以相同授權散布，與 LGPL 資料並列 brief §11 的待決項，由使用者判斷。詞級 trigram 另用 rime-essay（LGPL-3.0）的詞與詞頻切段，`LICENSE`、`NOTICE` 列四份語料、rime-essay 與粵語口語詞表（切段用的預設詞庫的來源）。
 
 ### 4.4 英文、簡繁與 emoji
 
@@ -530,15 +538,15 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 抽查：`anr` 查不到「問」；「問」的速成碼含 `ar`；「丟」同時有 `hi` 與 `mi`；`a` 的首選是「日」；`anr` 的候選有「門口」；簡體模式 `anr` 的第一頁有「门口」、沒有「門口」；中文狀態打 `the` 第 2 個候選是 `the`；`hk` 的「笑」後面緊接 emoji 資料包裡它的第一個 emoji。「日」「門口」經 `Engine` 查，含字頻排序；「门口」、`the` 與 `hk` 經 `Session` 打。
 - 詞庫：每個詞的碼都由詞裡每個字的一個速成碼接成；報告列詞數、被門檻與字集濾掉的數量、HKCanCor 補上的詞數與對不上而略過的話輪數。
 - Unihan `kCangjie` 交叉比對，差異清單輸出成報表，不擋建置。
-- bigram 資料包 ≤ 8 MB（§4.3）。
+- bigram 資料包 ≤ 8 MB（§4.3）；詞級 trigram 預算版加上 bigram ≤ 8 MB（M3 票 11b，spec〈採用門檻〉的預算版）。
 - 前處理保留的粵語用字（`corpora.rs` 的 `CANTONESE_KEPT`：晒、搵、吓、郁、喂、涌、咸、响、仆）在 train 的字頻都大於 0；字形對照表換掉的香港寫法與雙向並存寫法的另一種在 train 都不出現（§4.3，M1 票 17b）；詞庫沒有對照表換掉的寫法與「着名」這類反向的錯字，雙向並存寫法的詞每種寫法都在、詞頻相同、兩字字頻相同，含單向前一個字的詞都另收後一個字的寫法（§4.2，M1 票 17c）；雙向兩字的 unigram、詞庫裡含它的相鄰字每種寫法的 bigram 都相同（M1 票 17d）。
 - 簡體字（M3 票 19）：繁簡同形與本身是正規繁體字的人、日、台、后、里、干、面、系、云、松、只、范、谷、斗、制、准、几都沒標成簡體字，報告列簡體字的字數；繁體模式 `ls` 的「门」排在碼表裡 `ls` 每個沒標簡體字的連打字集的字之後（經 `Engine` 查）。
 - 字根提示：碼表的每個字（含擴展區）都有至少一個倉頡碼；抽查「丟」三代 `hgi`、五代先列 `mgi`，「問」兩代都是 `anr`。
 - 英文：報告列詞幹數、禁忌詞數、展開的詞形數、打不出而不收的數量與收的詞數。
 - emoji：報告列 CLDR 標註數、太泛而不收的關鍵字數、方框漢字數、有字打不出而不收的字詞數、收的字詞數與 emoji 數。
-- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫、粵典詞庫、bigram、字根提示、簡繁、英文與 emoji 八份）。
+- 決定性：同樣的來源建出 sha256 相同的資料包（速成、詞庫、粵典詞庫、bigram、詞級 trigram 預算版與放寬版、字根提示、簡繁、英文與 emoji 十份；第二次建置把詞級 trigram 也重切重訓）。
 - 粵典詞庫（M3 票 24）：收了預設詞庫的每個詞條（同碼、同詞頻），也多了詞；報告列粵典的詞頭數與補上的詞數。粵典的來源對不上而略過時不做這項，報告列「略過 quick-lexicon-words-hk」與原因，不算失敗（§4.2）。
-- 方案指名：建出的詞庫、語言模型、字根提示的 id 是方案 `[packs]` 指名的那份（核心接受別份，§4.6，所以由建置端擋）。
+- 方案指名：建出的詞庫、語言模型、詞級 trigram、字根提示的 id 是方案 `[packs]` 指名的那份（核心接受別份，§4.6，所以由建置端擋）。
 - manifest（§4.6）：每份資料包旁的 `manifest.json` 讀得回，照殼的路（`Pack::open`）讀回寫出的檔核對得過。
 
 ### 4.6 資料包 manifest（M3 票 20）
@@ -562,7 +570,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 | --- | --- | --- |
 | `manifest_version` | manifest 格式的版本，現在 1；欄位的意思改了才加，加欄位不加 | WebExtension `manifest.json` 的 `manifest_version`、Cargo index 的 `v` |
 | `id` | 等於資料包裡的 id；小寫英數與 `-`，資料包檔名是 `<id>.pack` | Cargo `name` 的字元限制 |
-| `kind` | `scheme`、`lexicon`、`language-model`、`radical-hint`、`simplifier`、`english`、`emoji`，一種對應一個 `Pack` 型別 | — |
+| `kind` | `scheme`、`lexicon`、`language-model`、`word-trigram`（M3 票 11b 加）、`radical-hint`、`simplifier`、`english`、`emoji`，一種對應一個 `Pack` 型別；加種類不加 `manifest_version`，舊核心讀到不認得的種類拒絕載入 | — |
 | `version` | semver；同一個 id 的新版較大。內容改了就加，現在由 `pipeline.rs` 的 `build_packs` 每份各寫一個，全是 `1.0.0` | Cargo `vers`、npm、VS Code |
 | `min_core_version` | 讀得了它的最舊核心（`qim-core` 的 crate 版本），`MAJOR.MINOR.PATCH`，單一下限、不寫範圍；建置端寫建它的核心版本 | Cargo `rust-version`、Firefox `strict_min_version`、LibreOffice minimal-version |
 | `size` | 資料包檔的位元組數 | Flatpak `extra-data` 的 `size` |

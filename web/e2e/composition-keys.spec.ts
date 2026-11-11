@@ -52,7 +52,10 @@ test("組字中按 z、←、→ 吃下不動作", async ({ page }, testInfo) =>
 		await page.keyboard.press(key);
 		await expect(text, key).toHaveValue("");
 		await expect(composition, key).toHaveText("日弓口");
-		await expect(items, key).toHaveText(before);
+		// ← → 移動目前分段：分段的候選照不知道前文時單打它的碼（plan §2.1），不一定和接著句首的
+		// 整串候選同序（M3 票 11b 起詞級 trigram 看得出句首），只比首選。
+		if (key === "z") await expect(items, key).toHaveText(before);
+		else await expect(items.first(), key).toHaveText(before[0]);
 	}
 	await page.screenshot({ path: testInfo.outputPath("swallowed.png") });
 	await page.keyboard.type(" ");

@@ -63,6 +63,8 @@ pub struct Packs {
     pub lexicon: Option<String>,
     /// 語言模型資料包（[`crate::LanguageModelPack`]）；沒指名時打分只剩 β、γ。
     pub language_model: Option<String>,
+    /// 詞級 trigram 資料包（[`crate::WordTrigramPack`]）；沒指名時打分只用字級 bigram。
+    pub word_trigram: Option<String>,
     /// 字根提示資料包（[`crate::RadicalHintPack`]），只給殼顯示，[`crate::Engine`] 不載入。
     pub radical_hint: Option<String>,
 }

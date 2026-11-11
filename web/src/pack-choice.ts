@@ -9,6 +9,7 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
 	scheme: "方案",
 	lexicon: "詞庫",
 	"language-model": "語言模型",
+	"word-trigram": "詞級 trigram",
 	[RADICAL_HINT]: "字根提示",
 	simplifier: "簡繁",
 	english: "英文",

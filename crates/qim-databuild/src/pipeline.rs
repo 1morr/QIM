@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use qim_core::{
     EmojiPack, EnglishPack, LanguageModelPack, LexiconPack, MANIFEST_FILE, Manifest, Pack,
-    RadicalHintPack, SchemePack, SimplifierPack,
+    RadicalHintPack, SchemePack, SimplifierPack, WordTrigramPack,
 };
 
 use crate::built::{self, BuiltPack};
@@ -25,7 +25,7 @@ use crate::verify::{
 };
 use crate::{
     Error, bigram, build_scheme_pack, emoji, english, gboard, lexicon, libcangjie, opencc, packing,
-    personal, radical_hint, scheme, simplified, unihan, words_hk,
+    personal, radical_hint, scheme, simplified, unihan, word_trigram, words_hk,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -166,6 +166,8 @@ struct PackSet {
     words_hk: Option<WordsHkSummary>,
     skipped: Vec<Skipped>,
     language_model: bigram::Summary,
+    /// 兩份詞級 trigram 的統計，方案指名的那份在前。
+    word_trigrams: Vec<word_trigram::Summary>,
     english: english::Counts,
     emoji: emoji::Counts,
 }
@@ -197,6 +199,8 @@ pub struct Outcome {
     /// 來源出問題而沒建的可選資料包（粵典詞庫），其他資料包照建。
     pub skipped: Vec<Skipped>,
     pub language_model: bigram::Summary,
+    /// 兩份詞級 trigram 的統計，方案指名的那份在前。
+    pub word_trigrams: Vec<word_trigram::Summary>,
     pub english: english::Counts,
     pub emoji: emoji::Counts,
     /// 預設 Gboard 速成佈局（[`gboard::layout`]）。
@@ -447,6 +451,64 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             };
             Ok((pack, summary))
         };
+    // 詞級 trigram（plan §4.3）：用預設詞庫與字級 bigram 的現行打分切各語料的 train 切分，數一次，
+    // 依兩種門檻各建一份；方案指名的那份在前（`built::find` 與網頁都取同種的第一份當預設）。
+    let build_word_trigrams = |quick: &QuickBuild,
+                               lexicon: &LexiconPack,
+                               language_model: &LanguageModelPack|
+     -> Result<
+        Vec<(
+            word_trigram::Variant,
+            WordTrigramPack,
+            word_trigram::Summary,
+        )>,
+        Error,
+    > {
+        let id = named(
+            &quick.pack.scheme.packs.word_trigram,
+            "word_trigram",
+            "詞級 trigram",
+        )?;
+        let default = word_trigram::VARIANTS
+            .iter()
+            .position(|v| v.id == id)
+            .ok_or_else(|| {
+                Error::invalid(
+                    QUICK_SCHEME,
+                    format!(
+                        "[packs] 的 word_trigram 是 {id}，要是 {} 之一",
+                        word_trigram::VARIANTS.map(|v| v.id).join("、")
+                    ),
+                )
+            })?;
+        let ranking = &quick.pack.scheme.ranking;
+        let scoring = word_trigram::CurrentScoring::new(
+            &language_model.model,
+            &lexicon.lexicon,
+            ranking.word_bonus,
+            ranking.segment_penalty,
+        );
+        let readers = trains
+            .iter()
+            .map(|(path, weight)| Ok((Box::new(open(path)?) as Box<dyn io::BufRead>, *weight)))
+            .collect::<Result<Vec<_>, Error>>()?;
+        let counts =
+            word_trigram::count(readers, &scoring).map_err(Error::io(root.join("build/corpus")))?;
+        let mut variants = word_trigram::VARIANTS.to_vec();
+        variants.swap(0, default);
+        Ok(variants
+            .into_iter()
+            .map(|variant| {
+                let (model, summary) =
+                    word_trigram::train(&scoring, &counts, variant.id, variant.pruning);
+                let pack = WordTrigramPack {
+                    id: variant.id.into(),
+                    model,
+                };
+                (variant, pack, summary)
+            })
+            .collect())
+    };
     // 粵典的詞頭。網址沒有版本，上游一更新 sha256 就對不上（或下載不到）：可選的粵典詞庫不能擋其他
     // 資料包，所以這兩種錯回傳 `Ok(Err(略過的原因))`，只略過粵典詞庫；檔案內容不合格式照樣是錯。
     let load_headwords = || -> Result<Result<BTreeMap<String, u64>, Skipped>, Error> {
@@ -497,6 +559,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             Err(skipped) => (None, vec![skipped]),
         };
         let (language_model, language_model_summary) = build_language_model(quick)?;
+        let word_trigrams = build_word_trigrams(quick, &lexicon, &language_model)?;
         let simplifier = SimplifierPack {
             id: SIMPLIFIER_ID.into(),
             simplifier: opencc::hk2s(|file| load_text(OPENCC, file))?,
@@ -556,6 +619,17 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 packing::language_model_sources(),
                 language_model_about(&language_model.id),
             )?,
+        ];
+        for (variant, pack, summary) in &word_trigrams {
+            packs.push(LicensedPack::new(
+                variant.name,
+                pack,
+                "1.0.0",
+                packing::word_trigram_sources(),
+                word_trigram_about(summary, &lexicon.id, &language_model.id),
+            )?);
+        }
+        packs.extend([
             LicensedPack::new(
                 "字根提示",
                 &quick.radical_hint,
@@ -584,7 +658,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
                 packing::EMOJI.into(),
                 EMOJI_ABOUT.replace("{max}", &emoji::MAX_KEYWORD_EMOJI.to_string()),
             )?,
-        ];
+        ]);
         // 接在預設詞庫後面：`built::find` 取同種的第一份，預設詞庫要在前。
         if let Some((pack, _)) = &words_hk {
             packs.insert(
@@ -604,6 +678,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             words_hk: words_hk.map(|(_, summary)| summary),
             skipped,
             language_model: language_model_summary,
+            word_trigrams: word_trigrams.into_iter().map(|(_, _, s)| s).collect(),
             english: english_counts,
             emoji: built_emoji.counts,
         })
@@ -703,6 +778,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         report.words_hk = first.words_hk;
         report.skipped = first.skipped.clone();
         report.language_model = Some(first.language_model);
+        report.word_trigrams = first.word_trigrams.clone();
         report.english = Some(first.english);
         report.emoji = Some(first.emoji);
         report.corpora = corpora.clone();
@@ -717,6 +793,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         words_hk: first.words_hk,
         skipped: first.skipped,
         language_model: first.language_model,
+        word_trigrams: first.word_trigrams,
         english: first.english,
         emoji: first.emoji,
         layout_path,
@@ -865,6 +942,26 @@ fn language_model_about(id: &str) -> String {
          of each corpus by its weight ({weights}), and pruned to the pairs whose weighted\n\
          count is at least {min}. {CORPUS_PREPROCESSING}",
         min = bigram::MIN_COUNT,
+        weights = corpus_weights(),
+    )
+}
+
+/// 詞級 trigram 資料包 NOTICE 最後一段：怎麼用來源。同字級 bigram，授權是否要求模型同授權散布是
+/// brief §11 的待決項。
+fn word_trigram_about(summary: &word_trigram::Summary, lexicon: &str, bigram: &str) -> String {
+    let pruning = summary.pruning;
+    format!(
+        "{id} is a word trigram language model trained by QIM with interpolated\n\
+         Kneser-Ney smoothing (discounts computed per corpus). The training split of each\n\
+         corpus listed above was split into words with the words and frequencies of the\n\
+         {lexicon} lexicon and the {bigram} character bigram model, then word bigrams\n\
+         and trigrams were counted within each clause, multiplying the counts of each corpus\n\
+         by its weight ({weights}), and pruned to the bigrams whose weighted count is at\n\
+         least {min2} and the trigrams whose weighted count is at least {min3}.\n\
+         {CORPUS_PREPROCESSING}",
+        id = summary.id,
+        min2 = pruning.min_bigram,
+        min3 = pruning.min_trigram,
         weights = corpus_weights(),
     )
 }

@@ -244,6 +244,7 @@ fn kind_names_match_the_manifest_json() {
         PackKind::Scheme,
         PackKind::Lexicon,
         PackKind::LanguageModel,
+        PackKind::WordTrigram,
         PackKind::RadicalHint,
         PackKind::Simplifier,
         PackKind::English,

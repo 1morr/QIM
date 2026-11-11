@@ -1,8 +1,9 @@
 //! 每鍵延遲（plan §5.2）：逐鍵打基準的每個輸入碼，量每次按鍵到 `Snapshot` 回來的時間，
 //! 原生與 WebAssembly 各量一次，報 p50 / p95。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。
 //!
-//! 每個輸入都從空的組字打起；載入資料包不算在內。打完有兩段以上的輸入另量「選開頭一段」那一鍵
-//! （[`lefts_to_first_segment`]）：選定後剩下的輸入碼從頭重建 lattice，是每鍵最重的一種。
+//! 每個輸入都從空的組字打起；載入資料包不算在內，另報一次載入的時間（[`Timing::load_ms`]）。
+//! 打完有兩段以上的輸入另量「選開頭一段」那一鍵（[`lefts_to_first_segment`]）：選定後剩下的輸入碼
+//! 從頭重建 lattice，是每鍵最重的一種。
 
 use std::hint::black_box;
 use std::io::Write;
@@ -30,6 +31,10 @@ pub struct Timing {
     pub per_key_ms: Vec<Vec<f64>>,
     /// 每個輸入打完後選開頭一段的毫秒數（[`lefts_to_first_segment`]），順序同輸入；打完不到兩段的是 `None`。
     pub select_ms: Vec<Option<f64>>,
+    /// 載入的毫秒數，沒量是 `None`。原生是解開每份資料包加建 `Engine`（`qim_bench::load_engine`，
+    /// 不含讀檔）；WebAssembly 是 `new Session(packs)`（`Engine::open`：核對 manifest 與 sha256、
+    /// 解開、建 `Engine`，同網頁）。
+    pub load_ms: Option<f64>,
 }
 
 /// 在 WebAssembly 上量時間的方式：給基準載入的每份資料包路徑（順序不拘，腳本依檔頭魔數分辨）與輸入碼，逐鍵打每個輸入。
@@ -192,6 +197,7 @@ pub fn native_timing(engine: &Engine, inputs: &[String]) -> Timing {
         runtime: profile.into(),
         per_key_ms,
         select_ms,
+        load_ms: None,
     }
 }
 
@@ -232,13 +238,24 @@ pub fn node_wasm_timer(
 }
 
 /// 綁定的計時腳本（Node 的 [`WASM_SCRIPT`]、`scripts/experiments/` 的 Swift 程式）的輸出：第一行是
-/// runtime，之後每個輸入一行、各鍵的毫秒數以空白分隔；有選開頭一段時行尾接 ` | ` 與它的毫秒數。
+/// runtime，有量載入時接 ` | ` 與載入的毫秒數；之後每個輸入一行、各鍵的毫秒數以空白分隔；有選開頭
+/// 一段時行尾接 ` | ` 與它的毫秒數。
 pub fn parse_timing(stdout: &str) -> Result<Timing, String> {
     let mut lines = stdout.lines();
-    let runtime = lines
+    let first = lines
         .next()
         .filter(|line| !line.is_empty())
         .ok_or("沒有輸出")?;
+    let (runtime, load_ms) = match first.split_once(" | ") {
+        Some((runtime, load)) => (
+            runtime,
+            Some(
+                load.parse::<f64>()
+                    .map_err(|_| format!("第 1 行的載入不是毫秒數：{load}"))?,
+            ),
+        ),
+        None => (first, None),
+    };
     let ms = |i: usize, text: &str| {
         text.parse::<f64>()
             .map_err(|_| format!("第 {} 行不是毫秒數：{text}", i + 2))
@@ -263,6 +280,7 @@ pub fn parse_timing(stdout: &str) -> Result<Timing, String> {
         runtime: runtime.into(),
         per_key_ms,
         select_ms,
+        load_ms,
     })
 }
 

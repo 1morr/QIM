@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use qim_core::{
     CangjieVersion, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, Key, LanguageModel,
     LanguageModelPack, Lexicon, LexiconPack, Manifest, Options, RadicalHintPack, RadicalHints,
-    SchemePack, Session, SimplifierPack, UserModel,
+    SchemePack, Session, SimplifierPack, UserModel, WordTrigramPack,
 };
 
 use crate::built::{self, BuiltPack};
@@ -17,7 +17,7 @@ use crate::common_forms::{BothForms, CommonForms, ONE_WAY_DISTINCT, REVERSED_ONE
 use crate::corpus::Counts;
 use crate::libcangjie::Row;
 use crate::transcode::Transcoder;
-use crate::{bigram, emoji, english, lexicon};
+use crate::{bigram, emoji, english, lexicon, word_trigram};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
@@ -54,6 +54,8 @@ pub enum CheckId {
     MenAfterTraditional,
     /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
     LanguageModelSize,
+    /// 詞級 trigram 預算版加上字級 bigram 不超過 [`bigram::MAX_BYTES`]（spec〈採用門檻〉的預算版）。
+    WordTrigramSize,
     /// 同樣的來源建兩次，每份資料包的 sha256 都相同、清單一樣。
     Deterministic,
     /// 每份資料包旁的 manifest 讀得回，核心照它載入得了資料包（plan §4.6）。
@@ -98,6 +100,7 @@ impl fmt::Display for CheckId {
             Self::MenAfterTraditional => "抽查：ls 的「门」在繁體字之後",
             Self::EmojiAfterLaugh => "抽查：hk 的「笑」後面接著它的 emoji",
             Self::LanguageModelSize => "bigram 資料包大小",
+            Self::WordTrigramSize => "詞級 trigram 預算版加 bigram 的大小",
             Self::Deterministic => "決定性：建兩次 sha256 相同",
             Self::Manifests => "manifest 核對得過",
             Self::CorpusTranscodes => "語料轉碼",
@@ -138,6 +141,8 @@ pub struct Report {
     pub skipped: Vec<Skipped>,
     /// bigram 的訓練統計；[`run`] 不算，由呼叫端填。
     pub language_model: Option<bigram::Summary>,
+    /// 詞級 trigram 的訓練統計；[`run`] 不算，由呼叫端填。
+    pub word_trigrams: Vec<word_trigram::Summary>,
     pub checks: Vec<Check>,
     /// Unihan 交叉比對的摘要；[`run`] 不算，由呼叫端填。
     pub unihan: Option<UnihanSummary>,
@@ -298,6 +303,9 @@ impl fmt::Display for Report {
         if let Some(language_model) = &self.language_model {
             writeln!(f, "{language_model}")?;
         }
+        for summary in &self.word_trigrams {
+            writeln!(f, "{summary}")?;
+        }
         if let Some(english) = &self.english {
             writeln!(f, "{}", english_summary(english))?;
         }
@@ -354,6 +362,7 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
         words_hk: None,
         skipped: Vec::new(),
         language_model: None,
+        word_trigrams: Vec::new(),
         checks: Vec::new(),
         unihan: None,
         corpora: Vec::new(),
@@ -386,6 +395,27 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
                 detail,
             },
         });
+    let budget = built::find::<LanguageModelPack>(first).and_then(|bigram| {
+        let words = built::find_id(first, word_trigram::BUDGET_ID)?;
+        Ok((bigram.bytes.len(), words.bytes.len()))
+    });
+    report.checks.push(match budget {
+        Ok((bigram, words)) => Check {
+            id: CheckId::WordTrigramSize,
+            passed: bigram + words <= bigram::MAX_BYTES,
+            detail: format!(
+                "{} {words} 加 bigram {bigram} 共 {} 位元組，上限 {}",
+                word_trigram::BUDGET_ID,
+                bigram + words,
+                bigram::MAX_BYTES
+            ),
+        },
+        Err(detail) => Check {
+            id: CheckId::WordTrigramSize,
+            passed: false,
+            detail,
+        },
+    });
     let digests = |packs: &[BuiltPack]| {
         packs
             .iter()
@@ -424,11 +454,13 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
     let lexicon = built::decode::<LexiconPack>(packs)?;
     let language_model = built::decode::<LanguageModelPack>(packs)?;
     let radical_hint = built::decode::<RadicalHintPack>(packs)?;
+    let word_trigram = built::decode::<WordTrigramPack>(packs)?;
     // 核心接受方案指名以外的同種資料包（殼的切換，plan §4.6），建出的預設那份要剛好是指名的。
     let named = &pack.scheme.packs;
     for (what, expected, found) in [
         ("詞庫", &named.lexicon, &lexicon.id),
         ("語言模型", &named.language_model, &language_model.id),
+        ("詞級 trigram", &named.word_trigram, &word_trigram.id),
         ("字根提示", &named.radical_hint, &radical_hint.id),
     ] {
         if expected.as_deref() != Some(found.as_str()) {
@@ -444,6 +476,7 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
     let emoji = built::decode::<EmojiPack>(packs)?;
     let engine = Engine::new(pack.clone(), Some(lexicon.clone()), Some(language_model))
         .map_err(|e| e.to_string())?
+        .with_word_trigram(word_trigram)
         .with_simplifier(simplifier)
         .with_english(english)
         .with_emoji(emoji.clone());
@@ -509,7 +542,7 @@ fn pack_checks(
             id: CheckId::Decodes,
             passed: true,
             detail: format!(
-                "格式版本 {}，速成、詞庫、bigram、字根提示、簡繁、英文與 emoji",
+                "格式版本 {}，速成、詞庫、bigram、詞級 trigram、字根提示、簡繁、英文與 emoji",
                 qim_core::FORMAT_VERSION
             ),
         },

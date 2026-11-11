@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     CodeTable, EmojiTable, EnglishWords, LanguageModel, Lexicon, Manifest, PackKind, RadicalHints,
-    Scheme, Simplifier,
+    Scheme, Simplifier, WordTrigram,
 };
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 6;
+pub const FORMAT_VERSION: u32 = 7;
 
 /// 各種資料包共用的位元組格式：魔數 [`Pack::MAGIC`]、postcard 的 [`FORMAT_VERSION`]、
 /// postcard 的本體。
@@ -87,6 +87,14 @@ pub struct LanguageModelPack {
     pub model: LanguageModel,
 }
 
+/// 詞級 trigram 資料包：同步層的語言模型（plan §2.3、§4.3）。方案用 [`crate::Packs::word_trigram`]
+/// 指名它的 `id`，由 [`crate::Engine::with_word_trigram`] 掛上。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordTrigramPack {
+    pub id: String,
+    pub model: WordTrigram,
+}
+
 /// 簡繁資料包：OpenCC 的轉換表（plan §4.4），由 [`crate::Engine::with_simplifier`] 掛上，
 /// 不由方案指名：各方案都輸出繁體，簡體模式共用同一份。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +144,11 @@ pub enum PackError {
     },
     /// 方案指名了語言模型卻沒給，或沒指名卻給了；`None` 是方案沒指名或沒給。
     LanguageModelMismatch {
+        expected: Option<String>,
+        found: Option<String>,
+    },
+    /// 方案指名了詞級 trigram 卻沒給，或沒指名卻給了；`None` 是方案沒指名或沒給。
+    WordTrigramMismatch {
         expected: Option<String>,
         found: Option<String>,
     },
@@ -200,6 +213,12 @@ impl fmt::Display for PackError {
             Self::LanguageModelMismatch { expected, found } => write!(
                 f,
                 "方案指名的語言模型是 {}，給的是 {}",
+                name(expected),
+                name(found)
+            ),
+            Self::WordTrigramMismatch { expected, found } => write!(
+                f,
+                "方案指名的詞級 trigram 是 {}，給的是 {}",
                 name(expected),
                 name(found)
             ),
@@ -299,6 +318,15 @@ impl Pack for EnglishPack {
 impl Pack for EmojiPack {
     const MAGIC: [u8; 4] = *b"QIMJ";
     const KIND: PackKind = PackKind::Emoji;
+
+    fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl Pack for WordTrigramPack {
+    const MAGIC: [u8; 4] = *b"QIMW";
+    const KIND: PackKind = PackKind::WordTrigram;
 
     fn id(&self) -> &str {
         &self.id
