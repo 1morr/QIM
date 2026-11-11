@@ -401,17 +401,19 @@ impl WebSession {
             .collect()
     }
 
-    /// 給背景模型的重排要求（plan §2.7）；沒有組字時是 `undefined`。
+    /// 給背景模型的重排要求（plan §2.1、§2.7）；沒有組字、移到某一段改字時是 `undefined`。
     #[wasm_bindgen(js_name = rerankRequest)]
     pub fn rerank_request(&self) -> Option<WebRerankRequest> {
         self.session.rerank_request().map(|r| WebRerankRequest {
             generation: r.generation,
             context: r.context,
-            candidates: r.candidates.into_iter().map(|c| c.original).collect(),
+            scores: r.paths.iter().map(|p| p.score).collect(),
+            paths: r.paths.into_iter().map(|p| p.text).collect(),
         })
     }
 
-    /// 套用重排結果：`order` 是要求的候選的位置，好的在前；`generation` 過期時是 `undefined`。
+    /// 套用重排結果：`order` 是要求的路徑的序號，好的在前；排出的路徑到第 2 位，候選列沒有就插入。
+    /// `generation` 過期時是 `undefined`。
     #[wasm_bindgen(js_name = applyRerank)]
     pub fn apply_rerank(&mut self, generation: u64, order: Vec<usize>) -> Option<WebSnapshot> {
         self.session
@@ -549,12 +551,16 @@ pub struct WebSnapshot {
 pub struct WebRerankRequest {
     #[wasm_bindgen(readonly)]
     pub generation: u64,
-    /// 候選前面的字詞（繁體原文）。
+    /// 路徑前面的字：前文接上選定的分段，最多 50 字。
     #[wasm_bindgen(readonly)]
     pub context: String,
-    /// 前幾個候選的繁體原文，依目前的順序；和 `context` 一樣用原文，簡體模式下模型也看繁體。
+    /// lattice 的前 9 條整句路徑的繁體原文，依路徑分由高到低；簡體模式下模型也看繁體。路徑分另放
+    /// `scores`、不帶分段：JS 端的模型只要文字與路徑分，兩個平的陣列不必為每條路徑另建 JS 物件。
     #[wasm_bindgen(readonly)]
-    pub candidates: Vec<String>,
+    pub paths: Vec<String>,
+    /// 各路徑的同步層路徑分，和 `paths` 同順序（神經模型的 `路徑分 + λ·神經分` 用）。
+    #[wasm_bindgen(readonly)]
+    pub scores: Vec<f64>,
 }
 
 impl From<Snapshot> for WebSnapshot {

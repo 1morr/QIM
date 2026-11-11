@@ -709,6 +709,7 @@ mod tests {
                 .iter()
                 .map(|(t, s)| ScoredPath {
                     text: (*t).into(),
+                    segments: vec![(*t).into()],
                     score: *s,
                 })
                 .collect(),
