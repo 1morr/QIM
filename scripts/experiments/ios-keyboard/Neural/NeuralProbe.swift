@@ -7,13 +7,20 @@ enum NeuralProbe {
     /// 鍵名、`models/` 裡的檔名（`neural-cost gen` 寫出的四個檔）與路徑形狀（條數, 每條字數）。
     /// 沒給形狀的照 neural-cost 的預設 6 × 8（M2 票 11）；`·9` 兩個鍵是 M3 票 09 用的 9 條 × 18 字
     /// （票 07 定的 N 與口語 dev 路徑長度 p95）。
-    static let models: [(String, String, (Int, Int)?)] = [
-        ("L32", "lstm-1.4m-f32.safetensors", nil),
-        ("L8", "lstm-1.4m-q8.gguf", nil),
-        ("G32", "gpt-23m-f32.safetensors", nil),
-        ("G8", "gpt-23m-q8.gguf", nil),
-        ("L8·9", "lstm-1.4m-q8.gguf", (9, 18)),
-        ("G8·9", "gpt-23m-q8.gguf", (9, 18)),
+    struct Model {
+        let key: String
+        let file: String
+        /// 路徑條數與每條字數；nil 照 neural-cost 的預設。
+        let paths: (count: Int, length: Int)?
+    }
+
+    static let models = [
+        Model(key: "L32", file: "lstm-1.4m-f32.safetensors", paths: nil),
+        Model(key: "L8", file: "lstm-1.4m-q8.gguf", paths: nil),
+        Model(key: "G32", file: "gpt-23m-f32.safetensors", paths: nil),
+        Model(key: "G8", file: "gpt-23m-q8.gguf", paths: nil),
+        Model(key: "L8·9", file: "lstm-1.4m-q8.gguf", paths: (9, 18)),
+        Model(key: "G8·9", file: "gpt-23m-q8.gguf", paths: (9, 18)),
     ]
     /// 與 Mac 的 `run.sh` 相同：每個上下文長度 30 次、2 條執行緒。
     static let iterations: UInt32 = 30
@@ -24,7 +31,8 @@ enum NeuralProbe {
     static var onUpdate: (() -> Void)?
     private static var isRunning = false
 
-    static func run(_ file: String, shape: (Int, Int)?) {
+    static func run(_ model: Model) {
+        let file = model.file
         guard !isRunning else { return }
         guard let url = Bundle.main.url(forResource: file, withExtension: nil, subdirectory: "models") else {
             publish(["nc missing \(file)"])
@@ -32,9 +40,9 @@ enum NeuralProbe {
         }
         isRunning = true
         // neural-cost 的 `bench::run` 讀這兩個環境變數（README〈上次結果〉）。
-        if let (paths, length) = shape {
-            setenv("NC_PATHS", String(paths), 1)
-            setenv("NC_PATH_LEN", String(length), 1)
+        if let paths = model.paths {
+            setenv("NC_PATHS", String(paths.count), 1)
+            setenv("NC_PATH_LEN", String(paths.length), 1)
         } else {
             unsetenv("NC_PATHS")
             unsetenv("NC_PATH_LEN")

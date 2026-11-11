@@ -69,7 +69,7 @@ impl Group {
         }
     }
 
-    fn is_context(self) -> bool {
+    pub fn is_context(self) -> bool {
         matches!(self, Group::ContextWiki | Group::ContextColloquial)
     }
 }

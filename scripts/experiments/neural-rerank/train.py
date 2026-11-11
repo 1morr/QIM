@@ -318,8 +318,8 @@ def train(args: argparse.Namespace) -> None:
     model = (CifgLstm(vocab) if args.model == "lstm" else Gpt(vocab, dropout=args.dropout)).to(device)
     params = sum(p.numel() for p in model.parameters())
     mix = Mixture(data, vocab, args.colloquial_frac, args.seed)
-    decay = [p for n, p in model.named_parameters() if p.dim() == 2]
-    no_decay = [p for n, p in model.named_parameters() if p.dim() < 2]
+    decay = [p for p in model.parameters() if p.dim() == 2]
+    no_decay = [p for p in model.parameters() if p.dim() < 2]
     opt = torch.optim.AdamW(
         [{"params": decay, "weight_decay": args.weight_decay}, {"params": no_decay, "weight_decay": 0.0}],
         lr=args.lr,
@@ -333,7 +333,7 @@ def train(args: argparse.Namespace) -> None:
         p = (step - args.warmup) / max(1, args.steps - args.warmup)
         return args.lr * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * p)))
 
-    log = open(out / "train.log", "w", encoding="utf-8")
+    log = (out / "train.log").open("w", encoding="utf-8")
     config = {k: v for k, v in vars(args).items() if k != "func"}
     config.update(params=params, vocab=vocab, context=CONTEXT, colloquial_frac_used=mix.colloquial_frac)
     print(json.dumps(config, ensure_ascii=False))
@@ -370,6 +370,7 @@ def train(args: argparse.Namespace) -> None:
             log.flush()
             last = rec
     elapsed = time.time() - start
+    log.close()
     if best_state is not None:
         model.load_state_dict(best_state)
     tensors = {k: v.detach().float().cpu().contiguous() for k, v in model.export().items()}

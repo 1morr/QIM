@@ -234,7 +234,7 @@ fn neural(args: &[String]) -> Result<(), String> {
         let (kind, format, params) = (loaded.kind, loaded.format, loaded.params);
         let size = std::fs::metadata(model_path).map_err(|e| e.to_string())?.len();
         let vocab_size = loaded.scorer.vocab();
-        check_reference(model_path, &*loaded.scorer)?;
+        check_reference(model_path, loaded.format, &*loaded.scorer)?;
         let mut reranker = Neural::new(prefix.clone(), loaded, Vocab::load(Path::new(&vocab), vocab_size)?);
         println!(
             "模型 {kind} {}：參數 {params}、檔案 {size} 位元組、字表 {vocab_size}、載入 {load_ms:.1} ms；{} 切分、N = {n}\n",
@@ -305,13 +305,10 @@ fn latency_table(sets: &[model_ladder::Set], reranker: &model_ladder::neural::Ne
     );
     let mut groups: Vec<(String, Vec<&model_ladder::Set>)> = Vec::new();
     for set in sets {
-        let label = if set.group == model_ladder::Group::Wiki
-            || set.group == model_ladder::Group::Colloquial
-            || set.group == model_ladder::Group::Personal
-        {
-            set.group.label().to_string()
-        } else {
+        let label = if set.group.is_context() {
             format!("有前文·前文{}", set.context_chars)
+        } else {
+            set.group.label().to_string()
         };
         match groups.iter_mut().find(|(l, _)| *l == label) {
             Some((_, v)) => v.push(set),
@@ -343,7 +340,11 @@ fn latency_table(sets: &[model_ladder::Set], reranker: &model_ladder::neural::Ne
 
 /// `train.py` 在權重旁寫的 `reference.json`（PyTorch 算的分數）：candle 算的要對得上，否則兩邊的
 /// 結構不一致（GELU 近似、閘的順序……）。q8 只印差多少。
-fn check_reference(model: &Path, scorer: &dyn model_ladder::neural::Scorer) -> Result<(), String> {
+fn check_reference(
+    model: &Path,
+    format: model_ladder::neural::Format,
+    scorer: &dyn model_ladder::neural::Scorer,
+) -> Result<(), String> {
     #[derive(serde::Deserialize)]
     struct Reference {
         context: Vec<u32>,
@@ -357,7 +358,6 @@ fn check_reference(model: &Path, scorer: &dyn model_ladder::neural::Scorer) -> R
     };
     let refs: Vec<Reference> =
         serde_json::from_str(&text).map_err(|e| format!("{}：{e}", path.display()))?;
-    let q8 = model.extension().is_some_and(|e| e == "gguf");
     let mut worst = 0f32;
     for r in &refs {
         let got = scorer
@@ -369,7 +369,7 @@ fn check_reference(model: &Path, scorer: &dyn model_ladder::neural::Scorer) -> R
         "和 PyTorch 的分數最多差 {worst:.4} nat（{} 組）",
         refs.len()
     );
-    if !q8 && worst > 1e-2 {
+    if format == model_ladder::neural::Format::F32 && worst > 1e-2 {
         return Err(format!(
             "candle 與 PyTorch 的分數差 {worst}：模型結構對不上"
         ));
