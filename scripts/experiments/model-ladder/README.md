@@ -11,6 +11,7 @@
 | `src/lib.rs` | 讀集合、`Reranker` 介面、每題的候選與路徑、指標、報告、匯出、配對比較 |
 | `src/main.rs` | 命令列：`eval`、`export`、`compare` |
 | `tests/framework.rs` | 用小碼表確認首選不動、N 截斷、外部結果查表、前文截斷、McNemar |
+| `src/neural.rs`、`tests/neural.rs` | 票 09 的神經重排（candle）：`neural`、`quantize` 兩個指令，用法與結果在 `../neural-rerank/README.md` |
 | `src/sync.rs` | 同步層的模型（票 08）：字級 trigram、詞級 n-gram、字級 bigram 重訓，訓練與查表 |
 | `src/sync_cli.rs` | 命令列 `sync`：訓練、掛上核心、報正確率與成本 |
 | `tests/sync.rs` | 剪枝後機率加總、各語料各算折扣、α 夾在 1 以下、句首 trigram、切詞 |
@@ -97,7 +98,7 @@ cargo run --release -- sync --model char3:10 --model word3:8:8 [--split test] [-
   程序之間的 p50 差到兩倍以上，倍數只是中位數的比，誤差很大；方向（路徑變長就變慢、記憶體變多）可信，數值要在空著的機器與 iPhone 重量。峰值增量程序之間差得少，較可信。
 
   f32 兩種與 1.4M f32 的原始輸出同樣在量的時候記下，但 iPhone 上 23M 只能用 q8（M2 票 09），表上只列 q8。照倍數把 M2 在 iPhone 量到的數字放大（M2：23M q8 上下文 200 字 p95 54.5 ms、峰值 +46.9 MB；1.4M q8 6.4 ms）：
-  - 23M q8、9 條 × 18 字、上下文 200 字：p95 約 105–110 ms，超過青簡 macOS 的停鍵防抖 80 ms；9 × 7 字約 60 ms。Mac 上的峰值多約 15 MB（81 → 96 MB），iPhone 若照加，約 62 MB，**貼近或超過 60 MB 的上限**（spec）。票 09 要在 iPhone 上用 9 條 × 18 字重量。
+  - 23M q8、9 條 × 18 字、上下文 200 字：p95 約 105–110 ms，超過青簡 macOS 的停鍵防抖 80 ms；9 × 7 字約 60 ms。Mac 上的峰值多約 15 MB（81 → 96 MB），iPhone 若照加，約 62 MB，**貼近或超過 60 MB 的上限**（spec）。票 09 已在 iPhone 上用 9 條 × 18 字實量（p95 84 ms、峰值 +75 MB，`../neural-rerank/README.md`〈成本〉）。
   - 1.4M q8：9 × 18 字約 18 ms、峰值增量仍在 6 MB 內。
   - 上下文 0 字時候選路徑那部分變成主要的工作量：23M q8 由 7.1 ms 變 27.1 ms（3.8 倍）。
   - 重跑：`cd ../neural-cost && RUNS=1 NC_PATHS=9 NC_PATH_LEN=18 ./run.sh`（各種交替跑三輪）。
@@ -298,7 +299,7 @@ cargo run --release -- sync --model char3:10 --model word3:8:8 [--split test] [-
 ## 給實驗票
 
 - 同步層（票 08，已做，見〈同步層〉）：`sync` 訓練模型並經 `Engine::with_segment_model` 掛上核心；看首選、修正次數與前 2 名，和基線 `compare`。
-- 停鍵層的神經模型（票 09）：在本 crate 加一個實作 `Reranker` 的模組（candle 照 `../neural-cost/`），或照外部模型的做法。
+- 停鍵層的神經模型（票 09）：`src/neural.rs` 的 `Neural`（candle，照 `../neural-cost/`），訓練與結果在 `../neural-rerank/`。
 - Foundation Models、DeepSeek（票 10）：`export` 匯出 `Query`，外部程式（Swift 命令列、HTTP）一題回一行 `{"split": 切分, "set": 集合名, "line": 行號, "ranked": [文字…]}`，再 `eval [--split …] --orders <檔> --name <名>`。切分不符就報錯（dev 與 test 的集合名相同）；沒回的題照原順序、報告最後印題數。延遲請在外部程式量，框架內的計時只算 `rerank` 呼叫本身。
 - 模型回的文字不在這題的候選與路徑裡就不算（框架丟掉、報告印個數），LLM 憑空寫出答案不會灌高命中率。spec 的提示寫「前 10 個候選、只回序號」：`Query.candidates` 是第一頁 9 個（`RERANK_LIMIT`），序號換回文字由外部程式負責。
 
