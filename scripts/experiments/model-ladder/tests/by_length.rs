@@ -38,6 +38,8 @@ fn rows_fall_into_length_buckets_at_the_boundaries() {
     let got: Vec<(usize, usize, usize)> =
         cells.iter().map(|c| (c.total, c.correct, c.top2)).collect();
     assert_eq!(got, [(2, 1, 2), (2, 1, 1), (2, 0, 1), (2, 1, 1)]);
+    let all = model_ladder::LengthCell::sum(&cells);
+    assert_eq!((all.total, all.correct, all.top2), (8, 3, 5));
 }
 
 /// 逐題結果檔多一欄字數，讀回來分得了組；舊的讀法（`compare`）不受影響。

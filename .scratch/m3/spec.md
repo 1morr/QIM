@@ -27,13 +27,13 @@
 - 繁體模式的簡體字（HKSCS 收的「门」「农」「阳」這類）照 macOS 速成排在同碼的繁體字之後，不過濾，選過照常學；簡體模式不受影響。粗口字「𨳊」照字頻、不另處理（使用者 2026-11-11 決定，參考：Rime 速成不過濾、照詞頻混排，librime 的 `charset_filter` 只藏擴展區、不藏簡體字；黑箱 T17）。
 - 完整粵語詞庫：先查來源與授權（`mattpocock-skills:research`），查清才建資料包；查不清就留在之後，寫回 brief §1.5。
 - 資料包 manifest（id、種類、版本、最低核心版本、sha256、大小、授權）；網頁設定頁列出、切換、刪除資料包，也可從檔案匯入；線上更新可關。更新來源是 GitHub Releases（`1morr/QIM`，使用者 2026-11-11 決定）：M3 用本機靜態伺服器驗完整流程，真的建 release 前先問使用者。階梯採用可選下載的模型時也走這裡。
-- 階梯採用的項目（票 11，`docs/research/model-ladder.md`）：同步層的詞級 trigram 進核心（票 11b）。停鍵層的 1.4M 在新基線重量沒過（個人集退步超過門檻，票 11d），重排改以路徑為單位（票 11c）、`qim-neural` 與模型資料包（票 11d）、網頁的神經重排（票 11e）都不做。
+- 階梯採用的項目（票 11，`docs/research/model-ladder.md`）：同步層的詞級 trigram 進核心（票 11b）；重排的要求與結果改以 lattice 路徑為單位、可插到第 2 位（票 11c）；停鍵層的 1.4M 在新基線重量過（票 11d 量，個人集改成只報不擋後採用，〈採用門檻〉），做 `qim-neural` 與 1.4M 模型資料包（票 11d），網頁在 Web Worker 跑（票 11e）。
 - 雲端（依階梯結論，見〈模型階梯實驗〉的「產出」；票 11 定不做，下面這段留給重評，票 22）：使用者自帶 API key，支援 OpenAI 相容與 Anthropic 兩種介面（brief §8），結果非同步、標示來源，經既有的 `rerank_request` / `apply_rerank`。提示的組裝、遮蔽 email／電話／卡號、解析模型回覆、每日請求上限的計數、排除指定 App 的規則都放 `qim-core` 的純函式（不加依賴、不開網路），殼只做 HTTP、存 key、給今天的日期；這樣各平台殼共用同一份規則（plan §7.4「介面與規則放核心」）。網頁照 plan §3.1 經 Vite 開發伺服器轉發，key 只在開發機的環境變數。
 - M1、M2 留給 M3 的發現（`.scratch/m1/issues/24-m1-close.md`、`.scratch/m2/issues/12-m2-close.md` 的 Comments），分到各票：
   - 排位規則 1 與 2 的重複移動、規則 3、4 與「分段選出、詞庫沒有的整串」沒有測試；`--set beam=0`、`NaN` 繞過方案檔驗證 → 排位守門票。
   - 資料包清單在 `qim-databuild` 平行散開、六種資料包的 `to_bytes` / `from_bytes` 同形；個人集路徑在 `qim-databuild` 與 `qim-bench` 各一份 → 資料包整理票。
   - `web/src/main.ts` 超過 600 行 → 網頁整理票。
-  - 重排把第 2 位的使用者詞或英文擠到第 3（plan §2.1、§2.4 沒寫先後）→ 雲端重排票定；票 11 改由票 11c 定，11c wontfix 後沒有真的重排，留到之後採用重排模型時定。
+  - 重排把第 2 位的使用者詞或英文擠到第 3（plan §2.1、§2.4 沒寫先後）→ 雲端重排票定；票 11 改由票 11c 定。
   - Common Voice 因「說」「記」同碼 `yu` 多錯、KN 在乘權重的次數上算 → 同步層 n-gram 票一起看。
   - 口語語料不足、要不要找新來源（plan §8）→ 訓練神經模型前問使用者。
   - Foundation Models 停頓後第一個請求的 6–15 s 尾巴、神經模型的路徑數與長度 → 階梯各票。
@@ -67,7 +67,7 @@
 
 - 前置：M1 的 `rerank_request` / `apply_rerank` 介面與首選字基準；M2 量完的記憶體上限、Foundation Models、上下文長度與小型神經模型開銷（`docs/research/ios-feasibility.md`、brief §12.3）；M3 的 `set_context` 與「有前文」集合。
 - 模型大小上限（M2 票 09）：iOS 鍵盤擴充裡，模型的 footprint 峰值增量 ≤ 60 MB，讓核心加資料包（79 MB）加模型留在記憶體警告線（約 142 MB）以下；23M 級只能用 q8（+47 MB）。數字來自 iPhone 18 Pro Max，只限 iOS 鍵盤擴充。
-- 測試集：維基、口語、個人三個集合，加「有前文」的集合。結論以口語與個人集為主，維基集只防退步。
+- 測試集：維基、口語、個人三個集合，加「有前文」的集合。結論以口語為主；個人集原本也是，票 25 起只報不擋（〈採用門檻〉）；維基集只防退步。
 - 受測模型：
 
 | 層 | 模型 | 備註 |
@@ -89,14 +89,14 @@
 
 ### 採用門檻
 
-票 07 提出，使用者 2026-11-11 確認（四項都照提案），之後的實驗票不改。基線與量法：`scripts/experiments/model-ladder/README.md`。
+票 07 提出，使用者 2026-11-11 確認（四項都照提案），之後的實驗票不改；唯一的例外是使用者在票 25 把個人集那條改成只報不擋（下面〈共同規則〉）。基線與量法：`scripts/experiments/model-ladder/README.md`。
 
 基線（test 切分，字級 bigram 加 `set_context`；2026-11-11 合併 main 到 `02217b1` 後重量，票 16、18 等改了資料包）：口語首選 36.3%、前 2 名 49.1%、修正 2.421 次/句、前 9 條路徑有答案 68.0%；個人首選 76.0%、前 2 名 85.5%、修正 0.325 次/句；維基首選 43.8%、前 2 名 55.1%。之後主分支再改資料包或核心時，各實驗票在開工的 commit 重量基線再比，門檻（增量）不變。
 
 共同規則：
 - 設定在 dev 切分定案後，test 切分與個人集各跑一次，只看那一次。
 - 改善看 test 的口語組（2,638 題）；改善的翻好／翻壞要過 McNemar 精確檢定（雙尾）p < 0.05（`model-ladder compare`）。
-- 不退步：個人集的首選、前 2 名各不低於基線 0.5 點、修正次數不多於基線 2%；維基的首選、前 2 名不低於基線 1.0 點。
+- 不退步：維基的首選、前 2 名不低於基線 1.0 點。個人集的首選、前 2 名、修正次數只報、不擋（使用者 2026-11-11 改，票 25；原本是首選、前 2 名各不低於基線 0.5 點、修正次數不多於基線 2%）：個人集取自 Rime 的學習資料，Rime 不看上下文，使用者在 Rime 多半只打短詞；QIM 要能一下打長句、用上下文，不該被這個習慣卡住。只改模型階梯的門檻：`cargo xtask bench --check` 的個人集 baseline 照舊守核心不退步，換模型的票照舊更新並列翻盤。
 - 同一層裡較貴的一級要比已採用的較便宜那級再過門檻，只比基線好不算。
 - 正確率過了、成本超標的不採用；成本達標、正確率沒過的也不採用。
 
@@ -123,8 +123,8 @@
 
 - 範圍內做的功能在網頁都可用，各有 Playwright 實打讀回的測試與截圖（`.scratch/m3/evidence/`）。
 - 首選字基準：「有前文」集合給前文時的答錯數與修正次數都比同一批題不給前文時少；`cargo xtask bench --check` 綠燈，其他集合不比 M3 開工時差，數字變了的有寫理由。
-- 雲端：階梯結論不做（票 11），M3 不送任何請求到雲端；票 22 wontfix，寫明重評條件。
-- 階梯採用的項目：詞級 trigram 在 `cargo xtask bench --check` 裡過同步層的門檻（票 11b）；停鍵層的 1.4M 在新基線沒過、記錄在 `docs/research/model-ladder.md`（票 11d）。
+- 雲端：階梯結論不做（票 11；票 25 對新基線重量後仍不做），M3 的產品不送任何請求到雲端；票 22 wontfix，寫明重評條件。
+- 階梯採用的項目：詞級 trigram 在 `cargo xtask bench --check` 裡過同步層的門檻（票 11b）；網頁停鍵後神經模型把路徑排到第 2 位，Playwright 實打讀回（票 11c、11e）。
 - 階梯：各層的採用結論與不採用理由寫回 brief §12、§1.5、§11，brief §8 的 200 字確認或改。
 - 個人模型：`bench --learning` 學習開的修正次數不比 M3 開工時多；匯出 v2 再匯入等價；v1 的檔仍匯入得了。
 - 繁體模式 `ls` 的「门」排在所有同碼繁體字之後，簡體模式照常。
@@ -148,9 +148,9 @@
 | [10](issues/10-ladder-llm.md) | 07 | Foundation Models 與 DeepSeek 重排的正確率、延遲、費用 |
 | [11](issues/11-ladder-conclusion.md) | 08, 09, 10 | 各層採用結論寫回 brief；採用的項目補實作票；改寫票 22 |
 | [11b](issues/11b-word-trigram.md) | 11 | 同步層的詞級 trigram 做成資料包、核心打分；iPhone 量放寬版；刪 `with_segment_model` |
-| [11c](issues/11c-rerank-paths.md) | 11d | wontfix（票 11d：1.4M 在新基線沒過，停鍵層不做） |
-| [11d](issues/11d-neural-rerank-crate.md) | 11b | wontfix：新基線重量 1.4M，口語 +5.5 點但個人集前 2 名 −0.53 點沒過；結果在 `docs/research/model-ladder.md` |
-| [11e](issues/11e-web-neural-rerank.md) | 11c | wontfix（同 11c） |
+| [11c](issues/11c-rerank-paths.md) | 11d | 重排的要求帶 lattice 前 9 條路徑，結果可插到第 2 位；定重排和規則 3、4、5 的先後 |
+| [11d](issues/11d-neural-rerank-crate.md) | 11b | `qim-neural`、1.4M 模型資料包（新基線重量已做完，個人集只報不擋後採用） |
+| [11e](issues/11e-web-neural-rerank.md) | 11c | 網頁在 Web Worker 跑神經重排，「重排」選單預設神經模型 |
 | [12](issues/12-personal-bigram.md) | 03, 04 | 個人 bigram、學習總開關、匯出 v2（收 v1） |
 | [13](issues/13-association.md) | 05, 12 | 聯想：上屏後給下一個詞，有開關 |
 | [14](issues/14-common-phrases.md) | 01 | 常用語：與觸發詞共用格式，網頁管理 |
@@ -161,9 +161,9 @@
 | [19](issues/19-simplified-after-traditional.md) | 02 | 繁體模式的簡體字排在同碼繁體字之後、不過濾 |
 | [20](issues/20-pack-manifest.md) | 01, 02 | 資料包 manifest；設定頁列出、切換、刪除、從檔案匯入 |
 | [21](issues/21-pack-online-update.md) | 20 | 從 GitHub Releases 形式的索引線上更新（M3 用本機伺服器） |
-| [22](issues/22-cloud-rerank.md) | 05, 11 | wontfix（票 11：雲端沒過門檻）；保留重評條件 |
+| [22](issues/22-cloud-rerank.md) | 05, 11 | wontfix（票 11；票 25 對新基線重量 flash 比 1.4M 只多 2.4 點，仍沒過）；保留重評條件 |
 | [24](issues/24-words-hk-lexicon.md) | 18, 20 | 粵典詞頭表照非商業條款另建一份詞庫資料包，可切換（使用者 2026-11-11 決定） |
 | [25](issues/25-ladder-long-context.md) | 11b | 階梯補測：依句長分組、口語長前文（使用者 2026-11-11 要求） |
-| [23](issues/23-m3-close.md) | 01–21、11b、24、25（22、11c、11d、11e wontfix） | 里程碑 code-review、乾淨 checkout 重驗、v2 定稿、封存 |
+| [23](issues/23-m3-close.md) | 01–21、11b–11e、24、25（22 wontfix） | 里程碑 code-review、乾淨 checkout 重驗、v2 定稿、封存 |
 
 可以同時開工的：01、02、03、04、06。票 11 依結論補的實作票編成 `11b`、`11c`…，加進本表並擋票 23。

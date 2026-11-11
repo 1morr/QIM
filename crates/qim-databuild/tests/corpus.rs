@@ -186,7 +186,7 @@ fn long_context_items_pair_each_context_item_with_up_to_200_chars_before_it() {
     );
 }
 
-/// 對話前文（M3 票 25）：HKCanCor 一段錄音是一段對話，前文接同一段對話裡前面的話輪，最多
+/// 口語長前文（M3 票 25）：HKCanCor 一段錄音是一段對話，前文接同一段對話裡前面的話輪，最多
 /// [`LONG_CONTEXT_CHARS`] 字；話輪結尾不是標點時補一個空格分開。dev、test 各一份，題是有前文的句子，
 /// 對話的第一句沒有前文、不出題；不跨到上一段對話。
 #[test]
@@ -214,7 +214,7 @@ fn dialogue_items_take_earlier_turns_of_the_same_conversation_as_context() {
         codes(&second)
     )];
     expected.sort();
-    let mut dialogue: Vec<&str> = finished.dialogue_bench.lines().collect();
+    let mut dialogue: Vec<&str> = finished.dialogue_items.lines().collect();
     dialogue.sort();
     assert_eq!(dialogue, expected);
     assert_eq!(
@@ -223,7 +223,7 @@ fn dialogue_items_take_earlier_turns_of_the_same_conversation_as_context() {
     );
 }
 
-/// 對話前文只留最後 [`LONG_CONTEXT_CHARS`] 字；話輪照樣是一般的段落，「有前文」與長前文的題不變。
+/// 口語長前文只留最後 [`LONG_CONTEXT_CHARS`] 字；話輪照樣是一般的段落，「有前文」與長前文的題不變。
 #[test]
 fn dialogue_context_keeps_the_last_200_chars_and_turns_still_feed_the_other_items() {
     let [first] = test_clauses(1).try_into().unwrap();
@@ -241,7 +241,7 @@ fn dialogue_context_keeps_the_last_200_chars_and_turns_still_feed_the_other_item
         .skip(before.chars().count() - LONG_CONTEXT_CHARS)
         .collect();
     assert_eq!(
-        finished.dialogue_bench,
+        finished.dialogue_items,
         format!("{tail}\t{}\t{first}\n", codes(&first))
     );
     assert_eq!(

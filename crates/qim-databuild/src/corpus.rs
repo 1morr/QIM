@@ -14,7 +14,7 @@
 //! 同一批題另出一份長前文（同一段裡前面最多 [`LONG_CONTEXT_CHARS`] 字），給模型階梯量前文長度
 //! （M3 票 07，`scripts/experiments/model-ladder/`）。
 //!
-//! 對話前文的題（M3 票 25）：一段對話（HKCanCor 的一段錄音）的話輪各是一段，「有前文」與長前文
+//! 口語長前文的題（M3 票 25）：一段對話（HKCanCor 的一段錄音）的話輪各是一段，「有前文」與長前文
 //! 不跨話輪；另出一份題，前文接同一段對話裡前面的話輪，最多 [`LONG_CONTEXT_CHARS`] 字，給模型階梯量
 //! 口語的長前文。
 
@@ -88,7 +88,7 @@ pub struct Builder<'t, W> {
     context: ContextItems,
     /// dev 切分的「有前文」調參題，取法同 `context`。
     dev_context: ContextItems,
-    /// 對話前文的題（[`Self::add_dialogue`]），test、dev 各一份；最多 [`BENCH_SENTENCES`] 句。
+    /// 口語長前文的題（[`Self::add_dialogue`]），test、dev 各一份；最多 [`BENCH_SENTENCES`] 句。
     dialogue: ContextItems,
     dev_dialogue: ContextItems,
     chars: HashMap<char, u64>,
@@ -158,7 +158,7 @@ impl<'t, W: Write> Builder<'t, W> {
     }
 
     /// 加入一段對話：每個話輪照 [`Self::add`] 當一段，另把 dev、test 的句子配上同一段對話裡它前面的
-    /// 文字（前面的話輪接起來，最多 [`LONG_CONTEXT_CHARS`] 字）當對話前文的題。話輪結尾不是標點時
+    /// 文字（前面的話輪接起來，最多 [`LONG_CONTEXT_CHARS`] 字）當口語長前文的題。話輪結尾不是標點時
     /// 補一個空格，免得兩個話輪的字黏成一句。前文要有字，所以對話的第一句不出題。
     pub fn add_dialogue(&mut self, turns: &[String]) -> io::Result<()> {
         let mut before = String::new();
@@ -200,7 +200,7 @@ impl<'t, W: Write> Builder<'t, W> {
         let dev_context_items = self.context_lines(&self.dev_context, false);
         let context_long_bench = self.context_lines(&self.context, true);
         let dev_context_long_items = self.context_lines(&self.dev_context, true);
-        let dialogue_bench = self.context_lines(&self.dialogue, false);
+        let dialogue_items = self.context_lines(&self.dialogue, false);
         let dev_dialogue_items = self.context_lines(&self.dev_dialogue, false);
         let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
         chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -213,7 +213,7 @@ impl<'t, W: Write> Builder<'t, W> {
             dev_context_items,
             context_long_bench,
             dev_context_long_items,
-            dialogue_bench,
+            dialogue_items,
             dev_dialogue_items,
             chars,
             train: self.train,
@@ -321,9 +321,9 @@ pub struct Finished<W> {
     pub context_long_bench: String,
     /// `dev_context_items` 的長前文版。
     pub dev_context_long_items: String,
-    /// 對話前文的題（[`Builder::add_dialogue`]），格式同 `context_bench`；沒加過對話是空的。
-    pub dialogue_bench: String,
-    /// 對話前文的 dev 調參題。
+    /// 口語長前文的題（[`Builder::add_dialogue`]），格式同 `context_bench`；沒加過對話是空的。
+    pub dialogue_items: String,
+    /// 口語長前文的 dev 調參題。
     pub dev_dialogue_items: String,
     /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
     pub chars: String,

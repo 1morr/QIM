@@ -104,7 +104,7 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，brief §12.2 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
 
-`bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數。邏輯在 `crates/qim-databuild/src/personal.rs`。個人集的路徑與檔頭、基準目錄與「有前文」的目錄、`build/corpus/<名>/dev.tsv`、`dev-context.tsv` 與兩份長前文題在 `qim-databuild`（寫）與 `qim-bench`（讀）各有一份（plan §1.3 不讓 `qim-bench` 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
+`bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數。邏輯在 `crates/qim-databuild/src/personal.rs`。個人集的路徑與檔頭、基準目錄與「有前文」的目錄、`build/corpus/<名>/dev.tsv`、`dev-context.tsv`、兩份長前文題與兩份口語長前文題在 `qim-databuild`（寫）與 `qim-bench`（讀）各有一份（plan §1.3 不讓 `qim-bench` 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
 
 ### 線上更新的 release
 

@@ -72,12 +72,12 @@ pub fn context_long_items(name: &str) -> String {
 pub fn dev_context_long_items(name: &str) -> String {
     format!("build/corpus/{name}/dev-context-long.tsv")
 }
-/// 集合 `name` 的對話前文題（test 切分）：只有對話語料（HKCanCor）有，前文是同一段對話裡前面的
+/// 集合 `name` 的口語長前文題（test 切分）：只有對話語料（HKCanCor）有，前文是同一段對話裡前面的
 /// 話輪，最多 200 字；`cargo xtask data` 寫的，不進 git。基準不讀，模型階梯實驗讀（M3 票 25）。
 pub fn dialogue_items(name: &str) -> String {
     format!("build/corpus/{name}/test-dialogue.tsv")
 }
-/// 集合 `name` 的 dev 對話前文題，同 [`dialogue_items`]。
+/// 集合 `name` 的 dev 口語長前文題，同 [`dialogue_items`]。
 pub fn dev_dialogue_items(name: &str) -> String {
     format!("build/corpus/{name}/dev-dialogue.tsv")
 }

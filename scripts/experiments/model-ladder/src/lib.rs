@@ -527,7 +527,8 @@ impl Summary {
     }
 }
 
-fn pct(part: usize, whole: usize) -> String {
+/// 百分比，一位小數；分母 0 是「—」。
+pub fn pct(part: usize, whole: usize) -> String {
     if whole == 0 {
         "—".into()
     } else {
@@ -632,9 +633,22 @@ pub struct LengthCell {
     pub top2: usize,
 }
 
+impl LengthCell {
+    /// 幾組加起來（「全部」那欄）。
+    pub fn sum(cells: &[LengthCell]) -> LengthCell {
+        cells.iter().fold(LengthCell::default(), |a, c| LengthCell {
+            total: a.total + c.total,
+            correct: a.correct + c.correct,
+            top2: a.top2 + c.top2,
+        })
+    }
+}
+
 /// 把（字數, 首選正確, 前 2 名命中）依 [`LENGTH_BUCKETS`] 分組加起來；0 字的題不算。
-pub fn by_length(rows: impl IntoIterator<Item = (usize, bool, bool)>) -> [LengthCell; 4] {
-    let mut cells = [LengthCell::default(); 4];
+pub fn by_length(
+    rows: impl IntoIterator<Item = (usize, bool, bool)>,
+) -> [LengthCell; LENGTH_BUCKETS.len()] {
+    let mut cells = [LengthCell::default(); LENGTH_BUCKETS.len()];
     for (chars, correct, top2) in rows {
         if let Some(i) = LENGTH_BUCKETS
             .iter()

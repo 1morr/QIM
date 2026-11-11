@@ -15,7 +15,7 @@ use std::process::ExitCode;
 
 use model_ladder::{
     CONTEXT_LENGTHS, ContextStats, DEFAULT_N, Group, Identity, LENGTH_BUCKETS, Orders, Reranker,
-    Split, by_length, compare, export_set, group_label, language_model_cost, load_sets,
+    Split, by_length, compare, export_set, group_label, language_model_cost, load_sets, pct,
     read_length_rows, report, run_set, write_rows,
 };
 
@@ -241,17 +241,15 @@ fn length_table(args: &[String]) -> Result<(), String> {
                 continue;
             }
             let cells = by_length(rows.iter().copied());
-            let all = by_length(rows.iter().map(|&(_, c, t)| (1, c, t)))[0];
+            let all = model_ladder::LengthCell::sum(&cells);
             let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("?");
             let cell = |c: model_ladder::LengthCell| {
-                let pct = |n: usize| {
-                    if c.total == 0 {
-                        "—".to_string()
-                    } else {
-                        format!("{:.1}%", 100.0 * n as f64 / c.total as f64)
-                    }
-                };
-                format!(" {}／{}（{}） |", pct(c.correct), pct(c.top2), c.total)
+                format!(
+                    " {}／{}（{}） |",
+                    pct(c.correct, c.total),
+                    pct(c.top2, c.total),
+                    c.total
+                )
             };
             print!("| {name} |");
             for c in cells {
@@ -283,7 +281,7 @@ fn context_stats(args: &[String]) -> Result<(), String> {
             .map(|i| i.context.as_deref().map_or(0, |c| c.chars().count()))
             .collect();
         let s = ContextStats::of(&lengths);
-        let pct = |n: usize| format!("{:.1}%", 100.0 * n as f64 / s.total.max(1) as f64);
+        let pct = |n: usize| pct(n, s.total);
         println!(
             "| {} | {} | {} | {} | {} |",
             set.name.trim_end_matches("·前文200"),
