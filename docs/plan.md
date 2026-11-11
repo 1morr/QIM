@@ -80,7 +80,7 @@ flowchart LR
 | `crates/qim-databuild/` | CLI：取得來源、建資料包、訓練 bigram、產生基準語料 |
 | `crates/qim-bench/` | 首選字基準 runner，量正確率與每鍵延遲 |
 | `crates/qim-wasm/`、`crates/qim-ffi/` | 綁定層，不放邏輯；`qim-ffi` 由 M2 票 07 建，Swift 綁定由 `cargo xtask ffi` 產生 |
-| `xtask/` | 閘門與開發指令（`cargo xtask check`、`data`、`web`、`ffi`、`bench`、`commit-msg`） |
+| `xtask/` | 閘門與開發指令（`cargo xtask check`、`data`、`pack-release`、`neural-import`、`web`、`ffi`、`bench`、`commit-msg`） |
 | `data/` | 自己維護的方案檔、佈局檔、粵語詞表、來源清單 `sources.toml`、進資料包的授權全文 `licenses/`，與停鍵層採用的模型 `neural-rerank/`（訓練不是決定性的，重訓分數會變，所以採用的那份進 git，§2.7）；不放其他第三方原始檔與建置產物 |
 | `bench/` | `fixed.tsv`、`corpus/`、`colloquial/`（都含授權與署名）、`baseline.json` |
 | `web/` | 網頁 prototype（Vite + TypeScript）、`web/editor/` 佈局編輯器、Playwright 測試 |
@@ -125,7 +125,7 @@ flowchart LR
 | `zip` | 9.3.0 | `qim-databuild` 讀 Unihan.zip、HKCanCor 的 zip | Unicode 只發 zip；只開 deflate 解壓 |
 | `dirs` | 7.0.0 | `qim-databuild` 找平台的使用者快取目錄，放下載的來源 | 各平台的快取目錄慣例（macOS `~/Library/Caches`、XDG、Windows `LocalAppData`）不必自己寫 |
 | `bzip2` / `quick-xml` | 0.6.1 / 0.42.0 | `qim-databuild` 讀維基 dump（`pages-articles.xml.bz2`） | `bzip2` 預設用純 Rust 的 libbz2-rs-sys；串流讀 XML，不必整份載入 |
-| `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證、`qim-core` 讀寫資料包 manifest（§4.6）；`jsonschema` 關掉預設 features（不要網路與檔案的 `$ref` 解析）；iOS 鍵盤擴充不帶 `jsonschema`（M2 票 09，§1.3） | 佈局要給 TS、Swift、Kotlin 直接讀 |
+| `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證、`qim-core` 讀寫資料包 manifest（§4.6）、`qim-databuild` 匯入停鍵層模型時讀 `reference.json`、`train.json`（§2.7）；`jsonschema` 關掉預設 features（不要網路與檔案的 `$ref` 解析）；iOS 鍵盤擴充不帶 `jsonschema`（M2 票 09，§1.3） | 佈局要給 TS、Swift、Kotlin 直接讀 |
 | `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2 票 07 確認）；proc-macro 宣告介面，`uniffi-bindgen-swift` 從靜態函式庫產生綁定（library mode），它要的 `cli` feature 只在 `qim-ffi` 的 `bindgen` feature 開 | 一份介面產生兩種語言 |
 | `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |

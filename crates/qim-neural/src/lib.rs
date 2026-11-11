@@ -29,7 +29,7 @@ pub enum Error {
     InvalidVocab(String),
     /// λ 要是有限的非負數。
     InvalidLambda(f64),
-    /// 推論失敗（candle 回的錯誤）。
+    /// 推論失敗：candle 回的錯誤，或交進來的 token 超出字表、路徑是空的（[`Model::score`]）。
     Inference(String),
 }
 
@@ -97,12 +97,12 @@ impl Reranker {
         let mut scored = self.model.score(&context, &nonempty)?.into_iter();
         Ok(tokens
             .iter()
-            .map(|(t, unknown)| match t.is_empty() {
-                true => 0.0,
-                false => {
-                    let raw = scored.next().expect("每條非空的路徑都有分數");
-                    raw - self.vocab.unknown_penalty() * *unknown as f32
+            .map(|(t, unknown)| {
+                if t.is_empty() {
+                    return 0.0;
                 }
+                let raw = scored.next().expect("每條非空的路徑都有分數");
+                raw - self.vocab.unknown_penalty() * *unknown as f32
             })
             .collect())
     }

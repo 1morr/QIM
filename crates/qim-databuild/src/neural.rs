@@ -149,15 +149,9 @@ pub fn import(model_dir: &Path, vocab: &Path, lambda: f64, out: &Path) -> Result
         ));
     }
     let kept = &lines[..size];
-    if let Some(bad) = kept[2..].iter().find(|l| l.chars().count() != 1) {
-        return Err(Error::invalid(
-            what,
-            format!("字表的一行要是一個字：{bad:?}"),
-        ));
-    }
+    let chars = vocab_chars(kept[2..].iter().copied(), &what)?;
     let weights = to_gguf(&safetensors, Format::Q8).map_err(invalid_model(&safetensors_path))?;
     let unknown_chars = (lines.len() - size).max(1) as u32;
-    let chars: Vec<char> = kept[2..].iter().filter_map(|l| l.chars().next()).collect();
     // 寫檔前照殼的路載入一次：字表重複的字、和模型對不上的都在這裡擋下。
     Reranker::new(&weights, &chars, unknown_chars, lambda).map_err(invalid_model(vocab))?;
 
@@ -192,6 +186,19 @@ pub fn import(model_dir: &Path, vocab: &Path, lambda: f64, out: &Path) -> Result
     })
 }
 
+/// 字表兩個記號之後的行，一行一個字；`what` 是錯誤訊息裡的檔名。
+fn vocab_chars<'a>(lines: impl Iterator<Item = &'a str>, what: &str) -> Result<Vec<char>, Error> {
+    lines
+        .map(|l| {
+            let mut chars = l.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => Ok(c),
+                _ => Err(Error::invalid(what, format!("一行要是一個字：{l:?}"))),
+            }
+        })
+        .collect()
+}
+
 /// 由匯入的檔（`dir` 通常是 [`NEURAL_DIR`]）建模型資料包。
 pub fn pack(dir: &Path) -> Result<ModelPack, Error> {
     let config_path = dir.join(CONFIG);
@@ -199,20 +206,7 @@ pub fn pack(dir: &Path) -> Result<ModelPack, Error> {
         .map_err(|e| Error::invalid(config_path.display().to_string(), e.to_string()))?;
     let vocab_path = dir.join(VOCAB);
     let text = read_text(&vocab_path)?;
-    let vocab: Vec<char> = text
-        .lines()
-        .skip(2)
-        .map(|l| {
-            let mut chars = l.chars();
-            match (chars.next(), chars.next()) {
-                (Some(c), None) => Ok(c),
-                _ => Err(Error::invalid(
-                    vocab_path.display().to_string(),
-                    format!("一行要是一個字：{l:?}"),
-                )),
-            }
-        })
-        .collect::<Result<_, _>>()?;
+    let vocab = vocab_chars(text.lines().skip(2), &vocab_path.display().to_string())?;
     Ok(ModelPack {
         id: MODEL_ID.into(),
         vocab,

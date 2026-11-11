@@ -78,7 +78,8 @@ pub enum CheckId {
     LexiconForms,
     /// 粵典詞庫收了預設詞庫的每個詞條（同碼、同詞頻），也多了詞（M3 票 24，plan §4.2）。
     WordsHkLexicon,
-    /// 停鍵層的模型資料包交給 `qim-neural` 載入得了、重排得出名次（M3 票 11d，plan §2.7）。
+    /// 停鍵層的模型資料包交給 `qim-neural` 載入得了，同分的路徑裡把沒有錯字的排第一
+    /// （M3 票 11d，plan §2.7）。
     NeuralRerank,
 }
 
@@ -112,7 +113,7 @@ impl fmt::Display for CheckId {
             Self::CommonForms => "字形用常見寫法",
             Self::LexiconForms => "詞庫用常見寫法",
             Self::WordsHkLexicon => "粵典詞庫是預設詞庫加粵典的詞",
-            Self::NeuralRerank => "停鍵層模型載入得了、排得出名次",
+            Self::NeuralRerank => "抽查：停鍵層模型把「今日天氣好好」排第一",
         })
     }
 }
@@ -956,31 +957,33 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
     }
 }
 
-/// 粵典詞庫 `words_hk` 收了預設詞庫 `default` 的每個詞條（同碼、同詞頻），並多了詞：它只是預設詞庫
-/// 再補詞，拿掉它就回到預設詞庫（plan §4.2）。
+/// 停鍵層的模型資料包交給 `qim-neural` 載入得了，三條同分的路徑裡把沒有錯字的排第一（plan §2.7）。
 pub fn neural_rerank(packs: &[BuiltPack]) -> Check {
     let result = built::decode::<ModelPack>(packs).and_then(|pack| {
         let reranker =
             qim_neural::Reranker::new(&pack.weights, &pack.vocab, pack.unknown_chars, pack.lambda)
                 .map_err(|e| e.to_string())?;
+        // 路徑分相同，只差一個同音的錯字：沒有錯字的放最後，模型要把它排第一。
         let paths = [
-            ("今日天氣好好", -10.0),
             ("今日天器好好", -10.0),
             ("金日天氣好好", -10.0),
+            ("今日天氣好好", -10.0),
         ];
         let order = reranker
             .rank("我哋出去行街，", &paths)
             .map_err(|e| e.to_string())?;
         let mut sorted = order.clone();
         sorted.sort_unstable();
-        match sorted == [0, 1, 2] {
-            true => Ok(format!(
-                "字表 {} 字、λ {}，排出 {order:?}",
-                pack.vocab.len(),
-                pack.lambda
-            )),
-            false => Err(format!("名次不是 0–2 的排列：{order:?}")),
+        if sorted != [0, 1, 2] || order[0] != 2 {
+            return Err(format!(
+                "「今日天氣好好」沒排第一，或名次不是 0–2 的排列：{order:?}"
+            ));
         }
+        Ok(format!(
+            "字表 {} 字、λ {}，排出 {order:?}",
+            pack.vocab.len(),
+            pack.lambda
+        ))
     });
     Check {
         id: CheckId::NeuralRerank,
@@ -989,6 +992,8 @@ pub fn neural_rerank(packs: &[BuiltPack]) -> Check {
     }
 }
 
+/// 粵典詞庫 `words_hk` 收了預設詞庫 `default` 的每個詞條（同碼、同詞頻），並多了詞：它只是預設詞庫
+/// 再補詞，拿掉它就回到預設詞庫（plan §4.2）。
 pub fn words_hk_lexicon(default: &Lexicon, words_hk: &Lexicon) -> Check {
     let mut missing = Vec::new();
     for (code, words) in default.iter() {

@@ -471,28 +471,20 @@ fn upstream(readme: &str) -> Files {
     )
 }
 
-/// 在 `root` 放停鍵層的模型（`cargo xtask neural-import` 寫的那三個檔）：qim-neural 的極小測試模型。
+/// 在 `root` 放停鍵層的模型：複製 repo 的 `data/neural-rerank/`（`--verify` 抽查它的排序）。
 fn neural_model(root: &Path) {
     let dir = root.join(qim_databuild::neural::NEURAL_DIR);
     std::fs::create_dir_all(&dir).unwrap();
-    let tiny = std::fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../qim-neural/tests/fixtures/tiny-lstm.safetensors"),
-    )
-    .unwrap();
-    let weights = qim_neural::to_gguf(&tiny, qim_neural::Format::Q8).unwrap();
-    std::fs::write(dir.join(qim_databuild::neural::WEIGHTS), weights).unwrap();
-    std::fs::write(
-        dir.join(qim_databuild::neural::VOCAB),
-        "<sep>\n<unk>\n我\n你\n的\n是\n好\n人\n天\n大\n小\n中\n",
-    )
-    .unwrap();
-    std::fs::write(
-        dir.join(qim_databuild::neural::CONFIG),
-        "lambda = 2.0\nunknown_chars = 3\n\n[trained]\nname = \"tiny\"\ncommit = \"0000000\"\n\
-         safetensors_sha256 = \"00\"\nreference_max_difference = 0.0\n",
-    )
-    .unwrap();
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(qim_databuild::neural::NEURAL_DIR);
+    for name in [
+        qim_databuild::neural::WEIGHTS,
+        qim_databuild::neural::VOCAB,
+        qim_databuild::neural::CONFIG,
+    ] {
+        std::fs::copy(repo.join(name), dir.join(name)).unwrap();
+    }
 }
 
 /// 在 `root` 放 sources.toml、repo 裡的速成方案檔與 Unicode 授權全文。
@@ -800,7 +792,7 @@ fn every_pack_has_a_manifest_next_to_it() {
         .to_path_buf();
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
     assert!(notice.contains("CIFG-LSTM"), "{notice}");
-    assert!(notice.contains("10 most frequent characters"), "{notice}");
+    assert!(notice.contains("9998 most frequent characters"), "{notice}");
     let (words, _) = manifest_of("詞級 trigram");
     assert_eq!(words.kind, PackKind::WordTrigram);
     assert_eq!(

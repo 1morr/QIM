@@ -120,23 +120,27 @@ fn import_refuses_a_bad_lambda() {
     assert!(qim_databuild::neural::import(&model, &vocab, -1.0, &tmp.path().join("o")).is_err());
 }
 
+/// `--verify` 的抽查用 repo 裡採用的模型：同分的三條路徑裡要把沒有錯字的排第一；權重壞了就不過。
 #[test]
-fn verify_loads_the_model_pack_with_qim_neural() {
-    use qim_core::Pack;
+fn verify_checks_the_adopted_model_ranks_the_right_sentence_first() {
     use qim_databuild::built::BuiltPack;
     use qim_databuild::verify::{self, CheckId};
 
-    let tmp = TempDir::new().unwrap();
-    let (model, vocab) = trained(tmp.path(), &reference());
-    let out = tmp.path().join("out");
-    qim_databuild::neural::import(&model, &vocab, 2.0, &out).unwrap();
-    let mut pack = qim_databuild::neural::pack(&out).unwrap();
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(qim_databuild::neural::NEURAL_DIR);
+    let mut pack = qim_databuild::neural::pack(&dir).unwrap();
     let built = |p: &qim_core::ModelPack| vec![BuiltPack::new("停鍵層模型", p).unwrap()];
     let check = verify::neural_rerank(&built(&pack));
     assert_eq!(check.id, CheckId::NeuralRerank);
     assert!(check.passed, "{}", check.detail);
+    // 極小的隨機模型排不出來：抽查看的是排序，不只是載入得了。
+    let tmp = TempDir::new().unwrap();
+    let (model, vocab) = trained(tmp.path(), &reference());
+    let out = tmp.path().join("out");
+    qim_databuild::neural::import(&model, &vocab, 2.0, &out).unwrap();
+    let tiny = qim_databuild::neural::pack(&out).unwrap();
+    assert!(!verify::neural_rerank(&built(&tiny)).passed);
     pack.weights.truncate(100);
-    let check = verify::neural_rerank(&built(&pack));
-    assert!(!check.passed);
-    assert!(pack.to_bytes().is_ok());
+    assert!(!verify::neural_rerank(&built(&pack)).passed);
 }
