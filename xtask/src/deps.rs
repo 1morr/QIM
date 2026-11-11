@@ -46,20 +46,14 @@ const RULES: &[Rule] = &[
         no_io: true,
     },
     Rule {
-        krate: "qim-neural",
-        workspace: &[],
-        external: Some(&["candle-core", "candle-nn"]),
-        no_io: true,
-    },
-    Rule {
         krate: "qim-wasm",
-        workspace: &["qim-core", "qim-layout", "qim-neural"],
+        workspace: &["qim-core", "qim-layout"],
         external: Some(&["wasm-bindgen"]),
         no_io: false,
     },
     Rule {
         krate: "qim-ffi",
-        workspace: &["qim-core", "qim-layout", "qim-neural"],
+        workspace: &["qim-core", "qim-layout"],
         external: Some(&["uniffi"]),
         no_io: false,
     },

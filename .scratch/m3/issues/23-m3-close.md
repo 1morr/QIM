@@ -1,7 +1,7 @@
 # 23: M3 收尾
 
 Status: ready-for-agent
-Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 11b, 11c, 11d, 11e, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25（22 依票 11 的結論 wontfix）
+Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 11b, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25（22 依票 11 的結論、11c、11d、11e 依票 11d 的重量結果 wontfix）
 讀: spec〈驗收〉；`docs/progress.md`〈寫法與封存〉；plan §2.4、§7、§8；`docs/development.md`〈全部檢查〉；票 01–22 的 `## Comments`
 
 ## What to build

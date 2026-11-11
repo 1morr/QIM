@@ -1,6 +1,6 @@
 # 11c: 核心：重排看 lattice 路徑、可插到第 2 位
 
-Status: ready-for-agent
+Status: wontfix
 Blocked by: 11d
 讀: `docs/research/model-ladder.md`〈停鍵層〉；plan §2.1（重排、`paths`、上下文）、§2.4（排位規則）、§2.7；ADR 0005；`scripts/experiments/llm-rerank/README.md`〈提示〉〈給票 11〉；`scripts/experiments/neural-rerank/README.md`〈接法〉；`.scratch/m1/issues/24-m1-close.md` Comments 的「M3」各條（重排與規則 3、4 那條）；票 15 的 Comments（記住的字串）
 
@@ -21,3 +21,5 @@ Blocked by: 11d
 - [ ] `cargo xtask bench --check` 不變（bench 不跑重排）；實際操作網頁亂按一輪；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-11（票 11d）：wontfix。1.4M 在詞級 trigram 的新基線上口語前 2 名 +5.5 點，但個人集前 2 名 −0.53 點，超過門檻的 0.5 點；使用者選照門檻停下（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。停鍵層與雲端都不做，本票的改動沒人用。
