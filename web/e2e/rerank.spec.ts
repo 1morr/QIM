@@ -75,3 +75,33 @@ test("把最後一條路徑排最前：候選列沒有它，插到第 2 位，�
 	await page.keyboard.press("2");
 	await expect(text).toHaveValue(inserted);
 });
+
+// 插入的整句選了之後照學習規則記下（M3 票 11c 協調者回饋）：學到的分數把它拉進候選列，選兩次
+// 就成首選（規則 2），不必每次停鍵等重排。真資料包上 `anr` 插入的整句選一次後下次就在第 2 位。
+test("插入的整句選兩次後成首選，不等停鍵", async ({ page }, testInfo) => {
+	const { text, items, rerank } = ui(page);
+	const { first, all } = await unranked(page);
+	await rerank.selectOption("raise-last");
+	await text.focus();
+	await page.keyboard.type(CODE);
+	await expect(items.nth(2)).toHaveText(`3${first[1]}`);
+	const inserted = ((await items.nth(1).textContent()) ?? "").slice(1);
+	expect(all).not.toContain(inserted);
+	await page.keyboard.press("2");
+	await expect(text).toHaveValue(inserted);
+
+	// 第二次：選一次學到的分數已把它放進候選列，等重排插入別的路徑後找它的位置再選。
+	await page.keyboard.type(CODE);
+	await page.waitForTimeout(600);
+	const second = (await items.allTextContents()).map((t) => t.slice(1));
+	const at = second.indexOf(inserted);
+	expect(at).toBeGreaterThan(0);
+	await page.keyboard.press(String(at + 1));
+	await expect(text).toHaveValue(inserted.repeat(2));
+
+	// 第三次：打完立刻讀，不等重排回來。
+	await page.keyboard.type(CODE);
+	const third = await items.allTextContents();
+	expect(third[0]).toBe(`1${inserted}`);
+	await page.screenshot({ path: testInfo.outputPath("chosen-twice.png") });
+});
