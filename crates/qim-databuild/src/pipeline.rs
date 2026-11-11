@@ -309,6 +309,14 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             corpora::dev_context_items_path(root, corpus.name),
             first.dev_context_items.as_bytes(),
         )?;
+        write(
+            corpora::context_long_items_path(root, corpus.name),
+            first.context_long_bench.as_bytes(),
+        )?;
+        write(
+            corpora::dev_context_long_items_path(root, corpus.name),
+            first.dev_context_long_items.as_bytes(),
+        )?;
         corpora.push(CorpusSummary {
             name: corpus.name.into(),
             counts: first.counts,
@@ -788,6 +796,8 @@ fn build_corpus<W: Write>(
         dev_items,
         context_bench,
         dev_context_items,
+        context_long_bench,
+        dev_context_long_items,
         chars,
         train,
         dev,
@@ -798,6 +808,8 @@ fn build_corpus<W: Write>(
         dev_items,
         dev_context_items,
         context_bench,
+        context_long_bench,
+        dev_context_long_items,
         chars,
         train: train.sha256(),
         dev: dev.sha256(),
@@ -820,6 +832,10 @@ struct Built {
     dev_context_items: String,
     /// 「有前文」的題。
     context_bench: String,
+    /// 長前文版的「有前文」題（test、dev）：同一批題只換前文，由 `context_bench`、`dev_context_items`
+    /// 與來源決定，不另比。
+    context_long_bench: String,
+    dev_context_long_items: String,
     chars: String,
     train: String,
     dev: String,

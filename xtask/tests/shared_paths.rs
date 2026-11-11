@@ -46,6 +46,14 @@ fn databuild(corpora: &[&str]) -> Shared {
             format!("{name} 的 dev 有前文題"),
             slashed(corpora::dev_context_items_path(root, name)),
         ));
+        shared.push((
+            format!("{name} 的長前文題"),
+            slashed(corpora::context_long_items_path(root, name)),
+        ));
+        shared.push((
+            format!("{name} 的 dev 長前文題"),
+            slashed(corpora::dev_context_long_items_path(root, name)),
+        ));
     }
     shared
 }
@@ -77,6 +85,14 @@ fn bench(corpora: &[&str]) -> Shared {
         shared.push((
             format!("{name} 的 dev 有前文題"),
             qim_bench::dev_context_items(name),
+        ));
+        shared.push((
+            format!("{name} 的長前文題"),
+            qim_bench::context_long_items(name),
+        ));
+        shared.push((
+            format!("{name} 的 dev 長前文題"),
+            qim_bench::dev_context_long_items(name),
         ));
     }
     shared

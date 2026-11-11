@@ -39,7 +39,7 @@ pub use remembered::{REMEMBERED_LIMIT, REMEMBERED_STRINGS_MAX};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
     CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_LIMIT,
-    RerankRequest, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
+    RerankRequest, ScoredPath, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{ImportError, Phrase, UserModel, UserWordError};

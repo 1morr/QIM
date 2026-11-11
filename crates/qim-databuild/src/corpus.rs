@@ -11,6 +11,8 @@
 //!
 //! 「有前文」的基準題（plan §5.2）：test 切分的句子配上同一段文字裡它前面的
 //! [`CONTEXT_CLAUSES`] 句與中間的標點，前文原樣保留，不轉碼。dev 切分用同樣的取法另出一份調參題。
+//! 同一批題另出一份長前文（同一段裡前面最多 [`LONG_CONTEXT_CHARS`] 字），給模型階梯量前文長度
+//! （M3 票 07，`scripts/experiments/model-ladder/`）。
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::io::{self, Write};
@@ -28,6 +30,9 @@ pub const CONTEXT_SENTENCES: usize = 1000;
 
 /// 「有前文」的題，前文取目標句前面幾句。
 pub const CONTEXT_CLAUSES: usize = 2;
+
+/// 長前文最多幾個字：模型階梯量前文 0、50、200 字（`.scratch/m3/spec.md`〈模型階梯實驗〉）。
+pub const LONG_CONTEXT_CHARS: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Split {
@@ -105,6 +110,7 @@ impl<'t, W: Write> Builder<'t, W> {
         for clause in clauses(text) {
             let start = clause.as_ptr() as usize - text.as_ptr() as usize;
             let context = recent.front().map(|&from| line_tail(&text[from..start]));
+            let long = last_chars(line_tail(&text[..start]), LONG_CONTEXT_CHARS);
             recent.push_back(start);
             if recent.len() > CONTEXT_CLAUSES {
                 recent.pop_front();
@@ -128,13 +134,13 @@ impl<'t, W: Write> Builder<'t, W> {
                     writeln!(self.dev, "{clause}")?;
                     self.dev_sentences.insert(clause.to_string());
                     if let Some(context) = context {
-                        self.dev_context.offer(clause, context);
+                        self.dev_context.offer(clause, context, long);
                     }
                 }
                 Split::Test => {
                     self.test.insert(clause.to_string());
                     if let Some(context) = context {
-                        self.context.offer(clause, context);
+                        self.context.offer(clause, context, long);
                     }
                 }
             }
@@ -150,8 +156,10 @@ impl<'t, W: Write> Builder<'t, W> {
         self.counts.test = self.test.len();
         let bench = self.sample(&self.test);
         let dev_items = self.sample(&self.dev_sentences);
-        let context_bench = self.context_lines(&self.context);
-        let dev_context_items = self.context_lines(&self.dev_context);
+        let context_bench = self.context_lines(&self.context, false);
+        let dev_context_items = self.context_lines(&self.dev_context, false);
+        let context_long_bench = self.context_lines(&self.context, true);
+        let dev_context_long_items = self.context_lines(&self.dev_context, true);
         let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
         chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
@@ -161,6 +169,8 @@ impl<'t, W: Write> Builder<'t, W> {
             dev_items,
             context_bench,
             dev_context_items,
+            context_long_bench,
+            dev_context_long_items,
             chars,
             train: self.train,
             dev: self.dev,
@@ -178,12 +188,13 @@ impl<'t, W: Write> Builder<'t, W> {
             .collect()
     }
 
-    /// 「有前文」的題，一行「前文<TAB>逐字速成碼<TAB>句子」，依句子的雜湊排序。
-    fn context_lines(&self, items: &ContextItems) -> String {
+    /// 「有前文」的題，一行「前文<TAB>逐字速成碼<TAB>句子」，依句子的雜湊排序；`long` 時前文是長前文。
+    fn context_lines(&self, items: &ContextItems, long: bool) -> String {
         items
             .0
             .iter()
-            .map(|((_, sentence), context)| {
+            .map(|((_, sentence), (context, long_context))| {
+                let context = if long { long_context } else { context };
                 format!("{context}\t{}\t{sentence}\n", self.codes(sentence))
             })
             .collect()
@@ -198,18 +209,19 @@ impl<'t, W: Write> Builder<'t, W> {
     }
 }
 
-/// 「有前文」的題：（句子的雜湊, 句子）→ 前文；只留雜湊最小的 [`CONTEXT_SENTENCES`] 句。
+/// 「有前文」的題：（句子的雜湊, 句子）→（前文, 長前文）；只留雜湊最小的 [`CONTEXT_SENTENCES`] 句。
 #[derive(Default)]
-struct ContextItems(BTreeMap<(u64, String), String>);
+struct ContextItems(BTreeMap<(u64, String), (String, String)>);
 
 impl ContextItems {
-    /// 同一句有幾種前文時取雜湊最小的前文，和來源的順序無關。
-    fn offer(&mut self, clause: &str, context: &str) {
+    /// 同一句有幾種前文時取雜湊最小的前文（長前文跟著它），和來源的順序無關。
+    fn offer(&mut self, clause: &str, context: &str, long: &str) {
         let items = &mut self.0;
         let entry = (key(clause), clause.to_string());
-        if let Some(kept) = items.get_mut(&entry) {
+        if let Some((kept, kept_long)) = items.get_mut(&entry) {
             if (key(context), context) < (key(kept), kept.as_str()) {
                 *kept = context.to_string();
+                *kept_long = long.to_string();
             }
             return;
         }
@@ -221,11 +233,19 @@ impl ContextItems {
         {
             return;
         }
-        items.insert(entry, context.to_string());
+        items.insert(entry, (context.to_string(), long.to_string()));
         if items.len() > CONTEXT_SENTENCES {
             items.pop_last();
         }
     }
+}
+
+/// `text` 的最後 `n` 個字（不足 `n` 字時整串）。
+fn last_chars(text: &str, n: usize) -> &str {
+    let skip = text.chars().count().saturating_sub(n);
+    text.char_indices()
+        .nth(skip)
+        .map_or("", |(i, _)| &text[i..])
 }
 
 /// `text` 最後一個換行或 tab 之後的部分：前文不跨段落，題目檔也就沒有換行與 tab。
@@ -244,6 +264,10 @@ pub struct Finished<W> {
     pub context_bench: String,
     /// dev 切分的「有前文」調參題，格式同 `context_bench`（`cargo xtask bench --dev` 讀）。
     pub dev_context_items: String,
+    /// `context_bench` 的長前文版：同樣的題與順序，前文是同一段裡前面最多 [`LONG_CONTEXT_CHARS`] 字。
+    pub context_long_bench: String,
+    /// `dev_context_items` 的長前文版。
+    pub dev_context_long_items: String,
     /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
     pub chars: String,
     pub train: W,

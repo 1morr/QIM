@@ -1,4 +1,4 @@
-use qim_databuild::corpus::{Builder, Split, clauses, split_of};
+use qim_databuild::corpus::{Builder, LONG_CONTEXT_CHARS, Split, clauses, split_of};
 use qim_databuild::libcangjie;
 use qim_databuild::transcode::Transcoder;
 
@@ -143,5 +143,45 @@ fn dev_clauses_get_context_items_of_their_own() {
     assert_eq!(
         finished.context_bench,
         format!("前文，{dev}。\t{}\t{test}\n", codes(&test))
+    );
+}
+
+/// 長前文（M3 票 07，模型階梯量前文 50、200 字用）：和「有前文」的題同一批、同順序，前文改成
+/// 同一段文字裡句子前面的最後 [`LONG_CONTEXT_CHARS`] 字，同樣不跨換行與 tab。
+#[test]
+fn long_context_items_pair_each_context_item_with_up_to_200_chars_before_it() {
+    let [first, second] = test_clauses(2).try_into().unwrap();
+    let [dev] = dev_clauses(1).try_into().unwrap();
+    let transcoder = transcoder();
+    let mut builder = Builder::new(&transcoder, std::io::sink(), std::io::sink());
+    let filler = "開".repeat(LONG_CONTEXT_CHARS + 50);
+    builder
+        .add(&format!("前面\n{filler}，甲乙，{first}！"))
+        .unwrap();
+    builder.add(&format!("短，{second}")).unwrap();
+    builder.add(&format!("一，二，三，{dev}")).unwrap();
+    let finished = builder.finish().unwrap();
+    let codes = |s: &str| transcoder.transcode(s).unwrap().join(" ");
+    let before_first = format!("{filler}，甲乙，");
+    let tail: String = before_first
+        .chars()
+        .skip(before_first.chars().count() - LONG_CONTEXT_CHARS)
+        .collect();
+    let long: Vec<&str> = finished.context_long_bench.lines().collect();
+    let mut expected = vec![
+        format!("{tail}\t{}\t{first}", codes(&first)),
+        format!("短，\t{}\t{second}", codes(&second)),
+    ];
+    // 和 `context_bench` 同順序：逐行只差第一欄。
+    let order: Vec<&str> = finished
+        .context_bench
+        .lines()
+        .map(|l| l.split_once('\t').unwrap().1)
+        .collect();
+    expected.sort_by_key(|line| order.iter().position(|o| line.ends_with(o)));
+    assert_eq!(long, expected);
+    assert_eq!(
+        finished.dev_context_long_items,
+        format!("一，二，三，\t{}\t{dev}\n", codes(&dev))
     );
 }

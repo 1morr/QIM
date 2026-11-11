@@ -103,6 +103,8 @@ iPhone：`../ios-keyboard` 預設不建神經模型探針。照 `../ios-keyboard
 
 ## 上次結果（2026-11-10）
 
+路徑數與長度可用環境變數 `NC_PATHS`、`NC_PATH_LEN` 蓋掉（預設 6、8，iOS 擴充沒有這兩個變數、照預設）。M3 票 07 用 9 條 × 7 字、9 條 × 18 字重量了 Mac，結果與照倍數推估的 iPhone 數字在 `../model-ladder/README.md`〈N 與路徑長度〉；下面是 M2 票 11 的 6 × 8。
+
 環境：
 
 - Mac：Mac18,5（Apple M6，32 GB），macOS 27.0.1（26A434）。
