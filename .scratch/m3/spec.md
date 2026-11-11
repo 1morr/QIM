@@ -163,6 +163,7 @@
 | [21](issues/21-pack-online-update.md) | 20 | 從 GitHub Releases 形式的索引線上更新（M3 用本機伺服器） |
 | [22](issues/22-cloud-rerank.md) | 05, 11 | wontfix（票 11：雲端沒過門檻）；保留重評條件 |
 | [24](issues/24-words-hk-lexicon.md) | 18, 20 | 粵典詞頭表照非商業條款另建一份詞庫資料包，可切換（使用者 2026-11-11 決定） |
-| [23](issues/23-m3-close.md) | 01–21、11b–11e、24（22 wontfix） | 里程碑 code-review、乾淨 checkout 重驗、v2 定稿、封存 |
+| [25](issues/25-ladder-long-context.md) | 11d | 階梯補測：依句長分組、口語長前文（使用者 2026-11-11 要求） |
+| [23](issues/23-m3-close.md) | 01–21、11b–11e、24、25（22 wontfix） | 里程碑 code-review、乾淨 checkout 重驗、v2 定稿、封存 |
 
 可以同時開工的：01、02、03、04、06。票 11 依結論補的實作票編成 `11b`、`11c`…，加進本表並擋票 23。
