@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 use crate::lattice::{self, Lattice, Listing, Preceding};
 use crate::lexicon::WordsByText;
@@ -9,7 +10,7 @@ use crate::user::{SchemeModel, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
-    SchemePack, Simplifier, SimplifierPack, UserModel, Word,
+    SchemePack, SegmentModel, SegmentQuery, Simplifier, SimplifierPack, UserModel, Word,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -36,6 +37,8 @@ pub struct Engine {
     words_by_text: WordsByText,
     /// 連打字集的字（碼表裡不是擴展區的字）：聯想只給連打打得出的字。
     continuous_chars: HashSet<char>,
+    /// 換掉 lattice 的靜態機率的實驗模型（[`Engine::with_segment_model`]）；`None` 照 plan §2.3。
+    segment_model: Option<Arc<dyn SegmentModel>>,
 }
 
 /// lattice 的一條邊：輸入碼 `[start, end)` 對到的一個字或詞。
@@ -130,7 +133,21 @@ impl Engine {
             simplifier: None,
             english: EnglishWords::default(),
             emoji: EmojiTable::default(),
+            segment_model: None,
         })
+    }
+
+    /// 掛上實驗的語言模型（M3 票 08，模型階梯）：lattice 的邊與整串的字詞的靜態機率改問它，
+    /// β、γ、`personal` 照舊。聯想仍用字級 bigram。
+    #[must_use]
+    pub fn with_segment_model(mut self, model: Arc<dyn SegmentModel>) -> Self {
+        self.segment_model = Some(model);
+        self
+    }
+
+    /// 有沒有掛上實驗的語言模型：有才要算 [`Engine::edge_score`] 的前面幾段。
+    pub(crate) fn has_segment_model(&self) -> bool {
+        self.segment_model.is_some()
     }
 
     /// 掛上簡繁資料包，簡體模式（[`crate::Options::simplified`]）才有作用。
@@ -334,9 +351,27 @@ impl Engine {
     /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
     /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）；`bigram` 是這條邊接在
     /// 前一個字詞後面的個人 bigram（[`crate::user::Following::probability`]），沒有是 0。
-    pub(crate) fn edge_score(&self, prev: Option<char>, edge: &Edge, bigram: f64) -> f64 {
+    /// 掛上實驗的語言模型時，靜態機率改問它，`before` 是前面的段（[`SegmentQuery::before`]）。
+    pub(crate) fn edge_score(
+        &self,
+        prev: Option<char>,
+        before: &[&str],
+        edge: &Edge,
+        bigram: f64,
+    ) -> f64 {
         let first = self.language_model.log_prob(prev, edge.first);
-        first + edge.inner + personal_bonus(first + edge.rest, edge.personal, bigram)
+        let Some(model) = &self.segment_model else {
+            return first + edge.inner + personal_bonus(first + edge.rest, edge.personal, bigram);
+        };
+        let static_log_prob = model.log_prob(&SegmentQuery {
+            before,
+            text: &edge.text,
+            current_log_prob: first + edge.rest,
+        });
+        // `inner` 是詞內機率加 β、γ：減掉詞內機率剩 β、γ。
+        static_log_prob
+            + (edge.inner - edge.rest)
+            + personal_bonus(static_log_prob, edge.personal, bigram)
     }
 
     /// 組字接在前文 `before` 後面時，開頭的字要接的前一字（plan §2.3）。bigram 只在句內訓練
@@ -502,6 +537,8 @@ impl Engine {
     /// （同分照碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
     pub(crate) fn span(&self, user: &UserModel, before: &Preceding, input: &str) -> Vec<Spanned> {
         let following = before.word.as_deref().and_then(|w| user.bigrams_after(w));
+        let segment = self.has_segment_model().then(|| before.segment()).flatten();
+        let history: Vec<&str> = segment.as_deref().into_iter().collect();
         let scheme_user = user.for_scheme(&self.scheme.id);
         let mut edges: Vec<Spanned> = self
             .exact(scheme_user, input, 0, usize::MAX)
@@ -509,6 +546,7 @@ impl Engine {
             .map(|e| Spanned {
                 score: self.edge_score(
                     before.character,
+                    &history,
                     &e,
                     following.map_or(0.0, |f| f.probability(&e.text)),
                 ),

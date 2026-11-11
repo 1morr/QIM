@@ -25,7 +25,7 @@ pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
 pub use items::{Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal};
 pub use latency::{
     LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, lefts_to_first_segment,
-    node_wasm_timer, parse_timing, percentile,
+    native_timing, node_wasm_timer, parse_timing, percentile,
 };
 /// 打一個集合，指標同基準；模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
 pub use score::score as score_set;
@@ -174,17 +174,32 @@ impl<T> Personal<T> {
     }
 }
 
+/// 量每鍵延遲的輸入碼：固定題與各語料集合的每一題，依序（個人集與「有前文」的題不量）。
+pub fn latency_inputs(root: &Path) -> Result<Vec<String>, String> {
+    let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
+    Ok(inputs_of(&fixed, &load_corpora(root)?))
+}
+
+fn inputs_of(fixed: &[Item], corpora: &[(String, Vec<Item>)]) -> Vec<String> {
+    fixed
+        .iter()
+        .chain(corpora.iter().flat_map(|(_, items)| items))
+        .map(Item::input)
+        .collect()
+}
+
 /// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
 pub fn run(root: &Path, mode: Mode, wasm: WasmTimer) -> Result<Outcome, String> {
     let (engine, packs, _) = load_engine(root, &[])?;
-    let fixed = parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
-    let mut latency_inputs: Vec<String> = fixed.iter().map(Item::input).collect();
-    let fixed = score::score(&engine, "fixed", &fixed, false);
-    let mut sets: Vec<SetResult> = Vec::new();
-    for (name, items) in load_corpora(root)? {
-        latency_inputs.extend(items.iter().map(Item::input));
-        sets.push(score::score(&engine, &name, &items, false));
-    }
+    let fixed_items =
+        parse_fixed(&read(&root.join(FIXED))?).map_err(|e| format!("{FIXED}：{e}"))?;
+    let fixed = score::score(&engine, "fixed", &fixed_items, false);
+    let corpora = load_corpora(root)?;
+    let mut sets: Vec<SetResult> = corpora
+        .iter()
+        .map(|(name, items)| score::score(&engine, name, items, false))
+        .collect();
+    let latency_inputs = inputs_of(&fixed_items, &corpora);
     // 「有前文」的題不量延遲：輸入碼和一般的題同一種，多量只是重複。
     for (name, items) in load_context_sets(root)? {
         sets.extend(score_with_and_without_context(&engine, &name, &items));
