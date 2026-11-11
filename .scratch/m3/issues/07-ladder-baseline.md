@@ -1,6 +1,6 @@
 # 07: 階梯實驗的框架、基線與採用門檻
 
-Status: in-progress
+Status: done
 Blocked by: 04, 06
 讀: spec〈模型階梯實驗〉〈共同規則〉；plan §2.7、§5.2；ADR 0005；票 06 的研究筆記；`docs/research/ios-feasibility.md`〈小型神經模型〉；`.scratch/m2/issues/12-m2-close.md` Comments 的「M3」各條
 
@@ -15,10 +15,10 @@ Blocked by: 04, 06
 
 ## 驗收
 
-- [ ] README 有日期、機器、commit、怎麼重跑、基線結果表。
-- [ ] 實驗 crate 不在 workspace 裡；個人集只報數字。
-- [ ] spec〈採用門檻〉已填，Comments 記使用者確認的日期。
-- [ ] `cargo xtask check` 綠燈。
+- [x] README 有日期、機器、commit、怎麼重跑、基線結果表。
+- [x] 實驗 crate 不在 workspace 裡；個人集只報數字。
+- [x] spec〈採用門檻〉已填，Comments 記使用者確認的日期。
+- [x] `cargo xtask check` 綠燈。
 
 ## Comments
 
@@ -47,3 +47,6 @@ Blocked by: 04, 06
   - `last_chars` 在 `qim-databuild` 與實驗 crate 各一份：實驗不依賴 `qim-databuild`，三行的函式不值得開一個共用處。
   - 實驗用 `CORPUS_DIRS[1]` 認口語集：`qim-bench` 沒有公開語料屬於哪個目錄，加註解說明。
   - `Session::paths` 是為階梯加的核心公開介面：票 11 若決定停鍵層不用它，連同 `tests/rerank.rs` 的兩個測試一起刪。
+- 2026-11-11 採用門檻：基線量完後用 AskUserQuestion 分四題（共同規則、同步層、停鍵層、雲端與前文長度）提出，使用者四題都選「照提案」，寫進 spec〈採用門檻〉。協調者事先說明這題不代答。
+- 2026-11-11 驗收自查：README 有日期、機器、commit、怎麼重跑、基線結果表；`model-ladder` 有空的 `[workspace]`，`cargo metadata` 的 workspace 成員沒有它（`cargo xtask check` 的 `deps` 通過）；個人集在 README 與逐題結果只有數字與行號；`cargo xtask check` 通過（`4433df6` 與本 commit）。
+

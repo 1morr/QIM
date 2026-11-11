@@ -30,6 +30,7 @@
 | 2026-11-11 | M3 01 | `main.ts` 拆成候選列、面板、設定區等模組，行為不變（亂按腳本前後逐步相同）；設定區移到頁面下方；見票 01 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 14 | 常用語：來源 `phrase` 的使用者詞，觸發詞或候選列清單上屏，設定區增刪改；匯出升 v2（詞欄跳脫）、收 v1；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
 | 2026-11-11 | M3 04 | `set_context`、選開頭一段後接選定段、bigram 加句首、「有前文」集合（給前文合計答錯與修正都較少，dev 重比結論相同）；見票 04 | 新 session 下 `/implement .scratch/m3/issues/03-ranking-rule-guards.md` |
+| 2026-11-11 | M3 07 | `model-ladder` 框架與基線（口語 test 首選 35.7%、前 2 名 48.6%）、N = 9 條 lattice 路徑、採用門檻經使用者確認寫進 spec；見票 07 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
 
 ## 偏差與決定
 
@@ -39,3 +40,5 @@
 - 2026-11-11 M3 票 04：「有前文」驗收看四語料合計（yue-wiki 答錯多 2、zh-wiki 持平），個人集修正 +13 接受並更新本機 baseline（使用者決定）；見票 04。
 - 2026-11-11 M3 票 01：開關收進頁面下方的設定區（`settings.ts` 一張表產生），重排選單改完也還焦點；plan §3.1 補一行；見票 01。
 - 2026-11-11 M3 票 14：匯出 v2 由票 14 先升（詞欄跳脫給常用語的換行），票 12 只加 bigram 列；常用語在簡體模式照樣轉簡體，同 M1 票 23；plan §2.4；見票 14。
+- 2026-11-11 M3 票 07：「前 N 條路徑」從 lattice 讀（核心加 `Session::paths`，plan §2.1），候選列只放 3 條句子；重排層只比前 2 名命中率（改不了首選與修正）；見票 07。
+- 2026-11-11 M3 票 07：`deepseek-v4-pro` 已轉給 V4.1-Flash，spec 表上的雲端對照要由票 10 另選；23M q8 在 9 條 × 18 字時推估貼近 60 MB，票 09 在 iPhone 重量；見票 07。
