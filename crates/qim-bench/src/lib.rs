@@ -72,6 +72,15 @@ pub fn context_long_items(name: &str) -> String {
 pub fn dev_context_long_items(name: &str) -> String {
     format!("build/corpus/{name}/dev-context-long.tsv")
 }
+/// 集合 `name` 的口語長前文題（test 切分）：只有對話語料（HKCanCor）有，前文是同一段對話裡前面的
+/// 話輪，最多 200 字；`cargo xtask data` 寫的，不進 git。基準不讀，模型階梯實驗讀（M3 票 25）。
+pub fn dialogue_items(name: &str) -> String {
+    format!("build/corpus/{name}/test-dialogue.tsv")
+}
+/// 集合 `name` 的 dev 口語長前文題，同 [`dialogue_items`]。
+pub fn dev_dialogue_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev-dialogue.tsv")
+}
 /// dev 模式裡由集合 `<名>` 的句子取出的短輸入，集合名是 `<名>` 接這些字尾：
 /// 每個字（單字），與句子裡出現的詞庫的詞（2 到 [`SHORT_WORD_CHARS`] 字）。
 pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];

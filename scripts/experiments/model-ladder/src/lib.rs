@@ -56,6 +56,8 @@ pub enum Group {
     Personal,
     ContextWiki,
     ContextColloquial,
+    /// 口語長前文（票 25）：HKCanCor 的題配同一段對話裡前面的話輪當前文（`qim_bench::dialogue_items`）。
+    Dialogue,
 }
 
 impl Group {
@@ -66,11 +68,18 @@ impl Group {
             Group::Personal => "個人",
             Group::ContextWiki => "有前文·維基",
             Group::ContextColloquial => "有前文·口語",
+            Group::Dialogue => "口語長前文",
         }
     }
 
+    /// 「有前文」的兩組（基準的「有前文」集合那批題）；合計列「有前文·前文N」只加它們。
     pub fn is_context(self) -> bool {
         matches!(self, Group::ContextWiki | Group::ContextColloquial)
+    }
+
+    /// 同一批題分前文 0、50、200 字三個集合的組。
+    pub fn varies_context(self) -> bool {
+        self.is_context() || self == Group::Dialogue
     }
 }
 
@@ -132,6 +141,27 @@ pub fn load_sets(root: &Path, split: Split) -> Result<Vec<Set>, String> {
                 } else {
                     Group::ContextWiki
                 },
+                context_chars: chars,
+                private: false,
+                items: items.iter().map(|i| with_context_chars(i, chars)).collect(),
+            });
+        }
+    }
+    // 口語長前文（票 25）：只有對話語料有題目檔。
+    for (name, _) in &corpora {
+        let rel = match split {
+            Split::Test => qim_bench::dialogue_items(name),
+            Split::Dev => qim_bench::dev_dialogue_items(name),
+        };
+        if !root.join(&rel).exists() {
+            continue;
+        }
+        let items = parse_context(&read(&root.join(&rel))?).map_err(|e| format!("{rel}：{e}"))?;
+        for chars in CONTEXT_LENGTHS {
+            sets.push(Set {
+                name: format!("{name}·對話·前文{chars}"),
+                split,
+                group: Group::Dialogue,
                 context_chars: chars,
                 private: false,
                 items: items.iter().map(|i| with_context_chars(i, chars)).collect(),
@@ -497,7 +527,8 @@ impl Summary {
     }
 }
 
-fn pct(part: usize, whole: usize) -> String {
+/// 百分比，一位小數；分母 0 是「—」。
+pub fn pct(part: usize, whole: usize) -> String {
     if whole == 0 {
         "—".into()
     } else {
@@ -539,11 +570,7 @@ pub fn group_totals(runs: &[SetRun]) -> Vec<(String, Summary)> {
     let mut totals: Vec<(String, Summary)> = keys
         .iter()
         .map(|&(group, chars)| {
-            let label = if group.is_context() {
-                format!("{}·前文{chars}", group.label())
-            } else {
-                group.label().to_string()
-            };
+            let label = group_label(group, chars);
             let summary = sum(&|r| r.set.group == group && r.set.context_chars == chars);
             (label, summary)
         })
@@ -555,6 +582,104 @@ pub fn group_totals(runs: &[SetRun]) -> Vec<(String, Summary)> {
         }
     }
     totals
+}
+
+/// 合計列的名字：分前文長度的組接「·前文N」。
+pub fn group_label(group: Group, context_chars: usize) -> String {
+    if group.varies_context() {
+        format!("{}·前文{context_chars}", group.label())
+    } else {
+        group.label().to_string()
+    }
+}
+
+/// 依句長分組的一組（票 25）：答案字數在 `min..=max`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LengthBucket {
+    pub label: &'static str,
+    pub min: usize,
+    pub max: usize,
+}
+
+/// 句長分組：口語 dev 的句長 p50 7 字、p95 18 字（README〈N 與路徑長度〉），切成四組。
+pub const LENGTH_BUCKETS: [LengthBucket; 4] = [
+    LengthBucket {
+        label: "1–4",
+        min: 1,
+        max: 4,
+    },
+    LengthBucket {
+        label: "5–8",
+        min: 5,
+        max: 8,
+    },
+    LengthBucket {
+        label: "9–14",
+        min: 9,
+        max: 14,
+    },
+    LengthBucket {
+        label: "15+",
+        min: 15,
+        max: usize::MAX,
+    },
+];
+
+/// 一個句長分組的題數、首選正確、前 2 名命中。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LengthCell {
+    pub total: usize,
+    pub correct: usize,
+    pub top2: usize,
+}
+
+impl LengthCell {
+    /// 幾組加起來（「全部」那欄）。
+    pub fn sum(cells: &[LengthCell]) -> LengthCell {
+        cells.iter().fold(LengthCell::default(), |a, c| LengthCell {
+            total: a.total + c.total,
+            correct: a.correct + c.correct,
+            top2: a.top2 + c.top2,
+        })
+    }
+}
+
+/// 把（字數, 首選正確, 前 2 名命中）依 [`LENGTH_BUCKETS`] 分組加起來；0 字的題不算。
+pub fn by_length(
+    rows: impl IntoIterator<Item = (usize, bool, bool)>,
+) -> [LengthCell; LENGTH_BUCKETS.len()] {
+    let mut cells = [LengthCell::default(); LENGTH_BUCKETS.len()];
+    for (chars, correct, top2) in rows {
+        if let Some(i) = LENGTH_BUCKETS
+            .iter()
+            .position(|b| (b.min..=b.max).contains(&chars))
+        {
+            cells[i].total += 1;
+            cells[i].correct += usize::from(correct);
+            cells[i].top2 += usize::from(top2);
+        }
+    }
+    cells
+}
+
+/// 前文長度的分佈：題數、p50（最近秩）、到 50 字與到 200 字的題數。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContextStats {
+    pub total: usize,
+    pub p50: Option<usize>,
+    pub at_least_50: usize,
+    pub at_least_200: usize,
+}
+
+impl ContextStats {
+    pub fn of(lengths: &[usize]) -> Self {
+        ContextStats {
+            total: lengths.len(),
+            p50: percentile(lengths, 50),
+            at_least_50: lengths.iter().filter(|&&n| n >= 50).count(),
+            at_least_200: lengths.iter().filter(|&&n| n >= 200).count(),
+        }
+    }
 }
 
 /// 給人看的報告，Markdown 表。
@@ -624,7 +749,7 @@ pub fn report(runs: &[SetRun], reranker: &str, n: usize) -> String {
         let of_group: Vec<&SetRun> = runs
             .iter()
             .filter(|r| r.set.group == group)
-            .filter(|r| !group.is_context() || r.set.context_chars == CONTEXT_LENGTHS[2])
+            .filter(|r| !group.varies_context() || r.set.context_chars == CONTEXT_LENGTHS[2])
             .collect();
         let counts: Vec<usize> = of_group
             .iter()
@@ -662,20 +787,22 @@ pub fn report(runs: &[SetRun], reranker: &str, n: usize) -> String {
 pub fn write_rows(dir: &Path, runs: &[SetRun]) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|e| format!("建不了 {}：{e}", dir.display()))?;
     for run in runs {
-        let mut text =
-            String::from("line\trank\tpath_rank\tcorrect\ttop2\tmodel_first\tcorrection_count\n");
+        let mut text = String::from(
+            "line\trank\tpath_rank\tcorrect\ttop2\tmodel_first\tcorrection_count\tchars\n",
+        );
         let show = |r: Option<usize>| r.map_or("-".into(), |k| k.to_string());
         for r in &run.rows {
             let _ = writeln!(
                 text,
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 r.line,
                 show(r.rank),
                 show(r.path_rank),
                 u8::from(r.correct),
                 u8::from(r.top2),
                 u8::from(r.model_first),
-                r.correction_count
+                r.correction_count,
+                r.chars
             );
         }
         let path = dir.join(format!("{}.tsv", run.set.name));
@@ -746,6 +873,24 @@ pub fn read_rows(path: &Path) -> Result<HashMap<usize, [bool; 3]>, String> {
         let flag = |s: &str| s == "1";
         let n: usize = cols[0].parse().map_err(|_| bad())?;
         rows.insert(n, [flag(cols[3]), flag(cols[4]), flag(cols[5])]);
+    }
+    Ok(rows)
+}
+
+/// 讀 [`write_rows`] 寫的檔的（答案字數, 首選正確, 前 2 名命中），依檔裡的順序；給 [`by_length`]。
+pub fn read_length_rows(path: &Path) -> Result<Vec<(usize, bool, bool)>, String> {
+    let text = read(path)?;
+    let mut rows = Vec::new();
+    for line in text.lines().skip(1) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let bad = || {
+            format!(
+                "{}：沒有字數欄（票 25 前寫的檔要重跑）：{line}",
+                path.display()
+            )
+        };
+        let chars: usize = cols.get(7).ok_or_else(bad)?.parse().map_err(|_| bad())?;
+        rows.push((chars, cols[3] == "1", cols[4] == "1"));
     }
     Ok(rows)
 }

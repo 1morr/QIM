@@ -45,15 +45,22 @@ const RULES: &[Rule] = &[
         external: Some(&["serde", "serde_json", "jsonschema"]),
         no_io: true,
     },
+    // 票 11d 建 `qim-neural`；建之前這條沒有對象（plan §1.3 先列了）。
+    Rule {
+        krate: "qim-neural",
+        workspace: &[],
+        external: Some(&["candle-core", "candle-nn"]),
+        no_io: true,
+    },
     Rule {
         krate: "qim-wasm",
-        workspace: &["qim-core", "qim-layout"],
+        workspace: &["qim-core", "qim-layout", "qim-neural"],
         external: Some(&["wasm-bindgen"]),
         no_io: false,
     },
     Rule {
         krate: "qim-ffi",
-        workspace: &["qim-core", "qim-layout"],
+        workspace: &["qim-core", "qim-layout", "qim-neural"],
         external: Some(&["uniffi"]),
         no_io: false,
     },

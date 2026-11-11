@@ -13,6 +13,10 @@
 //! [`CONTEXT_CLAUSES`] 句與中間的標點，前文原樣保留，不轉碼。dev 切分用同樣的取法另出一份調參題。
 //! 同一批題另出一份長前文（同一段裡前面最多 [`LONG_CONTEXT_CHARS`] 字），給模型階梯量前文長度
 //! （M3 票 07，`scripts/experiments/model-ladder/`）。
+//!
+//! 口語長前文的題（M3 票 25）：一段對話（HKCanCor 的一段錄音）的話輪各是一段，「有前文」與長前文
+//! 不跨話輪；另出一份題，前文接同一段對話裡前面的話輪，最多 [`LONG_CONTEXT_CHARS`] 字，給模型階梯量
+//! 口語的長前文。
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::io::{self, Write};
@@ -84,6 +88,9 @@ pub struct Builder<'t, W> {
     context: ContextItems,
     /// dev 切分的「有前文」調參題，取法同 `context`。
     dev_context: ContextItems,
+    /// 口語長前文的題（[`Self::add_dialogue`]），test、dev 各一份；最多 [`BENCH_SENTENCES`] 句。
+    dialogue: ContextItems,
+    dev_dialogue: ContextItems,
     chars: HashMap<char, u64>,
     counts: Counts,
 }
@@ -96,8 +103,10 @@ impl<'t, W: Write> Builder<'t, W> {
             dev,
             test: HashSet::new(),
             dev_sentences: HashSet::new(),
-            context: ContextItems::default(),
-            dev_context: ContextItems::default(),
+            context: ContextItems::new(CONTEXT_SENTENCES),
+            dev_context: ContextItems::new(CONTEXT_SENTENCES),
+            dialogue: ContextItems::new(BENCH_SENTENCES),
+            dev_dialogue: ContextItems::new(BENCH_SENTENCES),
             chars: HashMap::new(),
             counts: Counts::default(),
         }
@@ -148,6 +157,37 @@ impl<'t, W: Write> Builder<'t, W> {
         Ok(())
     }
 
+    /// 加入一段對話：每個話輪照 [`Self::add`] 當一段，另把 dev、test 的句子配上同一段對話裡它前面的
+    /// 文字（前面的話輪接起來，最多 [`LONG_CONTEXT_CHARS`] 字）當口語長前文的題。話輪結尾不是標點時
+    /// 補一個空格，免得兩個話輪的字黏成一句。前文要有字，所以對話的第一句不出題。
+    pub fn add_dialogue(&mut self, turns: &[String]) -> io::Result<()> {
+        let mut before = String::new();
+        for turn in turns {
+            self.add(turn)?;
+            for clause in clauses(turn) {
+                if self.transcoder.transcode(clause).is_err() {
+                    continue;
+                }
+                let start = clause.as_ptr() as usize - turn.as_ptr() as usize;
+                let context = format!("{before}{}", &turn[..start]);
+                let context = last_chars(line_tail(&context), LONG_CONTEXT_CHARS);
+                if !context.chars().any(char::is_alphanumeric) {
+                    continue;
+                }
+                match split_of(clause) {
+                    Split::Train => {}
+                    Split::Dev => self.dev_dialogue.offer(clause, context, context),
+                    Split::Test => self.dialogue.offer(clause, context, context),
+                }
+            }
+            before.push_str(turn);
+            if turn.chars().last().is_some_and(char::is_alphanumeric) {
+                before.push(' ');
+            }
+        }
+        Ok(())
+    }
+
     /// 回傳句數、基準的內容（`bench/` 的 TSV）、dev 的調參題（同格式）、字頻與兩個 writer。
     /// 基準與調參題各取雜湊最小的 [`BENCH_SENTENCES`] 句、依雜湊排序，和來源的順序無關。
     pub fn finish(mut self) -> io::Result<Finished<W>> {
@@ -160,6 +200,8 @@ impl<'t, W: Write> Builder<'t, W> {
         let dev_context_items = self.context_lines(&self.dev_context, false);
         let context_long_bench = self.context_lines(&self.context, true);
         let dev_context_long_items = self.context_lines(&self.dev_context, true);
+        let dialogue_items = self.context_lines(&self.dialogue, false);
+        let dev_dialogue_items = self.context_lines(&self.dev_dialogue, false);
         let mut chars: Vec<(char, u64)> = self.chars.into_iter().collect();
         chars.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let chars = chars.iter().map(|(c, n)| format!("{c}\t{n}\n")).collect();
@@ -171,6 +213,8 @@ impl<'t, W: Write> Builder<'t, W> {
             dev_context_items,
             context_long_bench,
             dev_context_long_items,
+            dialogue_items,
+            dev_dialogue_items,
             chars,
             train: self.train,
             dev: self.dev,
@@ -191,7 +235,7 @@ impl<'t, W: Write> Builder<'t, W> {
     /// 「有前文」的題，一行「前文<TAB>逐字速成碼<TAB>句子」，依句子的雜湊排序；`long` 時前文是長前文。
     fn context_lines(&self, items: &ContextItems, long: bool) -> String {
         items
-            .0
+            .items
             .iter()
             .map(|((_, sentence), (context, long_context))| {
                 let context = if long { long_context } else { context };
@@ -209,14 +253,23 @@ impl<'t, W: Write> Builder<'t, W> {
     }
 }
 
-/// 「有前文」的題：（句子的雜湊, 句子）→（前文, 長前文）；只留雜湊最小的 [`CONTEXT_SENTENCES`] 句。
-#[derive(Default)]
-struct ContextItems(BTreeMap<(u64, String), (String, String)>);
+/// 「有前文」的題：（句子的雜湊, 句子）→（前文, 長前文）；只留雜湊最小的 `limit` 句。
+struct ContextItems {
+    items: BTreeMap<(u64, String), (String, String)>,
+    limit: usize,
+}
 
 impl ContextItems {
+    fn new(limit: usize) -> Self {
+        Self {
+            items: BTreeMap::new(),
+            limit,
+        }
+    }
+
     /// 同一句有幾種前文時取雜湊最小的前文（長前文跟著它），和來源的順序無關。
     fn offer(&mut self, clause: &str, context: &str, long: &str) {
-        let items = &mut self.0;
+        let items = &mut self.items;
         let entry = (key(clause), clause.to_string());
         if let Some((kept, kept_long)) = items.get_mut(&entry) {
             if (key(context), context) < (key(kept), kept.as_str()) {
@@ -225,7 +278,7 @@ impl ContextItems {
             }
             return;
         }
-        let full = items.len() >= CONTEXT_SENTENCES;
+        let full = items.len() >= self.limit;
         if full
             && items
                 .last_key_value()
@@ -234,7 +287,7 @@ impl ContextItems {
             return;
         }
         items.insert(entry, (context.to_string(), long.to_string()));
-        if items.len() > CONTEXT_SENTENCES {
+        if items.len() > self.limit {
             items.pop_last();
         }
     }
@@ -268,6 +321,10 @@ pub struct Finished<W> {
     pub context_long_bench: String,
     /// `dev_context_items` 的長前文版。
     pub dev_context_long_items: String,
+    /// 口語長前文的題（[`Builder::add_dialogue`]），格式同 `context_bench`；沒加過對話是空的。
+    pub dialogue_items: String,
+    /// 口語長前文的 dev 調參題。
+    pub dev_dialogue_items: String,
     /// train 的字頻，一行「字<TAB>次數」：次數多的在前，同次數依碼位。
     pub chars: String,
     pub train: W,

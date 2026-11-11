@@ -1,12 +1,12 @@
 # 11c: 核心：重排看 lattice 路徑、可插到第 2 位
 
-Status: wontfix
+Status: ready-for-agent
 Blocked by: 11d
 讀: `docs/research/model-ladder.md`〈停鍵層〉；plan §2.1（重排、`paths`、上下文）、§2.4（排位規則）、§2.7；ADR 0005；`scripts/experiments/llm-rerank/README.md`〈提示〉〈給票 11〉；`scripts/experiments/neural-rerank/README.md`〈接法〉；`.scratch/m1/issues/24-m1-close.md` Comments 的「M3」各條（重排與規則 3、4 那條）；票 15 的 Comments（記住的字串）
 
 ## What to build
 
-票 09、10 都發現重排要看 lattice 的前 9 條整句路徑才有效，現在的 `apply_rerank` 只能在候選列第一頁內排（1.4M 的增益會從 8.5 點掉到 2.3～6.3 點）。把重排的要求與結果改成以路徑為單位。等票 11d 在新基線重量過才開工：沒過的話停鍵層與雲端都不做，這個介面沒人用，本票改 wontfix。
+票 09、10 都發現重排要看 lattice 的前 9 條整句路徑才有效，現在的 `apply_rerank` 只能在候選列第一頁內排（1.4M 的增益會從 8.5 點掉到 2.3～6.3 點）。把重排的要求與結果改成以路徑為單位。等票 11d 的 `qim-neural` 做完再開工（新基線的重量已做完，1.4M 在個人集改成只報不擋後採用，票 25）。
 
 - `RerankRequest` 改帶：`generation`、前文（最多 50 字，brief §8）、`Session::paths(9)` 的路徑（文字、分段、路徑分）。候選列第一頁不再整份送出。
 - `apply_rerank(order)` 的 `order` 指路徑的序號、好的在前：取第一條和首選不同的路徑放第 2 位；在候選列裡就移上來，不在就插入；其餘候選照原順序往後接、去重。首選不動（ADR 0005）。插入的候選選了之後照那條路徑的分段上屏與學習，同選一條多段的整句。
@@ -22,4 +22,4 @@ Blocked by: 11d
 
 ## Comments
 
-- 2026-11-11（票 11d）：wontfix。1.4M 在詞級 trigram 的新基線上口語前 2 名 +5.5 點，但個人集前 2 名 −0.53 點，超過門檻的 0.5 點；使用者選照門檻停下（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。停鍵層與雲端都不做，本票的改動沒人用。
+- 2026-11-11 曾隨票 11d 的重量結果 wontfix（`30a043c`）；使用者把模型階梯的「個人集不退步」改成只報不擋後 1.4M 採用，票 25 revert 那個 commit，本票恢復。

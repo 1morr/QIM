@@ -1,6 +1,6 @@
 # 11e: 網頁：停鍵重排接上神經模型
 
-Status: wontfix
+Status: ready-for-agent
 Blocked by: 11c
 讀: plan §2.7、§3.1、§4.6；brief §7（停鍵重排的開關）；`docs/research/model-ladder.md`；票 11c、11d 的 Comments；spec〈共同規則〉
 
@@ -22,4 +22,4 @@ Blocked by: 11c
 
 ## Comments
 
-- 2026-11-11（票 11d）：wontfix。1.4M 在詞級 trigram 的新基線上口語前 2 名 +5.5 點，但個人集前 2 名 −0.53 點，超過門檻的 0.5 點；使用者選照門檻停下（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。停鍵層與雲端都不做，本票的改動沒人用。
+- 2026-11-11 曾隨票 11d 的重量結果 wontfix（`30a043c`）；使用者把模型階梯的「個人集不退步」改成只報不擋後 1.4M 採用，票 25 revert 那個 commit，本票恢復。

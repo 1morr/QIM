@@ -218,6 +218,34 @@ impl Corpus {
         matches!(self.format, Format::HkCanCor)
     }
 
+    /// 來源是對話錄音（HKCanCor）：一段錄音的話輪由 [`Self::dialogues`] 一起交出，另出口語長前文的題
+    /// （`corpus::Builder::add_dialogue`，M3 票 25）。
+    pub fn conversational(&self) -> bool {
+        matches!(self.format, Format::HkCanCor)
+    }
+
+    /// 逐段對話交出轉換後的話輪，轉換同 [`Self::texts`]、順序同它，所以話輪逐一照 `texts` 的段落處理
+    /// 結果相同。不是對話的語料（[`Self::conversational`]）沒有對話，什麼都不交。
+    pub fn dialogues(
+        &self,
+        paths: &[PathBuf],
+        forms: &CommonForms,
+        mut dialogue: impl FnMut(&[String]) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        if !self.conversational() {
+            return Ok(());
+        }
+        let converter = Converter::new(self.conversion, forms.clone())?;
+        for path in paths {
+            let zip = std::fs::read(path).map_err(Error::io(path))?;
+            hkcancor::archive_dialogues(&zip, |turns| {
+                let turns: Vec<String> = turns.iter().map(|t| converter.convert(t)).collect();
+                dialogue(&turns)
+            })?;
+        }
+        Ok(())
+    }
+
     /// 已分詞的語料（HKCanCor）train 切分裡兩字以上的詞與次數（[`hkcancor::TrainWords`]）；
     /// 沒分詞的語料是空的。詞庫用它補詞（plan §4.2）。
     pub fn train_words(
@@ -348,4 +376,17 @@ pub fn context_long_items_path(root: &Path, name: &str) -> PathBuf {
 /// 讀同一個路徑，`shared_paths` 比對。
 pub fn dev_context_long_items_path(root: &Path, name: &str) -> PathBuf {
     build_dir(root, name).join("dev-context-long.tsv")
+}
+
+/// 語料 `name` 的口語長前文題（test 切分，`build/corpus/<名>/test-dialogue.tsv`，只有對話語料有，
+/// `Corpus::conversational`）：模型階梯讀（M3 票 25）；`qim_bench::dialogue_items` 讀同一個路徑，
+/// `shared_paths` 比對。
+pub fn dialogue_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("test-dialogue.tsv")
+}
+
+/// 語料 `name` 的 dev 口語長前文題（`build/corpus/<名>/dev-dialogue.tsv`）；`qim_bench::dev_dialogue_items`
+/// 讀同一個路徑，`shared_paths` 比對。
+pub fn dev_dialogue_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev-dialogue.tsv")
 }
