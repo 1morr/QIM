@@ -42,9 +42,11 @@
 | 2026-11-11 | M3 13 | 聯想：上屏後給下一個字詞（補完詞庫的詞、bigram、個人 bigram，同一把尺），按鍵照 macOS、開關預設開；bench 前後相同；黑箱 T6、T8 重跑；見票 13 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 15 | 記住 email：經 QIM 打過一次就記，中文組字打開頭 3 個字母起排第 2 位起（規則 5，開關預設開），設定區可刪，匯出 v2 加列；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 07 | `model-ladder` 框架與基線（合併 main 後口語 test 首選 36.3%、前 2 名 49.1%）、N = 9 條 lattice 路徑、採用門檻經使用者確認寫進 spec；見票 07 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
+| 2026-11-11 | M3 24 | 可選詞庫 `quick-lexicon-words-hk`（預設詞庫加粵典詞頭 20,556 詞，非商業條款）、`bench --lexicon`；口語集修正 −10%，預設詞庫不變；見票 24 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 24：推翻票 18 不用粵典，照非商業條款另建可選詞庫、預設仍 `quick-lexicon`；粵典詞的並存寫法已收也算收了（HKCanCor 不套）；改 brief §1.5、§5.2、§12.1、plan §4.2；見票 24。
 - 2026-11-11 M3 票 13：數字鍵照 macOS 選聯想（不學 Microsoft 的 Shift＋數字），上屏後緊接著打數字要先按 Esc；聯想只看剛上屏的分段、從段的邊界補詞，無痕不出；改 plan §2.1、§2.3、§2.4；見票 13。
 - 2026-11-11 M3 票 17：Gboard 快捷鍵預設不設成觸發詞（原本是方案的鍵就設），確認框勾選才設、標出會搶首選的列：在別的鍵盤設的快捷鍵常撞速成的碼；改 plan §2.4；見票 17。
 - 2026-11-10 M3（M2 票 12）：spec〈驗收〉的「`bench --check` 數字與 M1 結束時相同」改成和 M2 開工（`17727d9`）比：M1 封存後的補票改過詞庫，baseline M2 沒動；見票 12。

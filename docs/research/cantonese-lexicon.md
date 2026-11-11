@@ -156,6 +156,8 @@ M3 票 18，2026-11-11。回答：有沒有授權乾淨、能隨商店 App（App
 
 **採用**（2026-11-11）：使用者選第 2 條，只建 HKCanCor；粵典的 public domain 聲明與詞典本體的非商業授權對不上，算查不清，不推翻「不從粵典複製」，待粵典書面確認（brief §1.5、§12.1）。實作見 plan §4.2。
 
+**改採**（2026-11-11，M3 票 24）：使用者決定不寫信問粵典：QIM 開源、免費、無廣告，沒有商業打算，照較嚴的非商業條款用 `wordslist` 與 `existingwordcount`，另建可選的詞庫資料包 `quick-lexicon-words-hk`（預設詞庫不收粵典的詞），資料包附版權告示、免責聲明、特別鳴謝與官網連結。口語小詞表仍不從粵典複製。實作見 plan §4.2。
+
 **較可行的兩條路**（只列選項與義務，不拍板）：
 1. **粵典 `wordslist`（public domain）作詞表，`existingwordcount` 作粗略排序，兩者加 HKCanCor（CC BY）驗證與補頻**。義務：HKCanCor 署名與標示改作；粵典建議列 credit；全部檔案收進 `data/` 並記 sha256 與取得日期（來源網址無版本）。待使用者決定：(1) 接受「資料頁自標 public domain」作為依據，還是先寫信向 Hong Kong Lexicography Limited 取得書面確認（網站有聯絡電郵，沒有專門商業授權窗口）；(2) `data/lexicon/yue-colloquial.tsv` 檔頭寫「不從 rime-cantonese、粵典或其他有授權的詞表複製」，若採此路要改寫這句與 brief §12.1 的對應條。清洗工作量：去星號、去標點與整句諺語、異體寫法對到 QIM 現有的 OpenCC 常見寫法規則。
 2. **只用 HKCanCor（CC BY）加自行整理，維持現狀擴充**。義務最少、風險最低，量最小：多約幾百個 essay 沒有的詞。

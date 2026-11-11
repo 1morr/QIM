@@ -1,6 +1,6 @@
 # 24: 粵典詞頭表：照非商業條款另建粵語詞庫資料包
 
-Status: ready-for-agent
+Status: done
 Blocked by: 18, 20
 讀: brief §1.5、§5.1、§5.2、§12.1；plan §4.2；`docs/research/cantonese-lexicon.md`、`docs/research/data-sources.md` §6.2；票 18 的 Comments；spec〈共同規則〉
 
@@ -18,10 +18,67 @@ Blocked by: 18, 20
 
 ## 驗收
 
-- [ ] `cargo xtask data --verify` 綠燈；新資料包的 `LICENSE`／`NOTICE` 含上面列的各項。
-- [ ] `bench --check`：口語集（看 common-voice-yue 與 hkcancor）不變差，貼開／關這個資料包的對照；個人集翻盤列出並說明。個人集 baseline 是主 checkout 共用的本機檔，本票是這批唯一准 `--update-baseline` 的票。
-- [ ] 資料包大小、載入時間、每鍵延遲 p50／p95 和沒有這份資料包時比。
-- [ ] 網頁設定區「資料包」能在兩份詞庫間切換，Playwright 實打讀回：用含粵典的那份時打得出一個只在粵典詞頭表的詞、切回預設詞庫時打不出；截圖。
-- [ ] `cargo xtask check` 綠燈。
+- [x] `cargo xtask data --verify` 綠燈；新資料包的 `LICENSE`／`NOTICE` 含上面列的各項。
+- [x] `bench --check`：口語集（看 common-voice-yue 與 hkcancor）不變差，貼開／關這個資料包的對照；個人集翻盤列出並說明。個人集 baseline 是主 checkout 共用的本機檔，本票是這批唯一准 `--update-baseline` 的票。（口語兩集不變差；開這份時 zh-wiki·前文多錯 2 題、`--check` 不過，見 Comments）
+- [x] 資料包大小、載入時間、每鍵延遲 p50／p95 和沒有這份資料包時比。
+- [x] 網頁設定區「資料包」能在兩份詞庫間切換，Playwright 實打讀回：用含粵典的那份時打得出一個只在粵典詞頭表的詞、切回預設詞庫時打不出；截圖。
+- [x] `cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-11 做法（plan §4.2）：
+  - 資料包：多建一份詞庫資料包 `quick-lexicon-words-hk`（預設詞庫的詞再補粵典的詞頭），用票 20 的切換開關，不改核心。網頁內建兩份詞庫，`BUILTIN_IDS` 裡預設詞庫在前，所以預設仍用 `quick-lexicon`。
+  - **預設用哪份**：`quick-lexicon`。粵典那份口語集明顯變好，但它是非商業條款，App 上架商店後是否構成商業用途要使用者判斷（`docs/research/data-sources.md` §6.2 ★），預設詞庫要能隨任何發佈方式；使用者自己切換。
+  - 釘版本：`sources.toml` 的 `[source.words_hk]` 用原網址，version 填下載日期 `2026-11-11`、兩個檔各釘 sha256；上游一改乾淨建置就報 sha256 不符（`sources::cached` 的既有行為），照註解重下載、改 version 與 sha256。沒用 Wayback Machine：已有的快照最新是 2025-04（`existingwordcount` 2024-01），要新快照得替使用者在 archive.org 留紀錄。CI 不建資料包，不受影響。
+  - 授權：授權頁沒有版本化網址、每年改版權年份，同 Unicode，全文存 `data/licenses/words-hk-NCODL-1.0.txt`（英文版權告示、免責聲明、授權全文、〈關於我哋〉的特別鳴謝 6 項、官網），`license_text = { repo_file }`；manifest 授權欄多 `LicenseRef-words-hk-NCODL-1.0`。`NOTICE` 另寫粵典部分怎麼收、官網連結、§1(b)(iii) 的單一網址告示、「不得再授權、不得商業使用，商用改用 quick-lexicon」。
+  - 詞的處理：`words_hk.rs` 讀兩個 CSV（CRLF、沒有引號、首行 `Source,…`，首行不是就報錯），去掉結尾 `*`、去重、單字不收；`lexicon::build` 照語料詞那條路換成常見寫法、略過含連打字集以外字的詞（英文、數字、標點），只補 essay（達門檻）、口語詞表、HKCanCor 都沒收的。`lexicon::build` 的四種詞來源收成 `Words` 結構（參數太多）。
+  - 並存寫法撞詞：第一版 `--verify` 的新檢查（粵典詞庫要收預設詞庫的每個詞條、同碼同詞頻）抓到 100 個詞條詞頻被改：粵典的「開臺」生出「開台」，和 essay 的「開台」撞成同一個詞、詞頻相加。改成詞的任一種寫法已收就算收了（先寫了會紅的 `a_headword_that_is_another_spelling_of_a_kept_word_counts_as_kept`）。HKCanCor 的詞也有同樣的事（台北、台灣、電視台 3 詞），套上去預設詞庫 sha256 會變、`bench --check` zh-wiki 多錯 1、common-voice-yue 修正多 1，所以只對粵典套，預設詞庫維持原樣（`lexicon.rs` 的 `by_spelling`）。
+- 詞頻（`HEADWORD_FREQUENCY`）只用 dev 切分調。兩邊都有的詞，essay 詞頻是粵文庫次數的 101／195／347 倍（四分位，未換寫法前的粗算）；`existingwordcount` 沒分詞、是原始出現次數（「in」「er」也在），短詞偏高。dev 答錯／修正（每格 = 粵文庫次數乘 F，至少門檻 100；「上限」是再夾在那個值以下）：
+
+  | 集合 | 預設詞庫 | F=0 | 25 | **50** | 100 | 200 | 400 | 50＋上限 3000 | 上限 1000 | 上限 300 |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | yue-wiki | 1169/4579 | 1156/4471 | 1156/4471 | 1151/4455 | 1152/4456 | 1154/4463 | 1154/4468 | 1156/4471 | 1157/4473 | 1157/4475 |
+  | zh-wiki | 1142/4379 | 1138/4386 | 1137/4385 | 1136/4387 | 1137/4391 | 1139/4422 | 1139/4446 | 1136/4387 | 1136/4387 | 1138/4389 |
+  | common-voice-yue | 1022/3744 | 981/3393 | 974/3354 | 970/3343 | 976/3344 | 976/3343 | 973/3336 | 971/3345 | 972/3365 | 977/3378 |
+  | hkcancor | 624/2366 | 621/2297 | 613/2280 | 612/2273 | 618/2284 | 619/2286 | 616/2283 | 614/2275 | 616/2285 | 620/2295 |
+  | 有前文合計（給） | 1755/6781 | 1739/6650 | 1735/6622 | 1731/6614 | 1738/6625 | 1739/6639 | 1737/6639 | 1735/6621 | 1738/6633 | 1738/6644 |
+  | 固定題 | 84/84 | 84/84 | 84/84 | 84/84 | 83/84 | 83/84 | 83/84 | 84/84 | 84/84 | 84/84 |
+
+  取 50：多數集合最好或平手，固定題全過（100 起「真係頂唔順」打成「實係頂唔順」）。設上限每格都略差，不設。
+- `cargo xtask bench --check` 開／關這份資料包（關 = 預設詞庫，和 baseline 一樣；開 = `--lexicon quick-lexicon-words-hk --check`，和預設詞庫的 baseline 比），答錯／修正：
+
+  | 集合 | 關 | 開 |
+  | --- | --- | --- |
+  | yue-wiki | 1123/4295 | 1114/4153 |
+  | zh-wiki | 1126/4381 | 1126/4369 |
+  | common-voice-yue | 1030/3908 | 990/3519 |
+  | hkcancor | 650/2478 | 650/2401 |
+  | yue-wiki·前文（給／不給） | 573/2267、571/2279 | 565/2192、564/2205 |
+  | zh-wiki·前文（給／不給） | 559/2169、559/2191 | 561/2149、561/2174 |
+  | common-voice-yue·前文（給／不給） | 200/624、205/636 | 192/577、197/591 |
+  | hkcancor·前文（給／不給） | 448/1742、458/1762 | 446/1682、458/1702 |
+  | personal | 1082/1468 | 1082/1469 |
+
+  - 關：`bench 通過`、沒有翻盤，預設詞庫 sha256 `25d53b1d…` 不變。
+  - 開：口語兩集都不變差（common-voice-yue 答錯 −40、修正 −10.0%；hkcancor 答錯持平、修正 −3.1%；與 HKCanCor 無關的 common-voice-yue 為準）。`--check` 失敗在 zh-wiki·前文給與不給各多錯 2 題（由對變錯 4、由錯變對 2：「代碼」→「化碳」、「路費」→「唔順」、「事由的」→「軌由得」，粵典的詞頭搶了逐字拼的路），修正兩者都減少；維基集只防退步，這份資料包是可選的、不動 baseline。
+  - 由對變錯的模式：粵文庫沒見過、詞頻在門檻的詞頭在長句裡組出錯的路（大細、差館、化碳）；「實係」（粵文庫 411 次，多半是「其實係」裡的子字串）× 50 壓過口語詞表的「真係」（3000），common-voice-yue、hkcancor 各 1 題打成「實係」。這是 `existingwordcount` 沒分詞的代價，dev 上設上限反而更差，記為已知限制，靠學習分。
+  - 依長度分組（首選正確率）：common-voice-yue 每組都升（2 字 65.96% → 72.34%、3–4 字 51.64% → 55.27%、5–8 字 33.89% → 36.46%、9 字以上 33.23% → 34.75%）；hkcancor 5–8 字 34.52% → 34.77%、9 字以上 25.31% → 25.00%；zh-wiki·前文 5–8 字 53.40% → 53.06%、9 字以上 38.58% → 38.41%，其餘持平。
+  - 個人集：答錯持平；由錯變對 3 題（第 518、2581、4057 行：兩題的正解是粵典才有的詞），由對變錯 3 題（第 1868、2613、2777 行，都是兩字詞：兩題被同碼的粵典詞頭擠到第 2；一題也掉到第 2，新首選不是粵典獨有的詞，原因沒細查）。
+  - 預設詞庫沒變，所以沒有 `--update-baseline`（票准的那次沒用上）。沒改學習，沒跑 `--learning`。
+- 大小、載入、延遲（和沒有這份時比）：
+  - 資料包：5,201,789 → 5,649,417 位元組（+8.6%，manifest 的 `size`；下面記憶體的 MB 是 1,048,576 位元組）；碼 234,317 → 253,852、詞條 283,824 → 308,586。
+  - 記憶體與載入（`scripts/experiments/pack-memory/`，`LEXICON=` 各 3 次，README〈粵典詞庫對照〉）：詞庫那步 footprint 46.7 → 50.6 MB，六份加 `Engine` 合計 99.3 → 103.4 MB（+4.1 MB）；載入（讀檔、解開、`Engine::new`）合計 138–149 → 151–170 ms。iOS 鍵盤擴充上限 177 MB 內。
+  - 每鍵延遲（`cargo xtask bench` 的表，機器忙、load average 約 7，開關交替各跑兩次）：原生全部 p50／p95 40.5／72.4 → 41.1／73.6 µs（另一次 61.7／97.0 → 60.0／93.5）；WebAssembly 48.3／79.5 → 49.0／85.6 µs（另一次 71.3／112.5 → 68.5／108.3）。差在雜訊內。
+- 網頁：設定區「資料包」多一列 `quick-lexicon-words-hk`（詞庫，5.4 MB，授權欄看得到 `LicenseRef-words-hk-NCODL-1.0`），Playwright `粵典詞庫：切過去打得出只在粵典詞頭表的詞，切回預設詞庫打不出`：「襟食」（`lfov`）預設詞庫沒有、逐字也拼不出，切過去是首選、重新整理後還在，切回不在候選；截圖 `.scratch/m3/evidence/24-words-hk.png`、`24-default.png`。原有的 e2e 改成兩份詞庫（列數 8、`使用 quick-lexicon` 要 exact）。亂按一輪（組字中切換詞庫、退格與數字選字夾雜、← 選段、簡體模式）沒找到問題。
+- `--verify` 新增「粵典詞庫是預設詞庫加粵典的詞」：詞條 283,824 → 308,586；報告列「粵典詞庫：兩字以上的詞頭 57,860 個，其他來源都沒收、字都在連打字集的補上 20,556 詞」。
+- 首選字基準加 `--lexicon <id>`（換詞庫，不能和 `--update-baseline` 合用）；`scripts/experiments/pack-memory/` 本來就編不過（票 02 的 `Pack` trait），補 import，加 `LEXICON` 與耗時欄。
+- 平台殼（M6 起）：授權 §1(b)(ii) 要「顯著」連回官網；網頁只在 `NOTICE` 與設定區的授權欄，平台殼做資料包頁時要顯示 `NOTICE` 的官網連結。
+- code-review（Standards、Spec 兩軸）的發現與處理：
+  - `lexicon::Words` 和 `WordCounts`、`Word` 易混（Standards）：改名 `WordSources`。
+  - `build_lexicon` 的 `Option<headwords>` 同時決定收不收粵典與資料包 id（Standards）：改成呼叫端傳 id。
+  - plan §0 名詞對照沒列預設詞庫、粵典詞庫（Standards）：補一列。
+  - §1(b)(iii) 的單一網址告示只寫了 `wordslist` 的網址，條文不准換網址（Spec）：`NOTICE` 兩個檔各寫自己的網址，`tests/run.rs` 斷言兩個都在。
+  - brief §12.1 的 56,037 與 plan 的 57,860 對不上（Spec）：plan 註明差在含英文、數字、標點的 1,819 個。
+  - 「預設詞庫要在前」靠順序（Standards）：沒改。順序錯了 `verify::decode` 的方案指名檢查會失敗（「方案指名的詞庫是 quick-lexicon，建出的是 …」），網頁同理由 `BUILTIN_IDS` 註解寫明。
+  - e2e 裡 `getByLabel("使用 quick-lexicon", { exact: true })` 重複約 10 次、`--lexicon` 的 CLI 解析沒有測試、`--lexicon x --learning` 先編 WebAssembly 才被擋（Standards，判斷題）：沒改，既有的 CLI 分派也沒有測試，`qim-bench` 的 `run`／`run_dev` 有測換詞庫與擋 `--update-baseline`。
+  - 「本票唯一准 `--update-baseline`」與程式擋 `--lexicon --update-baseline`（Spec）：不衝突，預設詞庫沒變，baseline 不必更新。
