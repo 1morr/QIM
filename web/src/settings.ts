@@ -39,7 +39,7 @@ const RERANK: Select = {
 	options: [
 		["off", "關"],
 		["identity", "原樣（假實作）"],
-		["raise-fifth", "第 5 個提前（測試）"],
+		["raise-last", "最後一條路徑提前（測試）"],
 	],
 	selected: "identity",
 	apply: () => undefined,

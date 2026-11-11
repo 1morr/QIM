@@ -13,9 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use qim_bench::{Item, Personal, parse_context, parse_corpus};
-use qim_core::{
-    Engine, Key, LanguageModelPack, Pack, RERANK_LIMIT, ScoredPath, Session, UserModel,
-};
+use qim_core::{Engine, Key, LanguageModelPack, PAGE_SIZE, Pack, ScoredPath, Session, UserModel};
 use serde::{Deserialize, Serialize};
 
 pub mod neural;
@@ -209,7 +207,7 @@ pub struct Query {
     /// 輸入框前文（已截到集合的前文長度），沒給是空字串。
     pub before: String,
     pub input: String,
-    /// 候選列第一頁（最多 `RERANK_LIMIT` 個），依核心的順序；第一個是首選，重排不動它。
+    /// 候選列第一頁（最多 `PAGE_SIZE` 個），依核心的順序；第一個是首選，重排不動它。
     pub candidates: Vec<String>,
     /// lattice 蓋滿整串的前 N 條路徑與路徑分，依分數由高到低。
     pub paths: Vec<ScoredPath>,
@@ -366,7 +364,7 @@ pub fn type_item(
         line: item.line,
         before,
         input: item.input(),
-        candidates: candidates.iter().take(RERANK_LIMIT).cloned().collect(),
+        candidates: candidates.iter().take(PAGE_SIZE).cloned().collect(),
         paths: paths.iter().take(n).cloned().collect(),
     });
     let (ranked, unseen, rerank_ms) = match &query {

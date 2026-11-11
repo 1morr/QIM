@@ -397,7 +397,7 @@ dev（五個模型都有；flash 沒送 dev 的口語長前文）：
 - 同步層（票 08，已做，見〈同步層〉）：`sync` 訓練模型並經 `Engine::with_segment_model` 掛上核心（票 11b 刪掉，詞級 trigram 進了核心）；看首選、修正次數與前 2 名，和基線 `compare`。
 - 停鍵層的神經模型（票 09）：`src/neural.rs` 的 `Neural`（candle，照 `../neural-cost/`），訓練與結果在 `../neural-rerank/`。
 - Foundation Models、DeepSeek（票 10）：`export` 匯出 `Query`，外部程式（Swift 命令列、HTTP）一題回一行 `{"split": 切分, "set": 集合名, "line": 行號, "ranked": [文字…]}`，再 `eval [--split …] --orders <檔> --name <名>`。切分不符就報錯（dev 與 test 的集合名相同）；沒回的題照原順序、報告最後印題數。延遲請在外部程式量，框架內的計時只算 `rerank` 呼叫本身。
-- 模型回的文字不在這題的候選與路徑裡就不算（框架丟掉、報告印個數），LLM 憑空寫出答案不會灌高命中率。spec 的提示寫「前 10 個候選、只回序號」：`Query.candidates` 是第一頁 9 個（`RERANK_LIMIT`），序號換回文字由外部程式負責。
+- 模型回的文字不在這題的候選與路徑裡就不算（框架丟掉、報告印個數），LLM 憑空寫出答案不會灌高命中率。spec 的提示寫「前 10 個候選、只回序號」：`Query.candidates` 是第一頁 9 個（`PAGE_SIZE`），序號換回文字由外部程式負責。
 
 ## 限制
 

@@ -17,18 +17,21 @@ pub const PAGE_SIZE: usize = 9;
 /// 只看最後一字。殼可以給更長的，核心只留最後這麼多。
 pub const CONTEXT_LIMIT: usize = 200;
 
-/// 重排要求最多帶幾個候選：第一頁。重排只動第一頁，翻到後面的頁時看得到的不會變。
-pub const RERANK_LIMIT: usize = PAGE_SIZE;
+/// 重排要求最多帶幾條整句路徑（plan §2.1，M3 票 07、11）：lattice 的前 9 條，候選列沒有的也排得上來。
+pub const RERANK_PATHS: usize = 9;
 
-/// 給背景模型的重排要求（[`Session::rerank_request`]）。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 重排要求的前文最多幾個字（brief §8）：M3 模型階梯量過 200 字不比 50 字好。
+pub const RERANK_CONTEXT: usize = 50;
+
+/// 給背景模型的重排要求（[`Session::rerank_request`]，plan §2.1、§2.7）。
+#[derive(Debug, Clone, PartialEq)]
 pub struct RerankRequest {
     /// 結果交回 [`Session::apply_rerank`] 時帶著它；不是目前的就丟掉。
     pub generation: u64,
-    /// 候選前面的字詞（繁體原文）：選定的分段，或目前分段前面的分段；輸入框的前文在 M3 加。
+    /// 路徑前面的字：前文接上選定的分段（繁體原文），最多 [`RERANK_CONTEXT`] 字。
     pub context: String,
-    /// 前 [`RERANK_LIMIT`] 個候選，依目前的順序。
-    pub candidates: Vec<Candidate>,
+    /// lattice 蓋滿沒選定的輸入碼的前 [`RERANK_PATHS`] 條路徑，依路徑分由高到低；結果的 `order` 是它的序號。
+    pub paths: Vec<ScoredPath>,
 }
 
 /// lattice 裡蓋滿沒選定的輸入碼的一條路徑（[`Session::paths`]）；可序列化，模型階梯匯出給外部模型。
@@ -36,6 +39,8 @@ pub struct RerankRequest {
 pub struct ScoredPath {
     /// 字詞接起來的文字（繁體原文，不經簡體模式的後處理）。
     pub text: String,
+    /// 各段的字詞（繁體原文），接起來是 `text`。
+    pub segments: Vec<String>,
     /// 同步層的路徑分（plan §2.3），只在同一串輸入碼內可比。
     pub score: f64,
 }
@@ -450,6 +455,9 @@ pub struct Session {
     /// 沒選定的輸入碼原樣當英文，接著打的可見字元與空白接在後面；選定的分段照舊在前面。
     /// 中文的組字（選定的分段、lattice）留著，英文沒動過時切回不必重算。
     inline: Option<String>,
+    /// 翻到後面的頁時收到的重排結果：那時的 `generation` 與 `order`。回到第一頁時 `generation`
+    /// 沒變（候選沒變）才套用（[`Session::apply_rerank`]）。
+    waiting_rerank: Option<(u64, Vec<usize>)>,
 }
 
 impl Session {
@@ -592,68 +600,93 @@ impl Session {
         self.lattice.whole_paths(limit)
     }
 
-    /// 給背景模型的重排要求（plan §2.7）：目前的 `generation`、上下文與前 [`RERANK_LIMIT`]
-    /// 個候選。沒有組字（聯想不重排）、沒有候選，或換了選項還沒重列（候選列馬上會換）時是 `None`。
+    /// 給背景模型的重排要求（plan §2.1、§2.7）：目前的 `generation`、前文與 lattice 的前
+    /// [`RERANK_PATHS`] 條整句路徑。沒有組字（聯想不重排）、臨時英文、移到某一段改字（候選是那一段
+    /// 單打的字詞，整句插不進去）、沒有蓋滿的路徑，或換了選項還沒重列（候選列馬上會換）時是 `None`。
     pub fn rerank_request(&self) -> Option<RerankRequest> {
-        if !self.composing() || self.candidates.is_empty() || self.options_pending() {
+        if !self.can_rerank() {
             return None;
         }
-        // 上下文是候選所在的碼前面的分段：有目前分段時是它前面的，否則是選定的分段。
-        let context = match self.focus {
-            Some(i) => self.segments()[..i]
-                .iter()
-                .map(|s| s.text.as_str())
-                .collect(),
-            None => self.selected.iter().map(|s| s.text.as_str()).collect(),
-        };
+        let paths = self.lattice.whole_paths(RERANK_PATHS);
+        if paths.is_empty() {
+            return None;
+        }
+        // 路徑前面的字：前文（無痕時沒有）接上選定的分段。
+        let mut context = self.context.clone().unwrap_or_default();
+        context.extend(self.selected.iter().map(|s| s.text.as_str()));
         Some(RerankRequest {
             generation: self.generation,
-            context,
-            candidates: self.candidates[..self.rerank_limit()]
-                .iter()
-                .map(ShownCandidate::to_candidate)
-                .collect(),
+            context: last_chars(&context, RERANK_CONTEXT).to_string(),
+            paths,
         })
     }
 
-    /// 套用背景模型的重排結果（plan §2.7、ADR 0005）：`order` 是 [`RerankRequest::candidates`]
-    /// 的位置，好的在前。首選不動，`order` 裡其餘的照它的順序排在第 2 位起，沒提到的照原順序
-    /// 接在後面；超出範圍、重複的位置不算。
+    /// 套用背景模型的重排結果（plan §2.1、§2.7、ADR 0005）：`order` 是 [`RerankRequest::paths`]
+    /// 的序號，好的在前。取第一條和首選文字不同的路徑（超出範圍的序號不算）放到第 2 位：排位規則
+    /// 排在第 2 位起的候選不讓位，它排在那些後面（plan §2.4）。候選列有同樣文字的就移上來，沒有就
+    /// 插入那條路徑，其餘照原順序往後接；首選不動。
     ///
-    /// `generation` 不是目前的，或換了選項還沒重列（結果是給舊候選列的），就丟掉、
-    /// 回 `None`。名次真的變了才算候選變動、`generation` 加一，
-    /// 同一份要求的另一個結果（另一層模型）因此也作廢：它的位置是照重排前的順序。殼不要因為套用了
-    /// 重排的結果再要求重排。翻頁不改 `generation`，翻到第 2 頁後收到的結果照樣套用：重排只動
-    /// 第一頁，看得到的那頁不變（M1 票 23）。
+    /// `generation` 不是目前的、換了選項還沒重列，或現在不給要求（[`Session::rerank_request`]），
+    /// 結果是給舊候選列的，就丟掉、回 `None`。名次真的變了才算候選變動、`generation` 加一，同一份
+    /// 要求的另一個結果（另一層模型）因此也作廢。殼不要因為套用了重排的結果再要求重排。翻到後面的頁
+    /// 時先不套用、名次不變（插入會把第一頁最後一個擠到下一頁，看得到的那頁會變，M1 票 23），候選
+    /// 沒變的話回到第一頁時才套用，那次翻頁的快照帶著新的 `generation`。
     pub fn apply_rerank(
         &mut self,
         engine: &Engine,
         generation: u64,
         order: &[usize],
     ) -> Option<Snapshot> {
-        if generation != self.generation || !self.composing() || self.options_pending() {
+        if generation != self.generation || !self.can_rerank() {
             return None;
         }
-        let limit = self.rerank_limit();
-        let mut ranked: Vec<usize> = Vec::with_capacity(limit);
-        ranked.extend((limit > 0).then_some(0));
-        for i in order.iter().copied().chain(0..limit) {
-            if i < limit && !ranked.contains(&i) {
-                ranked.push(i);
-            }
-        }
-        if ranked.iter().enumerate().any(|(at, &i)| at != i) {
-            let top: Vec<ShownCandidate> =
-                ranked.iter().map(|&i| self.candidates[i].clone()).collect();
-            self.candidates.splice(..limit, top);
+        if self.page > 0 {
+            self.waiting_rerank = Some((generation, order.to_vec()));
+        } else if self.raise(engine, order) {
             self.generation += 1;
         }
         Some(with_radicals(engine, self.snapshot(engine, true, None)))
     }
 
-    /// 重排看得到的候選數：最多 [`RERANK_LIMIT`] 個。
-    fn rerank_limit(&self) -> usize {
-        self.candidates.len().min(RERANK_LIMIT)
+    /// 給重排要求、收重排結果：中文組字中、沒有目前分段、候選列是目前選項的。
+    fn can_rerank(&self) -> bool {
+        self.composing_chinese() && self.focus.is_none() && !self.options_pending()
+    }
+
+    /// 把 `order` 排出的路徑放到重排的位置（[`Session::apply_rerank`]）；名次變了時回真。
+    fn raise(&mut self, engine: &Engine, order: &[usize]) -> bool {
+        let Some(top) = self.candidates.first().map(|c| c.text().to_string()) else {
+            return false;
+        };
+        let Some(path) = order
+            .iter()
+            .filter(|&&k| k < RERANK_PATHS)
+            .filter_map(|&k| self.lattice.whole_path(k))
+            .map(|span| ShownCandidate {
+                converted: self.options.simplified.then(|| self.display(engine, &span)),
+                span,
+            })
+            .find(|c| c.text() != top)
+        else {
+            return false;
+        };
+        // 排位規則排在第 2 位起的候選之後。
+        let slot = 1 + self.candidates[1..]
+            .iter()
+            .take_while(|c| c.span.pinned_after_top)
+            .count();
+        match self.candidates.iter().position(|c| c.text() == path.text()) {
+            Some(at) if at <= slot => false,
+            Some(at) => {
+                let moved = self.candidates.remove(at);
+                self.candidates.insert(slot, moved);
+                true
+            }
+            None => {
+                self.candidates.insert(slot, path);
+                true
+            }
+        }
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
@@ -1400,8 +1433,16 @@ impl Session {
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
-        // 翻頁不是候選變動，`generation` 不加（M1 票 23）。
+        // 翻頁不是候選變動，`generation` 不加（M1 票 23）；回到第一頁時套用翻頁中收到的重排結果。
         self.page = page;
+        if page == 0
+            && let Some((generation, order)) = self.waiting_rerank.take()
+            && generation == self.generation
+            && self.can_rerank()
+            && self.raise(engine, &order)
+        {
+            self.generation += 1;
+        }
         self.snapshot(engine, true, None)
     }
 

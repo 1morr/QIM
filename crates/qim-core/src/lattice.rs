@@ -60,6 +60,9 @@ pub(crate) struct CandidateSpan {
     /// `text`；選定與上屏時用（plan §2.4）。
     pub segments: Vec<Segment>,
     pub kind: SpanKind,
+    /// 由排位規則排定在第 2 位以後（規則 3、4、5，或首選被規則 1 佔走時的規則 2）：停鍵重排的
+    /// 路徑排在這些候選後面（plan §2.4，M3 票 11c）。
+    pub pinned_after_top: bool,
 }
 
 /// 候選從哪裡來。英文、emoji 與記住的字串不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、不學。
@@ -90,6 +93,7 @@ impl CandidateSpan {
             text,
             len: code.len(),
             kind: SpanKind::Word,
+            pinned_after_top: false,
         }
     }
 }
@@ -260,19 +264,36 @@ impl Lattice {
         }
     }
 
-    /// 蓋滿整串的前 `limit` 條路徑的分數與文字，依分數由高到低（最多 beam 條）；沒有輸入碼時是空的。
+    /// 蓋滿整串的前 `limit` 條路徑的文字、各段的字詞與分數，依分數由高到低（最多 beam 條）；
+    /// 沒有輸入碼時是空的。
     pub fn whole_paths(&self, limit: usize) -> Vec<ScoredPath> {
-        if self.input.is_empty() {
+        let end = self.input.len();
+        if end == 0 {
             return Vec::new();
         }
-        self.columns[self.input.len()]
+        self.columns[end]
             .iter()
             .take(limit)
-            .map(|node| ScoredPath {
+            .enumerate()
+            .map(|(k, node)| ScoredPath {
                 text: node.text.clone(),
+                segments: self.path(end, k).into_iter().map(|s| s.text).collect(),
                 score: node.score,
             })
             .collect()
+    }
+
+    /// 蓋滿整串的第 `k` 條路徑（[`Lattice::whole_paths`] 的順序）當成候選：選了照它的分段上屏與學習。
+    pub fn whole_path(&self, k: usize) -> Option<CandidateSpan> {
+        let end = self.input.len();
+        let node = self.columns[end].get(k).filter(|_| end > 0)?;
+        Some(CandidateSpan {
+            text: node.text.clone(),
+            len: end,
+            segments: self.path(end, k),
+            kind: SpanKind::Word,
+            pinned_after_top: false,
+        })
     }
 
     /// 首選路徑的各段（碼與字詞）；沒有路徑蓋滿整串時是空的。
@@ -345,6 +366,7 @@ pub(crate) fn candidates(
                     len: n,
                     segments: lattice.path(n, k),
                     kind: SpanKind::Word,
+                    pinned_after_top: false,
                 };
                 (node.score, false, span)
             }),
@@ -569,17 +591,18 @@ impl Ranked<'_> {
             .expect("位置數不限")
     }
 
-    /// 排好的候選列。
+    /// 排好的候選列；排定在第 2 位以後的標成 [`CandidateSpan::pinned_after_top`]。
     fn into_list(self) -> Vec<CandidateSpan> {
         let total = self.free.len() + self.pinned.len();
         let mut pinned = self.pinned;
         let mut free = self.free.into_iter();
         (0..total)
-            .map(|p| {
-                pinned
-                    .remove(&p)
-                    .or_else(|| free.next())
-                    .expect("位置數等於候選數")
+            .map(|p| match pinned.remove(&p) {
+                Some(span) => CandidateSpan {
+                    pinned_after_top: p > 0,
+                    ..span
+                },
+                None => free.next().expect("位置數等於候選數"),
             })
             .collect()
     }
