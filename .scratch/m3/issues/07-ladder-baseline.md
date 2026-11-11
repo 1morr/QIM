@@ -50,3 +50,4 @@ Blocked by: 04, 06
 - 2026-11-11 採用門檻：基線量完後用 AskUserQuestion 分四題（共同規則、同步層、停鍵層、雲端與前文長度）提出，使用者四題都選「照提案」，寫進 spec〈採用門檻〉。協調者事先說明這題不代答。
 - 2026-11-11 驗收自查：README 有日期、機器、commit、怎麼重跑、基線結果表；`model-ladder` 有空的 `[workspace]`，`cargo metadata` 的 workspace 成員沒有它（`cargo xtask check` 的 `deps` 通過）；個人集在 README 與逐題結果只有數字與行號；`cargo xtask check` 通過（`4433df6` 與本 commit）。
 
+- 2026-11-11 合併 main（`02217b1`，票 01–21 已合併）：衝突只在 `qim-core` 的 `use` 與 `session.rs` 的型別宣告（兩邊都是新增），兩邊都留；main 給 `qim-core` 加了 serde_json，`rerank.rs` 的 `.into()` 推不出型別，改 `usize::from`；`CodeEntry` 多了 `simplified`，實驗的測試補上。重建資料時先拿掉個人集的軟連結，免得改寫主 checkout 正在量的共用檔。`cargo xtask check` 通過；`cargo xtask bench --check` 通過、13 個集合（含個人集）都沒有翻盤；實驗 crate 8 個測試通過。合併後基線變了（例如口語 test 首選 35.7% → 36.3%、前 2 名 48.6% → 49.1%，個人前 2 名 86.5% → 85.5%），dev、test 重跑，更新 spec〈採用門檻〉的基線數字與據此算出的絕對值，門檻的增量不變；N = 9 與路徑長度的結論不變。

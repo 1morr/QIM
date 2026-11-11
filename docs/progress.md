@@ -41,7 +41,7 @@
 | 2026-11-11 | M3 21 | 線上更新：核心 `PackIndex`、`pack-release`（擋沒加版本）、網頁背景檢查與開關，本機伺服器驗；內建與下載版取較高的；未建 GitHub release；見票 21 | 新 session 下 `/implement .scratch/m3/issues/13-association.md` |
 | 2026-11-11 | M3 13 | 聯想：上屏後給下一個字詞（補完詞庫的詞、bigram、個人 bigram，同一把尺），按鍵照 macOS、開關預設開；bench 前後相同；黑箱 T6、T8 重跑；見票 13 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
 | 2026-11-11 | M3 15 | 記住 email：經 QIM 打過一次就記，中文組字打開頭 3 個字母起排第 2 位起（規則 5，開關預設開），設定區可刪，匯出 v2 加列；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m3/issues/07-ladder-baseline.md` |
-| 2026-11-11 | M3 07 | `model-ladder` 框架與基線（口語 test 首選 35.7%、前 2 名 48.6%）、N = 9 條 lattice 路徑、採用門檻經使用者確認寫進 spec；見票 07 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
+| 2026-11-11 | M3 07 | `model-ladder` 框架與基線（合併 main 後口語 test 首選 36.3%、前 2 名 49.1%）、N = 9 條 lattice 路徑、採用門檻經使用者確認寫進 spec；見票 07 | 新 session 下 `/implement .scratch/m3/issues/08-ladder-sync-ngram.md` |
 
 ## 偏差與決定
 
