@@ -337,6 +337,16 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             corpora::dev_context_long_items_path(root, corpus.name),
             first.dev_context_long_items.as_bytes(),
         )?;
+        if corpus.conversational() {
+            write(
+                corpora::dialogue_items_path(root, corpus.name),
+                first.dialogue_bench.as_bytes(),
+            )?;
+            write(
+                corpora::dev_dialogue_items_path(root, corpus.name),
+                first.dev_dialogue_items.as_bytes(),
+            )?;
+        }
         corpora.push(CorpusSummary {
             name: corpus.name.into(),
             counts: first.counts,
@@ -1011,8 +1021,13 @@ fn build_corpus<W: Write>(
     dir: &Path,
 ) -> Result<Built, Error> {
     let mut builder = Builder::new(transcoder, train, dev);
-    corpus.texts(paths, forms, |text| {
-        builder.add(text).map_err(Error::io(dir))
+    corpus.dialogues(paths, forms, |turns| {
+        if corpus.conversational() {
+            builder.add_dialogue(turns)
+        } else {
+            turns.iter().try_for_each(|text| builder.add(text))
+        }
+        .map_err(Error::io(dir))
     })?;
     let Finished {
         counts,
@@ -1022,6 +1037,8 @@ fn build_corpus<W: Write>(
         dev_context_items,
         context_long_bench,
         dev_context_long_items,
+        dialogue_bench,
+        dev_dialogue_items,
         chars,
         train,
         dev,
@@ -1034,6 +1051,8 @@ fn build_corpus<W: Write>(
         context_bench,
         context_long_bench,
         dev_context_long_items,
+        dialogue_bench,
+        dev_dialogue_items,
         chars,
         train: train.sha256(),
         dev: dev.sha256(),
@@ -1060,6 +1079,9 @@ struct Built {
     /// 與來源決定，不另比。
     context_long_bench: String,
     dev_context_long_items: String,
+    /// 對話前文的題（test、dev；只有對話語料有），由來源與切分決定，不另比。
+    dialogue_bench: String,
+    dev_dialogue_items: String,
     chars: String,
     train: String,
     dev: String,

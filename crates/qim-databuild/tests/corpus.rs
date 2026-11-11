@@ -185,3 +185,68 @@ fn long_context_items_pair_each_context_item_with_up_to_200_chars_before_it() {
         format!("一，二，三，\t{}\t{dev}\n", codes(&dev))
     );
 }
+
+/// 對話前文（M3 票 25）：HKCanCor 一段錄音是一段對話，前文接同一段對話裡前面的話輪，最多
+/// [`LONG_CONTEXT_CHARS`] 字；話輪結尾不是標點時補一個空格分開。dev、test 各一份，題是有前文的句子，
+/// 對話的第一句沒有前文、不出題；不跨到上一段對話。
+#[test]
+fn dialogue_items_take_earlier_turns_of_the_same_conversation_as_context() {
+    let [first, second] = test_clauses(2).try_into().unwrap();
+    let [dev] = dev_clauses(1).try_into().unwrap();
+    let transcoder = transcoder();
+    let codes = |s: &str| transcoder.transcode(s).unwrap().join(" ");
+    let mut builder = Builder::new(&transcoder, std::io::sink(), std::io::sink());
+    let filler = "開".repeat(LONG_CONTEXT_CHARS);
+    builder
+        .add_dialogue(&[format!("{filler}？"), "上一段".into()])
+        .unwrap();
+    builder
+        .add_dialogue(&[
+            format!("{first}！"),
+            "你好".into(),
+            format!("係呀，{second}"),
+            format!("{dev}。"),
+        ])
+        .unwrap();
+    let finished = builder.finish().unwrap();
+    let mut expected = vec![format!(
+        "{first}！你好 係呀，\t{}\t{second}",
+        codes(&second)
+    )];
+    expected.sort();
+    let mut dialogue: Vec<&str> = finished.dialogue_bench.lines().collect();
+    dialogue.sort();
+    assert_eq!(dialogue, expected);
+    assert_eq!(
+        finished.dev_dialogue_items,
+        format!("{first}！你好 係呀，{second} \t{}\t{dev}\n", codes(&dev))
+    );
+}
+
+/// 對話前文只留最後 [`LONG_CONTEXT_CHARS`] 字；話輪照樣是一般的段落，「有前文」與長前文的題不變。
+#[test]
+fn dialogue_context_keeps_the_last_200_chars_and_turns_still_feed_the_other_items() {
+    let [first] = test_clauses(1).try_into().unwrap();
+    let transcoder = transcoder();
+    let codes = |s: &str| transcoder.transcode(s).unwrap().join(" ");
+    let filler = "開".repeat(LONG_CONTEXT_CHARS + 10);
+    let mut builder = Builder::new(&transcoder, std::io::sink(), std::io::sink());
+    builder
+        .add_dialogue(&[format!("{filler}。"), format!("甲，{first}")])
+        .unwrap();
+    let finished = builder.finish().unwrap();
+    let before = format!("{filler}。甲，");
+    let tail: String = before
+        .chars()
+        .skip(before.chars().count() - LONG_CONTEXT_CHARS)
+        .collect();
+    assert_eq!(
+        finished.dialogue_bench,
+        format!("{tail}\t{}\t{first}\n", codes(&first))
+    );
+    assert_eq!(
+        finished.context_bench,
+        format!("甲，\t{}\t{first}\n", codes(&first))
+    );
+    assert_eq!(finished.context_long_bench, finished.context_bench);
+}

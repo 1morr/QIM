@@ -11,6 +11,7 @@
 | `src/lib.rs` | 讀集合、`Reranker` 介面、每題的候選與路徑、指標、報告、匯出、配對比較 |
 | `src/main.rs` | 命令列：`eval`、`export`、`compare` |
 | `tests/framework.rs` | 用小碼表確認首選不動、N 截斷、外部結果查表、前文截斷、McNemar |
+| `tests/by_length.rs` | 依句長分組的邊界、逐題結果檔的字數欄、前文長度分佈（票 25） |
 | `src/neural.rs`、`tests/neural.rs` | 票 09 的神經重排（candle）：`neural`、`quantize` 兩個指令，用法與結果在 `../neural-rerank/README.md` |
 
 獨立的 crate（`Cargo.toml` 有空的 `[workspace]`），不在 repo 的 workspace 裡，`cargo xtask check` 不編它；它用路徑依賴 `qim-core`、`qim-bench`。
@@ -28,11 +29,15 @@ cargo run --release -- eval --split test            # test 切分加個人集：
 cargo run --release -- export [--split test] [--n 9] [--include-personal]
 cargo run --release -- eval --orders <結果.jsonl> --name <模型名>
 cargo run --release -- compare ../../../build/model-ladder/dev/baseline ../../../build/model-ladder/dev/<模型名>
+cargo run --release -- by-length [--split test] ../../../build/model-ladder/<切分>/baseline ../../../build/model-ladder/<切分>/<模型名> …
+cargo run --release -- context-stats [--split test]
 ```
 
 - `eval` 印 Markdown 表，逐題結果寫到 `build/model-ladder/<切分>/<模型名>/<集合>.tsv`（只有行號與數字，個人集也一樣）。
 - `export` 把每題的重排要求寫成 `build/model-ladder/<切分>/requests/<集合>.jsonl`（下面〈給實驗票〉），不含答案。個人集要加 `--include-personal` 才匯出；它的內容只在本機、不送雲端，雲端實驗要跑個人集每次先問使用者（plan §5.2）。
 - `compare` 比兩個逐題結果目錄裡同名的集合：首選、前 2 名、可動首選各報翻好／翻壞與 McNemar 精確檢定（雙尾）的 p 值。
+- `by-length`（票 25）把幾個逐題結果目錄（各一個模型）依答案字數分成 1–4、5–8、9–14、15 字以上，各組列首選、前 2 名與題數；組是口語、維基、個人與口語長前文的三種前文長度（「有前文」兩組不分）。逐題結果檔的最後一欄是答案字數，票 25 前寫的檔沒有這欄，要重跑。
+- `context-stats`（票 25）印長前文題與口語長前文題的前文長度：p50、到 50 字與到 200 字的比例。
 - 票 08 的 `sync`（已刪，見上）另有兩個除錯用的環境變數 `SHOW`、`EXPLAIN`，要用時同樣 checkout `a6b4550`。
 
 ## 量法
@@ -44,6 +49,7 @@ cargo run --release -- compare ../../../build/model-ladder/dev/baseline ../../..
 | 維基 | yue-wiki、zh-wiki | `build/corpus/<名>/dev.tsv`（各 2,000 句） | `bench/corpus/<名>.tsv` |
 | 口語 | common-voice-yue、hkcancor | `build/corpus/<名>/dev.tsv` | `bench/colloquial/<名>.tsv` |
 | 有前文 | 四個語料各 `·前文0`、`·前文50`、`·前文200` | `dev-context-long.tsv` | `test-context-long.tsv` |
+| 口語長前文 | `hkcancor·對話·前文0`、`·前文50`、`·前文200`（票 25） | `build/corpus/hkcancor/dev-dialogue.tsv`（968 題） | `test-dialogue.tsv`（988 題） |
 | 個人 | personal | 不切（下面〈調參與報數〉） | `bench/personal/rime-userdb.tsv` |
 
 - 有前文：和基準的「有前文」集合同一批題，前文改用同一段裡前面最多 200 字（`cargo xtask data` 寫的長前文題，plan §5.2）。`·前文0` 不給前文（同基準的 `·前文·不給`），`·前文50`、`·前文200` 給最後 50、200 字。核心只看前文的最後一字（plan §2.3），所以基線的 50 與 200 一樣；給重排模型的前文才有差別。長前文有多長：維基段落常超過 50 字，口語多半只有一兩句（test 的長前文 p50 是 8–79 字，見下面〈限制〉）。
@@ -306,5 +312,5 @@ cargo run --release -- compare ../../../build/model-ladder/dev/baseline ../../..
 - 只在打完整串輸入碼時重排一次；實際上使用者可能在停鍵層回來前就按空白，青簡記下過這種競態（`docs/research/neural-rerank.md` §1.7）。
 - 前 2 名命中率假設使用者等到結果才看候選列。
 - 有前文的題都是整句，前文以標點結尾，核心接句首（plan §2.3）；長前文只多給重排模型看。
-- 長前文多長取決於語料：test 的長前文 p50 是 common-voice-yue 8 字、hkcancor 16 字、yue-wiki 54 字、zh-wiki 79 字；到 50 字的比例 0%、17%、54%、66%，到 200 字的 0%、1%、6%、16%（dev 相近）。所以前文 200 字那檔實際上只在維基量得到，口語的 50 與 200 幾乎相同。HKCanCor 每句話是一行，要量口語的長前文得把同一段對話接起來（票 09、10 決定要不要）。
+- 長前文多長取決於語料：test 的長前文 p50 是 common-voice-yue 8 字、hkcancor 16 字、yue-wiki 54 字、zh-wiki 79 字；到 50 字的比例 0%、17%、54%、66%，到 200 字的 0%、1%、6%、16%（dev 相近）。所以前文 200 字那檔實際上只在維基量得到，口語的 50 與 200 幾乎相同。HKCanCor 每句話是一行，票 25 把同一段對話接起來做了口語長前文題（前文 p50 200 字，〈依句長分組與口語長前文〉）。
 - 神經模型延遲的重算是忙碌機器上的倍數推估，不是 iPhone 實測（上面〈N 與路徑長度〉）。

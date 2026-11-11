@@ -4,6 +4,8 @@
 //! model-ladder eval [--split dev|test] [--n <N>] [--orders <結果.jsonl> --name <名>]
 //! model-ladder export [--split dev|test] [--n <N>] [--include-personal]
 //! model-ladder compare <逐題結果目錄 A> <逐題結果目錄 B>
+//! model-ladder by-length [--split dev|test] <逐題結果目錄>…
+//! model-ladder context-stats [--split dev|test]
 //! model-ladder neural --model <權重> --vocab <字表> [--split dev|test] [--n <N>] [--lambdas <λ,…>] [--name <名>]
 //! model-ladder quantize <f32 的 .safetensors> <q8 的 .gguf>
 //! ```
@@ -12,13 +14,16 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use model_ladder::{
-    DEFAULT_N, Identity, Orders, Reranker, Split, compare, export_set, language_model_cost,
-    load_sets, report, run_set, write_rows,
+    CONTEXT_LENGTHS, ContextStats, DEFAULT_N, Group, Identity, LENGTH_BUCKETS, Orders, Reranker,
+    Split, by_length, compare, export_set, group_label, language_model_cost, load_sets,
+    read_length_rows, report, run_set, write_rows,
 };
 
 const USAGE: &str = "用法：\n  model-ladder eval [--split dev|test] [--n <N>] [--orders <檔> --name <名>]\n  \
                      model-ladder export [--split dev|test] [--n <N>] [--include-personal]\n  \
                      model-ladder compare <目錄 A> <目錄 B>\n  \
+                     model-ladder by-length [--split dev|test] <目錄>…\n  \
+                     model-ladder context-stats [--split dev|test]\n  \
                      model-ladder neural --model <權重> --vocab <字表> [--split dev|test] [--n <N>] [--lambdas <λ,…>] [--name <名>]\n  \
                      model-ladder quantize <f32 的 .safetensors> <q8 的 .gguf>";
 
@@ -32,6 +37,8 @@ fn main() -> ExitCode {
         Some("eval") => eval(&args[1..]),
         Some("export") => export(&args[1..]),
         Some("compare") if args.len() == 3 => compare_dirs(&args[1], &args[2]),
+        Some("by-length") => length_table(&args[1..]),
+        Some("context-stats") => context_stats(&args[1..]),
         Some("neural") => neural(&args[1..]),
         Some("quantize") if args.len() == 3 => {
             model_ladder::neural::quantize(Path::new(&args[1]), Path::new(&args[2]))
@@ -171,6 +178,120 @@ fn compare_dirs(a: &str, b: &str) -> Result<(), String> {
             line.push_str(&format!(" {}/{} | {:.3} |", p.better, p.worse, p.p_value()));
         }
         println!("{line}");
+    }
+    Ok(())
+}
+
+/// 依句長分組（票 25）：每個逐題結果目錄（一個模型）在各組、各句長分組的首選、前 2 名與題數。
+/// 組照 `load_sets`：口語、維基、個人與口語長前文的三種前文長度；「有前文」的兩組不分。
+fn length_table(args: &[String]) -> Result<(), String> {
+    let (split_args, dirs): (Vec<&String>, Vec<&String>) = {
+        let mut flags = Vec::new();
+        let mut dirs = Vec::new();
+        let mut it = args.iter();
+        while let Some(a) = it.next() {
+            if a == "--split" {
+                flags.push(a);
+                flags.push(it.next().ok_or_else(|| USAGE.to_string())?);
+            } else {
+                dirs.push(a);
+            }
+        }
+        (flags, dirs)
+    };
+    let f = flags(&split_args.into_iter().cloned().collect::<Vec<_>>())?;
+    let split = f.split.unwrap_or(Split::Dev);
+    if dirs.is_empty() {
+        return Err(USAGE.into());
+    }
+    let sets = load_sets(&root(), split)?;
+    let mut groups: Vec<(Group, usize)> = sets
+        .iter()
+        .filter(|s| !s.group.is_context())
+        .map(|s| (s.group, s.context_chars))
+        .collect();
+    groups.sort();
+    groups.dedup();
+    println!(
+        "依句長分組：{} 切分；每格是首選／前 2 名（題數）\n",
+        split.name()
+    );
+    for (group, chars) in groups {
+        print!("{}\n\n| 模型 |", group_label(group, chars));
+        for b in LENGTH_BUCKETS {
+            print!(" {} 字 |", b.label);
+        }
+        println!(
+            " 全部 |\n| --- |{}",
+            " ---: |".repeat(LENGTH_BUCKETS.len() + 1)
+        );
+        for dir in &dirs {
+            let dir = Path::new(dir.as_str());
+            let mut rows = Vec::new();
+            for set in sets
+                .iter()
+                .filter(|s| s.group == group && s.context_chars == chars)
+            {
+                let path = dir.join(format!("{}.tsv", set.name));
+                if path.exists() {
+                    rows.extend(read_length_rows(&path)?);
+                }
+            }
+            if rows.is_empty() {
+                continue;
+            }
+            let cells = by_length(rows.iter().copied());
+            let all = by_length(rows.iter().map(|&(_, c, t)| (1, c, t)))[0];
+            let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+            let cell = |c: model_ladder::LengthCell| {
+                let pct = |n: usize| {
+                    if c.total == 0 {
+                        "—".to_string()
+                    } else {
+                        format!("{:.1}%", 100.0 * n as f64 / c.total as f64)
+                    }
+                };
+                format!(" {}／{}（{}） |", pct(c.correct), pct(c.top2), c.total)
+            };
+            print!("| {name} |");
+            for c in cells {
+                print!("{}", cell(c));
+            }
+            println!("{}", cell(all));
+        }
+        println!();
+    }
+    Ok(())
+}
+
+/// 前文長度的分佈（票 25）：各語料的長前文題與口語長前文題，前文的字數 p50、到 50 字與到 200 字的
+/// 比例（前文最多 200 字，`qim_databuild::corpus::LONG_CONTEXT_CHARS`）。
+fn context_stats(args: &[String]) -> Result<(), String> {
+    let f = flags(args)?;
+    let split = f.split.unwrap_or(Split::Dev);
+    println!(
+        "前文長度：{} 切分\n\n| 題 | 題數 | p50 字 | 到 50 字 | 到 200 字 |\n| --- | ---: | ---: | ---: | ---: |",
+        split.name()
+    );
+    for set in load_sets(&root(), split)?
+        .iter()
+        .filter(|s| s.group.varies_context() && s.context_chars == CONTEXT_LENGTHS[2])
+    {
+        let lengths: Vec<usize> = set
+            .items
+            .iter()
+            .map(|i| i.context.as_deref().map_or(0, |c| c.chars().count()))
+            .collect();
+        let s = ContextStats::of(&lengths);
+        let pct = |n: usize| format!("{:.1}%", 100.0 * n as f64 / s.total.max(1) as f64);
+        println!(
+            "| {} | {} | {} | {} | {} |",
+            set.name.trim_end_matches("·前文200"),
+            s.total,
+            s.p50.map_or("—".into(), |p| p.to_string()),
+            pct(s.at_least_50),
+            pct(s.at_least_200)
+        );
     }
     Ok(())
 }

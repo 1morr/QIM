@@ -147,6 +147,14 @@ pub fn archive(
     })
 }
 
+/// zip 裡 `utf8/` 下每個轉寫檔（一段對話）的全部話輪，順序同 [`archive`]。
+pub fn archive_dialogues(
+    zip: &[u8],
+    mut dialogue: impl FnMut(&[String]) -> Result<(), Error>,
+) -> Result<(), Error> {
+    transcripts(zip, |text| dialogue(&utterances(text)))
+}
+
 /// zip 裡 `utf8/` 下每個轉寫檔的話輪的詞，順序同 [`archive`]。
 pub fn archive_tagged(zip: &[u8], mut utterance: impl FnMut(&[Tagged])) -> Result<(), Error> {
     transcripts(zip, |text| {

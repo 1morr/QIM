@@ -653,6 +653,7 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
 - 更新 baseline 要用 `--update-baseline`，並在同一個 commit 說明原因。
 - dev 切分也有「有前文」的題（`build/corpus/<名>/dev-context.tsv`，取法同 test 的），`--dev` 一樣給前文、不給前文各打一次（M3 票 04）。
 - 長前文（M3 票 07）：`cargo xtask data` 另寫 `build/corpus/<名>/test-context-long.tsv` 與 `dev-context-long.tsv`，是 test 與 dev「有前文」的同一批題、同順序，前文換成同一段裡前面最多 200 字（不跨換行）。基準不讀；模型階梯截成前文 0、50、200 字量（`scripts/experiments/model-ladder/`）。
+- 口語長前文（M3 票 25）：HKCanCor 一段錄音是一段對話，每個話輪各當一段，上面兩種前文都不跨話輪；`cargo xtask data` 另寫 `build/corpus/hkcancor/test-dialogue.tsv` 與 `dev-dialogue.tsv`：test、dev 切分裡有前文的句子（最多 2,000 句，同句取雜湊最小的前文），前文是同一段對話裡前面的話輪接起來的最後 200 字（話輪結尾不是標點時補空格），格式同「有前文」的題。基準不讀；模型階梯讀。
 - 調參（β、γ、語料權重）只看 dev 切分：`cargo xtask bench --dev [--set <鍵>=<值>]` 打各集合的 dev 切分與由它取出的單字、詞，不比 baseline（`docs/development.md`〈dev 切分調參〉）。test 與個人集只用 `--check` 守門。
 - 使用者回報的新案例一律加進 `fixed.tsv`。網頁的「回報」把剛才用空白或數字鍵選字上屏的那次組字存成一行（輸入碼、上屏的字、來源欄附當時的首選），清單存在 `localStorage`、可直接改；組字中按標點、Enter 的上屏不算（M1 票 12）。
 - 防洩漏：個人集不進訓練語料，也不匯入基準用的 `UserModel`；`qim-databuild` 報告各測試集有幾句原樣出現在訓練語料，不為零要先查明才算數（CyIME 踩過，`docs/research/cyime.md` §3）。
