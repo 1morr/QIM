@@ -17,7 +17,7 @@
 | M0 | `.scratch/m0/issues/` | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 完成，[已封存](archive/M0.md) |
 | M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 完成，[已封存](archive/M1.md) |
 | M2 | `.scratch/m2/issues/` | brief §9、§11、§12.3；plan §1.4、§3、§7.3；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 完成，[已封存](archive/M2.md) |
-| M3 | `.scratch/m3/issues/` | brief §1.5、§7、§8、§12.3；plan §2.3、§2.7、§7.4、§7.8；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 進行中，已拆 23 張票（`.scratch/m3/spec.md`） |
+| M3 | `.scratch/m3/issues/` | brief §1.5、§7、§8、§12.3；plan §2.3、§2.7、§7.4、§7.8；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 進行中，已拆 23 張票，票 11 補 11b–11e（`.scratch/m3/spec.md`） |
 
 ## Session 紀錄
 
@@ -46,9 +46,12 @@
 | 2026-11-11 | M3 10 | FM 與 DeepSeek flash 重排（選項改給 9 條路徑）：flash 口語前 2 名 +10.4 點、每千次 0.43 元，過門檻；FM +1.3、停頓後 14.6% 超過 2 s，沒過；見票 10 | 新 session 下 `/implement .scratch/m3/issues/09-ladder-neural.md` |
 | 2026-11-11 | M3 09 | 1.4M、23M 神經重排：test 口語前 2 名 49.1% → 57.5%／59.0%，1.4M 全過門檻；23M 沒比 1.4M 多 2 點、iPhone 峰值 +75 MB 超標；見票 09 | 新 session 下 `/implement .scratch/m3/issues/11-ladder-conclusion.md` |
 | 2026-11-11 | M3 24 | 可選詞庫 `quick-lexicon-words-hk`（預設詞庫加粵典詞頭 20,556 詞，非商業條款）、`bench --lexicon`；口語集修正 −10%，預設詞庫不變；見票 24 | 新 session 下 `/implement .scratch/m3/issues/11-ladder-conclusion.md` |
+| 2026-11-11 | M3 11 | 階梯結論：詞級 trigram、1.4M 採用（後者在新基線重量過才做），23M、FM、雲端不做，前文改 50 字；補票 11b–11e，票 22 wontfix；見票 11 | 新 session 下 `/implement .scratch/m3/issues/11b-word-trigram.md` |
 
 ## 偏差與決定
 
+- 2026-11-11 M3 票 11：同步層詞級 trigram、停鍵層 1.4M（新基線重量過才做）、雲端與 FM 不做、前文 200 → 50 字（使用者同意）；改 brief §1.5、§7、§8、§11、§12.5、plan §1.4、§2.1、§2.7、§8；見 `docs/research/model-ladder.md`。
+- 2026-11-11 M3 票 11：雲端比 1.4M 只多 2.0 點沒過，票 22 wontfix、spec〈驗收〉雲端那條改寫；重排改以 lattice 路徑為單位（票 11c）；plan §1.3 加 `qim-neural`；見票 11。
 - 2026-11-11 M3 票 24（收尾後）：粵典來源 sha256 不符或下載失敗時只略過粵典詞庫，其他資料包照建、結束碼 0，網頁缺它照樣載入（協調者要求）；plan §4.2；見票 24。
 - 2026-11-11 M3 票 24：推翻票 18 不用粵典，照非商業條款另建可選詞庫、預設仍 `quick-lexicon`；粵典詞的並存寫法已收也算收了（HKCanCor 不套）；改 brief §1.5、§5.2、§12.1、plan §4.2；見票 24。
 - 2026-11-11 M3 票 09：23M q8 在 iPhone 實量 9 條 × 18 字峰值 +75 MB、p95 84 ms（票 07 推估 +62 MB、105–110 ms），超過 60 MB 上限；改 brief §12.3、plan §8、ios-feasibility；見票 09。

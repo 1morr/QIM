@@ -18,7 +18,7 @@ struct Rule {
     no_io: bool,
 }
 
-/// plan §1.3 禁止 `qim-core` 與 `qim-layout` 用的 std 路徑。
+/// plan §1.3 禁止 [`Rule::no_io`] 為真的 crate 用的 std 路徑。
 const FORBIDDEN_PATHS: &[&[&str]] = &[
     &["std", "fs"],
     &["std", "net"],
@@ -46,14 +46,20 @@ const RULES: &[Rule] = &[
         no_io: true,
     },
     Rule {
+        krate: "qim-neural",
+        workspace: &[],
+        external: Some(&["candle-core", "candle-nn"]),
+        no_io: true,
+    },
+    Rule {
         krate: "qim-wasm",
-        workspace: &["qim-core", "qim-layout"],
+        workspace: &["qim-core", "qim-layout", "qim-neural"],
         external: Some(&["wasm-bindgen"]),
         no_io: false,
     },
     Rule {
         krate: "qim-ffi",
-        workspace: &["qim-core", "qim-layout"],
+        workspace: &["qim-core", "qim-layout", "qim-neural"],
         external: Some(&["uniffi"]),
         no_io: false,
     },
