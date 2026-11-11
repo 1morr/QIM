@@ -252,7 +252,7 @@ QIM（暫名）。
 
 - 語言模型升級、小型神經重排、LLM 候選優化各接入到什麼程度：模型階梯實驗後決定（plan §7.8）。
 - 已決（M1 票 03）：Common Voice 粵語句子可用於訓練與基準，但只用 GitHub 上 CC0 的 Sentence Collector 句子檔；Mozilla Data Collective 的資料集要登入、禁止 re-host，不用（§5.2、§12.1）。
-- LGPL 資料、以 CC BY-SA 語料統計的字頻（詞庫資料包，M1 票 06）與訓練的 bigram 隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
+- LGPL 資料、以 CC BY-SA 語料統計的字頻（詞庫資料包，M1 票 06）與訓練的語言模型（字級 bigram；M3 票 08 量的字級 trigram 同樣只用 CC BY-SA 等語料，詞級 n-gram 另用 LGPL 的 rime-essay 切詞）隨商店 App 發佈是否合規：使用者判斷（§5.1、§5.2）。
 - 已決（M2 票 06）：沒有付費帳號也能用免費佈建在實機跑 iOS 鍵盤擴充；App Group 在沒有完整取用時擴充只能讀、不能寫。M2 的 iOS 實驗都用免費佈建做，付費帳號照 §10 等上架前再申請（§12.3）。
 - Linux 用 Fcitx5 還是 IBus：Linux 里程碑開始時定（§10）。
 
