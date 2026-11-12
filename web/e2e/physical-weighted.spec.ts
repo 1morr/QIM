@@ -205,3 +205,27 @@ test("臨時英文照配列：Dvorak 的實體 W 鍵接上逗號，不是 w", as
 	await page.keyboard.press("Enter");
 	await expect(text).toHaveValue("a,u");
 });
+
+test("萬用鍵 z 照實體鍵位：Dvorak 與 AZERTY 的實體 Z 鍵照樣是萬用鍵", async ({
+	page,
+}) => {
+	const composition = page.getByTestId("composition");
+	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
+	// Dvorak 的實體 H、Z、O 鍵打 d、;、r；照美式是 h、z、o，首選和美式打 hzo 一樣是「的人」。
+	await dispatch(page, "KeyH", "d");
+	await dispatch(page, "KeyZ", ";");
+	await expect(composition).toHaveText("竹＊");
+	await expect(
+		page.getByTestId("debug-weights").locator("code").first(),
+	).toHaveAttribute("data-letter", "z");
+	await dispatch(page, "KeyO", "r");
+	await expect(composition).toHaveText("竹＊人");
+	await expect(items.first()).toHaveText("1的人");
+	await page.keyboard.press("Escape");
+	// AZERTY 的實體 Z 鍵打 w。
+	await dispatch(page, "KeyH", "h");
+	await dispatch(page, "KeyZ", "w");
+	await dispatch(page, "KeyO", "o");
+	await expect(composition).toHaveText("竹＊人");
+	await expect(items.first()).toHaveText("1的人");
+});
