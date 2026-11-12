@@ -20,8 +20,8 @@ export function textBefore(
 /**
  * 接上輸入框，每次給游標前最多 `limit` 個字（綁定的 `contextLimit()`）；回傳的函式立刻給一次
  * （例如關掉無痕之後）。`changed` 在每次給前文或失焦忘掉之後呼叫：游標移走、失焦時核心收起聯想
- * （M3 票 13），網頁要跟著重畫候選列。`afterLeave` 在失焦、叫核心忘掉前文之後呼叫：核心這時可能記住
- * 剛打完的 email（記住的字串，M3 票 15），網頁要存檔。
+ * （M3 票 13），網頁要跟著重畫候選列。`afterLeave` 在失焦、叫核心忘掉前文之後呼叫：核心這時可能學到
+ * 剛打完的英文串（英文使用者詞，M4 票 14），網頁要存檔。
  */
 export function mountContext(
 	text: HTMLTextAreaElement,

@@ -21,6 +21,7 @@ fn scheme_pack() -> SchemePack {
             version: "1".into(),
             alphabet: "anr".into(),
             max_code_length: 2,
+            wildcard: None,
             radicals: BTreeMap::new(),
             packs: Packs {
                 lexicon: Some("quick-lexicon".into()),

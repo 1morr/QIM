@@ -15,6 +15,7 @@ fn scheme(language_model: Option<&str>) -> Scheme {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),

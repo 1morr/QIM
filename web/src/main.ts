@@ -18,7 +18,10 @@ import { mountReportPanel } from "./report-panel.ts";
 import { fakeRank, rerankScheduler } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
-import { mountRemembered, type Remembered } from "./remembered.ts";
+import {
+	type EnglishUserWords,
+	mountEnglishUserWords,
+} from "./english-user-words.ts";
 import { storage } from "./storage.ts";
 import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
@@ -135,30 +138,30 @@ async function start(): Promise<void> {
 	};
 	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
 	let phrases: Phrases | undefined;
-	/** 記住的 email 清單；同上比 `userDict` 晚掛上。 */
-	let remembered: Remembered | undefined;
+	/** 英文使用者詞的清單；同上比 `userDict` 晚掛上。 */
+	let englishUserWords: EnglishUserWords | undefined;
 	// 殼的日期契約（plan §2.4）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
 	// 今天，過了午夜才不會記成前一天。按鍵、點擊、觸控都從 keydown 或 pointerdown 開始；失焦時核心
-	// 會記住正在打的 email，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
+	// 會把正在打的串學成英文使用者詞，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
 	// 給（blur 不冒泡，但捕獲階段照樣經過 window），比任何處理器早。
 	const giveToday = (): void => session.setToday(localToday());
 	giveToday();
 	for (const type of ["keydown", "pointerdown", "blur"]) {
 		window.addEventListener(type, giveToday, { capture: true });
 	}
-	// 匯入、清空換掉整份使用者詞，常用語與記住的 email 的清單跟著重畫。
+	// 匯入、清空換掉整份使用者詞，常用語與英文使用者詞的清單跟著重畫。
 	const userDict = mountUserDict(session, () => {
 		phrases?.refresh();
-		remembered?.refresh();
+		englishUserWords?.refresh();
 		focusText();
 	});
-	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心記住 email）、失焦。 */
+	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心學英文使用者詞）、失焦。 */
 	const saveLearning = (): void => {
 		userDict.save();
-		remembered?.refresh();
+		englishUserWords?.refresh();
 	};
 	/**
-	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心記住剛打完的 email，要存檔；
+	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心學到剛打完的英文串，要存檔；
 	 * 字母、數字只是接在那串後面，不必存。`kind` 是實體鍵的種類或觸控的動作（觸控字母鍵是 `weighted`）。
 	 */
 	const afterHostKey = (kind: string | undefined): void => {
@@ -264,10 +267,10 @@ async function start(): Promise<void> {
 		userDict.save,
 		focusText,
 	);
-	remembered = mountRemembered(session, userDict.save, focusText);
+	englishUserWords = mountEnglishUserWords(session, userDict.save, focusText);
 	mountWordList(session, userDict.save, focusText);
 	// 給前文或失焦後核心可能收起了聯想（游標移走、換欄位）：沒有組字、核心也沒有候選了，就清掉候選列。
-	// 失焦時核心把正在打的 email 當打完記住，要存檔。
+	// 失焦時核心把正在打的串當打完學起來，要存檔。
 	const syncContext = mountContext(
 		text,
 		session,
@@ -297,7 +300,7 @@ async function start(): Promise<void> {
 		text,
 		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
 		(snapshot) => apply(snapshot, snapshot.action === "space"),
-		// 交還宿主的鍵也可能收起了聯想（空白、Enter），照樣重畫候選列；也可能讓核心記住剛打完的 email。
+		// 交還宿主的鍵也可能收起了聯想（空白、Enter），照樣重畫候選列；也可能讓核心學到剛打完的英文串。
 		(snapshot) => {
 			hostDefault(text, snapshot);
 			render(snapshot);

@@ -63,6 +63,7 @@ fn an_engine_refuses_a_scheme_with_a_bad_ranking() {
             version: "1".into(),
             alphabet: "a".into(),
             max_code_length: 1,
+            wildcard: None,
             radicals: [('a', "日".to_string())].into(),
             packs: Packs::default(),
             ranking: Ranking {

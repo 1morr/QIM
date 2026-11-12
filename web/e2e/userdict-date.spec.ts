@@ -2,7 +2,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 
 // 殼的日期契約（plan §2.4，M4 票 12）：網頁在第一次學習前、之後每次使用者操作前把今天交給核心，
 // 學到的條目記成最後使用的日期。除了實體鍵盤打字加選候選（`user-dict.spec.ts`），觸控鍵盤與
-// 「失焦時記住正在打的 email」也是學習的路徑；後者可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。
+// 「失焦時把正在打的串學成英文使用者詞」也是學習的路徑；後者可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。
 // 用 `page.clock` 換日。
 
 const EMAIL = "ivan.test@example.com";
@@ -31,7 +31,7 @@ async function ready(page: Page) {
 	return text;
 }
 
-test("打 email 打到午夜後直接失焦（沒有按鍵或點擊），記住的那天是失焦當天", async ({
+test("打 email 打到午夜後直接失焦（沒有按鍵或點擊），學到的那天是失焦當天", async ({
 	page,
 }) => {
 	await page.clock.setFixedTime(new Date(2026, 10, 12, 23, 58));
@@ -44,7 +44,8 @@ test("打 email 打到午夜後直接失焦（沒有按鍵或點擊），記住�
 	// 切到別的視窗：焦點離開輸入框，前面沒有 keydown、pointerdown。
 	await text.evaluate((element) => element.blur());
 	await expect
-		.poll(async () => (await storedRow(page, "string", EMAIL))?.[4])
+		// kind word count decayed last_tick last_used（第 6 欄）
+		.poll(async () => (await storedRow(page, "english", EMAIL))?.[5])
 		.toBe("2026-11-13");
 });
 

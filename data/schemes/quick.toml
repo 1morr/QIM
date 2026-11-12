@@ -5,6 +5,7 @@ name = "速成"
 version = "1"
 alphabet = "abcdefghijklmnopqrstuvwxy"
 max_code_length = 2
+wildcard = "z" # 萬用鍵（plan §2.5）：代替任一碼，速成只用 a–y；macOS 倉頡也用 Z
 
 [packs] # 另外的資料包的 id，由 qim-databuild 建到 build/packs/<id>/
 lexicon = "quick-lexicon"
@@ -44,3 +45,4 @@ v = "女"
 w = "田"
 x = "難"
 y = "卜"
+z = "＊" # 萬用鍵在組字裡的記號

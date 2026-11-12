@@ -15,7 +15,7 @@ export type CandidateKind =
 	| "word"
 	| "english"
 	| "emoji"
-	| "remembered"
+	| "englishUserWord"
 	| "association";
 
 /** 候選的一段（綁定的 `InspectedSegment` 讀成一般物件）。 */
@@ -25,6 +25,8 @@ export interface InspectedSegment {
 	source: SegmentSource;
 	learned: boolean;
 	personalBigram: boolean;
+	/** 碼有萬用鍵時實際對到的碼。 */
+	matchedCode?: string;
 }
 
 /** 一個候選（綁定的 `InspectedCandidate` 讀成一般物件）。 */
@@ -88,6 +90,7 @@ function read(inspection: WasmInspection): Inspection {
 						source: s.source as SegmentSource,
 						learned: s.learned,
 						personalBigram: s.personalBigram,
+						matchedCode: s.matchedCode,
 					})),
 				),
 				score: c.score,
@@ -141,7 +144,7 @@ const SOURCE_LABELS: Record<SegmentSource, string> = {
 const KIND_LABELS: Record<Exclude<CandidateKind, "word">, string> = {
 	english: "英文",
 	emoji: "emoji",
-	remembered: "記住的字串",
+	englishUserWord: "英文使用者詞",
 	association: "聯想",
 };
 
@@ -181,6 +184,13 @@ function table(
 	return { table: node, body };
 }
 
+/** 候選表「切段」欄的一段：`碼→字詞`；有萬用鍵時碼後面括號是實際對到的碼（`hz（ho）→的`）。 */
+export function segmentText(segment: InspectedSegment): string {
+	const matched =
+		segment.matchedCode === undefined ? "" : `（${segment.matchedCode}）`;
+	return `${segment.code}${matched}→${segment.text}`;
+}
+
 /**
  * 一個候選的來源標記：機器讀的代號（e2e 比對）與中文標籤。字詞是各段的來源（碼表、詞庫、使用者詞），
  * 多段的另標連打，學過的段標學習計數、接得上前一個字詞的標個人 bigram；其餘是候選的種類。
@@ -210,6 +220,9 @@ export function candidateSources(candidate: InspectedCandidate): {
 		}
 		if (segments.some((s) => s.personalBigram)) {
 			add("personalBigram", "個人 bigram");
+		}
+		if (segments.some((s) => s.matchedCode !== undefined)) {
+			add("wildcard", "萬用鍵");
 		}
 	} else {
 		add(candidate.kind, KIND_LABELS[candidate.kind]);
@@ -345,10 +358,7 @@ export function mountDebugPanel(
 				make("td", labels.join("、")),
 				make("td", score(candidate.score)),
 				make("td", score(candidate.learning)),
-				make(
-					"td",
-					candidate.segments.map((s) => `${s.code}→${s.text}`).join(" "),
-				),
+				make("td", candidate.segments.map(segmentText).join(" ")),
 			);
 			body.append(row);
 		});
