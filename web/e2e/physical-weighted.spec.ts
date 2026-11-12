@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // 實體鍵盤的鄰鍵先驗（M4 票 07）：中文模式的字母鍵送 `KeyboardEvent.code`，`qim-layout` 照實體鍵位
-// 轉成各字母的機率（`Key::Weighted`）；容錯進核心之前核心只用按下的字母，打字行為不變。debug 面板讀得到
+// 轉成各字母的機率（`Key::Weighted`）；核心只用按下的字母，打字行為不變。debug 面板讀得到
 // 這組機率；換 Dvorak 等配列（`key` 不同、`code` 相同）時照實體鍵位。
 
 /** 頁面拋出的錯誤；每個測試結尾要是空的。 */

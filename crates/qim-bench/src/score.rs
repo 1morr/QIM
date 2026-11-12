@@ -17,7 +17,8 @@ use crate::items::{Item, Unit};
 use crate::keys::{physical_key, top_char};
 
 /// 「原樣讀法」的選項：容錯關（M4 票 08）。「原樣正確卻被改錯」比的是同一題用它與用預設選項打的首選。
-/// 容錯的開關由票 10 加進 `Options`，在那之前核心沒有容錯，原樣讀法就是預設選項，改錯一定是 0。
+/// 速成不做容錯（M4 票 09，`docs/research/tolerance.md`），原樣讀法就是預設選項，改錯一直是 0；之後有會改寫讀法
+/// 的功能時在這裡關掉它。
 fn literal_options() -> Options {
     Options::default()
 }

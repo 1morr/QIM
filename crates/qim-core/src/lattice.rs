@@ -7,16 +7,13 @@ use crate::engine::{Spanned, WordHistory};
 use crate::english_user::ENGLISH_COMPLETION_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Following, SchemeUser};
-use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel, Weights};
+use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
 #[derive(Debug, Clone)]
 pub(crate) struct Lattice {
     input: String,
-    /// `input` 每一碼的按鍵機率（[`crate::Key::Weighted`]）；字母鍵、分隔記號與從字串重建的是 `None`。
-    /// 容錯的鄰鍵替換用（[`crate::Engine::with_tolerance`]）。
-    weights: Vec<Option<Weights>>,
     /// 組字前面是什麼：開頭的字接它。
     before: Preceding,
     /// `before.segment()`，詞級 trigram 用（[`Lattice::history`]）。
@@ -130,7 +127,6 @@ impl Default for Lattice {
     fn default() -> Self {
         Self {
             input: String::new(),
-            weights: Vec::new(),
             before: Preceding::default(),
             before_segment: None,
             columns: vec![vec![Node {
@@ -154,31 +150,15 @@ impl Lattice {
 
     /// 從頭建一串接在 `before` 後面的輸入碼的 lattice，和逐鍵 [`Lattice::push`] 相同。
     pub fn from_input(engine: &Engine, user: &UserModel, before: Preceding, input: &str) -> Self {
-        Self::from_keys(engine, user, before, input, &[])
-    }
-
-    /// 同 [`Lattice::from_input`]，`weights` 是 `input` 每一碼的按鍵機率（可以比 `input` 短，不足的是 `None`）。
-    pub fn from_keys(
-        engine: &Engine,
-        user: &UserModel,
-        before: Preceding,
-        input: &str,
-        weights: &[Option<Weights>],
-    ) -> Self {
         let mut lattice = Self::starting_after(before);
-        for (i, c) in input.chars().enumerate() {
-            lattice.push_weighted(engine, user, c, weights.get(i).cloned().flatten());
+        for c in input.chars() {
+            lattice.push(engine, user, c);
         }
         lattice
     }
 
     pub fn input(&self) -> &str {
         &self.input
-    }
-
-    /// `input` 每一碼的按鍵機率，同 `input` 一樣長。
-    pub fn weights(&self) -> &[Option<Weights>] {
-        &self.weights
     }
 
     /// 組字前面是什麼（開頭的字接它）。
@@ -190,25 +170,13 @@ impl Lattice {
     /// 沒有邊結束或開始在它上面，路徑在它這裡斷開時它算在前一段的碼尾。邊只有詞能跨過它，
     /// 而且它要落在詞內兩字的碼之間（`Engine::exact`）。
     pub fn push(&mut self, engine: &Engine, user: &UserModel, c: char) {
-        self.push_weighted(engine, user, c, None);
-    }
-
-    /// 同 [`Lattice::push`]，帶這一碼的按鍵機率（容錯的鄰鍵替換用）。
-    pub fn push_weighted(
-        &mut self,
-        engine: &Engine,
-        user: &UserModel,
-        c: char,
-        weights: Option<Weights>,
-    ) {
         self.input.push(c);
-        self.weights.push(weights);
         if c == SEPARATOR {
             let previous = self.columns.last().expect("至少有空路徑的一欄").clone();
             self.columns.push(previous);
             return;
         }
-        let edges = engine.edges_ending(user, &self.input, &self.weights);
+        let edges = engine.edges_ending(user, &self.input);
         // 起點欄 → 那一欄每條部分路徑的最後一段後面的個人 bigram；每條部分路徑只查一次。
         // 沒學過個人 bigram 時不查（每鍵都走這裡）。
         let has_bigrams = user.has_bigrams();
@@ -301,7 +269,6 @@ impl Lattice {
     /// 刪掉最後一個字母和它的一欄。
     pub fn pop(&mut self) {
         if self.input.pop().is_some() {
-            self.weights.pop();
             self.columns.pop();
         }
     }
@@ -361,9 +328,6 @@ impl Lattice {
     }
 }
 
-/// 候選列裡蓋滿整串的修正詞最多幾個（[`candidates`]，M4 票 09）。
-const CORRECTED_WHOLE_LIMIT: usize = 1;
-
 /// 候選列（plan §2.3）：
 /// 1. 蓋滿整串輸入碼的：碼表的字、詞庫的詞，與分數最高的幾條多段路徑（方案的
 ///    `ranking.sentences`），依分數排；簡體字排後（[`Listing::simplified_last`]）時簡體字排在它們之後；
@@ -392,18 +356,9 @@ pub(crate) fn candidates(
     // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間的分隔記號由 `Engine::span` 處理。
     let lookup_code = input.trim_end_matches(SEPARATOR);
     let before = &lattice.before;
-    // 容錯只進蓋滿整串的字詞與多段路徑，而且蓋滿整串的修正詞最多一個（分數最高的）：蓋滿整串的候選
-    // 都排在只蓋住開頭一段的前面、只蓋住開頭一段的又依長短排不看分數，修正詞多了會把使用者要選的字
-    // 擠到下一頁（M4 票 09，dev 上修正次數多一成以上）。
     let mut full: Vec<(f64, bool, CandidateSpan)> = engine
         .span(user, before, lookup_code)
         .into_iter()
-        .chain(
-            engine
-                .corrected_span(user, before, lookup_code, lattice.weights())
-                .into_iter()
-                .take(CORRECTED_WHOLE_LIMIT),
-        )
         .map(|s| {
             let late = listing.demotes(&s);
             (s.score, late, CandidateSpan::single(s.text, input))

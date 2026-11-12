@@ -43,9 +43,9 @@ QIM（暫名）。
 依據 `docs/research/ime-primer.md` §5。
 
 - **MVP**：速成連打；候選依使用頻率學習；手動新增詞與觸發詞；上屏學詞（含分段選字後自動造詞）；使用者詞補上詞庫沒有的詞；粵語口語詞（使用者詞、一份授權乾淨的小詞表與 HKCanCor 語料的詞；另有可選的粵典詞庫資料包，見下面「完整粵語詞庫」）；簡繁切換；中文狀態下的英文候選；組字中修改分段；畫布模型的佈局（預設 Gboard 佈局、多頁、長按、直向與橫向、淺色與深色）；按鍵放大預覽；佈局編輯器；手機的候選展開面板；字根提示；學習資料可看可刪；無痕模式。
-- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；英文使用者詞（打過的英文串都學，含 email、數字，出在中文組字，M4 票 14）；輸入框上下文配合 n-gram 排序（同步層用詞級 trigram，M3 模型階梯採用）；停鍵後的小型神經模型重排（Gboard 級 1.4M，M3 模型階梯採用）；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題（鍵盤與桌面候選窗共用一份主題格式）；個人 bigram；空間模型；英文模式的預測與自動修正；依欄位類型切換；智慧標點；單手佈局；震動與按鍵音；觸控平台的實體鍵盤；Android 懸浮鍵盤；無障礙；萬用鍵（`z`：速成只用 a–y；macOS 倉頡也用 Z，`docs/research/closed-source-imes.md` §1.2；M4 票 11 做了，行為見 §4.3）；容錯（§4.8）；譯詞（打中文出英文，可選資料包，詞表來源與授權開工時查）；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（M3 票 18 查過：rime-cantonese 授權鏈不明不用，先補 HKCanCor 的詞；M3 票 24 照粵典較嚴的非商業條款，把它的詞頭另建成可選的詞庫資料包 `quick-lexicon-words-hk`，預設詞庫不含、可整份拿掉，§12.1；授權允許商用的完整粵語詞庫仍沒有）。
+- **之後**：聯想；雲端聯想與補全；資料包線上更新；可選的崩潰回報；英文使用者詞（打過的英文串都學，含 email、數字，出在中文組字，M4 票 14）；輸入框上下文配合 n-gram 排序（同步層用詞級 trigram，M3 模型階梯採用）；停鍵後的小型神經模型重排（Gboard 級 1.4M，M3 模型階梯採用）；英文滑動輸入；剪貼簿歷史與同步；曲線自由手繪的按鍵、按鍵貼圖、外觀主題（鍵盤與桌面候選窗共用一份主題格式）；個人 bigram；空間模型；英文模式的預測與自動修正；依欄位類型切換；智慧標點；單手佈局；震動與按鍵音；觸控平台的實體鍵盤；Android 懸浮鍵盤；無障礙；萬用鍵（`z`：速成只用 a–y；macOS 倉頡也用 Z，`docs/research/closed-source-imes.md` §1.2；M4 票 11 做了，行為見 §4.3）；譯詞（打中文出英文，可選資料包，詞表來源與授權開工時查）；撤銷學習；空白鍵滑動移游標；常用語；emoji 候選；詞庫匯入；完整粵語詞庫（M3 票 18 查過：rime-cantonese 授權鏈不明不用，先補 HKCanCor 的詞；M3 票 24 照粵典較嚴的非商業條款，把它的詞頭另建成可選的詞庫資料包 `quick-lexicon-words-hk`，預設詞庫不含、可整份拿掉，§12.1；授權允許商用的完整粵語詞庫仍沒有）。
 - **待評估**：中文滑動輸入；語音輸入；多端檔案傳輸；句中英文混輸（§4.7）；腳本外掛（網頁版驗收後再定，理由見 `docs/research/cyime.md` §6）。
-- **不做**（M3 模型階梯量過、沒過門檻，理由與重評條件見 `docs/research/model-ladder.md`）：LLM 候選優化（雲端 LLM 與 Foundation Models 的重排）；青簡級 23M 神經模型；不設預算、可選下載的詞級 trigram。
+- **不做**（M3 模型階梯量過、沒過門檻，理由與重評條件見 `docs/research/model-ladder.md`）：LLM 候選優化（雲端 LLM 與 Foundation Models 的重排）；青簡級 23M 神經模型；不設預算、可選下載的詞級 trigram。速成的容錯（§4.8，M4 票 09 量過、沒過門檻，重評條件見 `docs/research/tolerance.md`）。
 
 ## 2. 使用者與情境【決定】
 
@@ -168,8 +168,9 @@ QIM（暫名）。
 
 依據 `docs/research/ranking-techniques.md` §5 與青簡（§12.4）。
 
+- **速成不做容錯**（M4 票 09 量過，沒過〈容錯採用門檻〉）：照下面的設計，四種修正各自都讓打錯碼的句子多讀回一些，但合起來修正次數只少 4–6%（門檻要少 10%）、原樣正確卻被改錯 1.8–2.6%（上限 1%），沒打錯的集合也退步；單字不修讓口語打錯的句子最多只救得回約兩成。數字與重評條件見 `docs/research/tolerance.md`（§12.4）。下面幾條留作重評時的設計。
 - 預設相信使用者：原樣讀得通就照原樣排，修正過的讀法帶懲罰，通常只當備選。
-- 容錯可在設定關閉，預設開（§7）。
+- 容錯可在設定關閉，預設開（§7；速成不做容錯，這個開關留給英文模式的容錯，M4 票 21、25）。
 - 速成每字只有兩碼，幾乎每個兩字母組合都是合法碼，打錯或漏碼多半變成另一個合法字（漏打 `anr` 的 `n` 就是「問」的 `ar`）。所以單字不容錯，只在詞與句層靠詞庫和上下文判斷「原樣讀不通、改一處就通」。
 - 按鍵位置：觸控用點擊位置算各鍵的機率（空間模型）；實體鍵盤用實體鍵盤的幾何算鄰鍵（含上下排與斜角），按實體鍵位、不按字母，換配列照樣適用。中文模式整個當美式鍵盤：字母與標點都照實體鍵位（`KeyboardEvent.code`），換 Dvorak、AZERTY 等配列時中文模式的手感跟美式一樣；英文直通照配列（使用者 2026-11-12 決定，M4 票 07）。臨時英文也是英文，同樣照配列（使用者 2026-11-12 確認）。
 - 機制所有方案共用，允許哪些修正（鄰鍵替換、漏碼、多碼、兩碼對調）、懲罰與啟動條件由方案各自設定並用自己的基準調：倉頡長碼稀疏，單字層也可容錯；拼音、粵拼另有模糊音與簡拼。
@@ -216,7 +217,7 @@ QIM（暫名）。
 【決定】
 
 - MVP 不同步；設定在主 App（桌面為設定視窗）修改，存在本機。
-- 會改寫使用者打出的字或改變候選位置的行為都有開關：組字中單按 Shift 先上屏或留碼接英文（預設照 Rime：左留碼、右先上屏，§4.3）、英文自動修正（預設關）、英文句首自動大寫（預設關）、中文狀態的英文候選（預設開）、繁體模式的簡體字排在繁體字之後（預設開，同 macOS 速成，§4.1；使用者 2026-11-11 決定）、容錯（預設開）、聯想（預設開）、停鍵重排（預設開，小型神經模型把一條候選排到第 2 位，M3 票 11；使用者 2026-11-11 確認）、雲端候選（預設開，填了 API key 才連線，§8；M3 模型階梯沒過門檻、暫不做，§1.5）、emoji 候選（預設開，同 rime-emoji；整串的字詞後面接它的 emoji，每列最多 3 個，plan §2.4，M3 票 16）、英文使用者詞（預設開，打過的英文串在中文組字排第 2 位起，plan §2.4 規則 4、5，M4 票 14）；另有智慧標點（§4.7，其中數字後半形 M1 已做、預設開）、學習（§4.5，預設開；關掉時不寫學習資料，已學的照用、前文照用，plan §2.4，M3 票 12）、無痕（§4.5）。
+- 會改寫使用者打出的字或改變候選位置的行為都有開關：組字中單按 Shift 先上屏或留碼接英文（預設照 Rime：左留碼、右先上屏，§4.3）、英文自動修正（預設關）、英文句首自動大寫（預設關）、中文狀態的英文候選（預設開）、繁體模式的簡體字排在繁體字之後（預設開，同 macOS 速成，§4.1；使用者 2026-11-11 決定）、容錯（預設開；速成不做容錯，§4.8，留給英文模式的容錯，M4 票 21、25）、聯想（預設開）、停鍵重排（預設開，小型神經模型把一條候選排到第 2 位，M3 票 11；使用者 2026-11-11 確認）、雲端候選（預設開，填了 API key 才連線，§8；M3 模型階梯沒過門檻、暫不做，§1.5）、emoji 候選（預設開，同 rime-emoji；整串的字詞後面接它的 emoji，每列最多 3 個，plan §2.4，M3 票 16）、英文使用者詞（預設開，打過的英文串在中文組字排第 2 位起，plan §2.4 規則 4、5，M4 票 14）；另有智慧標點（§4.7，其中數字後半形 M1 已做、預設開）、學習（§4.5，預設開；關掉時不寫學習資料，已學的照用、前文照用，plan §2.4，M3 票 12）、無痕（§4.5）。
 - 觸控鍵盤的外觀設定：數字列（預設關，同 Gboard；§4.4）。
 - 使用者詞庫可匯出、匯入成檔案，用來換機或備份。
 - 跨裝置同步是「之後」的功能：合併規則與詞庫格式先在核心定稿；實際傳輸方式在第一個平台殼開工時選（iCloud、自架、同步資料夾），要能跨 Apple 與 Android。
@@ -365,6 +366,7 @@ QIM（暫名）。
 - fcitx 的表格輸入法：萬用鍵是每個碼表設定檔的一項（`UseMatchingKey` 開關、`MatchingKey` 指定哪個鍵），不是全域設定；QIM 照它放在方案檔（`wildcard`）。[fcitx wiki：How to make your own table-based input method](https://fcitx-im.org/wiki/How_to_make_your_own_table-based_input_method)（2026-11-12 查）。
 - 刪指定候選的按鍵（M4 票 16，2026-11-12 查）：沒有跨產品的官方慣例。fcitx5 的拼音與表格（含速成、倉頡）是唯一能指定位置的：`Ctrl+7`（設定項 `ForgetWord`）進入「選要刪的詞」模式，再按數字鍵或點選，從使用者詞典移除並刪掉歷史（fcitx5-chinese-addons `e8d930f`：`im/pinyin/pinyin.h`、`pinyin.cpp` 的 `handleForgetCandidate`，`im/table/engine.h`、`state.cpp` 的 `handleForgetWord`）；`Ctrl+7` 在瀏覽器是切到第 7 個分頁，網頁攔不住。微軟拼音、注音、速成、倉頡的官方快捷鍵頁沒有刪候選的鍵（support.microsoft.com 的〈Microsoft Simplified Chinese IME〉〈Microsoft Traditional Chinese IME〉兩頁，簡中頁只有 Esc 與數字選字）；macOS 內建中文的 `Shift-Delete` 是復原文字替換，不是刪候選（Apple 中文輸入法快捷鍵頁）；搜狗只查到二手線索（滑鼠點候選的選單有「移除此詞」）。Rime 見 §12.2。
 - 速成萬用鍵的語意（自測，`docs/research/wildcard.md`，2026-11-12）：每個 `z` 代一碼、任一位置，單獨一個代一碼字；比「單獨的 `z` 不算字」在一碼字的題多對約 4–6 點、沒有打不出，首碼、尾碼的題相同。整句忘一碼仍有原樣約七成的首選，單字首選 1–2%。
+- 速成的容錯（自測，`docs/research/tolerance.md`，2026-11-13，M4 票 09）：照 §4.8 只修詞的邊、每條邊一處，懲罰在 dev 挑、test 跑一次。口語打錯的句子，四種修正（鄰鍵替換、多碼、漏碼、兩碼對調）全開時首選從 0.2% 到 9.7%（觸控 0% → 8.8%），但修正次數只少 3.9%／5.8%，原樣正確卻被改錯 1.8%／2.6%，沒打錯的集合答錯多 0.6–1.4%、修正多 2–6%；每鍵 p95 慢 16–18 倍、選開頭一段 32–48 ms。錯碼全改回來也只有約兩成落在「詞的邊、每段一處」。沒過門檻，不做。
 - macOS 倉頡 / 速成可輸入英文字後從候選窗選，並有「Adjust word frequency」設定。[Apple 倉頡](https://support.apple.com/guide/chinese-input-method/cangjie-traditional-cimcjt11820/mac)、[Apple 設定](https://support.apple.com/guide/chinese-input-method/change-chinese-and-cantonese-settings-cim21aa5fa50/mac)。
 - DeepSeek API 相容 OpenAI 與 Anthropic 的介面格式，模型為 `deepseek-flash` 與 `deepseek-v4-pro`；思考模式預設開啟，可用 `thinking` 參數關閉；Responses API 為無狀態、不在伺服器保存對話。[DeepSeek API Docs](https://api-docs.deepseek.com)、[Responses API](https://api-docs.deepseek.com/api/create-response)，2026-10-30 查。
 - DeepSeek 2026-11-11 的模型與價格：`deepseek-flash` 是 DeepSeek-V4.1-Flash-1017，`deepseek-v4-pro` 是 DeepSeek-V4-Pro-0813（2026-09-14 後繼續提供、計費不變）；舊名 `deepseek-v4-flash` 暫時轉給 V4.1-Flash。每百萬 token 高峰價（北京時間平日 9–12、14–18 時）flash 輸入命中快取 0.04 元、未命中 2 元、輸出 8 元，v4-pro 0.30、9、27 元，其他時段半價。OpenAI 相容的 `POST https://api.deepseek.com/chat/completions` 以 `"thinking": {"type": "disabled"}` 關思考；只限並行數（flash 2500、v4-pro 500），沒有每分鐘上限；快取自動、盡力而為，`usage` 分列 `prompt_cache_hit_tokens`、`prompt_cache_miss_tokens`。[Models & Pricing](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)、[Change Log](https://api-docs.deepseek.com/updates)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode)、[Rate Limit](https://api-docs.deepseek.com/quick_start/rate_limit)、[KV Cache](https://api-docs.deepseek.com/guides/kv_cache)，2026-11-11 查。

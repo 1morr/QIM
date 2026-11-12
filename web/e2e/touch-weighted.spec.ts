@@ -1,7 +1,7 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-// 觸控的空間模型（M4 票 06）：字母鍵依點擊位置送各字母的機率（`Key::Weighted`），容錯進核心之前
-// 核心只用機率最高的字母，打字行為不變；debug 面板讀得到這組機率。
+// 觸控的空間模型（M4 票 06）：字母鍵依點擊位置送各字母的機率（`Key::Weighted`），核心只用機率
+// 最高的字母，打字行為不變；debug 面板讀得到這組機率。
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 test.use(pixel);
 

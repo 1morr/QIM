@@ -1,10 +1,10 @@
 # tolerance：容錯的四種修正值不值得進核心（M4 票 09）
 
 - 日期：2026-11-13；機器：Apple M6（Mac18,5，32 GB）、macOS 27.0.1；rustc 1.99.1。
-- commit：M4 票 09 的分支（開工 `b3a1a7b`）；之後重跑用 `git log -- scripts/experiments/tolerance` 對。
+- commit：M4 票 09 的分支（開工 `b3a1a7b`），量的是 `117252a` 的機制；結論不採用，下一個 commit 把機制從核心刪掉，所以要在 `117252a` 上重跑（見〈怎麼重跑〉）。
 - 問題：形碼的容錯沒有任何先例（`docs/research/spatial-correction-swipe.md` §4）。漏碼、多碼、兩碼對調、鄰鍵替換各自與合起來，能不能讓打錯碼的題讀回來、又不把原樣讀得通的改錯，每鍵延遲放大多少。門檻在 `.scratch/m4/spec.md`〈容錯採用門檻〉〈每鍵延遲上限〉，結論在 `docs/research/tolerance.md`。
 
-## 機制（核心裡預設關）
+## 機制（`117252a` 的核心裡預設關，之後刪掉）
 
 `qim_core::Engine::with_tolerance(Tolerance)`（`crates/qim-core/src/tolerance.rs`）：lattice 每個起點的一段輸入碼，除了原樣查到的字詞，另找「改一處就是某個詞庫詞或使用者詞的碼」的詞（brief §4.8）：
 
@@ -17,7 +17,7 @@
   - 第二版蓋滿整串的修正詞全列：四種全開時，dev 沒打錯的集合修正次數多 10–16%。限成一個以後是 +3–5%；一個都不列只再少不到 1 點，首選卻變差（含打錯碼 10.6% → 9.4%），所以留一個。
   - 兩次改動都不動首選（分數最高的修正詞照樣留著），dev 挑懲罰看的首選與改錯不變，所以沒有重掃懲罰。
 
-核心預設全關、殼不接（協調者決定，M4 progress〈偏差與決定〉），只有這個實驗與基準打開。
+核心預設全關、殼不接（協調者決定，M4 progress〈偏差與決定〉），只有這個實驗打開；四種都沒過門檻，照協調者的決定在下一個 commit 刪掉。
 
 ## 量法
 
@@ -29,7 +29,8 @@
 - 「原樣正確卻被改錯」：票 08 的量法，沒打錯、容錯關時首選正確的題裡，容錯開時首選不正確的比例。這裡容錯是 `Engine` 的設定，所以「容錯關」用另一個沒開容錯的 `Engine` 打同一題（`SetResult::typo_stats` 的 `literal_correct` 在票 10 接上 `Options` 前一直等於容錯開的結果，不能直接用）。
 - 翻好／翻壞：打錯的題的首選，McNemar 精確檢定（雙尾）。
 - 沒打錯的集合：維基、口語、有前文（給與不給前文）各集合的答錯數與修正次數，加固定題。
-- 每鍵延遲：基準的輸入（固定題與四個語料的 test 題），照殼送實體鍵的按鍵機率（`qim_bench::physical_key`；`cargo xtask bench` 的計時在票 10 前送單一字母，量不到鄰鍵替換）；容錯關與開逐題交替，空白與學過（學完各語料與有前文的題的 `UserModel`）各一次。另把每個輸入的第一碼換成萬用鍵 `z` 再量一組（票 11 留下：萬用鍵的輸入每鍵約平常 10 倍）。
+- 每鍵延遲：基準的輸入（固定題與四個語料的 test 題），照殼送實體鍵的按鍵機率（`qim_bench::physical_key`；`cargo xtask bench` 的計時在票 10 前送單一字母，量不到鄰鍵替換）；容錯關與開逐題交替，空白與學過（學完各語料與有前文的題的 `UserModel`）各一次。另把每個輸入的第一碼換成萬用鍵 `z` 再量一組（票 11 留下：萬用鍵的輸入每鍵約平常 10 倍）。只量實體鍵：觸控的按鍵機率分布比較寬，鄰鍵替換展開得更多，只會更慢，實體鍵已經超過上限就沒再量；容錯關時延遲和按鍵機率無關。
+- 個人集：這個工作區沒有 `bench/personal/`（只在使用者本機），沒跑；門檻對它只報不擋。
 
 ### dev 怎麼挑（看結果前定）
 
@@ -47,12 +48,18 @@
 
 ## 怎麼重跑
 
+核心已經沒有 `Tolerance`，這個 crate 只在 `117252a` 上編得過：
+
 ```sh
-cargo xtask data                                   # repo 根目錄；格式 v8 的資料包與 dev、test 題
+git worktree add ../qim-tolerance 117252a          # repo 根目錄；另開一個 checkout，不動目前的工作區
+cd ../qim-tolerance
+cargo xtask data                                   # 格式 v8 的資料包與 dev、test 題
 cd scripts/experiments/tolerance
-cargo run --release -- dev                         # dev 掃懲罰，最後一行印出 test 的參數
-cargo run --release -- test --substitution 4 --order substitution   # 換成 dev 印的參數
-cargo run --release -- latency --substitution 4    # 同 test 的懲罰；負載低時跑
+cargo run --release -- dev                         # dev 掃懲罰，最後一行印出 test 的參數；約 17 分鐘（12 核、高負載）
+cargo run --release -- combo --omission 6 --insertion 10 --transposition 7 --substitution 5   # 只打一種設定
+cargo run --release -- ceiling                     # 救得到的上限
+cargo run --release -- test --omission 6 --insertion 10 --transposition 7 --substitution 5 --order substitution,insertion,omission,transposition   # 約 5 分鐘
+cargo run --release -- latency --omission 6 --insertion 10 --transposition 7 --substitution 5   # 負載低時跑，約 26 分鐘
 ```
 
 ## 結果
@@ -220,6 +227,27 @@ test 用：`cargo run --release -- test --omission 6 --insertion 10 --transposit
 
 ### 每鍵延遲（`latency`）
 
+兩次：第一次在 load 11 → 3 時量；只有 `z` 的空白那列只比上限多一點，照〈每鍵延遲上限〉在負載低時重跑（在 `117252a` 的另一個 checkout 裡跑、`--root` 指回這個工作區的資料）。
+
+#### 重跑（load 3–6）
+
+開始時：1:30  up 14 days, 15:21, 9 users, load averages: 5.17 6.14 8.14
+
+| 學習資料 | 輸入 | 容錯 | 全部 p95 | 第 20 碼起 p95 | 選開頭一段 p95 |
+| --- | --- | --- | ---: | ---: | ---: |
+| 空白 | 基準的輸入 | 關 | 75 µs | 78 µs | 1.28 ms |
+| 空白 | 基準的輸入 | 開 | 1327 µs | 1546 µs | 31.57 ms |
+| 空白 | 首碼換成 z | 關 | 1067 µs | 1101 µs | 1.39 ms |
+| 空白 | 首碼換成 z | 開 | 2198 µs | 2583 µs | 32.12 ms |
+| 學過 | 基準的輸入 | 關 | 185 µs | 237 µs | 2.00 ms |
+| 學過 | 基準的輸入 | 開 | 2922 µs | 6046 µs | 43.53 ms |
+| 學過 | 首碼換成 z | 關 | 1501 µs | 1550 µs | 2.31 ms |
+| 學過 | 首碼換成 z | 開 | 4031 µs | 5544 µs | 47.77 ms |
+
+結束時：1:53  up 14 days, 15:44, 10 users, load averages: 4.74 5.85 6.50
+
+#### 第一次
+
 開始時：0:51  up 14 days, 14:42, 11 users, load averages: 10.91 23.21 26.09
 
 | 學習資料 | 輸入 | 容錯 | 全部 p95 | 第 20 碼起 p95 | 選開頭一段 p95 |
@@ -235,4 +263,4 @@ test 用：`cargo run --release -- test --omission 6 --insertion 10 --transposit
 
 結束時：1:16  up 14 days, 15:07, 11 users, load averages: 3.42 5.62 9.80
 
-上限（〈每鍵延遲上限〉）：空白 1 / 1 / 5 ms，學過 3 / 3 / 10 ms。容錯開著的四列全部超過，負載降到 3–11 時量的，不是雜訊；容錯關、首碼換成 `z` 的空白那列全部 p95 也超過 1 ms（票 11 留下的問題，見 `docs/research/tolerance.md`〈每鍵延遲〉）。
+上限（〈每鍵延遲上限〉）：空白 1 / 1 / 5 ms，學過 3 / 3 / 10 ms。容錯開著的四列兩次都全部超過；容錯關、首碼換成 `z` 的空白那列全部 p95 兩次都超過 1 ms（票 11 留下的問題，見 `docs/research/tolerance.md`〈每鍵延遲〉）。

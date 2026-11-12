@@ -60,7 +60,7 @@ impl Weights {
         Ok(Weights(entries))
     }
 
-    /// 機率最高的字母；容錯進核心之前，核心只用它（同 `Key::Letter`）。
+    /// 機率最高的字母；核心只用它（同 `Key::Letter`）。
     pub fn top(&self) -> char {
         self.0[0].0
     }

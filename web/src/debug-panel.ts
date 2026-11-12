@@ -309,7 +309,7 @@ export function mountDebugPanel(
 		return line;
 	};
 
-	// 按鍵機率：觸控的空間模型或實體鍵盤的鄰鍵先驗算出的各字母機率；容錯進核心之前核心只用第一個。
+	// 按鍵機率：觸控的空間模型或實體鍵盤的鄰鍵先驗算出的各字母機率；核心只用第一個。
 	const weightsLine = (inspection: Inspection): HTMLElement => {
 		const line = make("p", "按鍵機率：", { "data-testid": "debug-weights" });
 		if (inspection.weights.length === 0) {

@@ -215,7 +215,7 @@ pub enum Key {
     /// 不記沒有字元的鍵）。
     Modifier,
     /// 觸控點一下字母鍵：各字母的機率，由殼經 `qim-layout` 依點擊位置與按鍵幾何算出（M4 票 06）。
-    /// 容錯進核心之前只用機率最高的字母，其餘同 `Letter`；[`Session::inspect`] 看得到這組機率。
+    /// 核心只用機率最高的字母，其餘同 `Letter`；[`Session::inspect`] 看得到這組機率。
     Weighted(Weights),
 }
 
@@ -484,7 +484,7 @@ pub struct Session {
     /// 沒變（候選沒變）才套用（[`Session::apply_rerank`]）。
     waiting_rerank: Option<(u64, Vec<usize>)>,
     /// 最近一個鍵是 [`Key::Weighted`]（觸控或實體鍵盤的字母鍵）時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
-    /// 其他鍵與 [`Session::text`] 清掉。容錯的票再決定要不要逐碼記。
+    /// 其他鍵與 [`Session::text`] 清掉。
     key_weights: Option<Weights>,
     /// 停鍵結果快取（plan §2.7，M4 票 03）：重排要求 → 模型給的名次，都是 `reranker` 排的。
     rerank_cache: RerankCache,
@@ -855,7 +855,7 @@ impl Session {
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
-        // 容錯進核心之前，按鍵機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
+        // 按鍵機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
         let key = match key {
             Key::Weighted(weights) => {
                 let top = weights.top();
@@ -1031,8 +1031,7 @@ impl Session {
                 }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
-            self.lattice
-                .push_weighted(engine, user, c, self.key_weights.clone());
+            self.lattice.push(engine, user, c);
             self.refresh_candidates(engine, user);
             return self.snapshot(engine, true, None);
         }
@@ -1450,7 +1449,7 @@ impl Session {
             top = lattice::candidates(
                 engine,
                 user,
-                &Lattice::from_keys(engine, user, before, &rest, self.weights_of_tail(&rest)),
+                &Lattice::from_input(engine, user, before, &rest),
                 self.listing(false),
             )
             .into_iter()
@@ -1637,22 +1636,10 @@ impl Session {
         self.snapshot(engine, true, None)
     }
 
-    /// 剩下的輸入碼換成 `input`，lattice 從頭建。`input` 是現在的輸入碼的結尾（選了開頭一段、整串重建）
-    /// 時，那幾碼的按鍵機率照留（容錯的鄰鍵替換用）；其他（放回選定的分段）沒有按鍵機率。
+    /// 剩下的輸入碼換成 `input`，lattice 從頭建。
     fn recompose(&mut self, engine: &Engine, user: &UserModel, input: &str) {
         let before = self.before_unselected(engine);
-        let weights = self.weights_of_tail(input).to_vec();
-        self.lattice = Lattice::from_keys(engine, user, before, input, &weights);
-    }
-
-    /// 剩下的輸入碼 `tail` 是現在的輸入碼的結尾時，它那幾碼的按鍵機率；否則是空的。
-    fn weights_of_tail(&self, tail: &str) -> &[Option<Weights>] {
-        let input = self.lattice.input();
-        if input.ends_with(tail) {
-            &self.lattice.weights()[input.len() - tail.len()..]
-        } else {
-            &[]
-        }
+        self.lattice = Lattice::from_input(engine, user, before, input);
     }
 
     /// 沒選定的輸入碼前面是什麼（plan §2.3）：最後選定的分段（它的最後一字與它）；沒有選定的

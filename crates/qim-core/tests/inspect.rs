@@ -439,7 +439,7 @@ fn the_input_code_is_shown_cut_into_segments() {
     );
 }
 
-/// 觸控的 `Key::Weighted`（M4 票 06）：容錯進核心之前打字行為同機率最高的字母，面板看得到這組機率，
+/// 觸控的 `Key::Weighted`（M4 票 06）：打字行為同機率最高的字母，面板看得到這組機率，
 /// 下一個不是觸控字母的鍵清掉。
 #[test]
 fn a_weighted_tap_types_its_top_letter_and_shows_its_probabilities() {

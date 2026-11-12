@@ -24,7 +24,7 @@ pub struct PhysicalModel {
 }
 
 impl Default for PhysicalModel {
-    /// 初值都**沒有來源**，容錯的票在基準的 dev 切分上調：
+    /// 初值都**沒有來源**，還沒在基準上調過：
     /// - `hit_probability` 0.9：按下的鍵是首選，打錯的先驗佔一成。
     /// - `sigma_keys` 0.5：F 的鄰鍵 D、G（1 鍵距）各約 0.023，R（1.03）0.020，C、V（1.12）0.014，T（1.25）0.007。
     /// - `radius_keys` 1.5：中間的鍵有 6 個鄰鍵（同排左右，上下排各二）都在 1.25 內，下一圈從 1.6 起；
