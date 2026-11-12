@@ -43,16 +43,13 @@
 | 2026-11-12 | M4 15 | 退格撤銷：撤銷紀錄 `Undo` 以動作為單位，中英共用；照 librime 的 3 秒由殼計時（`expire_undo`）；Session 分開、無痕不撤銷；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m4/issues/16-forget-candidate.md` |
 | 2026-11-12 | M4 03 | 停鍵結果快取放核心：鍵是重排要求、上限 32；殼給 `set_reranker_id`，漏給只是沒快取；退格回算過的碼不等停鍵；見票 03 | 新 session 下 `/implement .scratch/m4/issues/16-forget-candidate.md` |
 | 2026-11-12 | M4 16 | 撤銷學習：核心 `Session::forget`、網頁組字中 Shift+Delete／Ctrl+Delete 清目前頁第一個；個人 bigram 只清現在前文那組；第 2 位的自動造詞桌面清不到，留給 M5；見票 16 | 新 session 下 `/implement .scratch/m4/issues/17-sync-merge.md` |
-
-## 偏差與決定
-
-- 2026-11-12 M4 票 16（協調者決定）：撤銷學習刪資料從嚴，個人 bigram 只清現在前文那組；桌面按鍵照 librime （Ctrl+Delete，另收 Shift+Delete）清目前頁第一個；改 plan §2.1、§2.4、§3.1、§7.9，brief §4.3、§4.5、§12.2、§12.4。
 | 2026-11-12 | M4 08 | 口語的「含打錯碼」「觸控模擬」集合（test、dev，決定性）、改錯比例（票 10 前是 0）、不容錯基線；〈容錯採用門檻〉使用者確認；見票 08 | 新 session 下 `/implement .scratch/m4/issues/09-tolerance-experiment.md` |
 
 ## 偏差與決定
 
 - 2026-11-12 M4 票 08（使用者確認）：〈容錯採用門檻〉照提案寫進 spec：打錯的題首選 ≥ 10%／觸控 ≥ 6%、修正少 10%，沒打錯的不退步，改錯 ≤ 1.0%。
 - 2026-11-12 M4 票 08：含打錯碼的替換 65% 鄰鍵、35% 非鄰鍵（票寫鄰鍵等機率，照 Grudin 1983）；基準照殼送實體鍵的按鍵機率，`qim-bench` 加依賴 `qim-layout`；改 plan §1.3、§5.2。
+- 2026-11-12 M4 票 16（協調者決定）：撤銷學習刪資料從嚴，個人 bigram 只清現在前文那組；桌面按鍵照 librime （Ctrl+Delete，另收 Shift+Delete）清目前頁第一個；改 plan §2.1、§2.4、§3.1、§7.9，brief §4.3、§4.5、§12.2、§12.4。
 - 2026-11-12 M4 票 03（協調者要求）：快取放核心，殼經 `set_reranker_id` 給重排識別、漏給只是沒快取；`rerank_request` 改 `&mut`（記下給出的要求）；改 plan §0、§2.1、§2.7、§3.1。
 - 2026-11-12 M4 票 15（協調者決定）：退格撤銷照 librime 保留 3 秒時限，核心不讀時間、由殼計時（`Session::expire_undo`，網頁 `undo-window.ts`）；改 plan §2.4、brief §12.2。
 - 2026-11-12 M4 票 07：名詞「觸控機率」改成按鍵機率（含實體鍵盤），新增鄰鍵先驗；`touch_weights` → `key_weights`、面板 `debug-weights`；改名詞表、plan §0、§2.1、§3.1。
