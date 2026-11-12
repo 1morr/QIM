@@ -287,7 +287,7 @@ fn latency(latency: &Latency) -> String {
          機器 {}；固定題與各語料集合的每一題從空的組字逐鍵打，不含載入資料包；\
          打完有兩段以上的題再按 ← 到第一段（不計時）、選它的首選，「選開頭一段」計那一次。\
          學習資料「空白」是空白的 UserModel，「學過」是一個 UserModel 依序學完各語料集合與「有前文」的題\
-         （給前文）之後（WebAssembly 先 importUserDict）。\
+         （給前文）之後（WebAssembly 先 loadUserDict）。\
          WebAssembly 用 {WASM_BINDINGS}（`cargo xtask bench` 以 release 編）。\n\n\
          | 學習資料 | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 | p95 上限 |\n\
          | --- | --- | --- | ---: | ---: | ---: | ---: | --- |\n",

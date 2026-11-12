@@ -651,7 +651,7 @@ fn changing_a_later_segment_before_committing_also_learns_an_auto_phrase() {
 
     assert!(
         user.export()
-            .contains("entry\tquick\t日肉\tab\t1\t1\t1\t1\t\t\tauto\t\n"),
+            .contains("entry\tquick\t日肉\tab\t0:1:1:0:\t\t\t1\t1\t1\t1\t\tauto\t\t1\t\n"),
         "{}",
         user.export()
     );
@@ -910,13 +910,15 @@ fn twelve() -> Data<'static> {
     }
 }
 
-/// 匯出檔裡學習計數與自動造詞的列（不含手動加詞與常用語）的碼。
+/// 匯出檔裡學習計數與自動造詞的列（不含手動加詞與常用語）的碼：沒有使用者詞但有計數（`version` 欄）的，
+/// 與來源是 `auto` 的。
 fn learned_codes(user: &UserModel) -> Vec<String> {
     user.export()
         .lines()
         .filter(|l| l.starts_with("entry\t"))
-        .filter(|l| matches!(l.split('\t').nth(10), Some("learned" | "auto")))
-        .map(|l| l.split('\t').nth(3).unwrap().to_string())
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .filter(|f| f[12] == "auto" || f[12].is_empty() && !f[7].is_empty())
+        .map(|f| f[3].to_string())
         .collect()
 }
 

@@ -55,14 +55,11 @@ test("選過兩次的候選，最近一次過了 365 天就不再是首選", asy
 	await choose(page, "a", second);
 	await choose(page, "a", second);
 	await expect(text).toHaveValue(second + second);
-	// kind scheme word code commits … last_used（第 9 欄）、last_commit_date（第 10 欄）
 	await expect
-		.poll(async () => (await storedEntry(page, "a", second))?.slice(4, 5))
-		.toEqual(["2"]);
-	expect((await storedEntry(page, "a", second))?.slice(8, 10)).toEqual([
-		"2026-01-01",
-		"2026-01-01",
-	]);
+		// counts（第 5 欄）「編號:用過:整串上屏:不算的:最後整串上屏的日期」、last_used（第 12 欄）。
+		.poll(async () => (await storedEntry(page, "a", second))?.[4])
+		.toBe("0:2:2:0:2026-01-01");
+	expect((await storedEntry(page, "a", second))?.[11]).toBe("2026-01-01");
 
 	// 剛好 365 天：還在一年內。
 	await page.clock.setFixedTime(new Date(2027, 0, 1, 12, 0));

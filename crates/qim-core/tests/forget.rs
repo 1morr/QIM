@@ -142,6 +142,24 @@ fn position(snapshot: &Snapshot, text: &str) -> Option<usize> {
 }
 
 /// `ab` 的字：「甲」字頻高，是首選；「乙」「丙」在後。另有 `c`「丁」給前文用。
+/// 匯出檔裡開頭是 `prefix` 的列拆成欄；沒有時是 `None`。
+fn row(export: &str, prefix: &str) -> Option<Vec<String>> {
+    let line = export.lines().find(|l| l.starts_with(prefix))?;
+    Some(line.split('\t').map(String::from).collect())
+}
+
+/// 匯出檔裡刪掉的條目（墓碑表，M4 票 17）有幾列是 `of`（`entry`、`bigram`、`english`）的：同步時把刪除傳到
+/// 別台，只存鍵的雜湊，不留原文。
+fn deleted(export: &str, of: &str) -> usize {
+    let prefix = format!("deleted\t{of}\t");
+    export.lines().filter(|l| l.starts_with(&prefix)).count()
+}
+
+/// 開頭是 `prefix` 的 `entry` 列有學到的計數（`version` 到 `last_used` 五欄）。
+fn has_counts(export: &str, prefix: &str) -> bool {
+    row(export, prefix).is_some_and(|f| !f[7].is_empty())
+}
+
 fn ab() -> Data<'static> {
     Data {
         table: vec![("ab", "甲乙丙"), ("c", "丁")],
@@ -172,13 +190,18 @@ fn a_learned_top_returns_to_its_unlearned_place_and_can_be_learned_again() {
     ime.press(Key::Escape);
     assert_eq!(ime.candidates_of("ab"), unlearned);
     let export = ime.user.export();
-    assert!(!export.contains("entry\tquick\t丙\t"), "{export}");
+    assert!(row(&export, "entry\tquick\t丙\t").is_none(), "{export}");
     assert!(
-        !export.contains("bigram\t丙\t丙\t"),
+        row(&export, "bigram\t丙\t丙\t").is_none(),
         "現在前文那一組清掉：{export}"
     );
+    assert_eq!(
+        (deleted(&export, "entry"), deleted(&export, "bigram")),
+        (1, 1),
+        "{export}"
+    );
     assert!(
-        export.contains("bigram\t丁\t丙\t"),
+        row(&export, "bigram\t丁\t丙\t").is_some_and(|f| f[4].is_empty() && !f[7].is_empty()),
         "別的前文那一組留著：{export}"
     );
 
@@ -214,7 +237,17 @@ fn a_forgotten_auto_phrase_is_gone_and_can_be_learned_again() {
     assert!(!texts(&forgotten).contains(&"乙丁".into()), "{forgotten:?}");
     ime.press(Key::Escape);
     assert!(!ime.candidates_of("ab").contains(&"乙丁".into()));
-    assert!(!ime.user.export().contains("乙丁"), "{}", ime.user.export());
+    let export = ime.user.export();
+    assert!(!export.contains("乙丁"), "{export}");
+    assert!(
+        row(&export, "bigram\t乙\t丁\t").is_none(),
+        "造詞裡的接續：{export}"
+    );
+    assert_eq!(
+        (deleted(&export, "entry"), deleted(&export, "bigram")),
+        (1, 1),
+        "{export}"
+    );
 
     ime.choose("ab", &["乙", "丁"]);
     assert_eq!(ime.candidates_of("ab")[..2], ["日月", "乙丁"]);
@@ -236,8 +269,9 @@ fn forgetting_a_sentence_keeps_what_its_segments_learned() {
     ime.type_code("ab");
     ime.forget("曰月");
     let export = ime.user.export();
-    assert!(!export.contains("entry\tquick\t曰月\t"), "{export}");
-    assert!(export.contains("entry\tquick\t曰\ta\t"), "{export}");
+    assert!(row(&export, "entry\tquick\t曰月\t").is_none(), "{export}");
+    assert_eq!(deleted(&export, "entry"), 1, "{export}");
+    assert!(has_counts(&export, "entry\tquick\t曰\ta\t"), "{export}");
 }
 
 /// 手動加的詞與常用語只清學到的計數，詞留著：打觸發詞仍是首選。
@@ -246,14 +280,14 @@ fn a_manual_word_keeps_the_word_and_loses_only_its_counts() {
     let mut ime = Ime::new(&ab());
     ime.user.add_word(&ime.engine, "乙丁", Some("yy")).unwrap();
     ime.choose("yy", &["乙丁"]);
-    assert!(ime.user.export().contains("entry\tquick\t乙丁\tyy\t1\t"));
+    assert!(has_counts(&ime.user.export(), "entry\tquick\t乙丁\tyy\t"));
 
     ime.type_code("yy");
     ime.forget("乙丁");
     ime.press(Key::Escape);
     let export = ime.user.export();
-    assert!(!export.contains("entry\tquick\t乙丁\tyy\t"), "{export}");
-    assert!(export.contains("\tmanual\tyy"), "{export}");
+    assert!(!has_counts(&export, "entry\tquick\t乙丁\tyy\t"), "{export}");
+    assert!(export.contains("\tmanual\tyy\t"), "{export}");
     assert_eq!(ime.candidates_of("yy")[0], "乙丁");
 }
 
@@ -394,5 +428,6 @@ fn forgetting_a_common_character_keeps_its_bigrams_after_other_words() {
         "戊 → 的 的加分還在"
     );
     let export = ime.user.export();
-    assert!(!export.contains("entry\tquick\t的\t"), "{export}");
+    assert!(row(&export, "entry\tquick\t的\t").is_none(), "{export}");
+    assert_eq!(deleted(&export, "entry"), 1, "{export}");
 }

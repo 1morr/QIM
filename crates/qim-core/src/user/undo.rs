@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::{Bigrams, Count, Decayed, SchemeModel, UserModel, UserWord};
+use super::{Bigrams, Count, Decayed, SchemeModel, Tally, UserModel, UserWord};
 use crate::english_user::{EnglishUserWord, EnglishUserWords};
 
 /// 寫撤銷紀錄的是哪個 [`crate::Session`]：幾個 Session 共用一份個人模型時（一個輸入框一個），只撤銷
@@ -41,25 +41,59 @@ pub(super) struct SchemeUndo {
     rows: BTreeMap<(String, String), Row>,
 }
 
-/// 一列（碼, 詞）改之前的計數與使用者詞；`None` 是原本沒有。
+/// 一列（碼, 詞）改之前的計數、使用者詞與各台的次數；`None` 是原本沒有。
 #[derive(Debug, Clone)]
 struct Row {
     count: Option<Count>,
     word: Option<UserWord>,
+    tally: Option<Tally>,
+    /// 墓碑表裡這列的（刪過又用到時，學習會把它移回來）。
+    buried: Option<Tally>,
 }
 
-/// 改到的個人 bigram：（前一個字詞, 這一段）→ 改之前的衰減值。
+/// 條目還不在、墓碑表裡有它時的那筆（[`super::sync::digest`]）：撤銷時放回墓碑表。只在表不是空的時才算雜湊。
+fn buried(
+    present: bool,
+    graveyard: &BTreeMap<String, Tally>,
+    digest: impl FnOnce() -> String,
+) -> Option<Tally> {
+    if present || graveyard.is_empty() {
+        return None;
+    }
+    graveyard.get(&digest()).cloned()
+}
+
+/// 撤銷時把墓碑表的那筆放回去：`Some` 是原本在墓碑表裡（被學習移回來了）。
+fn rebury(
+    graveyard: &mut BTreeMap<String, Tally>,
+    digest: impl FnOnce() -> String,
+    tally: Option<Tally>,
+) {
+    if let Some(tally) = tally {
+        graveyard.insert(digest(), tally);
+    }
+}
+
+/// 改到的個人 bigram：（前一個字詞, 這一段）→ 改之前的衰減值與各台的次數。
 #[derive(Debug, Clone)]
 pub(super) struct BigramsUndo {
     tick: u64,
-    pairs: BTreeMap<(String, String), Option<Decayed>>,
+    pairs: BTreeMap<(String, String), Saved<Decayed>>,
 }
 
-/// 改到的英文使用者詞：小寫的鍵 → 改之前的詞。
+/// 一個條目改之前的樣子：學到的值、各台的次數與墓碑表裡的那筆；`None` 是原本沒有。
+#[derive(Debug, Clone)]
+struct Saved<V> {
+    value: Option<V>,
+    tally: Option<Tally>,
+    buried: Option<Tally>,
+}
+
+/// 改到的英文使用者詞：小寫的鍵 → 改之前的詞與各台的次數。
 #[derive(Debug, Clone)]
 pub(super) struct EnglishUndo {
     tick: u64,
-    words: BTreeMap<String, Option<EnglishUserWord>>,
+    words: BTreeMap<String, Saved<EnglishUserWord>>,
 }
 
 impl Undo {
@@ -123,11 +157,19 @@ impl Undo {
             .pairs
             .entry((previous.to_string(), text.to_string()))
             .or_insert_with(|| {
-                bigrams
-                    .entries
-                    .get(previous)
-                    .and_then(|n| n.get(text))
-                    .copied()
+                let tally = bigrams.tally(previous, text).cloned();
+                let buried = buried(tally.is_some(), &bigrams.graveyard, || {
+                    Bigrams::digest(previous, text)
+                });
+                Saved {
+                    value: bigrams
+                        .entries
+                        .get(previous)
+                        .and_then(|n| n.get(text))
+                        .copied(),
+                    tally,
+                    buried,
+                }
             });
     }
 
@@ -140,7 +182,17 @@ impl Undo {
             })
             .words
             .entry(key.to_string())
-            .or_insert_with(|| english.words.get(key).cloned());
+            .or_insert_with(|| {
+                let tally = english.tallies.get(key).cloned();
+                let buried = buried(tally.is_some(), &english.graveyard, || {
+                    EnglishUserWords::digest(key)
+                });
+                Saved {
+                    value: english.words.get(key).cloned(),
+                    tally,
+                    buried,
+                }
+            });
     }
 
     /// 把記下的值放回 `user`：學習資料回到這個動作之前。
@@ -152,23 +204,65 @@ impl Undo {
             }
             let model = user.schemes.entry(scheme).or_default();
             model.tick = undo.tick;
-            for ((code, text), Row { count, word }) in undo.rows {
+            for ((code, text), row) in undo.rows {
+                let Row {
+                    count,
+                    word,
+                    tally,
+                    buried,
+                } = row;
+                rebury(
+                    &mut model.graveyard,
+                    || SchemeModel::digest(&code, &text),
+                    buried,
+                );
                 put(&mut model.entries, code.clone(), text.clone(), count);
-                put(&mut model.words, code, text, word);
+                put(&mut model.words, code.clone(), text.clone(), word);
+                put(&mut model.tallies, code, text, tally);
             }
         }
         if let Some(undo) = self.bigrams {
             user.bigrams.tick = undo.tick;
-            for ((previous, text), decayed) in undo.pairs {
-                put(&mut user.bigrams.entries, previous, text, decayed);
+            for ((previous, text), saved) in undo.pairs {
+                let Saved {
+                    value: decayed,
+                    tally,
+                    buried,
+                } = saved;
+                rebury(
+                    &mut user.bigrams.graveyard,
+                    || Bigrams::digest(&previous, &text),
+                    buried,
+                );
+                put(
+                    &mut user.bigrams.entries,
+                    previous.clone(),
+                    text.clone(),
+                    decayed,
+                );
+                put(&mut user.bigrams.tallies, previous, text, tally);
             }
         }
         if let Some(undo) = self.english {
             user.english.tick = undo.tick;
-            for (key, word) in undo.words {
+            for (key, saved) in undo.words {
+                let Saved {
+                    value: word,
+                    tally,
+                    buried,
+                } = saved;
+                rebury(
+                    &mut user.english.graveyard,
+                    || EnglishUserWords::digest(&key),
+                    buried,
+                );
                 match word {
-                    Some(word) => user.english.words.insert(key, word),
+                    Some(word) => user.english.words.insert(key.clone(), word),
                     None => user.english.words.remove(&key),
+                };
+                match tally {
+                    Some(tally) => user.english.tallies.insert(key, tally),
+                    None => user.english.tallies.remove(&key),
                 };
             }
         }
@@ -180,9 +274,17 @@ impl SchemeUndo {
     pub(super) fn save(&mut self, model: &SchemeModel, code: &str, text: &str) {
         self.rows
             .entry((code.to_string(), text.to_string()))
-            .or_insert_with(|| Row {
-                count: model.count(code, text).copied(),
-                word: model.word(code, text).cloned(),
+            .or_insert_with(|| {
+                let tally = model.tally(code, text).cloned();
+                let buried = buried(tally.is_some(), &model.graveyard, || {
+                    SchemeModel::digest(code, text)
+                });
+                Row {
+                    count: model.count(code, text).copied(),
+                    word: model.word(code, text).cloned(),
+                    tally,
+                    buried,
+                }
             });
     }
 }

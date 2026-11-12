@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::Date;
-use crate::user::{Decayed, expired};
+use crate::user::{Decayed, Tally, sync};
 
 /// 一串最多幾個位元組：email 地址的上限（RFC 5321 的 path 上限 256 減去角括號），長過的多半不是
 /// 要再打一次的字串。
@@ -123,33 +123,31 @@ pub(crate) fn letters(text: &str, alphabet: &str) -> String {
 pub(crate) struct EnglishUserWords {
     pub(crate) tick: u64,
     pub(crate) words: BTreeMap<String, EnglishUserWord>,
+    /// 小寫的鍵 → 各台打過的次數與墓碑（[`Tally`]，跨裝置合併用）。有詞的鍵一定有；只放還在的。
+    pub(crate) tallies: BTreeMap<String, Tally>,
+    /// 刪掉的詞（墓碑表）：[`EnglishUserWords::digest`] → 各台的次數與墓碑，不存原文。
+    pub(crate) graveyard: BTreeMap<String, Tally>,
 }
 
-/// 一個英文使用者詞。
+/// 一個英文使用者詞在這台學到的值；打過的次數各台分開記在 [`EnglishUserWords::tallies`]（不衰減，出現門檻
+/// 用；各台最後一次距今超過一年時那台的當作 0、下一次從 1 重算，同中文的整串上屏次數，plan §2.4〈學習的時限〉）。
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EnglishUserWord {
     /// 最後打的寫法。
     pub(crate) text: String,
-    /// 打過的次數，不衰減，出現門檻用；最後一次距今超過一年時當作 0、下一次從 1 重算（同中文的整串
-    /// 上屏次數，plan §2.4〈學習的時限〉）。
-    pub(crate) count: u64,
-    /// 衰減值與最後使用的日期：誰最常用（前綴補完的先後與 20 條）、時限與淘汰用。
+    /// 衰減值、最後使用的日期與版本：誰最常用（前綴補完的先後與 20 條）、時限與淘汰用。
     pub(crate) decayed: Decayed,
 }
 
-impl EnglishUserWord {
-    /// `today` 時算數的次數。
-    pub(crate) fn count_on(&self, today: Option<Date>) -> u64 {
-        if expired(self.decayed.last_used, today) {
-            0
-        } else {
-            self.count
-        }
+impl crate::user::Versioned for EnglishUserWord {
+    fn version(&self) -> u64 {
+        self.decayed.version
     }
 
-    /// `today` 時過了出現門檻（一年內打過 [`ENGLISH_SHOWN_AFTER`] 次）沒有。
-    pub(crate) fn passed(&self, today: Option<Date>) -> bool {
-        self.count_on(today) >= ENGLISH_SHOWN_AFTER
+    fn order(&self, other: &Self) -> std::cmp::Ordering {
+        self.decayed
+            .order(&other.decayed)
+            .then_with(|| self.text.cmp(&other.text))
     }
 }
 
@@ -159,20 +157,38 @@ pub(crate) fn key(text: &str) -> String {
 }
 
 impl EnglishUserWords {
-    /// 學一次 `text`（[`to_learn`] 過的）：次數、衰減值加一，tick 加一。
-    pub(crate) fn learn(&mut self, text: &str, today: Option<Date>) {
+    /// 學一次 `text`（[`to_learn`] 過的）：`device` 自己那格的次數加一、衰減值加一，tick 加一。
+    pub(crate) fn learn(&mut self, text: &str, today: Option<Date>, device: &str) {
         self.tick += 1;
-        let word = self
-            .words
-            .entry(key(text))
-            .or_insert_with(|| EnglishUserWord {
-                text: String::new(),
-                count: 0,
-                decayed: Decayed::default(),
-            });
-        word.count = word.count_on(today) + 1;
+        let key = key(text);
+        if !self.tallies.contains_key(&key) {
+            let buried = sync::exhume(&mut self.graveyard, || Self::digest(&key));
+            self.tallies.insert(key.clone(), buried.unwrap_or_default());
+        }
+        let tally = self.tallies.get_mut(&key).expect("剛放進去");
+        tally.commit(device, today);
+        let version = tally.touch(device);
+        let word = self.words.entry(key).or_insert_with(|| EnglishUserWord {
+            text: String::new(),
+            decayed: Decayed::default(),
+        });
         word.text = text.to_string();
-        word.decayed.bump(self.tick, today);
+        word.decayed.bump(self.tick, today, version);
+    }
+
+    /// 鍵是 `key`（小寫）的詞在墓碑表裡的鍵（[`sync::digest`]）。
+    pub(crate) fn digest(key: &str) -> String {
+        sync::digest(&["english", key])
+    }
+
+    /// 鍵是 `key` 的詞 `today` 時算數的次數（各台相加，各台只算一年內的）。
+    pub(crate) fn count_on(&self, key: &str, today: Option<Date>) -> u64 {
+        self.tallies.get(key).map_or(0, |t| t.commits_on(today))
+    }
+
+    /// 鍵是 `key` 的詞 `today` 時過了出現門檻（一年內打過 [`ENGLISH_SHOWN_AFTER`] 次）沒有。
+    pub(crate) fn passed(&self, key: &str, today: Option<Date>) -> bool {
+        self.count_on(key, today) >= ENGLISH_SHOWN_AFTER
     }
 
     /// 輸入碼 `input` 剛好是一個英文使用者詞（全是方案字母表 `alphabet` 的字母、不分大小寫），又打過
@@ -188,7 +204,7 @@ impl EnglishUserWords {
         }
         self.words
             .get(input)
-            .filter(|w| w.passed(today))
+            .filter(|_| self.passed(input, today))
             .map(|w| w.text.as_str())
     }
 
@@ -205,8 +221,9 @@ impl EnglishUserWords {
     ) -> Vec<&str> {
         let mut pool: Vec<(f64, &str)> = self
             .words
-            .values()
-            .filter(|w| w.count_on(today) >= ENGLISH_COMPLETION_AFTER)
+            .iter()
+            .filter(|(key, _)| self.count_on(key, today) >= ENGLISH_COMPLETION_AFTER)
+            .map(|(_, w)| w)
             .filter(|w| !in_dictionary(&w.text))
             .map(|w| (w.decayed.at(self.tick), w.text.as_str()))
             .collect();
@@ -223,20 +240,42 @@ impl EnglishUserWords {
         self.words.values().map(|w| w.text.clone()).collect()
     }
 
-    /// 加進匯入的一個詞，tick 至少到它的最後 tick；不分大小寫已有時不加、回傳 `false`。
-    pub(crate) fn insert(&mut self, word: EnglishUserWord) -> bool {
-        let key = key(&word.text);
-        if self.words.contains_key(&key) {
+    /// 加進匯入的一個鍵：各台的次數 `tally` 與詞 `word`（刪掉的只有次數），tick 至少到詞的最後 tick；
+    /// 不分大小寫已有時不加、回傳 `false`。
+    pub(crate) fn insert(
+        &mut self,
+        key: String,
+        tally: Tally,
+        word: Option<EnglishUserWord>,
+    ) -> bool {
+        if self.tallies.contains_key(&key) {
             return false;
         }
-        self.tick = self.tick.max(word.decayed.last_tick());
-        self.words.insert(key, word);
+        if let Some(word) = word {
+            self.tick = self.tick.max(word.decayed.last_tick());
+            self.words.insert(key.clone(), word);
+        }
+        self.tallies.insert(key, tally);
         true
     }
 
-    /// 忘掉 `text`（不分大小寫）；沒學過時回傳 `false`。
-    pub(crate) fn forget(&mut self, text: &str) -> bool {
-        self.words.remove(&key(text)).is_some()
+    /// 在 `today` 忘掉 `text`（不分大小寫）：留墓碑，詞丟掉；沒學過時回傳 `false`。
+    pub(crate) fn forget(&mut self, text: &str, today: Option<Date>) -> bool {
+        let key = key(text);
+        if self.words.remove(&key).is_none() {
+            return false;
+        }
+        if let Some(mut tally) = self.tallies.remove(&key) {
+            tally.delete(today);
+            self.graveyard.insert(Self::digest(&key), tally);
+        }
+        true
+    }
+
+    /// 刪掉鍵是 `key` 的詞與它各台的次數（上限淘汰，不留墓碑）。
+    pub(crate) fn remove(&mut self, key: &str) {
+        self.words.remove(key);
+        self.tallies.remove(key);
     }
 }
 
