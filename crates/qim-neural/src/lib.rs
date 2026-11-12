@@ -109,18 +109,32 @@ impl Reranker {
 
     /// 路徑（文字、同步層的路徑分）依 `路徑分 + λ·神經分` 由高到低的序號；同分的照原本的順序。
     pub fn rank(&self, before: &str, paths: &[(&str, f64)]) -> Result<Vec<usize>, Error> {
+        Ok(self.rank_scored(before, paths)?.order)
+    }
+
+    /// 同 [`Reranker::rank`]，另給各路徑的 `路徑分 + λ·神經分`（網頁的 debug 面板顯示）。
+    pub fn rank_scored(&self, before: &str, paths: &[(&str, f64)]) -> Result<Ranking, Error> {
         let texts: Vec<&str> = paths.iter().map(|(t, _)| *t).collect();
         let neural = self.scores(before, &texts)?;
-        let total: Vec<f64> = paths
+        let totals: Vec<f64> = paths
             .iter()
             .zip(&neural)
             .map(|((_, score), &n)| score + self.lambda * f64::from(n))
             .collect();
         let mut order: Vec<usize> = (0..paths.len()).collect();
         // 穩定排序：同分的照原本的順序。
-        order.sort_by(|&a, &b| total[b].total_cmp(&total[a]));
-        Ok(order)
+        order.sort_by(|&a, &b| totals[b].total_cmp(&totals[a]));
+        Ok(Ranking { order, totals })
     }
+}
+
+/// [`Reranker::rank_scored`] 的結果。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ranking {
+    /// 路徑的序號，好的在前。
+    pub order: Vec<usize>,
+    /// 各路徑的 `路徑分 + λ·神經分`，和輸入的路徑同順序。
+    pub totals: Vec<f64>,
 }
 
 #[cfg(test)]
@@ -202,6 +216,25 @@ mod tests {
         let gap = 2.0 * f64::from(neural[hi] - neural[lo]);
         let paths = [(texts[hi], -11.0 - gap), (texts[lo], -10.0)];
         assert_eq!(r.rank("天", &paths).unwrap(), vec![1, 0]);
+    }
+
+    #[test]
+    fn rank_scored_gives_each_path_its_total_alongside_the_order() {
+        // λ 是 0 時總分就是路徑分。
+        let r0 = reranker(0.0);
+        let paths = [("我的", -2.0), ("你好", -1.0), ("大人", -2.5)];
+        let ranking = r0.rank_scored("天", &paths).unwrap();
+        assert_eq!(ranking.order, vec![1, 0, 2]);
+        assert_eq!(ranking.totals, vec![-2.0, -1.0, -2.5]);
+        // λ 不是 0 時是路徑分加 λ·神經分，名次同 `rank`。
+        let r = reranker(2.0);
+        let neural = r.scores("天", &["我的", "你好", "大人"]).unwrap();
+        let ranking = r.rank_scored("天", &paths).unwrap();
+        for (i, (_, score)) in paths.iter().enumerate() {
+            let expected = score + 2.0 * f64::from(neural[i]);
+            assert!((ranking.totals[i] - expected).abs() < 1e-9);
+        }
+        assert_eq!(ranking.order, r.rank("天", &paths).unwrap());
     }
 
     #[test]

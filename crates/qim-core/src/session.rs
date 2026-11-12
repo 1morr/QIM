@@ -10,6 +10,13 @@ use crate::remembered::TypedRun;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
+mod inspect;
+
+pub use inspect::{
+    CandidateKind, ContextState, InspectedCandidate, InspectedSegment, Inspection, PrecedingChar,
+    Reranked, SegmentSource,
+};
+
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
 
@@ -378,6 +385,8 @@ struct ShownCandidate {
     span: CandidateSpan,
     /// 簡體模式轉換後的文字；不轉換時是 `None`，顯示原文。
     converted: Option<String>,
+    /// 停鍵重排放到這裡的（[`Session::apply_rerank`]）；debug 面板顯示。
+    rerank: Option<Reranked>,
 }
 
 impl ShownCandidate {
@@ -663,35 +672,38 @@ impl Session {
         let Some(top) = self.candidates.first().map(|c| c.text().to_string()) else {
             return false;
         };
-        let Some(path) = order
+        let Some((k, path)) = order
             .iter()
             .filter(|&&k| k < RERANK_PATHS)
-            .filter_map(|&k| self.lattice.whole_path(k))
-            .map(|span| ShownCandidate {
-                converted: self.options.simplified.then(|| self.display(engine, &span)),
-                span,
+            .filter_map(|&k| Some((k, self.lattice.whole_path(k)?)))
+            .map(|(k, span)| {
+                let shown = ShownCandidate {
+                    converted: self.options.simplified.then(|| self.display(engine, &span)),
+                    span,
+                    rerank: None,
+                };
+                (k, shown)
             })
-            .find(|c| c.text() != top)
+            .find(|(_, c)| c.text() != top)
         else {
             return false;
         };
         // 排位規則排在第 2 位起的候選之後。
         let slot = 1 + self.candidates[1..]
             .iter()
-            .take_while(|c| c.span.pinned_after_top)
+            .take_while(|c| c.span.rule.is_some())
             .count();
-        match self.candidates.iter().position(|c| c.text() == path.text()) {
-            Some(at) if at <= slot => false,
-            Some(at) => {
-                let moved = self.candidates.remove(at);
-                self.candidates.insert(slot, moved);
-                true
-            }
-            None => {
-                self.candidates.insert(slot, path);
-                true
-            }
-        }
+        let (moved, inserted) = match self.candidates.iter().position(|c| c.text() == path.text()) {
+            Some(at) if at <= slot => return false,
+            Some(at) => (self.candidates.remove(at), false),
+            None => (path, true),
+        };
+        let moved = ShownCandidate {
+            rerank: Some(Reranked { path: k, inserted }),
+            ..moved
+        };
+        self.candidates.insert(slot, moved);
+        true
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
@@ -791,7 +803,7 @@ impl Session {
             self.focus = None;
             if self.lattice.input().is_empty() {
                 if self.selected.is_empty() {
-                    self.composition_word = self.context_word();
+                    self.composition_word = self.context_word(engine);
                 }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
@@ -1408,8 +1420,8 @@ impl Session {
                 word: Some(segment.text.clone()),
             },
             (None, Some(context)) if !self.options.incognito => Preceding {
-                character: engine.context_char(context),
-                word: self.context_word(),
+                character: engine.context_char(self.context_last_char(engine, context)),
+                word: self.context_word(engine),
             },
             (None, _) => Preceding::default(),
         }
@@ -1417,23 +1429,45 @@ impl Session {
 
     /// 前文給的前一個字詞（個人 bigram，plan §2.3）：前文以上一次上屏的組字的最後一段結尾時是
     /// 那一段（原文；簡體模式下前文是顯示的字，也認），否則是前文的最後一字（字母或數字才算，
-    /// 標點、空白之後沒有）。不知道前文或無痕時沒有。前文由 `Session` 接上上屏的字（[`Session::context`]），
-    /// 所以剛上屏的那段接在前文結尾。
-    fn context_word(&self) -> Option<String> {
+    /// 標點、空白之後沒有；簡體模式轉回繁體，個人 bigram 記的是原文）。不知道前文或無痕時沒有。
+    /// 前文由 `Session` 接上上屏的字（[`Session::context`]），所以剛上屏的那段接在前文結尾。
+    fn context_word(&self, engine: &Engine) -> Option<String> {
         if self.options.incognito {
             return None;
         }
         let context = self.context.as_deref()?;
-        if let Some(last) = &self.last_word
-            && (context.ends_with(&last.original) || context.ends_with(&last.shown))
-        {
+        if let Some(last) = self.last_word_ending(context) {
             return Some(last.original.clone());
         }
-        context
-            .chars()
-            .next_back()
+        self.context_last_char(engine, context)
             .filter(|c| c.is_alphanumeric())
             .map(String::from)
+    }
+
+    /// 前文 `context` 的最後一字，換成繁體原文（plan §2.3）：前文以上一次上屏的那一段結尾時是
+    /// 那段原文的最後一字（簡體模式下一對多的字照實際打的，「幹」顯示「干」仍接「幹」）；否則
+    /// 簡體模式下逐字轉回繁體（[`Engine::traditional_char`]，同停鍵層的前文，plan §2.7）。空的
+    /// 前文是 `None`。
+    fn context_last_char(&self, engine: &Engine, context: &str) -> Option<char> {
+        if let Some(c) = self
+            .last_word_ending(context)
+            .and_then(|last| last.original.chars().next_back())
+        {
+            return Some(c);
+        }
+        let last = context.chars().next_back()?;
+        Some(if self.options.simplified {
+            engine.traditional_char(last)
+        } else {
+            last
+        })
+    }
+
+    /// 上一次上屏的最後一段，前文 `context` 以它（原文或顯示的字）結尾時。
+    fn last_word_ending(&self, context: &str) -> Option<&LastWord> {
+        self.last_word
+            .as_ref()
+            .filter(|last| context.ends_with(&last.original) || context.ends_with(&last.shown))
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {
@@ -1481,6 +1515,7 @@ impl Session {
             .map(|span| ShownCandidate {
                 converted: self.options.simplified.then(|| self.display(engine, &span)),
                 span,
+                rerank: None,
             })
             .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
             .collect()
