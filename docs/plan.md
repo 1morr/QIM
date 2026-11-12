@@ -42,6 +42,7 @@
 | 各台的次數 | `Tally`（一台一格 `Cell`） | 墓碑 / 墓碑表 | `Tombstone` / `graveyard`（匯出種類 `deleted`） |
 | 跨裝置合併 | `UserModel::merge`（結果 `Merged`，網頁 `mergeUserDict`） | 讀回自己的存檔 | `UserModel::replace_learning`（網頁 `loadUserDict`） |
 | 清空記號 | `Cleared`（`UserModel::clear`，網頁 `clearUserDict`） | 從備份還原 | `UserModel::restore`（網頁 `restoreUserDict`） |
+| 打錯碼的集合（含打錯碼 / 觸控模擬） | `typo` / `touch`（`qim_databuild::typo`、`qim_bench::parse_typo`、`parse_touch`） | 原樣正確卻被改錯 | `false_corrections`（`qim_bench::TypoStats`） |
 
 ## 1. 架構總覽
 
@@ -107,7 +108,7 @@ flowchart LR
 | `qim-wasm` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `wasm-bindgen` | 被 `qim-core` 或 `qim-layout` 依賴 |
 | `qim-ffi` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `uniffi` | 同上 |
 | `qim-databuild` | `qim-core`（資料包格式）、`qim-layout`（算出預設佈局）、`qim-neural`（匯入停鍵層模型時核對分數、量化，§2.7）；外部 crate 不限（I/O 套件） | 被 `qim-core` 或 `qim-layout` 依賴 |
-| `qim-bench` | `qim-core`（資料包格式）；外部 crate 不限（I/O 套件） | 被 `qim-core` 依賴 |
+| `qim-bench` | `qim-core`（資料包格式）、`qim-layout`（照殼的做法把實體鍵與觸控點擊轉成按鍵機率，M4 票 08）；外部 crate 不限（I/O 套件） | 被 `qim-core` 依賴 |
 | `web/`、`platforms/*` | 只透過綁定呼叫核心與 `qim-layout` | 重寫排序、查碼或點擊判定邏輯 |
 
 強制：`cargo xtask check` 的 `deps` 步驟（M0 票 02 接上）。
@@ -139,6 +140,7 @@ flowchart LR
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2 票 07 確認）；proc-macro 宣告介面，`uniffi-bindgen-swift` 從靜態函式庫產生綁定（library mode），它要的 `cli` feature 只在 `qim-ffi` 的 `bindgen` feature 開 | 一份介面產生兩種語言 |
 | `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
 | `rustc-hash` | 2.1.3 | `qim-databuild` 數詞級 trigram 的次數（兩千萬種 trigram 的雜湊表，§4.3） | rustc 自己用的雜湊，比標準庫的 SipHash 快得多；建置端不必防碰撞攻擊；票 08 的實驗也用它 |
+| `rand_chacha` | 0.10.0 | `qim-databuild` 產生打錯碼的基準集合（M4 票 08）：每題以那一行的 sha256 當種子的 ChaCha8 | rust-random 維護，官方保證跨平台、跨版本輸出相同；常態分布自己寫，不用數值可能隨小版本變的 `rand_distr` |
 | `strsim` | 0.11.1 | `qim-bench` 算字正確率的編輯距離（以字計的 Levenshtein） | 維護中、無依賴；不自己寫 |
 | `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU；網頁經 `qim-wasm` 編成 WebAssembly、開 SIMD128，§3.1）與量化（`qim-databuild` 匯入模型時經 `qim-neural`） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
 | `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
@@ -695,6 +697,7 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
 | `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼）；每個語料一個 `<名>.tsv`，一行「逐字速成碼（空格分隔）<TAB>句子」，由 `cargo xtask data` 產生 | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
 | `bench/colloquial/` | 口語語料 test 切分的句子，轉碼方式與格式同上（HKCanCor、Common Voice）；口語集的開發切分只用來調參 | 依來源（CC BY 4.0、CC0），附 `ATTRIBUTION.md`，進 git |
 | `bench/corpus/context/`、`bench/colloquial/context/` | 「有前文」的題（M3 票 04）：test 切分的句子，前文是來源同一行裡它前面的兩句與中間的標點（原樣，可含英文、數字）；每個語料取雜湊最小的 1,000 句，段落第一句沒有前文、不收。一行「前文<TAB>逐字速成碼<TAB>句子」，由 `cargo xtask data` 產生。基準把同一批題打兩次：給前文（集合名 `<名>·前文`）與不給前文（`<名>·前文·不給`），報告並列兩者與合計；兩個都進 baseline。給前文時每次從空的組字打起都先 `set_context`（前文接著這題已上屏的字），同殼在上屏後給游標前的文字 | 同所在目錄的授權，`ATTRIBUTION.md` 說明，進 git |
+| `bench/colloquial/typo/`、`bench/colloquial/touch/` | 打錯碼的題（M4 票 08）：口語 test 切分的同一批句子，「含打錯碼」照實體鍵盤的錯誤模型改成實際按的鍵（每鍵 3%，替換、漏碼、多碼、對調；替換多半是實體鄰鍵），「觸控模擬」照 Fowler 2015 在預設佈局上每鍵抽一個點擊、雜訊照 Goodman 2002（往下、往中心偏，x、y 的 σ 不同、有旋轉）。錯誤模型與容錯的鄰鍵先驗、空間模型故意不同；參數與來源在 `docs/research/typo-bench-models.md`，格式在 `docs/development.md`〈語料〉。由 `cargo xtask data` 以每行的 sha256 為種子決定性產生；dev 的同一種題在 `build/corpus/<名>/dev-typo.tsv`、`dev-touch.tsv`，`--dev` 打。集合名 `<名>·打錯`、`<名>·觸控`，進 baseline | 同所在目錄的授權，進 git |
 | `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料（brief §12.2 的 `.userdb.txt`；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
 | `bench/personal/rime-userdb.tsv` | 個人集的題目：`cargo xtask data` 從上一列轉出的速成碼、詞、上屏次數 | 同上 |
 | `bench/personal/sentences.txt` | 選填：使用者提供的真實句子，一行一句，由 `qim-databuild` 轉碼；英文段落切開不算 | 同上 |
@@ -707,6 +710,8 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
   - 偏差：使用者只選得到 Rime 給的候選，所以這份資料偏向 Rime 詞庫已有的詞；QIM 的詞庫也來自 rime-essay，個人集的分數可能偏高，判斷時要和口語集一起看。
   - 隱私：個人集的內容不寫進 repo 的任何檔案、commit、票，只報數字；不送雲端 LLM（§7.8 的雲端部分不跑個人集，除非使用者同意）。
 - 指標：固定題通過數、整句首選正確率、字正確率、修正次數、每字按鍵數、首選跳動、每鍵延遲 p50 / p95（原生與 WebAssembly 各量一次，WebAssembly 用 Node 跑網頁同一份綁定；另報組字第 20 碼起的按鍵與「選開頭一段」那一鍵：選定後剩下的輸入碼從頭重建 lattice，M2 票 07 加；空白的學習資料與學過的〔一個 `UserModel` 依序學完全部公開集合〕各量一組，M4 票 05 加）。原生的 p95 由 `--check` 擋，上限在 [M4 spec〈每鍵延遲上限〉](../.scratch/m4/spec.md#每鍵延遲上限)；WebAssembly 只報。
+- 按鍵照殼的做法送（M4 票 08）：字母照實體鍵位經 `qim_layout::PhysicalModel` 轉成按鍵機率，觸控模擬的點擊經 `qim_layout::SpatialModel` 轉成按鍵機率；容錯進核心後基準量到的就是殼實際送的機率。
+- 打錯碼的集合另報（M4 票 08）：沒打錯（每一鍵機率最高的字母都等於原本的碼）與打錯的題各答對幾題，與「原樣正確卻被改錯」的比例：沒打錯、原樣讀法（容錯關）首選正確的題裡，實際首選不正確的比例（Fowler 2015 的 false correction）。容錯的開關由票 10 接上，在那之前是 0；上限在 [M4 spec〈容錯採用門檻〉](../.scratch/m4/spec.md#容錯採用門檻)。打錯碼的題第一次按實際按的鍵、卡住後照碼重打（算修正），所以照樣每題打得出。
 - 依長度分組：正確率與修正次數另按目標的字數分組（1、2、3–4、5–8、9 以上）。熟手多半打幾個字就上屏，長句的整句正確率低且雜訊大，分組才看得出變化。
 - 翻盤清單：和 baseline 比，列出由錯變對、由對變錯的題目（個人集只列題號）。只看總數會把一處變好、一處變壞看成沒變。
 - 學習模式（`--learning`）：照檔案的順序打每個語料集合、「有前文」的題（給前文）與個人集，模擬使用者選字（同修正次數的模擬）並讓整個集合共用的 `UserModel` 學習，和同一順序、每題空白的 `UserModel` 比修正次數。只報不擋，不讀也不寫 baseline。基準其他模式都用空白的 `UserModel`（每鍵延遲另量學過的一組）。

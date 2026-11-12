@@ -40,6 +40,24 @@ impl Group {
         }
     }
 
+    /// 「含打錯碼」的基準題（plan §5.2，M4 票 08）：`<目錄>/typo/<名>.tsv`，授權同 [`Group::dir`]。只有口語：
+    /// 品質判斷以口語為主（brief §9），維基的長句每句都有好幾處錯、整句首選幾乎全錯，量不出容錯的差別；
+    /// 維基集照舊守「沒打錯的不退步」。
+    pub fn typo_dir(self) -> Option<&'static str> {
+        match self {
+            Group::Wiki => None,
+            Group::Colloquial => Some("bench/colloquial/typo"),
+        }
+    }
+
+    /// 「觸控模擬」的基準題（M4 票 08）：`<目錄>/touch/<名>.tsv`；只有口語，理由同 [`Group::typo_dir`]。
+    pub fn touch_dir(self) -> Option<&'static str> {
+        match self {
+            Group::Wiki => None,
+            Group::Colloquial => Some("bench/colloquial/touch"),
+        }
+    }
+
     fn license_paragraph(self) -> &'static str {
         match self {
             Group::Wiki => {
@@ -342,10 +360,19 @@ pub fn attribution_file(group: Group, sections: &[String]) -> String {
          {CONTEXT_SENTENCES} held-out test clauses that follow other text on the same line of the source,\n\
          one per line: the text before the clause as written (up to {CONTEXT_CLAUSES} clauses and the\n\
          punctuation between them), a tab, the Quick codes, a tab and the clause.\n\
+         {typo}\
          \n\
          {}",
         sections.join("\n"),
         license = group.license_paragraph(),
+        typo = if group.typo_dir().is_some() {
+            "The files of the same name under typo/ and touch/ repeat the clauses of the main\n\
+             file, each preceded by machine-generated simulated typing and a tab: the keys of a\n\
+             keyboard typist with synthetic typing errors (typo/) or simulated touch points on an\n\
+             on-screen keyboard (touch/).\n"
+        } else {
+            ""
+        },
     )
 }
 
@@ -389,4 +416,16 @@ pub fn dialogue_items_path(root: &Path, name: &str) -> PathBuf {
 /// 讀同一個路徑，`shared_paths` 比對。
 pub fn dev_dialogue_items_path(root: &Path, name: &str) -> PathBuf {
     build_dir(root, name).join("dev-dialogue.tsv")
+}
+
+/// 語料 `name` 的 dev「含打錯碼」調參題（`build/corpus/<名>/dev-typo.tsv`，只有 [`Group::typo_dir`] 有的
+/// 語料有）；`qim_bench::dev_typo_items` 讀同一個路徑，`shared_paths` 比對。
+pub fn dev_typo_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev-typo.tsv")
+}
+
+/// 語料 `name` 的 dev「觸控模擬」調參題（`build/corpus/<名>/dev-touch.tsv`）；`qim_bench::dev_touch_items`
+/// 讀同一個路徑，`shared_paths` 比對。
+pub fn dev_touch_items_path(root: &Path, name: &str) -> PathBuf {
+    build_dir(root, name).join("dev-touch.tsv")
 }

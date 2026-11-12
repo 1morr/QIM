@@ -71,7 +71,7 @@ const RULES: &[Rule] = &[
     },
     Rule {
         krate: "qim-bench",
-        workspace: &["qim-core"],
+        workspace: &["qim-core", "qim-layout"],
         external: None,
         no_io: false,
     },

@@ -43,7 +43,7 @@ impl PhysicalModel {
     /// 和為 1。`code` 不是字母鍵（`KeyA`–`KeyZ`）時是 `None`。
     pub fn letter_weights(&self, code: &str) -> Option<Vec<(char, f32)>> {
         let pressed = code_letter(code)?;
-        let keys = keys();
+        let keys = letter_keys();
         let &(_, x, y) = keys.iter().find(|&&(c, _, _)| c == pressed)?;
         let mut neighbours: Vec<(char, f64)> = keys
             .iter()
@@ -75,8 +75,9 @@ impl PhysicalModel {
     }
 }
 
-/// 字母鍵（`code` 的字母）與鍵中心的座標（鍵距）。
-fn keys() -> Vec<(char, f64, f64)> {
+/// 實體鍵盤的字母鍵（`code` 的字母）與鍵中心的座標：鍵距為單位，x 從 Tab 鍵左緣往右、y 從字母區第一排
+/// 往下。鄰鍵先驗用它；打錯碼的基準（M4 票 08）也照它抽鄰鍵，不另寫一份 QWERTY。
+pub fn letter_keys() -> Vec<(char, f64, f64)> {
     ROWS.iter()
         .zip(0u32..)
         .flat_map(|(&(offset, letters), row)| {

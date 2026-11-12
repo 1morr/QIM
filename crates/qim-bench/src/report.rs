@@ -66,6 +66,37 @@ fn context_pairs(sets: &[SetResult]) -> String {
     )
 }
 
+/// 打錯碼的集合（M4 票 08）：沒打錯與打錯的題各答對幾題，與「原樣正確卻被改錯」；沒有這種集合時是空字串。
+fn typo_table<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {
+    let rows: String = sets
+        .filter_map(|set| {
+            let t = set.typo_stats()?;
+            Some(format!(
+                "| {} | {} | {} | {} | {} | {} | {}/{} | {:.2}% |\n",
+                set.name,
+                set.total(),
+                t.clean,
+                t.clean_correct,
+                t.mistyped,
+                t.mistyped_correct,
+                t.false_corrections,
+                t.literal_correct,
+                t.false_correction_rate() * 100.0,
+            ))
+        })
+        .collect();
+    if rows.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n打錯碼的集合：沒打錯是每一鍵機率最高的字母都等於原本的碼；原樣正確卻被改錯是沒打錯、原樣讀法（容錯關）\
+         首選正確的題裡，實際首選不正確的（容錯的開關在票 10 加進核心，之前一定是 0）\n\n\
+         | 集合 | 題數 | 沒打錯 | 沒打錯答對 | 打錯 | 打錯答對 | 原樣正確卻被改錯 | 改錯比例 |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n\
+         {rows}"
+    )
+}
+
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
 
@@ -128,6 +159,7 @@ pub fn render(outcome: &Outcome) -> String {
     }
     out.push_str(&length_groups(outcome.scored_sets()));
     out.push_str(&context_pairs(&outcome.sets));
+    out.push_str(&typo_table(outcome.sets.iter()));
 
     out.push_str("\n翻盤清單（和 baseline 比）\n");
     for set in outcome.scored_sets() {
@@ -198,6 +230,7 @@ pub fn render_dev(outcome: &DevOutcome) -> String {
     // 短輸入都在 1–4 字的組，分組沒有什麼可看。
     out.push_str(&length_groups(outcome.sets.iter().filter(|s| !is_short(s))));
     out.push_str(&context_pairs(&outcome.sets));
+    out.push_str(&typo_table(outcome.sets.iter()));
     let fixed = &outcome.fixed;
     out.push_str(&format!(
         "\n固定題 {}/{} 通過\n",
