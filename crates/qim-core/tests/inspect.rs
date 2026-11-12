@@ -447,21 +447,21 @@ fn a_weighted_tap_types_its_top_letter_and_shows_its_probabilities() {
     let mut letters = Ime::new();
     let tapped = touch.press(Key::Weighted(weights.clone()));
     assert_eq!(tapped, letters.press(Key::Letter('a')));
-    assert_eq!(touch.inspect().touch_weights, Some(weights));
-    assert_eq!(letters.inspect().touch_weights, None);
+    assert_eq!(touch.inspect().key_weights, Some(weights));
+    assert_eq!(letters.inspect().key_weights, None);
 
     let second = Weights::new(vec![('b', 1.0)]).unwrap();
     assert_eq!(
         touch.press(Key::Weighted(second.clone())),
         letters.press(Key::Letter('b'))
     );
-    assert_eq!(touch.inspect().touch_weights, Some(second));
+    assert_eq!(touch.inspect().key_weights, Some(second));
 
     touch.press(Key::Backspace);
-    assert_eq!(touch.inspect().touch_weights, None);
+    assert_eq!(touch.inspect().key_weights, None);
 
     // 觸控的文字鍵（`Session::text`）也是一個鍵。
     touch.press(Key::Weighted(Weights::new(vec![('a', 1.0)]).unwrap()));
     touch.session.text(&touch.engine, &mut touch.user, "，");
-    assert_eq!(touch.inspect().touch_weights, None);
+    assert_eq!(touch.inspect().key_weights, None);
 }

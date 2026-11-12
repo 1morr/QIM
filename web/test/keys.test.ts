@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type KeyEvent, LoneShift, shiftSwitch, toKey } from "../src/keys.ts";
+import {
+	type KeyEvent,
+	LoneShift,
+	type PhysicalKeyEvent,
+	physicalLetter,
+	shiftSwitch,
+	toKey,
+} from "../src/keys.ts";
 
 function press(key: string, modifiers: Partial<KeyEvent> = {}): KeyEvent {
 	return {
@@ -218,4 +225,57 @@ test("組字中單按 Shift 的設定值：認得的照原樣，其他當預設 
 	assert.equal(shiftSwitch("inline-ascii"), "inline-ascii");
 	assert.equal(shiftSwitch("rime"), "rime");
 	assert.equal(shiftSwitch("left"), "rime");
+});
+
+/** 實體鍵盤上的一個鍵：`code` 是實體鍵位，`key` 照目前的配列。 */
+function physical(
+	code: string,
+	key: string,
+	modifiers: Partial<PhysicalKeyEvent> = {},
+): PhysicalKeyEvent {
+	return { ...press(key), code, shiftKey: false, ...modifiers };
+}
+
+test("中文模式的字母鍵照實體鍵位送 code（M4 票 07）", () => {
+	assert.equal(physicalLetter(physical("KeyF", "f"), false), "KeyF");
+	assert.equal(physicalLetter(physical("KeyQ", "q"), false), "KeyQ");
+});
+
+test("key 不同但 code 相同時結果相同：換 Dvorak 照實體鍵位", () => {
+	// Dvorak 的實體 F 鍵打 u、實體 Q 鍵打 '。
+	assert.equal(physicalLetter(physical("KeyF", "u"), false), "KeyF");
+	assert.equal(physicalLetter(physical("KeyQ", "'"), false), "KeyQ");
+});
+
+test("英文（直通與臨時英文）的字母照配列打，不送 code", () => {
+	assert.equal(physicalLetter(physical("KeyF", "f"), true), null);
+	assert.equal(physicalLetter(physical("KeyF", "u"), true), null);
+});
+
+test("大寫字母、組合鍵與別的輸入法的事件不送 code", () => {
+	assert.equal(
+		physicalLetter(physical("KeyF", "F", { shiftKey: true }), false),
+		null,
+	);
+	// CapsLock 開著：沒按 Shift 也是大寫。
+	assert.equal(physicalLetter(physical("KeyF", "F"), false), null);
+	for (const modifier of ["ctrlKey", "metaKey", "altKey"] as const) {
+		assert.equal(
+			physicalLetter(physical("KeyF", "f", { [modifier]: true }), false),
+			null,
+			modifier,
+		);
+	}
+	assert.equal(
+		physicalLetter(physical("KeyF", "f", { isComposing: true }), false),
+		null,
+	);
+});
+
+test("非字母鍵不送 code，即使配列讓它打出字母", () => {
+	// Dvorak 的實體分號鍵打 s。
+	assert.equal(physicalLetter(physical("Semicolon", "s"), false), null);
+	assert.equal(physicalLetter(physical("Digit1", "1"), false), null);
+	assert.equal(physicalLetter(physical("Space", " "), false), null);
+	assert.equal(physicalLetter(physical("", "f"), false), null);
 });

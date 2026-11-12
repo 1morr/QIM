@@ -8,7 +8,7 @@ import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
-import { LoneShift, toKey } from "./keys.ts";
+import { LoneShift, physicalLetter, toKey } from "./keys.ts";
 import {
 	checkModelPack,
 	NeuralReranker,
@@ -60,6 +60,8 @@ const shown = {
 	composing: false,
 	/** 臨時英文（組字中單按留碼的 Shift）：組字是英文，沒有候選、字根提示與展開面板。 */
 	inlineAscii: false,
+	/** 英文（`Snapshot.ascii`：英文直通或臨時英文）：實體字母鍵照配列打，不照實體鍵位送機率。 */
+	ascii: false,
 	/** 候選列目前頁，點候選時換算成全部候選的位置。 */
 	page: 0,
 };
@@ -180,6 +182,7 @@ async function start(): Promise<void> {
 	const render = (snapshot: Snapshot): void => {
 		shown.composing = composition.show(snapshot);
 		shown.inlineAscii = shown.composing && snapshot.ascii;
+		shown.ascii = snapshot.ascii;
 		shown.page = snapshot.page;
 		candidateBar.setMode(snapshot.ascii);
 		candidateBar.show(
@@ -372,7 +375,11 @@ async function start(): Promise<void> {
 		if (!shown.composing) {
 			syncContext();
 		}
-		const snapshot = session.press(key.kind, key.value);
+		// 中文模式的字母鍵照實體鍵位送按下的字母與鄰鍵的機率（M4 票 07）。
+		const code = physicalLetter(event, shown.ascii);
+		const snapshot = code
+			? session.pressCode(code)
+			: session.press(key.kind, key.value);
 		try {
 			if (!snapshot.handled) {
 				// 交還瀏覽器的鍵（空白、Enter、方向鍵…）收起了聯想：候選列跟著清掉。

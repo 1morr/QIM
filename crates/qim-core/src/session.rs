@@ -473,9 +473,9 @@ pub struct Session {
     /// 翻到後面的頁時收到的重排結果：那時的 `generation` 與 `order`。回到第一頁時 `generation`
     /// 沒變（候選沒變）才套用（[`Session::apply_rerank`]）。
     waiting_rerank: Option<(u64, Vec<usize>)>,
-    /// 最近一個鍵是觸控的 [`Key::Weighted`] 時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
+    /// 最近一個鍵是 [`Key::Weighted`]（觸控或實體鍵盤的字母鍵）時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
     /// 其他鍵與 [`Session::text`] 清掉。容錯的票再決定要不要逐碼記。
-    touch_weights: Option<Weights>,
+    key_weights: Option<Weights>,
 }
 
 impl Session {
@@ -716,15 +716,15 @@ impl Session {
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
-        // 容錯進核心之前，觸控的機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
+        // 容錯進核心之前，按鍵機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
         let key = match key {
             Key::Weighted(weights) => {
                 let top = weights.top();
-                self.touch_weights = Some(weights);
+                self.key_weights = Some(weights);
                 Key::Letter(top)
             }
             key => {
-                self.touch_weights = None;
+                self.key_weights = None;
                 key
             }
         };
@@ -1200,7 +1200,7 @@ impl Session {
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         self.apply_pending_options(engine, user);
         self.end_association();
-        self.touch_weights = None;
+        self.key_weights = None;
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
