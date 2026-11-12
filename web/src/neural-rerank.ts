@@ -1,9 +1,9 @@
 // 停鍵層的神經模型（plan §2.7、§3.1，M3 票 11e）：主執行緒這邊的介面，推論在 Web Worker
-// （`rerank-worker.ts`）。主執行緒先用同一份綁定建一次 `Reranker` 核對模型資料包（核心不收就丟錯，同
-// 其他資料包），再把 manifest 與位元組交給 Worker。
+// （`rerank-worker.ts`）。換資料包時先在主執行緒核對模型資料包（核心不收就丟錯，同其他資料包），再把
+// manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗要不要報都在這裡管。
+// 不在執行期 import WebAssembly 綁定：Worker 與核對由殼給，單元測試換成假的（不必先跑 `cargo xtask web`）。
 
 import type { Rank, Ranked, RerankJob } from "./rerank.ts";
-import { Pack, Reranker } from "./wasm/qim_wasm.js";
 
 /** 一份資料包的原料：manifest 的 JSON 與資料包檔。 */
 export interface PackSource {
@@ -24,21 +24,25 @@ export type WorkerReply =
 	/** 沒載入模型時沒有 `ranked`。 */
 	| { id: number; type: "ranked"; ranked?: Ranked };
 
-/** 核心與 `qim-neural` 收不收這份模型資料包：不收時丟錯（訊息說明原因）。 */
-export function checkModelPack(source: PackSource): void {
-	const pack = new Pack(source.manifest, source.bytes);
-	try {
-		new Reranker(pack).free();
-	} finally {
-		pack.free();
-	}
+/** `NeuralReranker` 用到的 `Worker` 成員；單元測試給假的。 */
+export type RerankWorker = Pick<
+	Worker,
+	"postMessage" | "onmessage" | "onerror" | "onmessageerror"
+>;
+
+export interface NeuralRerankerOptions {
+	/** 跑 `rerank-worker.ts` 的 Worker。 */
+	worker: RerankWorker;
+	/** 核心與 `qim-neural` 收不收這份模型資料包：不收時丟錯（訊息說明原因）。 */
+	check: (pack: PackSource) => void;
+	/** Worker 載入不了模型（之後不重排，打字與候選照常）。 */
+	onLoadFailed: (error: Error) => void;
 }
 
 export class NeuralReranker {
-	private readonly worker = new Worker(
-		new URL("./rerank-worker.ts", import.meta.url),
-		{ type: "module" },
-	);
+	private readonly worker: RerankWorker;
+	private readonly check: (pack: PackSource) => void;
+	private readonly onLoadFailed: (error: Error) => void;
 	private next = 0;
 	private readonly waiting = new Map<
 		number,
@@ -46,8 +50,15 @@ export class NeuralReranker {
 	>();
 	/** Worker 起不來或丟了沒接住的錯：之後的要求都直接失敗，不會一直等。 */
 	private broken: Error | undefined;
+	/** Worker 正在用（或正在載入）的模型的 manifest；沒變就不重載，載入失敗時清掉，下次換資料包再試。 */
+	private loaded: string | undefined;
+	/** 交給 Worker 載入過幾次；只有最後一次的失敗算數。 */
+	private loads = 0;
 
-	constructor() {
+	constructor(options: NeuralRerankerOptions) {
+		this.worker = options.worker;
+		this.check = options.check;
+		this.onLoadFailed = options.onLoadFailed;
 		this.worker.onmessage = (event: MessageEvent<WorkerReply>) => {
 			const waiting = this.waiting.get(event.data.id);
 			this.waiting.delete(event.data.id);
@@ -82,9 +93,37 @@ export class NeuralReranker {
 		});
 	}
 
-	/** 換模型；`undefined` 是拿掉（之後不重排）。Worker 建不起來時丟錯。 */
-	async load(pack: PackSource | undefined): Promise<void> {
-		await this.send({ type: "load", pack });
+	/**
+	 * 交給 Worker 換成 `model`；`undefined` 是拿掉（之後不重排）。不在主執行緒核對：載入不了時由
+	 * `onLoadFailed` 報，打字不等它。
+	 */
+	load(model: PackSource | undefined): void {
+		this.loaded = model?.manifest;
+		const load = ++this.loads;
+		this.send({ type: "load", pack: model }).catch((error: unknown) => {
+			// 之後又換了別份（換模型 A→B 時 A 晚失敗）：Worker 用的是後來那份，這次的失敗不管、不報。
+			if (load !== this.loads) {
+				return;
+			}
+			this.loaded = undefined;
+			this.onLoadFailed(
+				error instanceof Error ? error : new Error(String(error)),
+			);
+		});
+	}
+
+	/**
+	 * 換資料包時的模型：先核對（不收就丟錯，資料包的改動退回），核心也收下其他資料包之後才呼叫回傳的
+	 * 函式交給 Worker；和正在用的同一份時是 `undefined`。
+	 */
+	prepare(model: PackSource | undefined): (() => void) | undefined {
+		if (model?.manifest === this.loaded) {
+			return undefined;
+		}
+		if (model) {
+			this.check(model);
+		}
+		return () => this.load(model);
 	}
 
 	/** 交給 `rerankScheduler` 的模型。 */

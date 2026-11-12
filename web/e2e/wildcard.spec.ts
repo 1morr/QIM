@@ -94,7 +94,7 @@ test.describe("觸控", () => {
 		await expect(text).toHaveValue("的人");
 	});
 
-	test("debug 面板：點 z 的觸控機率以 z 最高，候選同時標「萬用鍵」", async ({
+	test("debug 面板：點 z 的按鍵機率以 z 最高，候選同時標「萬用鍵」", async ({
 		page,
 	}) => {
 		await page.getByRole("button", { name: "debug" }).tap();
@@ -104,7 +104,7 @@ test.describe("觸控", () => {
 			await page.getByTestId(`key-${id}`).tap();
 		}
 		await expect(ui(page).composition).toHaveText("竹＊");
-		const touch = debug.getByTestId("debug-touch").locator("code");
+		const touch = debug.getByTestId("debug-weights").locator("code");
 		await expect(touch.first()).toHaveAttribute("data-letter", "z");
 		await page.getByTestId("key-o").tap();
 		await expect(ui(page).items.first()).toHaveText("1的人");

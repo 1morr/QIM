@@ -8,14 +8,10 @@ import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
-import { LoneShift, toKey } from "./keys.ts";
-import {
-	checkModelPack,
-	NeuralReranker,
-	type PackSource,
-} from "./neural-rerank.ts";
+import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
+import { NeuralReranker } from "./neural-rerank.ts";
 import { mountPackSettings } from "./pack-settings.ts";
-import { PackLibrary } from "./packs.ts";
+import { checkModelPack, PackLibrary } from "./packs.ts";
 import { mountPanel } from "./panel.ts";
 import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
@@ -26,6 +22,7 @@ import {
 	type EnglishUserWords,
 	mountEnglishUserWords,
 } from "./english-user-words.ts";
+import { storage } from "./storage.ts";
 import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
 import { undoWindow } from "./undo-window.ts";
@@ -64,6 +61,8 @@ const shown = {
 	composing: false,
 	/** 臨時英文（組字中單按留碼的 Shift）：組字是英文，沒有候選、字根提示與展開面板。 */
 	inlineAscii: false,
+	/** 英文（`Snapshot.ascii`：英文直通或臨時英文）：實體字母鍵照配列打，不照實體鍵位送機率。 */
+	ascii: false,
 	/** 候選列目前頁，點候選時換算成全部候選的位置。 */
 	page: 0,
 };
@@ -90,44 +89,47 @@ async function start(): Promise<void> {
 		load(LAYOUT_URL).then((response) => response.text()),
 		load(NUMBER_ROW_LAYOUT_URL).then((response) => response.text()),
 	]);
+	/** 狀態列一直留著的說明（只用內建的資料包、存不了、模型載入不了）；載入完才換掉「載入中…」。 */
+	const notices: string[] = [];
+	let ready = false;
+	const notify = (notice: string): void => {
+		if (!notices.includes(notice)) {
+			notices.push(notice);
+		}
+		if (ready) {
+			status.textContent = notices.join("；");
+		}
+	};
+	if (library.storeError) {
+		notify(
+			`IndexedDB 打不開，這次只用內建的資料包、匯入的不會存：${library.storeError}`,
+		);
+	}
+	// `localStorage` 打不開或存不下（載入中或之後）：學習資料與設定只留在記憶體。
+	storage.watch((error) =>
+		notify(
+			`學習資料與設定這次不會存（瀏覽器的儲存空間用不了）：${message(error)}`,
+		),
+	);
 	let session: Session;
-	/** 載入時就有要說的事（改用內建的資料包），載入完不清掉狀態列。 */
-	let notice = false;
 	try {
 		session = new Session(library.sessionPacks());
 	} catch (error) {
 		// 選的或匯入的資料包載入不了（例如 IndexedDB 裡的檔壞了）：這次只用內建的，說明原因。
 		library.fallBackToBuiltin();
 		session = new Session(library.sessionPacks());
-		status.textContent = `匯入的資料包載入不了，這次只用內建的：${message(error)}`;
-		notice = true;
+		notify(`匯入的資料包載入不了，這次只用內建的：${message(error)}`);
 	}
 	// 停鍵層模型在 Web Worker 裡載入，打字不等它；載入不了就不重排，打字與候選照常。
-	const neural = new NeuralReranker();
-	/** Worker 正在用的模型的 manifest；沒變就不重載，載入失敗時清掉，下次換資料包再試。 */
-	let loadedModel: string | undefined;
-	const loadModel = (model: PackSource | undefined): void => {
-		loadedModel = model?.manifest;
-		neural.load(model).catch((error: unknown) => {
-			loadedModel = undefined;
-			status.textContent = `停鍵層模型載入不了，不重排：${message(error)}`;
-		});
-	};
-	loadModel(library.modelPack());
-	/**
-	 * 換資料包時的模型：先在這裡核對（不收就丟錯，資料包的改動退回），核心也收下其他資料包之後才呼叫
-	 * 回傳的函式交給 Worker；沒換時是 `undefined`。
-	 */
-	const checkModel = (): (() => void) | undefined => {
-		const model = library.modelPack();
-		if (model?.manifest === loadedModel) {
-			return undefined;
-		}
-		if (model) {
-			checkModelPack(model);
-		}
-		return () => loadModel(model);
-	};
+	const neural = new NeuralReranker({
+		worker: new Worker(new URL("./rerank-worker.ts", import.meta.url), {
+			type: "module",
+		}),
+		check: checkModelPack,
+		onLoadFailed: (error) =>
+			notify(`停鍵層模型載入不了，不重排：${message(error)}`),
+	});
+	neural.load(library.modelPack());
 	/** 正在用的字根提示資料包，查完提示就釋放。 */
 	const radicalHints = (): RadicalHints => {
 		const pack = library.radicalHintPack();
@@ -192,6 +194,7 @@ async function start(): Promise<void> {
 	const render = (snapshot: Snapshot): void => {
 		shown.composing = composition.show(snapshot);
 		shown.inlineAscii = shown.composing && snapshot.ascii;
+		shown.ascii = snapshot.ascii;
 		shown.page = snapshot.page;
 		candidateBar.setMode(snapshot.ascii);
 		candidateBar.show(
@@ -241,16 +244,24 @@ async function start(): Promise<void> {
 		touchKeyboard?.refresh();
 		requestRerank(snapshot.generation);
 	};
-	/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
-	const applyHandled = (snapshot: Snapshot, chosen: boolean): void => {
+	/** 交給 `use` 之後釋放 `snapshot`（`use` 丟錯也釋放）；網頁自己向核心要的快照都經這裡。 */
+	const withSnapshot = (
+		snapshot: Snapshot,
+		use: (snapshot: Snapshot) => void,
+	) => {
 		try {
-			if (snapshot.handled) {
-				apply(snapshot, chosen);
-			}
+			use(snapshot);
 		} finally {
 			snapshot.free();
 		}
 	};
+	/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
+	const applyHandled = (snapshot: Snapshot, chosen: boolean): void =>
+		withSnapshot(snapshot, () => {
+			if (snapshot.handled) {
+				apply(snapshot, chosen);
+			}
+		});
 
 	const composition = mountComposition((index) =>
 		applyHandled(session.focusSegment(index), false),
@@ -312,15 +323,11 @@ async function start(): Promise<void> {
 	mountPackSettings(
 		library,
 		() => {
-			const changeModel = checkModel();
+			const changeModel = neural.prepare(library.modelPack());
 			const snapshot = session.setPacks(library.sessionPacks());
 			changeModel?.();
 			candidateBar.setRadicalHints(radicalHints());
-			try {
-				render(snapshot);
-			} finally {
-				snapshot.free();
-			}
+			withSnapshot(snapshot, render);
 		},
 		focusText,
 	);
@@ -332,12 +339,7 @@ async function start(): Promise<void> {
 	text.addEventListener("keyup", (event) => {
 		const side = loneShift.up(event.code, event.timeStamp);
 		if (side && !event.isComposing) {
-			const snapshot = session.press("toggleAscii", side);
-			try {
-				apply(snapshot, false);
-			} finally {
-				snapshot.free();
-			}
+			withSnapshot(session.press("toggleAscii", side), (s) => apply(s, false));
 		}
 	});
 	text.addEventListener("keydown", (event) => {
@@ -356,18 +358,15 @@ async function start(): Promise<void> {
 			panel.setOpen(event.key === "ArrowDown");
 			return;
 		}
-		const key = toKey(event, shown.composing, shown.inlineAscii);
+		// 中文模式整個當美式鍵盤：字母與標點照實體鍵位（M4 票 07）；英文直通與臨時英文照配列。
+		const remapped = usKeyEvent(event, shown.ascii);
+		const key = toKey(remapped.event, shown.composing, shown.inlineAscii);
 		if (!key) {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
-			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作。
+			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作，但也收起
+			// 了聯想。
 			if (!shown.composing) {
-				const snapshot = session.press("other");
-				try {
-					// 也收起了聯想。
-					render(snapshot);
-				} finally {
-					snapshot.free();
-				}
+				withSnapshot(session.press("other"), render);
 			}
 			return;
 		}
@@ -384,9 +383,18 @@ async function start(): Promise<void> {
 		if (!shown.composing) {
 			syncContext();
 		}
-		const snapshot = session.press(key.kind, key.value);
-		try {
+		// 中文模式的字母鍵照實體鍵位送按下的字母與鄰鍵的機率（M4 票 07）。
+		const code = physicalCode(event, shown.ascii);
+		const pressed = code
+			? session.pressCode(code)
+			: session.press(key.kind, key.value);
+		withSnapshot(pressed, (snapshot) => {
 			if (!snapshot.handled) {
+				// 換成美式字元的鍵：瀏覽器會照配列插入 `key`，改由網頁插入核心收到的那個字元。
+				if (remapped.character !== undefined) {
+					event.preventDefault();
+					insert(text, remapped.character);
+				}
 				// 交還瀏覽器的鍵（空白、Enter、方向鍵…）收起了聯想：候選列跟著清掉。
 				render(snapshot);
 				afterHostKey(key.kind);
@@ -394,16 +402,13 @@ async function start(): Promise<void> {
 			}
 			event.preventDefault();
 			apply(snapshot, chosen);
-		} finally {
-			snapshot.free();
-		}
+		});
 	});
 
 	text.readOnly = false;
 	text.dataset.ready = "true";
-	if (!notice) {
-		status.textContent = "";
-	}
+	ready = true;
+	status.textContent = notices.join("；");
 	// 載入中已經點進輸入框時 `focus()` 不會再觸發 focus 事件。
 	syncContext();
 	text.focus();
