@@ -329,7 +329,10 @@ impl UserModel {
     /// `false`。觸發詞剛好是這段文字自己的碼時，平常打字學到的同一組計數也一起刪：兩者是同一個鍵、
     /// 分不出來，寧可少一筆學習，也不留使用者刪掉的字。
     pub fn remove_phrase(&mut self, engine: &Engine, text: &str) -> bool {
-        let model = self.for_scheme_mut(&engine.scheme().id);
+        // 沒學過的方案不建出空的方案（`for_scheme_mut` 會建）。
+        let Some(model) = self.schemes.get_mut(&engine.scheme().id) else {
+            return false;
+        };
         let Some(phrases) = model.words.get_mut(PHRASE_CODE) else {
             return false;
         };
