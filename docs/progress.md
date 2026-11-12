@@ -33,12 +33,14 @@
 | 2026-11-12 | M4 01 | debug 面板：核心 `Session::inspect`（不進 Snapshot）、網頁面板與重排模型總分；bench、--learning 前後逐行相同，延遲高負載下交替量在雜訊內；見票 01 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
 | 2026-11-12 | M4 13 | 一年時限（整串上屏另記日期、規則 2、3 只看一年內、一年沒用的停用不刪）、條目上限 2 萬列／3 萬組（LatinIME 1.2 倍）；v3 entry 12 欄；見票 13 | 新 session 下 `/implement .scratch/m4/issues/14-english-user-words.md` |
 | 2026-11-12 | M4 06 | `Key::Weighted` 與 `qim-layout` 的空間模型（到形狀的距離加 2D Gaussian、點中的鍵一定最高）；網頁觸控送機率、面板顯示；bench 前後相同；見票 06 | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
+| 2026-11-12 | M4 11 | 萬用鍵 `z`：每個代一碼、任一位置，學習記實際的碼，面板標萬用鍵；整句首選約原樣七成、單字 1–2%（票 18 評估）；bench 前後相同；見票 11 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
 | 2026-11-12 | M4 05b | `qim_bench::run` 收 `Timers`，`run.rs` 改用數字固定的假原生計時器，load 61 下連跑三次都綠；補 `--check` 延遲接線與真實計時形狀的測試；見票 05b | 新 session 下 `/implement .scratch/m4/issues/05c-page-turn-e2e-race.md` |
 | 2026-11-12 | M4 05c | 翻頁 e2e 的競態是測試的問題（重排翻頁中回來照 plan 延到第一頁）：兩個翻頁測試關掉重排，補翻頁中途回來的 e2e；見票 05c | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
 | 2026-11-12 | M4 06b | 平手點都在鍵外（點擊判定照直線距離、Gaussian 各軸 σ 不同），照設計提到平手；測試格子補 Shift、刪除，種子進 repo 並加固定測試，產品沒改；見票 06b | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
 
 ## 偏差與決定
 
+- 2026-11-12 M4 票 11：沒有組字時 `z` 改為開始組字（brief §4.3 原本交還宿主），不設開關；單獨的 `z` 代一碼字、每段最多兩個；協調者補 `Blocked by: 01`；見票 11。
 - 2026-11-12 M4 票 06（協調者要求）：空間模型保證點中的鍵的字母機率最高（不是就提到和最高的平手、排第一）；plan §2.1 的 `Weighted(Vec)` 改成 `Weights` 型別，§2.6 加〈空間模型〉。
 - 2026-11-12 M4 票 13（使用者決定）：一年沒用的條目停用、不刪（時鐘錯了改回來要恢復、舊備份照收），實體刪除只在到上限時淘汰；改 plan §2.4、brief §4.5、spec〈細節〉。
 - 2026-11-12 M4 票 13（協調者決定）：中文條目沒有出現門檻，上限淘汰「先刪沒到門檻的」由票 14 驗；v3 的 entry 加 `last_commit_date`（12 欄）；改 plan §2.4、brief §4.5。

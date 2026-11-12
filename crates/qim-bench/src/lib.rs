@@ -30,6 +30,8 @@ pub use latency::{
     WasmTimer, lefts_to_first_segment, native_timing, native_timing_with, node_wasm_timer,
     parse_timing, percentile,
 };
+/// 照修正次數的模擬依序學完題目的 `UserModel`（延遲的「學過」那組）；萬用鍵實驗也用它（M4 票 11）。
+pub use score::learned_model;
 /// 打一個集合，指標同基準；模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
 pub use score::score as score_set;
 pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};

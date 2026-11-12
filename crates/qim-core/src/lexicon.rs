@@ -34,6 +34,11 @@ impl Lexicon {
         self.words.get(code).map_or(&[], Vec::as_slice)
     }
 
+    /// 有沒有以 `prefix` 開頭的輸入碼（萬用鍵展開時剪枝用）。
+    pub(crate) fn has_code_prefix(&self, prefix: &str) -> bool {
+        crate::code_table::has_key_with_prefix(&self.words, prefix)
+    }
+
     /// 依輸入碼的字典序列出全部輸入碼與它的詞。
     pub fn iter(&self) -> impl Iterator<Item = (&str, &[Word])> {
         self.words

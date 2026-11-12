@@ -15,6 +15,8 @@ struct SchemeFile {
     version: String,
     alphabet: String,
     max_code_length: u8,
+    /// 萬用鍵（plan §2.5）：選填，一個不在 alphabet 的 ASCII 小寫字母。
+    wildcard: Option<String>,
     radicals: BTreeMap<String, String>,
     #[serde(default)]
     packs: PacksTable,
@@ -32,7 +34,8 @@ struct PacksTable {
     radical_hint: Option<String>,
 }
 
-/// 字母表是 ASCII 字母、每個鍵剛好一個字根，字根表沒有字母表以外的鍵。
+/// 字母表是 ASCII 字母、每個鍵剛好一個字根，字根表沒有字母表與萬用鍵以外的鍵；萬用鍵是一個
+/// 不在字母表的 ASCII 小寫字母（分隔記號 `'` 不是字母，自然排除），可以沒有字根。
 pub fn parse(text: &str) -> Result<Scheme, Error> {
     let file: SchemeFile =
         toml::from_str(text).map_err(|e| Error::invalid("方案檔", e.to_string()))?;
@@ -52,12 +55,32 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
     if file.max_code_length == 0 {
         return Err(invalid("max_code_length 至少是 1".into()));
     }
+    let wildcard = match file.wildcard.as_deref() {
+        None => None,
+        Some(w) => {
+            let mut chars = w.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if c.is_ascii_lowercase() && !keys.contains(&c) => Some(c),
+                _ => {
+                    return Err(invalid(format!(
+                        "wildcard 要是一個不在 alphabet 的 ASCII 小寫字母：{w:?}"
+                    )));
+                }
+            }
+        }
+    };
     let mut radicals = BTreeMap::new();
     for (key, radical) in &file.radicals {
         let mut chars = key.chars();
         match (chars.next(), chars.next()) {
-            (Some(k), None) if keys.contains(&k) => radicals.insert(k, radical.clone()),
-            _ => return Err(invalid(format!("radicals 的鍵 {key:?} 不在 alphabet 裡"))),
+            (Some(k), None) if keys.contains(&k) || wildcard == Some(k) => {
+                radicals.insert(k, radical.clone())
+            }
+            _ => {
+                return Err(invalid(format!(
+                    "radicals 的鍵 {key:?} 不在 alphabet 裡，也不是萬用鍵"
+                )));
+            }
         };
     }
     if let Some(k) = keys.iter().find(|k| !radicals.contains_key(k)) {
@@ -70,6 +93,7 @@ pub fn parse(text: &str) -> Result<Scheme, Error> {
         version: file.version,
         alphabet: file.alphabet,
         max_code_length: file.max_code_length,
+        wildcard,
         radicals,
         packs: Packs {
             lexicon: file.packs.lexicon,

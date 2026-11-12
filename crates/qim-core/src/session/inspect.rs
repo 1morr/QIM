@@ -100,6 +100,8 @@ pub struct InspectedSegment {
     pub learned: bool,
     /// 有它接在前一個字詞後面的個人 bigram。
     pub personal_bigram: bool,
+    /// 碼有萬用鍵（brief §1.5）時它實際對到的碼（不含分隔記號，同學習記的碼）；沒有萬用鍵是 `None`。
+    pub matched_code: Option<String>,
 }
 
 /// 一段字詞從哪裡來。
@@ -187,6 +189,7 @@ fn inspect_candidate(
                 source: scored.map_or_else(|| engine.source_of(&s.code, &s.text), |x| x.source),
                 learned: scored.is_some_and(|x| x.learned),
                 personal_bigram: scored.is_some_and(|x| x.personal_bigram),
+                matched_code: engine.matched_code(user, &s.code, &s.text),
             }
         })
         .collect();
