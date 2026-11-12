@@ -52,7 +52,7 @@ test("多段的是連打，各段的來源只列一次；學過的段與個人 b
 	]);
 });
 
-test("英文、emoji、記住的字串、聯想照種類；重排與排位規則另標", () => {
+test("英文、emoji、英文使用者詞、聯想照種類；重排與排位規則另標", () => {
 	const english: InspectedCandidate = {
 		text: "the",
 		kind: "english",

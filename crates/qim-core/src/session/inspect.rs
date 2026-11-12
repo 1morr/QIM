@@ -41,7 +41,7 @@ pub struct InspectedCandidate {
     /// 顯示的文字（簡體模式是轉換後的）。
     pub text: String,
     pub kind: CandidateKind,
-    /// 字詞的各段（碼、字詞、來源）；英文、emoji、記住的字串與聯想沒有。
+    /// 字詞的各段（碼、字詞、來源）；英文、emoji、英文使用者詞與聯想沒有。
     pub segments: Vec<InspectedSegment>,
     /// 路徑分（plan §2.3）：各段接前一段的分數總和，含學習加分；不在 lattice 裡的候選是 `None`。
     pub score: Option<f64>,
@@ -82,8 +82,8 @@ pub enum CandidateKind {
     English,
     /// 接在字詞後面的 emoji。
     Emoji,
-    /// 記住的字串（排位規則 5）。
-    Remembered,
+    /// 英文使用者詞：整串輸入碼剛好是它（排位規則 4）或它的前綴補完（排位規則 5）。
+    EnglishUserWord,
     /// 聯想（上屏之後的候選）。
     Association,
 }
@@ -162,7 +162,7 @@ fn inspect_candidate(
         SpanKind::Word => CandidateKind::Word,
         SpanKind::English => CandidateKind::English,
         SpanKind::Emoji => CandidateKind::Emoji,
-        SpanKind::Remembered => CandidateKind::Remembered,
+        SpanKind::EnglishUserWord | SpanKind::EnglishCompletion => CandidateKind::EnglishUserWord,
     };
     let mut inspected = InspectedCandidate {
         text: candidate.text().to_string(),

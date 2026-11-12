@@ -244,16 +244,16 @@ impl WebSession {
             .collect()
     }
 
-    /// 記住的字串（M3 票 15，打過的 email），依文字排；設定區的清單用。
-    #[wasm_bindgen(js_name = rememberedStrings)]
-    pub fn remembered_strings(&self) -> Vec<String> {
-        self.user.remembered_strings()
+    /// 英文使用者詞（M4 票 14，打過的英文串，沒到出現門檻的也列），依小寫排；設定區的清單用。
+    #[wasm_bindgen(js_name = englishUserWords)]
+    pub fn english_user_words(&self) -> Vec<String> {
+        self.user.english_user_words()
     }
 
-    /// 忘掉記住的字串 `text`；沒記過時回傳 `false`。
-    #[wasm_bindgen(js_name = forgetRememberedString)]
-    pub fn forget_remembered_string(&mut self, text: &str) -> bool {
-        self.user.forget_remembered_string(text)
+    /// 忘掉英文使用者詞 `text`（不分大小寫）；沒學過時回傳 `false`。
+    #[wasm_bindgen(js_name = forgetEnglishUserWord)]
+    pub fn forget_english_user_word(&mut self, text: &str) -> bool {
+        self.user.forget_english_user_word(text)
     }
 
     /// 從清單選了常用語：照觸控鍵盤的 `text` 上屏（組字中先上屏組字），回傳快照給網頁插入。
@@ -373,11 +373,11 @@ impl WebSession {
         self.session.refresh(&self.engine, &self.user).into()
     }
 
-    /// 記住的字串（M3 票 15）：記下打過的 email，之後打它開頭的字母時排在候選第 2 位起，預設開。
-    /// 組字中切換也立刻重列候選。
-    #[wasm_bindgen(js_name = setRememberedStrings)]
-    pub fn set_remembered_strings(&mut self, on: bool) -> WebSnapshot {
-        self.set_options(|options| options.remembered_strings = on);
+    /// 英文使用者詞（M4 票 14）：學打過的英文串，打過 2 次的在中文組字打完整串時排第 2，打過 3 次的
+    /// 打開頭的字母也給，預設開。組字中切換也立刻重列候選。
+    #[wasm_bindgen(js_name = setEnglishUserWords)]
+    pub fn set_english_user_words(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.english_user_words = on);
         self.session.refresh(&self.engine, &self.user).into()
     }
 
@@ -701,7 +701,7 @@ pub struct WebInspection {
 pub struct WebInspectedCandidate {
     #[wasm_bindgen(readonly)]
     pub text: String,
-    /// `word`、`english`、`emoji`、`remembered`、`association`。
+    /// `word`、`english`、`emoji`、`englishUserWord`、`association`。
     #[wasm_bindgen(readonly)]
     pub kind: String,
     #[wasm_bindgen(readonly)]
@@ -774,7 +774,7 @@ impl From<Inspection> for WebInspection {
                         CandidateKind::Word => "word",
                         CandidateKind::English => "english",
                         CandidateKind::Emoji => "emoji",
-                        CandidateKind::Remembered => "remembered",
+                        CandidateKind::EnglishUserWord => "englishUserWord",
                         CandidateKind::Association => "association",
                     }
                     .into(),

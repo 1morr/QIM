@@ -135,7 +135,7 @@ textarea {
 }
 
 #phrases h2,
-#remembered h2,
+#english-user-words h2,
 #word-list h2 {
 	margin: 0.5rem 0 0;
 	font-size: 1rem;
@@ -163,8 +163,8 @@ textarea {
 	text-overflow: ellipsis;
 }
 
-/* 記住的 email（remembered.ts）：同常用語的清單，一列一條加刪除鍵。 */
-#remembered-list {
+/* 英文使用者詞（english-user-words.ts）：同常用語的清單，一列一條加刪除鍵。 */
+#english-user-words-list {
 	display: grid;
 	gap: 0.25rem;
 	margin: 0;
@@ -172,17 +172,17 @@ textarea {
 	list-style: none;
 }
 
-#remembered-list li {
+#english-user-words-list li {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
 }
 
-#remembered-list .remembered-text {
+#english-user-words-list .english-user-word-text {
 	overflow-wrap: anywhere;
 }
 
-#remembered-list .empty {
+#english-user-words-list .empty {
 	color: gray;
 }
 
@@ -201,7 +201,7 @@ textarea {
 }
 
 #phrases .note,
-#remembered .note,
+#english-user-words .note,
 #word-list .note {
 	margin: 0;
 	color: gray;
