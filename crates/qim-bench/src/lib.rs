@@ -26,8 +26,8 @@ use sha2::{Digest, Sha256};
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
 pub use items::{Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal};
 pub use latency::{
-    LONG_INPUT_KEYS, Latency, Summary, Timing, WASM_BINDINGS, WasmTimer, lefts_to_first_segment,
-    native_timing, node_wasm_timer, parse_timing, percentile,
+    LONG_INPUT_KEYS, Latency, Runs, Summary, Timing, UserData, WASM_BINDINGS, WasmTimer,
+    lefts_to_first_segment, native_timing, node_wasm_timer, parse_timing, percentile,
 };
 /// 打一個集合，指標同基準；模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
 pub use score::score as score_set;
@@ -120,7 +120,7 @@ pub struct Outcome {
     pub baseline: Option<Baseline>,
     /// 跑之前的個人集 baseline；沒有檔案時是 `None`。
     pub personal_baseline: Option<Baseline>,
-    /// 每鍵延遲：只報，不進違規也不進 baseline。
+    /// 每鍵延遲：`--check` 擋原生的 p95（[`Latency::violations`]），不進 baseline。
     pub latency: Latency,
     /// 擋退步的違規；空的就是通過。
     pub violations: Vec<String>,
@@ -232,14 +232,23 @@ pub fn run(
         .collect();
     let latency_inputs = inputs_of(&fixed_items, &corpora);
     // 「有前文」的題不量延遲：輸入碼和一般的題同一種，多量只是重複。
-    for (name, items) in load_context_sets(root)? {
-        sets.extend(score_with_and_without_context(&engine, &name, &items));
+    let context_sets = load_context_sets(root)?;
+    for (name, items) in &context_sets {
+        sets.extend(score_with_and_without_context(&engine, name, items));
     }
     let personal =
         load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
     let pack_paths: Vec<PathBuf> = packs.iter().map(|p| root.join(&p.path)).collect();
-    let mut latency = latency::measure(&engine, &pack_paths, &latency_inputs, wasm)?;
-    latency.native.load_ms = Some(load_ms);
+    // 學過的學習資料：同 `--learning` 的學習開，但一個 `UserModel` 依序學完全部公開集合（M3 票 12 的量法）。
+    let learned = score::learned_model(
+        &engine,
+        corpora
+            .iter()
+            .chain(&context_sets)
+            .flat_map(|(_, items)| items),
+    );
+    let mut latency = latency::measure(&engine, &pack_paths, &latency_inputs, &learned, wasm)?;
+    latency.blank.native.load_ms = Some(load_ms);
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
     let tolerate_bad_format = mode == Mode::UpdateBaseline;
     let baseline = load_baseline(&root.join(BASELINE), tolerate_bad_format)?;
@@ -257,6 +266,7 @@ pub fn run(
                 .map(|failure| format!("固定題沒過：{failure}"))
                 .collect();
             violations.extend(baseline::check(&sets_only, limits, BASELINE));
+            violations.extend(latency.violations());
             // 沒有個人集的檔時跳過整個個人集，連它的 baseline 也不比。
             if let Personal::Ran(set) = &personal {
                 let empty = Baseline::new();

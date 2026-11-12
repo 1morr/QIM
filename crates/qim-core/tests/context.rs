@@ -5,12 +5,14 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CLAUSE_START, CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack,
-    Options, Packs, Ranking, Scheme, SchemePack, Session, UserModel,
+    CLAUSE_START, CharModel, CodeEntry, CodeTable, ConversionTable, Engine, Key, LanguageModel,
+    LanguageModelPack, Options, Packs, Ranking, Scheme, SchemePack, Session, Simplifier,
+    SimplifierPack, UserModel,
 };
 
 /// `a` 是「甲」「乙」「丁」，單打時甲的字頻高；`b` 是「天」，「天乙」是常見的接續，
-/// 丁多半當句首。
+/// 丁多半當句首。簡體模式用的：`c`「後」（简「后」）後面接乙；`d`「乾」、`e`「幹」都簡化成「干」，
+/// 「乾」的 unigram 高、後面接甲，「幹」後面接乙。
 fn engine() -> Engine {
     let scheme = Scheme {
         id: "quick".into(),
@@ -33,6 +35,9 @@ fn engine() -> Engine {
     let code_table = CodeTable::from_entries([
         ("a".to_string(), vec![entry('甲'), entry('乙'), entry('丁')]),
         ("b".to_string(), vec![entry('天')]),
+        ("c".to_string(), vec![entry('後')]),
+        ("d".to_string(), vec![entry('乾')]),
+        ("e".to_string(), vec![entry('幹')]),
     ]);
     // 接續機率和 unigram 反過來：前一字沒有統計時誤用退回式，首選就成了乙。
     let model = |start: f64, continuation: f64| CharModel {
@@ -46,6 +51,9 @@ fn engine() -> Engine {
             ('乙', model(0.1, 0.5)),
             ('天', model(0.4, 0.4)),
             ('丁', model(0.05, 0.05)),
+            ('後', model(0.1, 0.1)),
+            ('乾', model(0.1, 0.1)),
+            ('幹', model(0.05, 0.05)),
             (CLAUSE_START, model(1e-6, 1e-6)),
         ],
         model(1e-6, 1e-6),
@@ -53,6 +61,9 @@ fn engine() -> Engine {
             ('天', '乙', 0.9f64.ln()),
             ('天', '甲', 0.01f64.ln()),
             (CLAUSE_START, '丁', 0.9f64.ln()),
+            ('後', '乙', 0.9f64.ln()),
+            ('乾', '甲', 0.9f64.ln()),
+            ('幹', '乙', 0.9f64.ln()),
         ],
     );
     Engine::new(
@@ -293,4 +304,73 @@ fn clearing_or_replacing_the_context_drops_the_commits_recorded_so_far() {
     session.set_context("。");
     let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
     assert_eq!(snapshot.candidates[0].text, "丁");
+}
+
+fn simplifier() -> SimplifierPack {
+    let table = ConversionTable::new(
+        [("後", "后"), ("乾", "干"), ("幹", "干")]
+            .iter()
+            .map(|&(k, v)| (k.to_string(), v.to_string())),
+    );
+    SimplifierPack {
+        id: "opencc-hk2s".into(),
+        simplifier: Simplifier::new(vec![], ConversionTable::new([]), vec![vec![table]]),
+    }
+}
+
+fn simplified() -> Options {
+    Options {
+        simplified: true,
+        ..Options::default()
+    }
+}
+
+/// 掛上簡繁資料包，照 `options` 給前文 `before`、打 `input`，回首選。
+fn top_with_simplifier(before: &str, options: Options, input: &str) -> String {
+    let engine = engine().with_simplifier(simplifier());
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(options);
+    session.set_context(before);
+    let mut snapshot = None;
+    for c in input.chars() {
+        snapshot = Some(session.handle(&engine, &mut user, Key::Letter(c)));
+    }
+    snapshot.unwrap().candidates[0].text.clone()
+}
+
+/// 簡體模式下殼給的前文是簡體字，語言模型是繁體：最後一字轉回繁體再接 bigram（同停鍵層的
+/// 前文，plan §2.7），首選和繁體模式下對應的繁體前文相同。一對多的取 unigram 最高的（干 → 乾）。
+#[test]
+fn simplified_context_is_turned_back_into_traditional() {
+    assert_eq!(top_with_simplifier("後", Options::default(), "a"), "乙");
+    assert_eq!(top_with_simplifier("后", simplified(), "a"), "乙");
+    assert_eq!(top_with_simplifier("乾", Options::default(), "a"), "甲");
+    assert_eq!(top_with_simplifier("干", simplified(), "a"), "甲");
+    // 一串碼：開頭的字接前文，整句同樣跟著變。
+    assert_eq!(top_with_simplifier("後", Options::default(), "ab"), "乙天");
+    assert_eq!(top_with_simplifier("后", simplified(), "ab"), "乙天");
+}
+
+/// 繁體模式的前文照原樣：簡體字沒有統計，照沒有前文打。
+#[test]
+fn traditional_mode_does_not_convert_the_context() {
+    assert_eq!(top_with_simplifier("后", Options::default(), "a"), "甲");
+}
+
+/// 前文以剛上屏的那一段（簡體模式顯示的字）結尾時，前一字是那段原文的最後一字：上屏「幹」
+/// 顯示「干」，接的是「幹」，不是逐字轉回的「乾」。
+#[test]
+fn context_ending_with_the_last_commit_follows_its_original() {
+    let engine = engine().with_simplifier(simplifier());
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(simplified());
+    session.set_context("");
+    session.handle(&engine, &mut user, Key::Letter('e'));
+    let snapshot = session.handle(&engine, &mut user, Key::Space);
+    assert_eq!(snapshot.commit.as_deref(), Some("干"));
+    session.set_context("干");
+    let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(snapshot.candidates[0].text, "乙");
 }

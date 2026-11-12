@@ -191,7 +191,7 @@ fn importing_adds_to_the_learning_instead_of_replacing_it() {
     for line in before.lines().filter(|l| !l.starts_with('#')) {
         assert!(after.contains(line), "少了：{line}\n{after}");
     }
-    assert!(after.contains("quick\t一台\tmir\t0\t0\t0\t0\tmanual\t\n"));
+    assert!(after.contains("entry\tquick\t一台\tmir\t0\t0\t0\t0\t\tmanual\t\n"));
     assert_eq!(typed(&user, "tk").first().map(String::as_str), Some("台口"));
 }
 

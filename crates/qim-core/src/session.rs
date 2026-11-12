@@ -803,7 +803,7 @@ impl Session {
             self.focus = None;
             if self.lattice.input().is_empty() {
                 if self.selected.is_empty() {
-                    self.composition_word = self.context_word();
+                    self.composition_word = self.context_word(engine);
                 }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
@@ -1283,8 +1283,7 @@ impl Session {
             .collect();
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         if !engine.has_entry(&code, &text) {
-            user.for_scheme_mut(&engine.scheme().id)
-                .add_auto_phrase(&code, &text);
+            user.add_auto_phrase(&engine.scheme().id, &code, &text);
         }
     }
 
@@ -1421,8 +1420,8 @@ impl Session {
                 word: Some(segment.text.clone()),
             },
             (None, Some(context)) if !self.options.incognito => Preceding {
-                character: engine.context_char(context),
-                word: self.context_word(),
+                character: engine.context_char(self.context_last_char(engine, context)),
+                word: self.context_word(engine),
             },
             (None, _) => Preceding::default(),
         }
@@ -1430,23 +1429,45 @@ impl Session {
 
     /// 前文給的前一個字詞（個人 bigram，plan §2.3）：前文以上一次上屏的組字的最後一段結尾時是
     /// 那一段（原文；簡體模式下前文是顯示的字，也認），否則是前文的最後一字（字母或數字才算，
-    /// 標點、空白之後沒有）。不知道前文或無痕時沒有。前文由 `Session` 接上上屏的字（[`Session::context`]），
-    /// 所以剛上屏的那段接在前文結尾。
-    fn context_word(&self) -> Option<String> {
+    /// 標點、空白之後沒有；簡體模式轉回繁體，個人 bigram 記的是原文）。不知道前文或無痕時沒有。
+    /// 前文由 `Session` 接上上屏的字（[`Session::context`]），所以剛上屏的那段接在前文結尾。
+    fn context_word(&self, engine: &Engine) -> Option<String> {
         if self.options.incognito {
             return None;
         }
         let context = self.context.as_deref()?;
-        if let Some(last) = &self.last_word
-            && (context.ends_with(&last.original) || context.ends_with(&last.shown))
-        {
+        if let Some(last) = self.last_word_ending(context) {
             return Some(last.original.clone());
         }
-        context
-            .chars()
-            .next_back()
+        self.context_last_char(engine, context)
             .filter(|c| c.is_alphanumeric())
             .map(String::from)
+    }
+
+    /// 前文 `context` 的最後一字，換成繁體原文（plan §2.3）：前文以上一次上屏的那一段結尾時是
+    /// 那段原文的最後一字（簡體模式下一對多的字照實際打的，「幹」顯示「干」仍接「幹」）；否則
+    /// 簡體模式下逐字轉回繁體（[`Engine::traditional_char`]，同停鍵層的前文，plan §2.7）。空的
+    /// 前文是 `None`。
+    fn context_last_char(&self, engine: &Engine, context: &str) -> Option<char> {
+        if let Some(c) = self
+            .last_word_ending(context)
+            .and_then(|last| last.original.chars().next_back())
+        {
+            return Some(c);
+        }
+        let last = context.chars().next_back()?;
+        Some(if self.options.simplified {
+            engine.traditional_char(last)
+        } else {
+            last
+        })
+    }
+
+    /// 上一次上屏的最後一段，前文 `context` 以它（原文或顯示的字）結尾時。
+    fn last_word_ending(&self, context: &str) -> Option<&LastWord> {
+        self.last_word
+            .as_ref()
+            .filter(|last| context.ends_with(&last.original) || context.ends_with(&last.shown))
     }
 
     fn turn_to(&mut self, engine: &Engine, page: usize) -> Snapshot {

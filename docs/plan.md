@@ -33,6 +33,7 @@
 | 線上更新 | `update`（網頁 `updatePacks`） | 資料包的來源（內建、匯入、線上更新） | `PackOrigin`（`builtin`、`imported`、`downloaded`） |
 | 粵典詞庫 / 粵典的詞頭 | `quick-lexicon-words-hk`（`WORDS_HK_LEXICON_ID`）/ `headwords`（`words_hk.rs`） | 預設詞庫 | 方案 `[packs] lexicon` 指名的那份（`quick-lexicon`） |
 | 停鍵層模型（資料包） | `ModelPack`（種類 `model`，id `zh-hant-neural-rerank`） | 神經重排 | `qim_neural::Reranker` |
+| 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
 
 ## 1. 架構總覽
 
@@ -92,7 +93,7 @@ flowchart LR
 
 | crate | 可以依賴 | 不可以 |
 | --- | --- | --- |
-| `qim-core` | `serde`、`postcard`、`serde_json`、`sha2`、`semver`（後三個給資料包 manifest，§4.6）；之後要加的依賴先改本表 | 任何 workspace crate（含綁定與平台 crate）；`std::fs`、`std::net`、`std::thread`、`std::time::SystemTime`（時間由殼以上屏次數傳入） |
+| `qim-core` | `serde`、`postcard`、`serde_json`、`sha2`、`semver`（後三個給資料包 manifest，§4.6）；之後要加的依賴先改本表 | 任何 workspace crate（含綁定與平台 crate）；`std::fs`、`std::net`、`std::thread`、`std::time::SystemTime`（時間由殼傳入：上屏次數與今天的日期，§2.4） |
 | `qim-layout` | `serde`、`serde_json`、`jsonschema` | `qim-core`；同上的 I/O |
 | `qim-neural` | `candle-core`、`candle-nn`（停鍵層的神經重排，M3 票 11 採用；模型由殼以位元組傳入，執行緒由殼開） | 任何 workspace crate；同上的 I/O |
 | `qim-wasm` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `wasm-bindgen` | 被 `qim-core` 或 `qim-layout` 依賴 |
@@ -268,13 +269,13 @@ P_段內 = 1（單字）
 
 - `P_bigram`：字級 interpolated Kneser-Ney bigram（§4.3），只看文字，所以「問」和「門口」、「一台」和「歹口」都在同一把尺上比；同樣的文字當成一個詞或拆成單字，段內的分數不同（詞用詞頻）。方案沒指名語言模型時每個字都是 0 分。
 - 詞級 trigram（M3 票 11b，§4.3）：方案指名詞級 trigram 時，每段的靜態機率 `log P_bigram + log P_段內` 換成 `log P_詞(段 | 前兩段)`：留下的 trigram 直接用；沒留下、前兩段有列時乘 α 退到詞級 bigram，前兩段沒有列時直接用詞級 bigram；詞級 bigram 同樣退到上面的現行打分。前一段不在詞表時整個照現行打分，所以沒有統計的地方和只有字級 bigram 時一樣；不在詞表的段（使用者詞、並存寫法的另一種）前一段有列時乘 α。`personal` 的靜態機率 `P` 也換成它，β、γ 照舊。段由建置端用現行打分切訓練句（§4.3），和解碼時的切法一致。詞表查文字用載入時建的雜湊索引：lattice 每條邊都查一次，用二分搜尋時每鍵比只有字級 bigram 慢一倍（p50 31 → 64 µs），雜湊後 45 µs（票 11b Comments）。
-- 組字開頭的字的「前一字」（M3 票 04，`Engine::context_char`）：有選定的分段時是最後一段的最後一字，和 lattice 裡路徑的下一段一樣，沒有統計的字照退回式算；否則看前文（§2.1）。bigram 只在句內訓練（§4.3 照標點、空白、符號切句），所以照切句的規則：前文以字結尾時接那個字；以標點、空白或符號結尾，或是空的時接句首（`CLAUSE_START`，§4.3）；結尾的字在語言模型裡沒有統計（英文、數字、罕用字）或資料包沒有句首時、不知道前文時（殼沒給、也還沒上屏過，或交還宿主的鍵讓它作廢，§2.1）、無痕時，用字頻的 unigram。先試過略過結尾的標點、接上一句的最後一字：「有前文」集合給前文反而比不給答錯多 1–5%、修正多 0.3–4%（四個語料都是），bigram 接不過標點；改接句首後給前文較好（票 04 Comments）。規則先在 test 的「有前文」集合上看出，之後在 dev 切分的同樣題目上重比三種規則，結論相同（`scripts/experiments/context-rule/`）。「有前文」集合的前文都以標點結尾（題目是整句），所以首選正確率量到的是句首的增益；「接前文的最後一字」只在模擬上屏一段後重打剩下的字時走到，只影響修正次數。
+- 組字開頭的字的「前一字」（M3 票 04，`Engine::context_char`）：有選定的分段時是最後一段的最後一字，和 lattice 裡路徑的下一段一樣，沒有統計的字照退回式算；否則看前文（§2.1）。bigram 只在句內訓練（§4.3 照標點、空白、符號切句），所以照切句的規則：前文以字結尾時接那個字（簡體模式下殼給的前文是簡體字，最後一字轉回繁體：前文以剛上屏的那一段結尾時取那段原文的最後一字，否則照停鍵層逐字轉回，§2.7；M4 票 04）；以標點、空白或符號結尾，或是空的時接句首（`CLAUSE_START`，§4.3）；結尾的字在語言模型裡沒有統計（英文、數字、罕用字）或資料包沒有句首時、不知道前文時（殼沒給、也還沒上屏過，或交還宿主的鍵讓它作廢，§2.1）、無痕時，用字頻的 unigram。先試過略過結尾的標點、接上一句的最後一字：「有前文」集合給前文反而比不給答錯多 1–5%、修正多 0.3–4%（四個語料都是），bigram 接不過標點；改接句首後給前文較好（票 04 Comments）。規則先在 test 的「有前文」集合上看出，之後在 dev 切分的同樣題目上重比三種規則，結論相同（`scripts/experiments/context-rule/`）。「有前文」集合的前文都以標點結尾（題目是整句），所以首選正確率量到的是句首的增益；「接前文的最後一字」只在模擬上屏一段後重打剩下的字時走到，只影響修正次數。
 - 詞的段：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，前後文由字級 bigram 接，詞內由 rime-essay 的詞頻估（每個詞算一次的詞頻總和當分母）。詞內也用字級 bigram 時，同碼的詞分不出常用度，個人集答錯多 27%（M1 票 11 Comments）。
 - `β` 鼓勵詞庫裡的詞，`γ` 抑制過度切碎；由首選字基準的 dev 切分調出（`cargo xtask bench --dev`），寫進方案檔。方案檔、`bench --set` 與載入資料包都經 `Ranking::check` 驗：beam 至少 1，β、γ 是有限的數（M3 票 03）。速成是 β = 1、γ = 1（M1 票 12）：dev 偏好更小的 β，但個人集（多是兩字詞）答錯變多，個人集只當守門、不拿來調。
 - `personal`：學過的段在任何長度的連打裡都加分，只加不減。參考 libime 的 `max(靜態分, log((1−w)·靜態機率 + w·個人機率))`，`w` = 0.05（libime 用 0.2，`docs/research/libime-user-model.md` §1；M1 票 12 調）；沒學過的段為 0。所以 `personal(段) = max(0, ln((1−w)·P + w·P_personal) − ln P)`，`P` 是這一段接在前一字後的靜態機率：首字 bigram 乘詞內機率，不含 β、γ。個人機率由這一段的學習計數與個人 bigram 合成（下面兩條）。
   - 個人機率 `P_personal = d_now ÷ D_max`：`d_now` 是（方案, 碼, 字詞）的衰減值衰減到這個方案現在的 tick（`d · e^(−(tick − 最後 tick)/200)`），`D_max = 1 / (1 − e^(−1/200)) ≈ 200.5` 是每次上屏都是它時衰減值的上限，所以 `P_personal` 在 (0, 1]。分母取常數，照 libime 除以滿載歷史的總量：學過一次的段 `P_personal ≈ 0.005`，不會因為才學幾次就壓過所有詞。
   - 個人 bigram（M3 票 12）：記「前一個字詞 → 這一段」的衰減值（§2.4），`P_bigram` 是這一段接在前一個字詞後面的條件機率：這組的衰減值 ÷ 前一個字詞後面各段的衰減值總和（都衰減到現在，照 libime `HistoryBigram` 除以前一詞的計數，`docs/research/libime-user-model.md` §2）。兩者合成 `P_personal = P_unigram + (1 − P_unigram)·λ·P_bigram`，λ = 0.8。libime 是 `(1 − λ)·P_unigram + λ·P_bigram`，沒有前一個字詞時學過的段只剩兩成的個人分，`a_learned_word_also_scores_in_longer_continuous_input` 就紅；這裡 bigram 只往上加。λ 在 dev 切分的學習模式掃 0–1，0.8 八個集合合計修正最少（票 12 Comments）。
-  - 前一個字詞：lattice 裡是部分路徑的最後一段；組字開頭是最後選定的分段，沒有時看前文：前文以上一次上屏的組字的最後一段結尾時是那一段（原文；簡體模式的前文是轉換後的字，也認），否則是前文的最後一字（字母或數字才算，標點、空白之後沒有）。沒給前文、無痕時沒有。前文只是一串字、分不出詞，所以接得上整個詞的只有剛上屏的那一段（同 libime 由上層傳入上一次上屏的詞）。
+  - 前一個字詞：lattice 裡是部分路徑的最後一段；組字開頭是最後選定的分段，沒有時看前文：前文以上一次上屏的組字的最後一段結尾時是那一段（原文；簡體模式的前文是轉換後的字，也認），否則是前文的最後一字（字母或數字才算，標點、空白之後沒有；簡體模式同上轉回繁體，個人 bigram 記的是原文，讀寫都用轉回的字，M4 票 04）。沒給前文、無痕時沒有。前文只是一串字、分不出詞，所以接得上整個詞的只有剛上屏的那一段（同 libime 由上層傳入上一次上屏的詞）。
   - 分母改用實際上屏的段數衰減總和時，`bench --learning` 四個公開集合的修正次數都較多（M1 票 13 Comments，當時是 unigram），所以用常數。
 - 詞內在詞頻與字級 bigram 之間內插（權重 0.4–0.6）在 dev 上口語略好、維基答錯少約 3–5%，但個人集答錯多 5–16%，不採用（M1 票 12 Comments）。
 - `personal` 的 w：票 13 換上 bigram 後 w 0.2 讓 zh-wiki 學習開變差，票 12 換上口語權重與新 β、γ 後連 common-voice-yue 也變差。學習模式改讀 dev 切分掃 0.01–0.2，0.05 對口語與維基都最好；test 上口語兩集、個人集與 yue-wiki 學習開較少，zh-wiki 持平（票 12 Comments）。
@@ -318,14 +319,17 @@ P_段內 = 1（單字）
 - 分隔記號（§2.1）不進學習資料：每段、整串、自動造詞的碼都去掉它，排位規則比對的碼也去掉它（同 Rime 使用者詞典的碼由音節組成，brief §12.2）。所以 `mi'r` 選兩次「歹口」，記的是 `mir` → 歹口，不分隔打 `mir` 也成首選；分隔過的組字照舊要分兩次以上選定才自動造詞（M1 票 28）。
 - `Options.incognito` 為真時不寫任何學習資料、不用前文。學習總開關 `Options.learning`（brief §4.5、§7，預設開，M3 票 12）關掉時也不寫任何學習資料（計數、個人 bigram、自動造詞），但已學的照用、前文照用；手動加詞與常用語是使用者明確的操作，照收（同無痕）。
 - 選了聯想（§2.1，M3 票 13）只記個人 bigram「剛上屏的最後一段 → 這個聯想」（`UserModel::learn_association`，tick 同上），聯想沒有輸入碼，不記學習計數；它也成了下一次組字前面的字詞（§2.3）。無痕、學習關掉時不記。
-- 匯出格式（對外，M1 票 14 定稿 v1；M3 升 v2，M3 票 23 定稿：下面四種列與跳脫就是 v2，之後加列的種類或改欄位要升 v3，brief §5.3）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
-  - 第一行 `# qim-userdict v2`；匯入也收 `# qim-userdict v1`（M3 spec〈共同規則〉）。接著個人 bigram 的 tick 一行 `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫），每個方案一行 `#@/tick/<方案>\t<tick>`；其餘 `#` 開頭的行與空行是註解，匯出時寫一行欄名註解，有個人 bigram 時在它們前面另一行。
-  - 每個（方案, 輸入碼, 詞）一列、9 欄，依方案、輸入碼、詞排序：`方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語，v2 起）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。
-  - 個人 bigram（v2 起，M3 票 12）：每組一列、5 欄，接在上面的列之後，依前一個字詞、這一段排序：`（空的方案欄）  前一個字詞  這一段  衰減值  最後 tick`。方案欄空的就是各方案共用，和其他列分得開（其他列的方案不能空）；前一個字詞與這一段照詞欄跳脫，不能是空的，衰減值是正的有限數。沒有 `#@/tick` 行時 tick 取最大的最後 tick（同方案的 tick）。v1 沒有這種列，方案欄空的照舊整份不收。
-  - 記住的字串（v2 起，M3 票 15）：每條一列、5 欄，接在個人 bigram 之後，依字串排序：`（空的方案欄）  （空的前一個字詞欄）  字串  衰減值  最後 tick`。和個人 bigram 同形，前一個字詞欄空的就是記住的字串（個人 bigram 的前一個字詞不能是空的）；字串照詞欄跳脫、要是 email（同打字時記的規則），衰減值是正的有限數。它用個人 bigram 的 tick（`#@/tick`，各方案共用的時間），每記一次 tick 加一。
-  - v2 的詞欄跳脫（M3 票 14，常用語含換行與 Tab）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，反斜線後是其他字或在結尾時整份不收；照 PostgreSQL `COPY` 的文字格式與 Linear TSV。v1 的詞欄照字面讀。常用語那列的輸入碼是空的、計數都是 0，觸發詞學到的計數另是一列 `learned`（碼是觸發詞）；其他列的輸入碼不能是空的。
-  - 參考：librime userdb 文字檔（第一行註解、`#@/key<Tab>value` 的 metadata 含 `/tick`、每列記衰減值 `d` 與最後 tick `t`）；libime 使用者詞庫分手動詞與 `[Auto]` 段，這裡收成「來源」欄。和兩者不同：第一行帶格式版本（兩者都沒有）；統計用固定欄，不用 librime 的 `c= d= t=`，因為要多記整串上屏的次數與 tick（規則 2），升版本時本來就要改 parser；多個方案放同一檔；刪除記號（librime 負的 `c`、libime `[Delete]`）等 M4 同步定合併規則時一起加（§7.5）。查證在 `docs/research/userdict-text-formats.md`。
-  - 匯入取代整個個人模型（殼存檔、換機都是整份），有一列不合格式就整份不收、錯誤帶行號：取代時收一半等於丟資料。兩者都是合併、壞列略過；合併規則跟同步一起在 M4 定。
+- 今天的日期（M4 票 12，殼的日期契約）：核心不讀系統時間（§1.3），殼用 `UserModel::set_today` 給使用者當地的日曆日（`qim_core::Date`，`YYYY-MM-DD`）。殼必須在第一次學習前給（含匯入存檔之前，v1、v2 的列取匯入那天），之後每次使用者操作前再給一次，過了午夜才不會記成前一天；網頁在 `window` 捕獲 `keydown`、`pointerdown` 時給。學到或改到的每個條目（學習計數、使用者詞、個人 bigram、記住的字串）記最後使用的日期，同一組（方案, 輸入碼, 詞）的計數與使用者詞是同一個日期；手動加詞、常用語記加進來（或改觸發詞）的那天。殼沒給過日期時學到的條目沒有日期（`None`，匯出時日期欄留空），不寫假日期：之後的一年時限（M4 票 13）跳過沒有日期的條目，免得殼漏給時資料被當成很久沒用而清掉。
+- 匯出格式（對外，M1 票 14 定稿 v1；M3 票 23 定稿 v2；M4 票 12 起是 v3 草稿，M4 收尾票定稿前 M4 的票可以往裡加種類與欄位，brief §5.3、M4 spec〈共同規則〉）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
+  - 第一行 `# qim-userdict v3`；匯入也收 v1、v2（見下面〈v1、v2〉）。接著 metadata 行，照 librime userdb 文字檔的 `#@/key<Tab>value`：裝置 id `#@/device\t<id>`（殼給過才寫，`UserModel::set_device`：英數、`-`、`_`，1–64 字；網頁第一次載入時用 `crypto.randomUUID()` 產生、存 `localStorage` 的 `qim.device`，照 librime 每次安裝一個 `installation_id`；跨裝置合併時分辨各台，M4 票 17）、個人 bigram 的 tick `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫）、每個方案一行 `#@/tick/<方案>\t<tick>`。其餘 `#` 開頭的行與空行是註解；匯出時每種列前寫一行欄名註解（`entry` 那行一定寫，其他種類有列時才寫）。
+  - 每列第一欄是種類；不認得的種類（之後的版本加的）略過，匯入回警告帶行號（`Imported::warnings`），其他列照收；已知種類照舊嚴格，一列不合格式就整份不收、錯誤帶行號。種類欄空的也不收。每列都有最後使用的日期欄 `last_used`：`YYYY-MM-DD` 的真實日期，或空的（不知道，見上面的日期契約）。日期只到日、不帶時區與時刻：一年時限只要日，也少洩漏打字的時刻；LatinIME 每個條目存最後使用的時間戳（300 天沒用的條目在 GC 時移除，淘汰也先刪最舊的，`docs/research/learning-forgetting-sync.md` §2.2–§2.3），librime 沒有日曆時間只有 tick。
+  - `entry`：每個（方案, 輸入碼, 詞）一列、11 欄，依方案、輸入碼、詞排序：`entry  方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  最後使用的日期  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。常用語那列的輸入碼是空的、計數都是 0，觸發詞學到的計數另是一列 `learned`（碼是觸發詞）；其他列的輸入碼不能是空的。
+  - `bigram`：個人 bigram（M3 票 12）每組一列、6 欄，接在 `entry` 之後，依前一個字詞、這一段排序：`bigram  前一個字詞  這一段  衰減值  最後 tick  最後使用的日期`。前一個字詞與這一段照詞欄跳脫，不能是空的，衰減值是正的有限數。沒有 `#@/tick` 行時 tick 取最大的最後 tick（同方案的 tick）。
+  - `string`：記住的字串（M3 票 15）每條一列、5 欄，接在 `bigram` 之後，依字串排序：`string  字串  衰減值  最後 tick  最後使用的日期`。字串照詞欄跳脫、要是 email（同打字時記的規則），衰減值是正的有限數。它用個人 bigram 的 tick（`#@/tick`，各方案共用的時間），每記一次 tick 加一。
+  - 詞欄跳脫（v2 起，M3 票 14，常用語含換行與 Tab）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，反斜線後是其他字或在結尾時整份不收；照 PostgreSQL `COPY` 的文字格式與 Linear TSV。
+  - v1、v2（M3 spec〈共同規則〉，一直要收）：沒有種類欄、日期與裝置 id，每列的最後使用日期取匯入那天（殼還沒給日期時沒有日期）：v1、v2 的資料是使用者正在搬過來的，取匯入那天給它們一年，不會一升級就被時限清掉；不知道日期就留空，同上面的契約。v2 的列依空的欄分種類：一般列 9 欄 `方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`；方案欄空的是個人 bigram（`（空）  前一個字詞  這一段  衰減值  最後 tick`），方案欄與前一個字詞欄都空的是記住的字串（`（空）  （空）  字串  衰減值  最後 tick`）；`#@/tick` 是共用的 tick。v1 只有一般列、沒有 `phrase`，詞欄照字面讀不跳脫，`#@/tick` 行是註解。
+  - 參考：librime userdb 文字檔（第一行註解、`#@/key<Tab>value` 的 metadata 含 `/tick` 與裝置的 `/user_id`、每列記衰減值 `d` 與最後 tick `t`）；libime 使用者詞庫分手動詞與 `[Auto]` 段，這裡收成「來源」欄。和兩者不同：第一行帶格式版本（兩者都沒有）；統計用固定欄，不用 librime 的 `c= d= t=`，因為要多記整串上屏的次數與 tick（規則 2），升版本時本來就要改 parser；多個方案放同一檔；每列有明確的種類欄，未知種類略過（librime 靠 parser 略過壞列與未知的 `key=value` 相容，`docs/research/userdict-text-formats.md` §1.8），已知種類仍嚴格；刪除記號（librime 負的 `c`、libime `[Delete]`）與各台分開的次數等 M4 票 17 定合併規則時加成新的種類或欄位。查證在 `docs/research/userdict-text-formats.md`。
+- 匯入取代整個個人模型（殼存檔、換機都是整份），已知種類有一列不合格式就整份不收、錯誤帶行號：取代時收一半等於丟資料（librime、libime 兩者都是合併、壞列略過）。`UserModel::import(text, today)` 把檔讀成一份新的個人模型，殼取代時留著自己的今天與裝置 id（檔可能是別台匯出的）。改成合併在 M4 票 17。
 
 ### 2.5 輸入方案（brief §6）
 
@@ -448,7 +452,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
 - 重排結果只決定名次，不寫回分數：神經分數只在同一串按鍵內可比（青簡踩過，`docs/research/open-source-imes.md` §5）。
 - `cargo xtask bench` 只跑同步層，不跑停鍵層的重排：`bench --check` 的個人集 baseline 守不到重排把哪些詞翻好或翻壞。換掉或重訓停鍵層的模型時，要跑 `scripts/experiments/model-ladder/` 的 `neural --split test` 與 `compare`（README〈怎麼重跑〉），報口語、維基、個人集的前 2 名與翻盤數；個人集只列數字與題號、只報不擋（`.scratch/m3/spec.md`〈採用門檻〉，M3 票 25）。1.4M 在新基線上個人集前 2 名 85.76% → 85.23%（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。
 - `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。殼經 `ModelPack::open` 核對模型資料包（§4.6），把欄位交給 `Reranker::new(權重, 字表, 字表外的字數, λ)`，再呼叫 `Reranker::rank(前文, 路徑的文字與路徑分)` 拿到路徑序號（好的在前）；前文只取最後 50 字（`CONTEXT_CHARS`），標點、空白、符號連續的收成 `<sep>`，字表外的字母數字連續的收成 `<unk>`；路徑裡字表外的字當 `<unk>`、另扣 `ln(字表外的字數)`；前文只算一次、各路徑共用（前綴快取），路徑補齊成一樣長一批算、補的位置遮掉；空字串的路徑神經分是 0。這台 Mac 上重排一次（9 條 × 18 字、前文 50 字，2 條執行緒）p95 約 6 ms（M3 票 11d，`cargo run --release -p qim-neural --example latency`）；網頁在 Web Worker 裡單執行緒、開 SIMD128 是 p95 27 ms（M3 票 11e，§3.1）。
-- 簡體模式下殼給的前文是簡體字，模型的字表是繁體：`rerank_request` 把前文逐字轉回繁體（反查簡繁資料包的表，一對多取語言模型 unigram 最高的，`Simplifier::traditional_chars`），選定的分段本來就是繁體原文（M3 票 11e，使用者決定）。只看單字、不看詞，「头发」會轉成「頭發」；同步層 bigram 的前文還沒轉（簡體字沒有統計時退回 unigram）。
+- 簡體模式下殼給的前文是簡體字，模型的字表是繁體：`rerank_request` 把前文逐字轉回繁體（反查簡繁資料包的表，一對多取語言模型 unigram 最高的，`Simplifier::traditional_chars`），選定的分段本來就是繁體原文（M3 票 11e，使用者決定）。只看單字、不看詞，「头发」會轉成「頭發」。同步層的前文也轉回繁體，另外前文以剛上屏的那一段結尾時取那段原文（「幹」顯示「干」仍接「幹」）；停鍵層只逐字轉（M4 票 04，§2.3）。
 - 模型的來源：`scripts/neural-rerank/train.py` 用 PyTorch 訓練（不是決定性的），`cargo xtask neural-import` 用 `reference.json` 核對 PyTorch 與 candle（f32 差 ≤ 0.0001 nat）後量化成 q8、寫進 `data/neural-rerank/`（進 git），`cargo xtask data` 只把它包成模型資料包（`docs/development.md`〈停鍵層的模型〉）。
 - 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 2·神經分`，λ 2 在 dev 定），在詞級 trigram 的新基線上口語 +5.5 點（票 11d；個人集 −0.53 點，模型階梯的個人集改成只報不擋後採用，票 25）；23M、Foundation Models、雲端 LLM 沒過門檻，不做（票 25 對新基線重量：23M 卡在 iPhone 峰值 +75 MB、flash 比 1.4M 只多 2.4 點）。
 
@@ -657,13 +661,13 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
   - 同時報不加權與依上屏次數加權的結果。
   - 偏差：使用者只選得到 Rime 給的候選，所以這份資料偏向 Rime 詞庫已有的詞；QIM 的詞庫也來自 rime-essay，個人集的分數可能偏高，判斷時要和口語集一起看。
   - 隱私：個人集的內容不寫進 repo 的任何檔案、commit、票，只報數字；不送雲端 LLM（§7.8 的雲端部分不跑個人集，除非使用者同意）。
-- 指標：固定題通過數、整句首選正確率、字正確率、修正次數、每字按鍵數、首選跳動、每鍵延遲 p50 / p95（原生與 WebAssembly 各量一次，WebAssembly 用 Node 跑網頁同一份綁定；只報不擋，另報組字第 20 碼起的按鍵與「選開頭一段」那一鍵：選定後剩下的輸入碼從頭重建 lattice，M2 票 07 加）。
+- 指標：固定題通過數、整句首選正確率、字正確率、修正次數、每字按鍵數、首選跳動、每鍵延遲 p50 / p95（原生與 WebAssembly 各量一次，WebAssembly 用 Node 跑網頁同一份綁定；另報組字第 20 碼起的按鍵與「選開頭一段」那一鍵：選定後剩下的輸入碼從頭重建 lattice，M2 票 07 加；空白的學習資料與學過的〔一個 `UserModel` 依序學完全部公開集合〕各量一組，M4 票 05 加）。原生的 p95 由 `--check` 擋，上限在 [M4 spec〈每鍵延遲上限〉](../.scratch/m4/spec.md#每鍵延遲上限)；WebAssembly 只報。
 - 依長度分組：正確率與修正次數另按目標的字數分組（1、2、3–4、5–8、9 以上）。熟手多半打幾個字就上屏，長句的整句正確率低且雜訊大，分組才看得出變化。
 - 翻盤清單：和 baseline 比，列出由錯變對、由對變錯的題目（個人集只列題號）。只看總數會把一處變好、一處變壞看成沒變。
-- 學習模式（`--learning`）：照檔案的順序打每個語料集合、「有前文」的題（給前文）與個人集，模擬使用者選字（同修正次數的模擬）並讓整個集合共用的 `UserModel` 學習，和同一順序、每題空白的 `UserModel` 比修正次數。只報不擋，不讀也不寫 baseline。基準其他模式都用空白的 `UserModel`。
+- 學習模式（`--learning`）：照檔案的順序打每個語料集合、「有前文」的題（給前文）與個人集，模擬使用者選字（同修正次數的模擬）並讓整個集合共用的 `UserModel` 學習，和同一順序、每題空白的 `UserModel` 比修正次數。只報不擋，不讀也不寫 baseline。基準其他模式都用空白的 `UserModel`（每鍵延遲另量學過的一組）。
 - 修正次數：模擬使用者打完整句輸入碼，首選能接上目標句就按空白，否則選能接上的最長候選，第一頁沒有就翻頁。每次選非首選或翻頁算一次，以每句平均回報。每字按鍵數把這些動作和輸入碼都算進去（文字輸入研究常用的 KSPC）。卡住（翻完都接不上）時按 Esc 清掉（算一次修正）改成一個字一個字打；一個字一個字也打不出就算「打不出」，`--check` 紅。細節見 `docs/development.md`〈首選字基準〉。
 - 首選跳動：逐碼打字時，首選開頭已打完的字被下一鍵改掉的次數，每句平均。先只回報，不擋 commit。
-- `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline、沒有打不出的題，否則失敗；集合沒有 baseline、或 baseline 的集合沒跑到也算失敗。改核心或資料包時必跑。
+- `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline、沒有打不出的題、原生每鍵延遲的 p95 在上限內，否則失敗；集合沒有 baseline、或 baseline 的集合沒跑到也算失敗。改核心或資料包時必跑。
 - 更新 baseline 要用 `--update-baseline`，並在同一個 commit 說明原因。
 - dev 切分也有「有前文」的題（`build/corpus/<名>/dev-context.tsv`，取法同 test 的），`--dev` 一樣給前文、不給前文各打一次（M3 票 04）。
 - 長前文（M3 票 07）：`cargo xtask data` 另寫 `build/corpus/<名>/test-context-long.tsv` 與 `dev-context-long.tsv`，是 test 與 dev「有前文」的同一批題、同順序，前文換成同一段裡前面最多 200 字（不跨換行）。基準不讀；模型階梯截成前文 0、50、200 字量（`scripts/experiments/model-ladder/`）。

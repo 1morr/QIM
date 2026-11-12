@@ -90,3 +90,41 @@ test("簡體模式按 Tab，字根提示對應繁體「門口」", async ({ page
 	// 「門」的五代是 an，不是「门」的 lis。
 	await expect(page.getByTestId("hint-1")).toHaveText("日弓(an) 口(r)");
 });
+
+/** 換掉輸入框的內容、游標放在結尾，像使用者貼上後點到那裡（同 `context.spec.ts`）。 */
+async function place(page: Page, value: string) {
+	await page
+		.getByRole("textbox", { name: "輸入框" })
+		.evaluate((element: HTMLTextAreaElement, value) => {
+			element.value = value;
+			element.dispatchEvent(new Event("input", { bubbles: true }));
+			element.setSelectionRange(value.length, value.length);
+		}, value);
+}
+
+// 同步層的前文（M4 票 04，plan §2.3）：簡體模式下輸入框裡是簡體字，最後一字轉回繁體再接 bigram。
+// 「点」接「點」的統計，`nq` 首選「解」（點解）；轉之前「点」沒有統計，和前文以英文結尾一樣照
+// unigram 是「建」。
+test("簡體模式下前文「点」讓 nq 的首選變成「解」，和繁體前文「點」相同", async ({
+	page,
+}, testInfo) => {
+	const { text, simplified, items } = await ready(page);
+	await simplified.check();
+	await text.focus();
+	await place(page, "OK");
+	await page.keyboard.type("nq");
+	await expect(items.first()).toHaveText("1建");
+	await page.keyboard.press("Escape");
+
+	await place(page, "点");
+	await page.keyboard.type("nq");
+	await expect(items.first()).toHaveText("1解");
+	await page.screenshot({
+		path: testInfo.outputPath("simplified-context.png"),
+	});
+	await page.keyboard.press("Escape");
+
+	await place(page, "點");
+	await page.keyboard.type("nq");
+	await expect(items.first()).toHaveText("1解");
+});

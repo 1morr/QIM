@@ -303,9 +303,19 @@ fn touch_text_keys_count_as_typed() {
     assert_eq!(ime.user.remembered_strings(), vec![EMAIL.to_string()]);
 }
 
-/// 匯出 v2：記住的字串是方案欄、前一個字詞欄都空的列（各方案共用、沒有前一個字詞），衰減值與最後 tick
-/// 同個人 bigram，tick 是共用的 `#@/tick`。
+/// 匯出 v3：記住的字串是種類 `string` 的列（各方案共用），衰減值與最後 tick 同個人 bigram，tick 是共用的
+/// `#@/tick`；殼沒給日期，最後使用的日期欄是空的。
 const TWO_EMAILS: &str = "\
+# qim-userdict v3
+#@/tick\t3
+# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tsource\ttrigger
+# kind\tstring\tdecayed\tlast_tick\tlast_used
+string\tivan.test@example.com\t1.990049833749168\t3\t
+string\tivan@work.example.org\t1\t2\t
+";
+
+/// 同一份寫成 v2（M3 票 23 定稿，固定）：方案欄、前一個字詞欄都空的列。
+const TWO_EMAILS_V2: &str = "\
 # qim-userdict v2
 #@/tick\t3
 # scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger
@@ -322,8 +332,10 @@ fn remembered_strings_export_and_import_as_shared_rows() {
     ime.type_in_english(EMAIL);
     assert_eq!(ime.user.export(), TWO_EMAILS);
 
-    let user = UserModel::import(TWO_EMAILS).unwrap();
+    let user = UserModel::import(TWO_EMAILS, None).unwrap().user;
     assert_eq!(user.export(), TWO_EMAILS);
+    let from_v2 = UserModel::import(TWO_EMAILS_V2, None).unwrap().user;
+    assert_eq!(from_v2, user);
     let mut ime = Ime { user, ..Ime::new() };
     assert_eq!(
         ime.candidates("ivan")[1..3],
@@ -339,12 +351,15 @@ fn a_row_that_is_not_an_email_is_an_error_with_its_line() {
         "\t\tivan@localhost\t1\t1",
         "\t\tivan\\n@example.com\t1\t1",
     ] {
-        let error = UserModel::import(&format!("{header}{row}\n")).unwrap_err();
+        let error = UserModel::import(&format!("{header}{row}\n"), None)
+            .map(|i| i.user)
+            .unwrap_err();
         assert_eq!(error.line, 2, "{row:?}");
     }
     let row = "\t\tivan@example.com\t1\t1\n";
     assert_eq!(
-        UserModel::import(&format!("{header}{row}{row}"))
+        UserModel::import(&format!("{header}{row}{row}"), None)
+            .map(|i| i.user)
             .unwrap_err()
             .line,
         3,
@@ -485,6 +500,6 @@ fn an_import_with_more_than_the_limit_is_an_error() {
     for i in 0..=REMEMBERED_STRINGS_MAX {
         text.push_str(&format!("\t\tuser{i}@example.com\t1\t{}\n", i + 1));
     }
-    let error = UserModel::import(&text).unwrap_err();
+    let error = UserModel::import(&text, None).map(|i| i.user).unwrap_err();
     assert_eq!(error.line, REMEMBERED_STRINGS_MAX + 2);
 }
