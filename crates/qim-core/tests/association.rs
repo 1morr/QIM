@@ -206,8 +206,7 @@ fn escape_only_closes_the_association() {
     assert!(!typing.key(Key::Escape).handled);
 }
 
-/// 有聯想時退格交還宿主刪字、聯想同時收起（M4 票 18c，使用者決定，偏離 librime-predict 與 Gboard
-/// 第一下只收起的慣例）。
+/// 有聯想時退格交還宿主刪字、聯想同時收起（plan §2.1）。
 #[test]
 fn backspace_closes_the_association_and_passes_to_the_host() {
     let mut typing = Typing::new();

@@ -1130,8 +1130,8 @@ impl Session {
 
     /// 聯想顯示中的鍵（plan §2.1），照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
     /// 不送字元的修飾鍵不動它。其他鍵收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，
-    /// 退格、空白、Enter、方向鍵、沒有那個聯想的數字交還宿主，標點照常上屏。退格交還宿主刪字
-    /// 是使用者的決定（M4 票 18c），偏離 librime-predict 與 Gboard 第一下只收起的慣例。
+    /// 退格、空白、Enter、方向鍵、沒有那個聯想的數字交還宿主，標點照常上屏。退格為什麼不像
+    /// librime-predict 只收起，見 plan §2.1。
     fn handle_association(
         &mut self,
         engine: &Engine,
