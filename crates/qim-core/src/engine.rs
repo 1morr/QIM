@@ -206,11 +206,14 @@ impl Engine {
         }
     }
 
-    /// 簡體字逐字轉回繁體（[`Engine::traditional_chars`]），其他字照原樣；沒掛上簡繁資料包時照原樣。
+    /// 簡體字逐字轉回繁體（[`Engine::traditional_char`]）。
     pub(crate) fn traditional(&self, text: &str) -> String {
-        text.chars()
-            .map(|c| self.traditional_chars.get(&c).copied().unwrap_or(c))
-            .collect()
+        text.chars().map(|c| self.traditional_char(c)).collect()
+    }
+
+    /// 簡體字轉回繁體（[`Engine::traditional_chars`]），其他字照原樣；沒掛上簡繁資料包時照原樣。
+    pub(crate) fn traditional_char(&self, c: char) -> char {
+        self.traditional_chars.get(&c).copied().unwrap_or(c)
     }
 
     /// 由資料包的位元組建立；讀檔是呼叫端的事（plan §1.3）。
@@ -410,16 +413,13 @@ impl Engine {
             + personal_bonus(static_log_prob, edge.personal, bigram)
     }
 
-    /// 組字接在前文 `before` 後面時，開頭的字要接的前一字（plan §2.3）。bigram 只在句內訓練
-    /// （句子以不是字母也不是數字的字元分開），所以照切句的規則：前文以字結尾時是那個字；以
-    /// 標點、空白或符號結尾，或是空的（輸入框的開頭）時是句首 [`CLAUSE_START`]。語言模型裡沒有
-    /// 它的統計（英文、數字、罕用字，或資料包沒有句首）時是 `None`，照不知道前文打。
-    pub(crate) fn context_char(&self, before: &str) -> Option<char> {
-        let last = before
-            .chars()
-            .next_back()
-            .filter(|c| c.is_alphanumeric())
-            .unwrap_or(CLAUSE_START);
+    /// 組字接在前文後面時，開頭的字要接的前一字（plan §2.3）；`last` 是前文的最後一字（繁體，
+    /// 簡體模式由呼叫端轉回），空的前文是 `None`。bigram 只在句內訓練（句子以不是字母也不是數字
+    /// 的字元分開），所以照切句的規則：前文以字結尾時是那個字；以標點、空白或符號結尾，或是空的
+    /// （輸入框的開頭）時是句首 [`CLAUSE_START`]。語言模型裡沒有它的統計（英文、數字、罕用字，
+    /// 或資料包沒有句首）時是 `None`，照不知道前文打。
+    pub(crate) fn context_char(&self, last: Option<char>) -> Option<char> {
+        let last = last.filter(|c| c.is_alphanumeric()).unwrap_or(CLAUSE_START);
         self.language_model.has_statistics(last).then_some(last)
     }
 

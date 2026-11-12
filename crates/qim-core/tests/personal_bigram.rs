@@ -7,12 +7,12 @@ mod common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Packs, Ranking, Scheme,
-    SchemePack, Session, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, ConversionTable, Engine, Key, Lexicon, LexiconPack, Options, Packs,
+    Ranking, Scheme, SchemePack, Session, Simplifier, SimplifierPack, Snapshot, UserModel, Word,
 };
 
-/// `ab` 是「甲」「乙」「丙」，甲的字頻遠高、乙丙相近；`c`「丁」、`d`「天」、`e`「日」給前文用；
-/// `cd` 是詞「丁天」；`fg` 是「戊」「己」，戊的字頻只比己高三倍。
+/// `ab` 是「甲」「乙」「丙」，甲的字頻遠高、乙丙相近；`c`「丁」、`d`「天」、`e`「日」、`h`「門」
+/// （简「门」）給前文用；`cd` 是詞「丁天」；`fg` 是「戊」「己」，戊的字頻只比己高三倍。
 fn engine(scheme: &str) -> Engine {
     let table = [
         ("ab", "甲乙丙"),
@@ -20,6 +20,7 @@ fn engine(scheme: &str) -> Engine {
         ("d", "天"),
         ("e", "日"),
         ("fg", "戊己"),
+        ("h", "門"),
     ];
     let chars = [
         ('甲', 1000),
@@ -30,6 +31,7 @@ fn engine(scheme: &str) -> Engine {
         ('日', 50),
         ('戊', 30),
         ('己', 10),
+        ('門', 50),
     ];
     let code_table = CodeTable::from_entries(table.iter().map(|(code, chars)| {
         let entries = chars
@@ -199,6 +201,71 @@ fn a_bigram_learned_in_one_scheme_applies_in_another() {
     assert!(
         rank_of_bing_after(&cangjie, &mut user, "丁")
             < rank_of_bing_after(&cangjie, &mut blank, "丁")
+    );
+}
+
+fn simplifier() -> SimplifierPack {
+    let table = ConversionTable::new([("門".to_string(), "门".to_string())]);
+    SimplifierPack {
+        id: "opencc-hk2s".into(),
+        simplifier: Simplifier::new(vec![], ConversionTable::new([]), vec![vec![table]]),
+    }
+}
+
+/// `simplified` 是簡體模式時的選項，否則是預設（繁體）。
+fn mode(simplified: bool) -> Options {
+    Options {
+        simplified,
+        ..Options::default()
+    }
+}
+
+/// 照 `options` 給前文 `context`、打 `ab`、選「丙」上屏。
+fn learn_bing_after(engine: &Engine, user: &mut UserModel, options: Options, context: &str) {
+    let mut session = Session::default();
+    session.set_options(options);
+    session.set_context(context);
+    let shown = type_code(engine, &mut session, user, "ab");
+    pick(engine, &mut session, user, shown, &["丙"]);
+}
+
+/// 照 `options` 給前文 `context`、打 `ab`，回「丙」的位置；清掉組字、不上屏。
+fn rank_of_bing_in(
+    engine: &Engine,
+    user: &mut UserModel,
+    options: Options,
+    context: &str,
+) -> usize {
+    let mut session = Session::default();
+    session.set_options(options);
+    session.set_context(context);
+    let shown = type_code(engine, &mut session, user, "ab");
+    session.handle(engine, user, Key::Escape);
+    rank_of_bing(&shown)
+}
+
+/// 個人 bigram 記繁體原文：簡體模式下殼給的前文（不是剛上屏的那段）最後一字轉回繁體再查、
+/// 再記，所以簡體模式在「门」後學的，繁體模式在「門」後用得到，反過來也是。
+#[test]
+fn simplified_context_reads_and_writes_the_traditional_previous_word() {
+    let engine = engine("quick").with_simplifier(simplifier());
+    let (traditional, simplified) = (mode(false), mode(true));
+    let blank = rank_of_bing_in(&engine, &mut UserModel::default(), traditional, "門");
+
+    let mut user = UserModel::default();
+    learn_bing_after(&engine, &mut user, simplified, "门");
+    let rank = rank_of_bing_in(&engine, &mut user, traditional, "門");
+    assert!(
+        rank < blank,
+        "簡體模式學的：繁體「門」後丙第 {rank}，沒學過第 {blank}"
+    );
+
+    let mut user = UserModel::default();
+    learn_bing_after(&engine, &mut user, traditional, "門");
+    let rank = rank_of_bing_in(&engine, &mut user, simplified, "门");
+    assert!(
+        rank < blank,
+        "繁體模式學的：簡體「门」後丙第 {rank}，沒學過第 {blank}"
     );
 }
 
