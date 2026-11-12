@@ -11,11 +11,14 @@ use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, Weights, punctuation};
 
 mod inspect;
+mod rerank_cache;
 
 pub use inspect::{
     CandidateKind, ContextState, InspectedCandidate, InspectedSegment, Inspection, PrecedingChar,
     Reranked, SegmentSource,
 };
+pub use rerank_cache::RERANK_CACHE_LIMIT;
+use rerank_cache::{RerankCache, RerankKey};
 
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
@@ -477,6 +480,15 @@ pub struct Session {
     /// 最近一個鍵是觸控的 [`Key::Weighted`] 時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
     /// 其他鍵與 [`Session::text`] 清掉。容錯的票再決定要不要逐碼記。
     touch_weights: Option<Weights>,
+    /// 停鍵結果快取（plan §2.7，M4 票 03）：重排要求 → 模型給的名次，都是 `reranker` 排的。
+    rerank_cache: RerankCache,
+    /// 殼正在用的停鍵層模型的識別（[`Session::set_reranker_id`]）；`None` 時不留快取。
+    reranker_id: Option<String>,
+    /// 最近一次給出的重排要求：那時的 `generation` 與快取的鍵。結果回來時鍵還是它才記進快取，
+    /// 要求之後前文變了、換了模型的結果不記錯鍵（[`Session::apply_rerank`]）。
+    asked: Option<(u64, RerankKey)>,
+    /// 候選列套用了快取裡的結果時的 `generation`，給 debug 面板（[`Session::inspect`]）。
+    cached_at: Option<u64>,
 }
 
 impl Session {
@@ -487,6 +499,10 @@ impl Session {
         // 無痕不讀上下文（brief §8）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
         if options.incognito && !self.options.incognito {
             self.forget_context();
+        }
+        // 無痕期間的結果不留到之後，之前的也不帶進去。
+        if options.incognito != self.options.incognito {
+            self.rerank_cache.clear();
         }
         self.options = options;
     }
@@ -623,7 +639,24 @@ impl Session {
     /// [`RERANK_PATHS`] 條整句路徑。沒有組字（聯想不重排）、臨時英文、移到某一段改字（候選是那一段
     /// 單打的字詞，整句插不進去）、沒有蓋滿的路徑，或換了選項還沒重列（候選列馬上會換）時是 `None`。
     /// 簡體模式下殼給的前文是簡體字，逐字轉回繁體（停鍵層模型的字表是繁體，M3 票 11e）。
-    pub fn rerank_request(&self, engine: &Engine) -> Option<RerankRequest> {
+    ///
+    /// 給出的要求記著（停鍵結果快取，plan §2.7），所以要 `&mut`；快取裡已有這份要求的結果時已經排好了
+    /// （`refresh_candidates`），是 `None`。
+    pub fn rerank_request(&mut self, engine: &Engine) -> Option<RerankRequest> {
+        let key = self.rerank_key(engine)?;
+        if self.rerank_cache.contains(&key) {
+            return None;
+        }
+        self.asked = Some((self.generation, key.clone()));
+        Some(RerankRequest {
+            generation: self.generation,
+            context: key.context,
+            paths: key.paths,
+        })
+    }
+
+    /// 重排要求裡模型要的部分（[`Session::rerank_request`]），也是停鍵結果快取的鍵。
+    fn rerank_key(&self, engine: &Engine) -> Option<RerankKey> {
         if !self.can_rerank() {
             return None;
         }
@@ -637,11 +670,23 @@ impl Session {
             context = engine.traditional(&context);
         }
         context.extend(self.selected.iter().map(|s| s.text.as_str()));
-        Some(RerankRequest {
-            generation: self.generation,
+        Some(RerankKey {
             context: last_chars(&context, RERANK_CONTEXT).to_string(),
             paths,
         })
+    }
+
+    /// 殼正在用的停鍵層模型（plan §2.7，M4 票 03）：模式加上模型資料包的識別，殼在開始、換重排模式或
+    /// 模型資料包時給；`None` 是關掉重排或沒有模型。和上次不同時清掉停鍵結果快取，舊模型排的名次不再
+    /// 套用；是 `None` 時不留快取，結果照常套用。殼沒給過就是 `None`：漏給只是沒有快取，不會套用別的
+    /// 模型排的名次。
+    /// 換了的時候，給舊模型的要求一起作廢：之後回來的結果 [`Session::apply_rerank`] 不收。
+    pub fn set_reranker_id(&mut self, reranker_id: Option<&str>) {
+        if self.reranker_id.as_deref() != reranker_id {
+            self.reranker_id = reranker_id.map(str::to_owned);
+            self.rerank_cache.clear();
+            self.asked = None;
+        }
     }
 
     /// 套用背景模型的重排結果（plan §2.1、§2.7、ADR 0005）：`order` 是 [`RerankRequest::paths`]
@@ -649,8 +694,9 @@ impl Session {
     /// 排在第 2 位起的候選不讓位，它排在那些後面（plan §2.4）。候選列有同樣文字的就移上來，沒有就
     /// 插入那條路徑，其餘照原順序往後接；首選不動。
     ///
-    /// `generation` 不是目前的、換了選項還沒重列，或現在不給要求（[`Session::rerank_request`]），
-    /// 結果是給舊候選列的，就丟掉、回 `None`。名次真的變了才算候選變動、`generation` 加一，同一份
+    /// `generation` 不是目前的、這個 `generation` 沒給過要求或之後換了模型（[`Session::set_reranker_id`]）、
+    /// 換了選項還沒重列，或現在不給要求（[`Session::rerank_request`]），結果是給舊候選列或舊模型的，
+    /// 就丟掉、回 `None`。收下的結果記進停鍵結果快取（殼給了模型的識別、鍵和要求時相同時）。名次真的變了才算候選變動、`generation` 加一，同一份
     /// 要求的另一個結果（另一層模型）因此也作廢。殼不要因為套用了重排的結果再要求重排。翻到後面的頁
     /// 時先不套用、名次不變（插入會把第一頁最後一個擠到下一頁，看得到的那頁會變，M1 票 23），候選
     /// 沒變的話回到第一頁時才套用，那次翻頁的快照帶著新的 `generation`。
@@ -660,8 +706,14 @@ impl Session {
         generation: u64,
         order: &[usize],
     ) -> Option<Snapshot> {
-        if generation != self.generation || !self.can_rerank() {
+        let asked = self.asked.as_ref().filter(|(g, _)| *g == generation);
+        if generation != self.generation || asked.is_none() {
             return None;
+        }
+        let key = self.rerank_key(engine)?;
+        // 要求之後前文變了（組字中殼再給前文）：名次照樣套用在這份候選列，但不是這個鍵的結果。
+        if self.reranker_id.is_some() && asked.is_some_and(|(_, k)| *k == key) {
+            self.rerank_cache.insert(key, order);
         }
         if self.page > 0 {
             self.waiting_rerank = Some((generation, order.to_vec()));
@@ -1530,6 +1582,23 @@ impl Session {
         self.listed_with = self.options;
         self.page = 0;
         self.generation += 1;
+        self.apply_cached_rerank(engine);
+    }
+
+    /// 這份候選列的重排要求已經算過：照快取裡的名次排（plan §2.7，M4 票 03），不等停鍵、不再要求。
+    /// 快取是空的時不算鍵，每鍵不多花時間。
+    fn apply_cached_rerank(&mut self, engine: &Engine) {
+        if self.rerank_cache.is_empty() {
+            return;
+        }
+        let Some(order) = self
+            .rerank_key(engine)
+            .and_then(|key| self.rerank_cache.get(&key).map(<[usize]>::to_vec))
+        else {
+            return;
+        };
+        self.raise(engine, &order);
+        self.cached_at = Some(self.generation);
     }
 
     /// 候選經過後處理（plan §2.2）：簡體模式轉成簡體，轉換後文字重複的只留第一個。排序時已去掉

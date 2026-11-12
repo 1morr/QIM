@@ -22,6 +22,8 @@ pub struct Inspection {
     pub candidates: Vec<InspectedCandidate>,
     /// 最近一個鍵是觸控的 [`crate::Key::Weighted`] 時，它的各字母機率（M4 票 06）；其他鍵是 `None`。
     pub touch_weights: Option<Weights>,
+    /// 候選列的停鍵重排來自快取（plan §2.7，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
+    pub rerank_cached: bool,
 }
 
 /// 核心記著的前文是什麼。
@@ -145,6 +147,7 @@ impl Session {
             segments: self.composition(engine).segments,
             candidates,
             touch_weights: self.touch_weights.clone(),
+            rerank_cached: self.cached_at == Some(self.generation),
         }
     }
 }

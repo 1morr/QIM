@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CodeEntry, CodeTable, ConversionTable, Engine, EnglishPack, EnglishWords, Key, Options, Pack,
-    Packs, RERANK_CONTEXT, RERANK_PATHS, Ranking, Scheme, SchemePack, Session, ShiftKey,
-    Simplifier, SimplifierPack, Snapshot, UserModel,
+    Packs, RERANK_CACHE_LIMIT, RERANK_CONTEXT, RERANK_PATHS, Ranking, RerankRequest, Scheme,
+    SchemePack, Session, ShiftKey, Simplifier, SimplifierPack, Snapshot, UserModel,
 };
 
 /// `a` 有 10 個字（比一頁多一個），`b` 有一個字；英文只有 `abba`。
@@ -61,6 +61,13 @@ impl Ime {
         }
     }
 
+    /// 殼說了用哪個模型：停鍵結果留快取。
+    fn cached() -> Self {
+        let mut ime = Self::new();
+        ime.session.set_reranker_id(Some("test"));
+        ime
+    }
+
     /// 簡體模式：「曰」轉成「日」、「晶」轉成「昌」，`ab` 的「曰月」與首選轉換後相同。
     fn simplified() -> Self {
         let table = ConversionTable::new([
@@ -102,20 +109,10 @@ impl Ime {
             .collect()
     }
 
-    /// 要求裡文字是 `text` 的路徑的序號。
-    fn path(&self, text: &str) -> usize {
-        let request = self.session.rerank_request(&self.engine).unwrap();
-        request
-            .paths
-            .iter()
-            .position(|p| p.text == text)
-            .unwrap_or_else(|| panic!("要求裡沒有 {text}：{:?}", request.paths))
-    }
-
     /// 取目前的要求，模型把 `texts` 這幾條路徑排在最前（依序），套用回傳的快照。
     fn rerank(&mut self, texts: &[&str]) -> Snapshot {
         let request = self.session.rerank_request(&self.engine).unwrap();
-        let order: Vec<usize> = texts.iter().map(|t| self.path(t)).collect();
+        let order: Vec<usize> = texts.iter().map(|t| path(&request, t)).collect();
         self.session
             .apply_rerank(&self.engine, request.generation, &order)
             .unwrap()
@@ -127,6 +124,15 @@ impl Ime {
         let at = self.all().iter().position(|t| t == text).unwrap();
         self.session.select(&self.engine, &mut self.user, at).commit
     }
+}
+
+/// 要求裡文字是 `text` 的路徑的序號。
+fn path(request: &RerankRequest, text: &str) -> usize {
+    request
+        .paths
+        .iter()
+        .position(|p| p.text == text)
+        .unwrap_or_else(|| panic!("要求裡沒有 {text}：{:?}", request.paths))
 }
 
 fn texts(snapshot: &Snapshot) -> Vec<String> {
@@ -525,5 +531,184 @@ fn simplified_mode_compares_the_shown_text() {
         texts(&unchanged),
         shown,
         "「晶月」顯示成「昌月」，已在第 2 位"
+    );
+}
+
+/// 停鍵結果快取（plan §2.7，M4 票 03）：殼說了用哪個模型（`set_reranker_id`）時，同一份要求的結果
+/// 留著。退格回到已經算過的那串碼，按鍵的快照就排好了，不再給要求（殼不必再等停鍵、跑模型），
+/// debug 面板看得到用的是快取。
+#[test]
+fn backspacing_to_a_reranked_code_uses_the_cached_result() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    let reranked = ime.rerank(&["晶月"]);
+    assert!(!ime.session.inspect(&ime.engine, &ime.user).rerank_cached);
+
+    ime.press(Key::Letter('a'));
+    let back = ime.press(Key::Backspace);
+    assert_eq!(texts(&back), texts(&reranked));
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
+    assert!(ime.session.inspect(&ime.engine, &ime.user).rerank_cached);
+}
+
+/// 名次沒變的結果也留著：回到那串碼不必再跑一次。
+#[test]
+fn an_unchanged_result_is_cached_too() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    ime.rerank(&["日月"]);
+    ime.press(Key::Letter('a'));
+    assert_eq!(texts(&ime.press(Key::Backspace)), AB);
+    assert_eq!(ime.session.rerank_request(&ime.engine), None);
+}
+
+/// 殼沒說用哪個模型（關掉重排、沒有模型）時不留也不套用，結果照常套用。
+#[test]
+fn without_a_reranker_nothing_is_cached() {
+    let mut ime = Ime::new();
+    ime.type_code("ab");
+    ime.rerank(&["晶月"]);
+    ime.press(Key::Letter('a'));
+    assert_eq!(texts(&ime.press(Key::Backspace)), AB);
+    assert!(ime.session.rerank_request(&ime.engine).is_some());
+}
+
+/// 換了模型（含關掉重排）：舊模型排的不再套用。
+#[test]
+fn changing_the_reranker_drops_the_cached_results() {
+    for next in [None, Some("other")] {
+        let mut ime = Ime::cached();
+        ime.type_code("ab");
+        ime.rerank(&["晶月"]);
+        ime.session.set_reranker_id(next);
+        ime.press(Key::Letter('a'));
+        assert_eq!(texts(&ime.press(Key::Backspace)), AB, "{next:?}");
+        assert!(ime.session.rerank_request(&ime.engine).is_some());
+        assert!(!ime.session.inspect(&ime.engine, &ime.user).rerank_cached);
+    }
+}
+
+/// 同一個模型再說一次不清快取（殼每次改設定都可以給）。
+#[test]
+fn naming_the_same_reranker_again_keeps_the_cache() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    let reranked = ime.rerank(&["晶月"]);
+    ime.session.set_reranker_id(Some("test"));
+    ime.press(Key::Letter('a'));
+    assert_eq!(texts(&ime.press(Key::Backspace)), texts(&reranked));
+}
+
+/// 前文變了：同一串碼不用舊結果。
+#[test]
+fn a_different_context_does_not_use_the_cached_result() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    ime.rerank(&["晶月"]);
+    ime.press(Key::Escape);
+    ime.session.set_context("今天");
+    assert_eq!(texts(&ime.type_code("ab")), AB);
+    assert!(ime.session.rerank_request(&ime.engine).is_some());
+}
+
+/// 選了開頭一段之後剩下同一串碼：路徑前面多了選定的字，不用沒選時的結果。
+#[test]
+fn a_selected_beginning_does_not_use_the_cached_result_for_the_same_code() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    ime.rerank(&["晶月"]);
+    ime.press(Key::Escape);
+    ime.type_code("bab");
+    let at = ime.all().iter().position(|t| t == "月").unwrap();
+    let rest = ime.session.select(&ime.engine, &mut ime.user, at);
+    assert_eq!(rest.composition.segments.len(), 3);
+    assert_eq!(texts(&rest), AB);
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
+    assert_eq!(request.context, "月");
+}
+
+/// 無痕前後各自一份：無痕期間算的不留到之後（brief §8）。
+#[test]
+fn turning_incognito_on_or_off_drops_the_cached_results() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    ime.rerank(&["晶月"]);
+    for incognito in [true, false] {
+        ime.session.set_options(Options {
+            incognito,
+            ..Options::default()
+        });
+        ime.press(Key::Letter('a'));
+        ime.press(Key::Backspace);
+        assert!(
+            ime.session.rerank_request(&ime.engine).is_some(),
+            "{incognito}"
+        );
+        ime.rerank(&["晶月"]);
+    }
+}
+
+/// 快取最多 [`RERANK_CACHE_LIMIT`] 份，滿了丟最久沒用的；用到的算最近用的。
+#[test]
+fn the_cache_keeps_the_most_recently_used_results_up_to_the_limit() {
+    let mut ime = Ime::cached();
+    // 回真是用了快取（不給要求）。
+    let hit_cache_after = |ime: &mut Ime, context: &str| {
+        ime.press(Key::Escape);
+        ime.session.set_context(context);
+        ime.type_code("ab");
+        if ime.session.rerank_request(&ime.engine).is_some() {
+            ime.rerank(&["晶月"]);
+            false
+        } else {
+            true
+        }
+    };
+    for i in 0..RERANK_CACHE_LIMIT {
+        assert!(!hit_cache_after(&mut ime, &i.to_string()));
+    }
+    assert!(hit_cache_after(&mut ime, "0"), "0 用過，變成最近用的");
+    assert!(
+        !hit_cache_after(&mut ime, "滿"),
+        "第 LIMIT + 1 份擠掉最久沒用的 1"
+    );
+    assert!(hit_cache_after(&mut ime, "0"));
+    assert!(!hit_cache_after(&mut ime, "1"));
+}
+
+/// 換了模型：在途的舊模型結果作廢，不套用也不記到新模型名下（code-review 找到）。
+#[test]
+fn a_result_from_the_previous_reranker_is_dropped() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
+    ime.session.set_reranker_id(Some("other"));
+    assert_eq!(
+        ime.session
+            .apply_rerank(&ime.engine, request.generation, &[3]),
+        None
+    );
+    ime.press(Key::Letter('a'));
+    assert_eq!(texts(&ime.press(Key::Backspace)), AB);
+    assert!(ime.session.rerank_request(&ime.engine).is_some());
+}
+
+/// 要求送出後前文變了（組字中點了輸入框）：結果照樣套用在這份候選列，但不記到新前文的鍵下。
+#[test]
+fn a_result_asked_before_the_context_changed_is_not_cached_under_the_new_context() {
+    let mut ime = Ime::cached();
+    ime.type_code("ab");
+    let request = ime.session.rerank_request(&ime.engine).unwrap();
+    ime.session.set_context("今天");
+    let applied = ime
+        .session
+        .apply_rerank(&ime.engine, request.generation, &[3])
+        .unwrap();
+    assert_eq!(texts(&applied)[1], "晶月");
+    ime.press(Key::Letter('a'));
+    assert_eq!(texts(&ime.press(Key::Backspace)), AB);
+    assert_eq!(
+        ime.session.rerank_request(&ime.engine).unwrap().context,
+        "今天"
     );
 }

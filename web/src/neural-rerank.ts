@@ -126,6 +126,11 @@ export class NeuralReranker {
 		return () => this.load(model);
 	}
 
+	/** Worker 正在用（或正在載入）的模型的 manifest；沒有模型或載入失敗時是 `undefined`。 */
+	get manifest(): string | undefined {
+		return this.loaded;
+	}
+
 	/** 交給 `rerankScheduler` 的模型。 */
 	readonly rank: Rank = async (job) => {
 		const reply = await this.send({ type: "rank", job });

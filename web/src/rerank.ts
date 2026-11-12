@@ -33,6 +33,23 @@ export function rerankMode(value: string): RerankMode {
 	return MODES.includes(value) ? (value as RerankMode) : "off";
 }
 
+/**
+ * 告訴核心的停鍵層模型識別（`Session.setRerankerId`，plan §2.7）：模式，神經模型再加上模型資料包的
+ * manifest。核心在識別變了時清掉停鍵結果快取、給舊模型的要求作廢，`undefined`（關掉、沒有模型）時不留快取。
+ */
+export function rerankerId(
+	mode: RerankMode,
+	manifest: string | undefined,
+): string | undefined {
+	if (mode === "off") {
+		return undefined;
+	}
+	if (mode === "neural") {
+		return manifest === undefined ? undefined : `neural ${manifest}`;
+	}
+	return mode;
+}
+
 /** 交給模型的重排要求：核心 `RerankRequest` 裡模型要的欄位，可以傳進 Web Worker。 */
 export interface RerankJob {
 	context: string;
