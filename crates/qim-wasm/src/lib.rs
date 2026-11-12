@@ -207,6 +207,12 @@ impl WebSession {
         self.session.clear_context(&mut self.user);
     }
 
+    /// 退格撤銷的時限到了（`Session::expire_undo`）：上屏後 3 秒（照 librime）網頁呼叫，之後的退格只刪字。
+    #[wasm_bindgen(js_name = expireUndo)]
+    pub fn expire_undo(&mut self) {
+        self.session.expire_undo(&mut self.user);
+    }
+
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
     #[wasm_bindgen(js_name = addWord)]
     pub fn add_word(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {

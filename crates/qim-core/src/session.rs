@@ -8,6 +8,7 @@ use crate::association::{self, ASSOCIATION_TAIL};
 use crate::english_user::TypedRun;
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
 use crate::scheme::{SEPARATOR, without_separators};
+use crate::user::{Undo, UndoOwner};
 use crate::{Engine, UserModel, Weights, punctuation};
 
 mod inspect;
@@ -463,6 +464,11 @@ pub struct Session {
     /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，學成英文使用者詞
     /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
     typed: TypedRun,
+    /// 最近一個動作送出去的字與動作之前的正在打的串；退格撤銷那個動作時拿來重算正在打的串
+    /// （[`Session::typed_after_undo`]）。沒送出字的動作是 `None`。
+    last_sent: Option<LastSent>,
+    /// 這個 Session 寫的撤銷紀錄的記號（[`UserModel::take_undo`]）。
+    undo_owner: UndoOwner,
     /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
     /// 其他鍵（不送字元的修飾鍵除外）、`text`、[`Session::clear_context`]、不以剛上屏的字結尾的
     /// [`Session::set_context`] 收起它。
@@ -518,6 +524,23 @@ impl Session {
     /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
     /// 離開欄位也是打完了一串字：正在打的串學成英文使用者詞（plan §2.4）。
     pub fn clear_context(&mut self, user: &mut UserModel) {
+        self.leave_text(user);
+        // 換了欄位，之後的退格不在剛上屏的字後面，前一個動作與這裡學到的都不撤銷。
+        self.expire_undo(user);
+    }
+
+    /// 退格撤銷（plan §2.4）的時限到了：這個 Session 上一個動作學到的不能再撤銷，之後的退格只刪字。
+    /// 核心不讀時間，由殼計時：照 librime 的 3 秒（`RevertRecentTransaction`，brief §12.2），殼在核心
+    /// 可能學到東西的動作（上屏、交還宿主的空白與標點這類讓英文串打完的鍵）之後重新計時，3 秒到了就
+    /// 呼叫。換欄位時殼呼叫的 [`Session::clear_context`] 也讓它失效。別的 Session 的紀錄不動。
+    pub fn expire_undo(&mut self, user: &mut UserModel) {
+        user.expire_undo(self.undo_owner);
+        self.last_sent = None;
+    }
+
+    /// 游標不在剛打的字後面了（Enter、Tab、方向鍵這類交還宿主的鍵，或離開欄位）：正在打的串打完，
+    /// 前文作廢。
+    fn leave_text(&mut self, user: &mut UserModel) {
         self.end_typed(user);
         self.forget_context();
     }
@@ -569,6 +592,7 @@ impl Session {
     /// 選全部候選（不只目前頁）的第 `index` 個，和按那個候選的數字鍵相同。
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
         self.apply_pending_options(engine, user);
+        let action = self.begin_action(user);
         let snapshot = if self.composing() {
             self.select_at(engine, user, index)
         } else if self.showing_association() {
@@ -578,6 +602,7 @@ impl Session {
             self.end_association();
             self.snapshot(engine, false, None)
         };
+        self.end_action(user, action, snapshot.commit.clone());
         self.finish(engine, user, snapshot)
     }
 
@@ -590,6 +615,8 @@ impl Session {
         segment: usize,
     ) -> Snapshot {
         self.apply_pending_options(engine, user);
+        let action = self.begin_action(user);
+        self.end_action(user, action, None);
         if !self.composing() {
             return self.snapshot(engine, false, None);
         }
@@ -729,11 +756,76 @@ impl Session {
                 key
             }
         };
+        let action = self.begin_action(user);
+        let closes_association = self.showing_association();
         let snapshot = self.handle_key(engine, user, key.clone());
         if !snapshot.handled {
-            self.passed_to_host(user, key);
+            self.passed_to_host(user, key.clone());
+        }
+        match key {
+            // 上屏後第一個交還宿主的鍵是退格：宿主照常刪字，這次上屏學到的都撤銷。
+            // 無痕、學習關掉時不動學習資料，也不撤銷。
+            Key::Backspace if !snapshot.handled => {
+                if self.writes_learning() && user.revert(action.pending) {
+                    self.typed_after_undo();
+                }
+                self.last_sent = None;
+            }
+            // 不送字元的修飾鍵、只收起聯想的退格不算夾在中間（librime 的 `OnUnhandledKey` 收不到
+            // 被 predictor 吃下的退格）：下一個鍵還能撤銷。其他鍵（含單按 Shift 切中英、Esc 收起
+            // 聯想）都算夾在中間。
+            Key::Modifier => user.keep_undo(action.pending),
+            Key::Backspace if closes_association => user.keep_undo(action.pending),
+            _ => {
+                let sent = if snapshot.handled {
+                    snapshot.commit.clone()
+                } else {
+                    sent_to_host(&key)
+                };
+                self.end_action(user, action, sent);
+            }
         }
         self.finish(engine, user, snapshot)
+    }
+
+    /// 一個動作（按鍵、點候選、點分段、打文字）開始（退格撤銷，plan §2.4）：收起前一個動作的撤銷紀錄，
+    /// 記下正在打的串。動作結束時呼叫端撤銷紀錄（退格）、放回去（不算夾在中間的鍵）或交給
+    /// [`Session::end_action`]。
+    fn begin_action(&mut self, user: &mut UserModel) -> Action {
+        Action {
+            pending: user.take_undo(self.undo_owner),
+            typed: self.typed.clone(),
+        }
+    }
+
+    /// 動作結束，前一個動作的紀錄丟掉：記下這個動作送出去的字 `sent`，緊接著的退格可以撤銷它學到的。
+    /// 沒送字的動作（方向鍵、Tab 這類移走游標的鍵）之後的退格不在它打完的字旁邊，學到的不能撤銷。
+    fn end_action(&mut self, user: &mut UserModel, action: Action, sent: Option<String>) {
+        match sent {
+            Some(text) => {
+                self.last_sent = Some(LastSent {
+                    typed: action.typed,
+                    text,
+                });
+            }
+            None => self.expire_undo(user),
+        }
+    }
+
+    /// 退格撤銷了上一個動作（[`Session::handle`]），宿主刪掉了它送出去的最後一個字：正在打的串回到
+    /// 那個動作之前，再接上其餘送出去的字。那個動作讓串打完時學到的已經撤銷，這裡不再學；所以
+    /// `teh` 空白、退格之後改成 `the` 再打空白，學的是 `the`。
+    fn typed_after_undo(&mut self) {
+        let Some(LastSent { mut typed, text }) = self.last_sent.take() else {
+            return;
+        };
+        let recording = self.learns_english();
+        let mut kept = text.chars();
+        kept.next_back();
+        for c in kept {
+            let _undone = typed.push(c, recording);
+        }
+        self.typed = typed;
     }
 
     /// 交還宿主的鍵宿主照打：可見字元與空白接在前文後面（librime 的 commit history 記這些
@@ -751,9 +843,9 @@ impl Session {
                 self.typed.backspace();
                 self.forget_context();
             }
-            Key::Enter => self.clear_context(user),
+            Key::Enter => self.leave_text(user),
             _ => {
-                self.clear_context(user);
+                self.leave_text(user);
                 self.typed.lose_track();
             }
         }
@@ -1200,6 +1292,7 @@ impl Session {
     /// （M1 票 27b）。文字照原樣、不轉全形，也不套數字後半形；簡體模式轉成簡體，原文留繁體（M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         self.apply_pending_options(engine, user);
+        let action = self.begin_action(user);
         self.end_association();
         self.touch_weights = None;
         let text = Commit {
@@ -1214,6 +1307,7 @@ impl Session {
         } else {
             self.snapshot(engine, true, Some(text))
         };
+        self.end_action(user, action, snapshot.commit.clone());
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
         self.finish(engine, user, snapshot)
     }
@@ -1618,6 +1712,32 @@ impl Session {
             ascii: self.ascii || self.inline.is_some(),
             generation: self.generation,
         }
+    }
+}
+
+/// 一個動作開始時的狀態（[`Session::begin_action`]）。
+struct Action {
+    /// 前一個動作的撤銷紀錄。
+    pending: Undo,
+    /// 動作之前的正在打的串。
+    typed: TypedRun,
+}
+
+/// 一個動作送出去的字（交還宿主的字元、上屏的字）與動作之前的正在打的串（[`Session::last_sent`]）。
+#[derive(Debug, Clone)]
+struct LastSent {
+    typed: TypedRun,
+    text: String,
+}
+
+/// 交還宿主的鍵送出去的字：可見字元、空白，Enter 是換行；其他鍵不送字（或不知道宿主怎麼處理）。
+fn sent_to_host(key: &Key) -> Option<String> {
+    match key {
+        Key::Letter(c) | Key::Punct(c) => Some(c.to_string()),
+        Key::Digit(d) => Some(d.to_string()),
+        Key::Space => Some(" ".into()),
+        Key::Enter => Some("\n".into()),
+        _ => None,
     }
 }
 

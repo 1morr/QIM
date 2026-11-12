@@ -28,6 +28,7 @@ import {
 } from "./english-user-words.ts";
 import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
+import { undoWindow } from "./undo-window.ts";
 import { mountUserDict } from "./user-dict.ts";
 import init, {
 	contextLimit,
@@ -155,10 +156,18 @@ async function start(): Promise<void> {
 		englishUserWords?.refresh();
 		focusText();
 	});
-	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心學英文使用者詞）、失焦。 */
+	// 退格撤銷的時限（plan §2.4）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
+	const undoTimer = undoWindow(() => session.expireUndo());
+	// 點輸入框會移游標：之後的退格不在剛上屏的字旁邊，不撤銷。
+	text.addEventListener("pointerdown", () => session.expireUndo());
+	/**
+	 * 核心可能學到東西之後：存檔，退格撤銷的 3 秒從這裡重算。上屏、英文直通打完一串字（核心學英文使用者詞）、
+	 * 失焦（核心這時已讓撤銷紀錄失效，重算也無妨）。
+	 */
 	const saveLearning = (): void => {
 		userDict.save();
 		englishUserWords?.refresh();
+		undoTimer.restart();
 	};
 	/**
 	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心學到剛打完的英文串，要存檔；

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc daf7cc2c81e8d3b1ae5d928e0917b5eeaacc4268adc88cd38df557bd292cc2c3 # shrinks to table = {"b": ['一']}, words = {}, actions = [(true, Key(Letter('b'))), (true, Key(Letter('A'))), (false, Key(Backspace))], inputs = ["a"]
+cc adaa8cf958633d3466cda80972c28a83220ebb5516670ae1c0425d23d7dfd4d2 # shrinks to table = {"ac": ['一'], "b": ['一']}, words = {}, learning = [Key(Letter('b')), Key(Letter('a')), Key(Letter('c')), Key(Punct(','))], actions = [Key(Backspace)]

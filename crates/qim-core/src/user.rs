@@ -7,6 +7,9 @@ use std::fmt;
 use crate::english_user::{self, ENGLISH_COMPLETION_AFTER, EnglishUserWord, EnglishUserWords};
 use crate::{Date, Engine, Segment};
 
+mod undo;
+pub(crate) use undo::{Undo, UndoOwner};
+
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
 const DECAY_STEP: f64 = 200.0;
 
@@ -68,7 +71,7 @@ const ENTRY_LIMIT: usize = 20_000;
 const BIGRAM_LIMIT: usize = 30_000;
 
 /// 使用者詞與學習計數；殼負責保存（plan §2.1）。各輸入方案分開記，互不影響（plan §2.4）。
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct UserModel {
     schemes: BTreeMap<String, SchemeModel>,
     /// 個人 bigram：只看文字，各方案共用（plan §2.4）。
@@ -82,6 +85,29 @@ pub struct UserModel {
     device: Option<String>,
     /// 條目上限（[`UserModel::set_limits`]）；不進匯出檔。
     limits: Limits,
+    /// 最近一個動作學到的東西的撤銷紀錄（退格撤銷，[`UserModel::take_undo`]）；不進匯出檔，比較時不看。
+    undo: Undo,
+}
+
+/// 比較學習資料與殼給的設定；撤銷紀錄不是學習資料（匯出檔也沒有它），不比。
+impl PartialEq for UserModel {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            schemes,
+            bigrams,
+            english,
+            today,
+            device,
+            limits,
+            undo: _,
+        } = self;
+        *schemes == other.schemes
+            && *bigrams == other.bigrams
+            && *english == other.english
+            && *today == other.today
+            && *device == other.device
+            && *limits == other.limits
+    }
 }
 
 /// 個人 bigram（plan §2.3）：上屏時記「前一個字詞 → 這一段」的衰減值，算分時給這一段接在
@@ -296,8 +322,10 @@ impl UserModel {
             return;
         }
         let today = self.today;
-        self.for_scheme_mut(scheme).learn(segments, today);
-        self.bigrams.learn(previous, segments, today);
+        let (model, scheme_undo) = self.learning_scheme(scheme);
+        model.learn(segments, today, scheme_undo);
+        self.bigrams
+            .learn(previous, segments, today, &mut self.undo);
         self.enforce_limits();
     }
 
@@ -308,8 +336,53 @@ impl UserModel {
             Some(previous),
             &[Segment::new(String::new(), text.to_string())],
             self.today,
+            &mut self.undo,
         );
         self.enforce_limits();
+    }
+
+    /// 退格撤銷（plan §2.4）：`owner` 開始一個動作，收起最近一個動作的撤銷紀錄交給它（不是它寫的時
+    /// 是空的），之後學到的記進新的一份。[`crate::Session`] 在每個動作（按鍵、點候選、打文字）開頭
+    /// 呼叫，動作結束時決定撤銷它（[`UserModel::revert`]）、留著給下一個動作（[`UserModel::keep_undo`]）
+    /// 或丟掉。手動加詞、常用語、刪英文使用者詞、匯入這類使用者明確的操作會丟掉紀錄，撤銷不會蓋掉
+    /// 它們的改動。
+    pub(crate) fn take_undo(&mut self, owner: UndoOwner) -> Undo {
+        let pending = std::mem::replace(&mut self.undo, Undo::new(owner));
+        if pending.is_by(owner) {
+            pending
+        } else {
+            Undo::default()
+        }
+    }
+
+    /// 這個動作不算夾在中間（只收起聯想的退格、修飾鍵，它們不學東西）：前一個動作的紀錄放回去，下一個
+    /// 鍵還能撤銷它。
+    pub(crate) fn keep_undo(&mut self, undo: Undo) {
+        debug_assert!(self.undo.is_empty(), "不算夾在中間的鍵學到了東西");
+        self.undo = undo;
+    }
+
+    /// `owner` 寫的撤銷紀錄失效（殼的時限到了、換了欄位，[`crate::Session::expire_undo`]）；別的 Session
+    /// 寫的不動。
+    pub(crate) fn expire_undo(&mut self, owner: UndoOwner) {
+        if self.undo.is_by(owner) {
+            self.discard_undo();
+        }
+    }
+
+    /// 丟掉撤銷紀錄，誰都不能撤銷：使用者明確的操作（手動加詞、常用語、刪英文使用者詞、匯入）改了資料，
+    /// 撤銷不能蓋掉它們的改動。
+    fn discard_undo(&mut self) {
+        self.undo = Undo::default();
+    }
+
+    /// 撤銷 `undo` 記的學習：改到的條目與 tick 回到那個動作之前。沒學到東西時回傳 `false`。
+    pub(crate) fn revert(&mut self, undo: Undo) -> bool {
+        if undo.is_empty() {
+            return false;
+        }
+        undo.revert(self);
+        true
     }
 
     /// 學過個人 bigram 沒有。
@@ -337,6 +410,8 @@ impl UserModel {
     /// 學一個英文使用者詞（[`crate::Session`] 從送出去的字裡認出來的串，[`english_user::to_learn`]
     /// 過的）：次數與衰減值加一，英文使用者詞自己的 tick 加一。
     pub(crate) fn learn_english(&mut self, text: &str) {
+        self.undo
+            .save_english(&self.english, &english_user::key(text));
         self.english.learn(text, self.today);
         self.enforce_limits();
     }
@@ -349,6 +424,7 @@ impl UserModel {
 
     /// 忘掉英文使用者詞 `text`（不分大小寫），匯出檔裡不再有它；沒學過時回傳 `false`。
     pub fn forget_english_user_word(&mut self, text: &str) -> bool {
+        self.discard_undo();
         self.english.forget(text)
     }
 
@@ -422,11 +498,13 @@ impl UserModel {
             for (_, victim) in order.into_iter().take(rows - entries) {
                 match victim {
                     Victim::Row { scheme, code, text } => {
+                        self.undo.save_row(&self.schemes, &scheme, &code, &text);
                         if let Some(model) = self.schemes.get_mut(&scheme) {
                             model.remove_row(&code, &text);
                         }
                     }
                     Victim::English(key) => {
+                        self.undo.save_english(&self.english, &key);
                         self.english.words.remove(&key);
                     }
                 }
@@ -462,6 +540,9 @@ impl UserModel {
                 .take(pairs - bigrams)
                 .map(|(_, previous, text)| (previous, text))
                 .collect();
+            for (previous, text) in &doomed {
+                self.undo.save_bigram(&self.bigrams, previous, text);
+            }
             self.bigrams.retain(|previous, text, _| {
                 !doomed.contains(&(previous.to_string(), text.to_string()))
             });
@@ -499,6 +580,7 @@ impl UserModel {
             today,
             device,
             limits,
+            undo: Undo::default(),
             ..learned
         };
     }
@@ -507,9 +589,16 @@ impl UserModel {
     /// 上屏次數由同一次上屏的 [`UserModel::learn`] 記。
     pub(crate) fn add_auto_phrase(&mut self, scheme: &str, code: &str, text: &str) {
         let today = self.today;
-        self.for_scheme_mut(scheme)
-            .add_auto_phrase(code, text, today);
+        let (model, scheme_undo) = self.learning_scheme(scheme);
+        model.add_auto_phrase(code, text, today, scheme_undo);
         self.enforce_limits();
+    }
+
+    /// 學習要改方案 `scheme`：它的個人模型（沒有就建一個空的）與這個動作的撤銷紀錄裡它的那份。
+    fn learning_scheme(&mut self, scheme: &str) -> (&mut SchemeModel, &mut undo::SchemeUndo) {
+        let scheme_undo = self.undo.scheme(&self.schemes, scheme);
+        let model = self.schemes.entry(scheme.to_string()).or_default();
+        (model, scheme_undo)
     }
 
     /// 方案 `scheme` 的個人模型，沒有就建一個空的。
@@ -541,6 +630,7 @@ impl UserModel {
         text: &str,
         trigger: Option<&str>,
     ) {
+        self.discard_undo();
         let today = self.today;
         let model = self.for_scheme_mut(&engine.scheme().id);
         model.words_at(code).insert(
@@ -564,6 +654,7 @@ impl UserModel {
         trigger: Option<&str>,
     ) -> Result<(), UserWordError> {
         check_user_word(engine, text, trigger, |c| c == '\n' || c == '\t')?;
+        self.discard_undo();
         let today = self.today;
         let model = self.for_scheme_mut(&engine.scheme().id);
         let old = model.words_at(PHRASE_CODE).insert(
@@ -600,6 +691,7 @@ impl UserModel {
     /// `false`。觸發詞剛好是這段文字自己的碼時，平常打字學到的同一組計數也一起刪：兩者是同一個鍵、
     /// 分不出來，寧可少一筆學習，也不留使用者刪掉的字。
     pub fn remove_phrase(&mut self, engine: &Engine, text: &str) -> bool {
+        self.discard_undo();
         // 沒學過的方案不建出空的方案（`for_scheme_mut` 會建）。
         let Some(model) = self.schemes.get_mut(&engine.scheme().id) else {
             return false;
@@ -671,7 +763,14 @@ impl Bigrams {
     /// 一次上屏的個人 bigram：`previous` → 第一段、相鄰兩段各記一次；有兩段以上時 `previous` →
     /// 整串也記（整串可能是自動造詞的使用者詞，同 [`SchemeModel::learn`] 整串和各段都記）。
     /// 同一組只記一次。
-    fn learn(&mut self, previous: Option<&str>, segments: &[Segment], today: Option<Date>) {
+    fn learn(
+        &mut self,
+        previous: Option<&str>,
+        segments: &[Segment],
+        today: Option<Date>,
+        undo: &mut Undo,
+    ) {
+        undo.save_bigram_tick(self);
         self.tick += 1;
         let tick = self.tick;
         let whole: String = segments.iter().map(|s| s.text.as_str()).collect();
@@ -693,6 +792,7 @@ impl Bigrams {
                 continue;
             }
             let (previous, text) = pair;
+            undo.save_bigram(self, previous, text);
             let decayed = self
                 .entries
                 .entry(previous.to_string())
@@ -789,7 +889,7 @@ impl SchemeModel {
 
     /// 一次上屏：整串輸入碼和每一段的衰減值各記一次，（碼, 字詞）相同的只記一次；整串另記一次
     /// 整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串，只看碼與字詞，不是空的。
-    fn learn(&mut self, segments: &[Segment], today: Option<Date>) {
+    fn learn(&mut self, segments: &[Segment], today: Option<Date>, undo: &mut undo::SchemeUndo) {
         self.tick += 1;
         let tick = self.tick;
         let whole = Segment::new(
@@ -806,6 +906,7 @@ impl SchemeModel {
             }
         }
         for (i, segment) in keys.into_iter().enumerate() {
+            undo.save(self, &segment.code, &segment.text);
             let count = self
                 .entries
                 .entry(segment.code.clone())
@@ -836,7 +937,14 @@ impl SchemeModel {
     }
 
     /// [`UserModel::add_auto_phrase`]。
-    fn add_auto_phrase(&mut self, code: &str, text: &str, today: Option<Date>) {
+    fn add_auto_phrase(
+        &mut self,
+        code: &str,
+        text: &str,
+        today: Option<Date>,
+        undo: &mut undo::SchemeUndo,
+    ) {
+        undo.save(self, code, text);
         self.words_at(code)
             .entry(text.to_string())
             .or_insert(UserWord {
