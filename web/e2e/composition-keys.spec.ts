@@ -118,8 +118,9 @@ test("沒有組字時：標點出全形，其他符號、大寫、Enter 照瀏�
 	await page.keyboard.press("Shift+B");
 	await page.keyboard.press("Enter");
 	await page.keyboard.press("ArrowLeft");
-	// 沒有全形的符號照瀏覽器，打在游標處；`z` 起 M4 票 11 是萬用鍵、會開始組字，不用它。
-	await page.keyboard.type("#");
+	// 沒有全形的符號照瀏覽器，打在游標處；`z` 起 M4 票 11 是萬用鍵、會開始組字，不用它。上排的符號用 Shift
+	// 加鍵送（中文模式照實體鍵位與 Shift 換成美式字元，票 07）。
+	await page.keyboard.press("Shift+Digit3");
 	await expect(text).toHaveValue("，？@B#\n");
 	await expect(composition).toHaveText("");
 });
