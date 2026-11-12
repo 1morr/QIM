@@ -19,6 +19,7 @@ fn scheme_pack(word_trigram: Option<&str>) -> SchemePack {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 1,
+        wildcard: None,
         radicals: BTreeMap::new(),
         packs: Packs {
             language_model: Some("bigram".into()),

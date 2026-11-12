@@ -192,8 +192,9 @@ impl Engine {
     /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan §2.4）：剛好是詞表裡的完整單字、又長過
     /// 方案一個字的最長碼時才有。不容錯、不補全；1–2 碼的英文字（`an`、`it`）和單字的碼撞得太常，
     /// macOS 速成也是第 3 碼起才出英文（黑箱 T7）。
+    /// 輸入碼有萬用鍵時沒有：萬用鍵在中文組字是比對模式，不當字母（plan §4.4）。
     pub(crate) fn english_candidate(&self, input: &str) -> Option<&str> {
-        (input.len() > usize::from(self.scheme.max_code_length))
+        (input.len() > usize::from(self.scheme.max_code_length) && !self.scheme.has_wildcard(input))
             .then(|| self.english.lookup(input))
             .flatten()
     }
@@ -468,6 +469,9 @@ impl Engine {
     fn exact(&self, user: &SchemeModel, input: &str, start: usize, limit: usize) -> Vec<Edge> {
         debug_assert!(!input.starts_with(SEPARATOR) && !input.ends_with(SEPARATOR));
         let cuts = separator_cuts(input);
+        if self.scheme.has_wildcard(input) {
+            return self.wildcard_edges(user, &without_separators(input), &cuts, start, limit);
+        }
         if cuts.is_empty() {
             return self.exact_code(user, input, start, limit).collect();
         }
@@ -511,6 +515,117 @@ impl Engine {
             .words(code)
             .map(move |text| self.user_word_edge(user, code, start, text));
         chars.chain(words).chain(user_words)
+    }
+
+    /// 有萬用鍵的碼 `pattern`（已去掉分隔記號，`cuts` 是分隔記號的位置，見 [`Engine::exact`]）的
+    /// 字、詞與使用者詞（brief §1.5、plan §2.5）：每個萬用鍵剛好代方案的一個鍵，對得上的實際的碼
+    /// 由 [`Engine::matching_codes`] 列出。字跨各個碼依字頻取最高的 `limit` 個（同 [`by_frequency`]）
+    /// 與學過的；同一個字詞對到幾個碼時只留第一個。學習計數與個人機率照實際的碼查。
+    ///
+    /// 單獨一個萬用鍵是任一個一碼的字；其餘一段的碼裡萬用鍵不能多於已知的碼，免得 `zz`、`azzz`
+    /// 這類碼對上大半個碼表或詞庫、每鍵延遲倍增。兩種規則在 dev 切分上比過（M4 票 11 Comments）：
+    /// 單獨的萬用鍵也不收時，一碼字換成 `z` 的題有一成多打不出，首碼、尾碼的題沒有分別。
+    fn wildcard_edges(
+        &self,
+        user: &SchemeModel,
+        pattern: &str,
+        cuts: &[usize],
+        start: usize,
+        limit: usize,
+    ) -> Vec<Edge> {
+        let wildcards = pattern
+            .chars()
+            .filter(|&c| Some(c) == self.scheme.wildcard)
+            .count();
+        if pattern.len() > 1 && wildcards * 2 > pattern.len() {
+            return Vec::new();
+        }
+        let codes = self.matching_codes(user, pattern);
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut edges = Vec::new();
+        if cuts.is_empty() {
+            let mut chars: Vec<(&str, &CodeEntry)> = codes
+                .iter()
+                .flat_map(|code| {
+                    self.char_entries(code)
+                        .iter()
+                        .filter(|e| !e.extension)
+                        .map(move |e| (code.as_str(), e))
+                })
+                .collect();
+            // 穩定排序：同字頻照碼的字典序、碼內的字序。
+            chars.sort_by_key(|(_, e)| Reverse(self.lexicon.char_frequency(e.text)));
+            let mut rank = 0;
+            for (code, e) in chars {
+                let text = e.text.to_string();
+                if !seen.insert(text.clone()) {
+                    continue;
+                }
+                if rank < limit || user.has_learned(code, &text) {
+                    edges.push(self.char_edge(user, code, start, e));
+                }
+                rank += 1;
+            }
+        }
+        for code in &codes {
+            let fits = |text: &str| cuts.is_empty() || self.splits_at(text, code, cuts);
+            for w in self.lexicon.lookup(code) {
+                if fits(&w.text) && seen.insert(w.text.clone()) {
+                    edges.push(self.word_edge(user, code, start, w));
+                }
+            }
+            for text in user.words(code) {
+                if fits(text) && seen.insert(text.to_string()) {
+                    edges.push(self.user_word_edge(user, code, start, text));
+                }
+            }
+        }
+        edges
+    }
+
+    /// 有萬用鍵的碼 `pattern`（不含分隔記號）對得上的實際的碼，依字典序：萬用鍵的位置換成方案的
+    /// 每個鍵，碼表、詞庫與使用者詞都沒有以它開頭的碼時就不往下展開。
+    fn matching_codes(&self, user: &SchemeModel, pattern: &str) -> Vec<String> {
+        let exists = |prefix: &str| {
+            self.code_table.has_prefix(prefix)
+                || self.lexicon.has_code_prefix(prefix)
+                || user.has_word_code_prefix(prefix)
+        };
+        let mut codes = Vec::new();
+        let mut todo = vec![String::new()];
+        while let Some(prefix) = todo.pop() {
+            let Some(next) = pattern[prefix.len()..].chars().next() else {
+                codes.push(prefix);
+                continue;
+            };
+            let keys: Vec<char> = if Some(next) == self.scheme.wildcard {
+                // 反過來推進堆疊，取出時依字母表的順序。
+                self.scheme.alphabet.chars().rev().collect()
+            } else {
+                vec![next]
+            };
+            for key in keys {
+                let mut longer = prefix.clone();
+                longer.push(key);
+                if exists(&longer) {
+                    todo.push(longer);
+                }
+            }
+        }
+        codes.sort();
+        codes
+    }
+
+    /// 學習記的碼（plan §2.4）：輸入碼 `code`（已去掉分隔記號）有萬用鍵時換成 `text` 實際的碼——
+    /// 碼表、詞庫或使用者詞裡對得上的第一個；都對不上時是 `None`。沒有萬用鍵時照原樣。
+    pub(crate) fn learned_code(&self, user: &UserModel, code: &str, text: &str) -> Option<String> {
+        if !self.scheme.has_wildcard(code) {
+            return Some(code.to_string());
+        }
+        let user = user.for_scheme(&self.scheme.id);
+        self.matching_codes(user, code)
+            .into_iter()
+            .find(|c| self.has_entry(c, text) || user.words(c).any(|t| t == text))
     }
 
     /// `text` 能不能一字一碼地拆開 `code`，使 `cuts` 的每個位置（去掉分隔記號後的碼裡）都是

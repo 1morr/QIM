@@ -605,6 +605,11 @@ impl SchemeModel {
             .flat_map(|words| words.keys().map(String::as_str))
     }
 
+    /// 有沒有以 `prefix` 開頭的使用者詞的碼（萬用鍵展開時剪枝用）。
+    pub(crate) fn has_word_code_prefix(&self, prefix: &str) -> bool {
+        crate::code_table::has_key_with_prefix(&self.words, prefix)
+    }
+
     /// 最長的使用者詞的碼長；lattice 往回找詞的上限要算進它。
     pub(crate) fn longest_word_code(&self) -> usize {
         self.words.keys().map(String::len).max().unwrap_or(0)

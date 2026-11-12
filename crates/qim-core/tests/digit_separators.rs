@@ -16,6 +16,7 @@ fn pack_bytes() -> Vec<u8> {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::from([('a', "日".into())]),
         packs: Packs::default(),
         ranking: Ranking::default(),

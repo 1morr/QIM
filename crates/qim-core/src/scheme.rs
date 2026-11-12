@@ -23,7 +23,11 @@ pub struct Scheme {
     /// 方案用到的鍵，依鍵盤標籤的順序；都是 ASCII 字母，輸入碼的位置就是位元組位置。
     pub alphabet: String,
     pub max_code_length: u8,
-    /// 鍵 → 字根，組字與鍵盤標籤用。
+    /// 萬用鍵（brief §1.5、plan §2.5）：輸入碼裡代替任一個方案的鍵，每個剛好代一碼，放在碼的任一
+    /// 位置都行；是碼表與詞庫的比對模式，不是容錯（Apple 倉頡的 `Z`、fcitx 表格的 `MatchingKey`）。
+    /// 不在 `alphabet` 裡；`None` 時沒有萬用鍵，那個鍵照方案以外的鍵處理。
+    pub wildcard: Option<char>,
+    /// 鍵 → 字根，組字與鍵盤標籤用；可以有萬用鍵（組字顯示它的記號）。
     pub radicals: BTreeMap<char, String>,
     /// 方案要搭配的其他資料包。
     pub packs: Packs,
@@ -47,12 +51,24 @@ impl Scheme {
         code.chars().all(|c| self.alphabet.contains(c))
     }
 
-    /// `input` 是中文組字打得出的輸入碼：方案的鍵，中間夾著分隔記號，不連著兩個（組字中
+    /// `c` 是組字收的碼：方案的鍵或萬用鍵。
+    pub fn is_code_key(&self, c: char) -> bool {
+        self.alphabet.contains(c) || self.wildcard == Some(c)
+    }
+
+    /// 輸入碼 `code` 有萬用鍵。
+    pub(crate) fn has_wildcard(&self, code: &str) -> bool {
+        self.wildcard.is_some_and(|w| code.contains(w))
+    }
+
+    /// `input` 是中文組字打得出的輸入碼：方案的鍵與萬用鍵，中間夾著分隔記號，不連著兩個（組字中
     /// 連按會吃下不動作）。臨時英文回中文組字時用；英文由組字的輸入碼起頭、只從尾端增刪，
     /// 所以不會以分隔記號開頭。
     pub(crate) fn composes(&self, input: &str) -> bool {
         !input.contains(&format!("{SEPARATOR}{SEPARATOR}"))
-            && self.spells(&without_separators(input))
+            && without_separators(input)
+                .chars()
+                .all(|c| self.is_code_key(c))
     }
 }
 

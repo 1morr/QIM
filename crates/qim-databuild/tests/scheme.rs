@@ -136,3 +136,33 @@ fn alphabet_is_ascii_letters() {
         .replace("b = \"月\"", "1 = \"月\"");
     assert!(scheme::parse(&digit).is_err());
 }
+
+/// 萬用鍵（brief §1.5、plan §2.5）：選填，一個不在 alphabet 的 ASCII 小寫字母，不是分隔記號；
+/// 可以有字根（組字顯示用），沒有也行。
+#[test]
+fn wildcard_is_an_optional_lowercase_letter_outside_the_alphabet() {
+    assert_eq!(scheme::parse(MINIMAL).unwrap().wildcard, None);
+    let with = MINIMAL.replace(
+        "max_code_length = 2",
+        "max_code_length = 2\nwildcard = \"z\"",
+    );
+    assert_eq!(scheme::parse(&with).unwrap().wildcard, Some('z'));
+    let shown = with.replace("b = \"月\"", "b = \"月\"\nz = \"＊\"");
+    assert_eq!(scheme::parse(&shown).unwrap().radicals[&'z'], "＊");
+
+    for bad in ["a", "zz", "", "Z", "'", "1", "ｚ"] {
+        let file = MINIMAL.replace(
+            "max_code_length = 2",
+            &format!("max_code_length = 2\nwildcard = \"{bad}\""),
+        );
+        assert!(scheme::parse(&file).is_err(), "{bad:?}");
+    }
+}
+
+#[test]
+fn quick_scheme_in_repo_uses_z_as_the_wildcard() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/schemes/quick.toml");
+    let s = scheme::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(s.wildcard, Some('z'));
+    assert!(!s.alphabet.contains('z'));
+}

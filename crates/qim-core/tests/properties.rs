@@ -105,6 +105,7 @@ fn engine_for(
         version: "1".into(),
         alphabet: "abc".into(),
         max_code_length: MAX_CODE_LENGTH,
+        wildcard: None,
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),

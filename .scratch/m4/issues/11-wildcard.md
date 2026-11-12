@@ -1,7 +1,7 @@
 # 11: 萬用鍵
 
 Status: ready-for-agent
-Blocked by: 05
+Blocked by: 01, 05
 讀: brief §1.5（萬用鍵）；plan §2.1、§2.5（方案檔）、§4.4（`z` 的過濾）、§5.2；`docs/research/closed-source-imes.md` §1.2；spec〈共同規則〉
 
 ## What to build

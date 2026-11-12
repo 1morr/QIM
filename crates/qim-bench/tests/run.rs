@@ -59,6 +59,7 @@ fn scheme_bytes(
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: lexicon.map(Into::into),

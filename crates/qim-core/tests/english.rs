@@ -35,12 +35,18 @@ const CHARS: [(char, u64); 8] = [
 
 /// 沒掛英文資料包的引擎。
 fn base_engine() -> Engine {
+    base_engine_with(None)
+}
+
+/// 沒掛英文資料包、萬用鍵是 `wildcard` 的引擎。
+fn base_engine_with(wildcard: Option<char>) -> Engine {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard,
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
@@ -434,4 +440,19 @@ fn the_expanded_list_is_empty_until_relisted_with_the_new_option() {
         .collect();
     assert_eq!(all[..texts(&shown).len()], texts(&shown)[..]);
     assert!(!all.contains(&"the".to_string()), "{all:?}");
+}
+
+/// 萬用鍵在中文組字是比對模式、不當字母（plan §4.4）：輸入碼有它時不出英文候選，即使英文詞表
+/// 有拼法相同的字（之後換成有 `z` 的英文詞典也一樣）。
+#[test]
+fn no_english_candidate_when_the_input_has_the_wildcard() {
+    let words = EnglishWords::new(["tze"]);
+    let engine = base_engine_with(Some('z')).with_english(EnglishPack {
+        id: "english".into(),
+        words,
+    });
+    let mut ime = Ime::with(engine);
+    let all = texts(&ime.type_code("tze"));
+    assert_eq!(all[0], "甘水", "{all:?}");
+    assert!(!all.iter().any(|t| t == "tze"), "{all:?}");
 }

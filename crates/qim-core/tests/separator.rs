@@ -23,6 +23,7 @@ fn engine() -> Engine {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::from([('m', "一".into()), ('i', "戈".into()), ('r', "口".into())]),
         packs: Packs {
             lexicon: Some("lexicon".into()),

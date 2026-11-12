@@ -26,6 +26,7 @@ fn engine(data: &Data) -> Engine {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::from([('a', "日".into()), ('n', "弓".into()), ('r', "口".into())]),
         packs: Packs {
             lexicon: Some("lexicon".into()),

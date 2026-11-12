@@ -786,7 +786,7 @@ impl Session {
             return self.snapshot(engine, false, None);
         }
         if let Key::Letter(c) = key
-            && engine.scheme().alphabet.contains(c)
+            && engine.scheme().is_code_key(c)
         {
             self.focus = None;
             if self.lattice.input().is_empty() {
@@ -884,7 +884,7 @@ impl Session {
                 }
                 self.snapshot(engine, true, None)
             }
-            // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、其他鍵：吃下不動作。
+            // 方案以外的小寫字母（方案沒設萬用鍵時的 `z`）、其他鍵：吃下不動作。
             // 切中英在上面處理過了。
             Key::Letter(_) | Key::ToggleAscii(_) | Key::Other | Key::Modifier => {
                 self.snapshot(engine, true, None)
@@ -1236,16 +1236,23 @@ impl Session {
     }
 
     /// 學一次上屏（plan §2.4）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
-    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。個人 bigram 的
-    /// 第一段接組字開頭時前文給的字詞（[`Session::composition_word`]）。
+    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。有萬用鍵的碼換成
+    /// 字詞實際的碼（[`Engine::learned_code`]），換不了時整次不學。個人 bigram 的第一段接組字開頭時
+    /// 前文給的字詞（[`Session::composition_word`]）。
     fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
         if !self.writes_learning() {
             return;
         }
-        let segments: Vec<Segment> = segments
+        let Some(segments) = segments
             .iter()
-            .map(|s| Segment::new(without_separators(&s.code), s.text.clone()))
-            .collect();
+            .map(|s| {
+                let code = engine.learned_code(user, &without_separators(&s.code), &s.text)?;
+                Some(Segment::new(code, s.text.clone()))
+            })
+            .collect::<Option<Vec<Segment>>>()
+        else {
+            return;
+        };
         let previous = self.composition_word.as_deref();
         user.learn(&engine.scheme().id, previous, &segments);
     }
