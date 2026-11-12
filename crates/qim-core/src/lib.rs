@@ -8,6 +8,7 @@ mod date;
 mod emoji;
 mod engine;
 mod english;
+mod english_user;
 mod language_model;
 mod lattice;
 mod lexicon;
@@ -16,7 +17,6 @@ mod pack;
 mod pack_index;
 mod punctuation;
 mod radical_hint;
-mod remembered;
 mod scheme;
 mod session;
 mod simplifier;
@@ -30,6 +30,10 @@ pub use date::{Date, ParseDateError};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
 pub use engine::Engine;
 pub use english::EnglishWords;
+pub use english_user::{
+    ENGLISH_COMPLETION_AFTER, ENGLISH_COMPLETION_LIMIT, ENGLISH_COMPLETION_POOL,
+    ENGLISH_SHOWN_AFTER,
+};
 pub use language_model::{CLAUSE_START, CharModel, LOG_PROB_STEP, LanguageModel};
 pub use lexicon::{Lexicon, Word};
 pub use manifest::{CORE_VERSION, MANIFEST_FILE, MANIFEST_VERSION, Manifest, PackKind};
@@ -39,7 +43,6 @@ pub use pack::{
 };
 pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex};
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
-pub use remembered::{REMEMBERED_LIMIT, REMEMBERED_STRINGS_MAX};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
     CONTEXT_LIMIT, Candidate, CandidateKind, Composition, ContextState, InspectedCandidate,

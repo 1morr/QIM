@@ -11,6 +11,7 @@ fn sample() -> SchemePack {
         version: "1".into(),
         alphabet: "ab".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::from([('a', "日".into()), ('b', "月".into())]),
         packs: Packs::default(),
         ranking: Ranking::default(),

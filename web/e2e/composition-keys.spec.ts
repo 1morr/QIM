@@ -44,18 +44,18 @@ test("選了開頭一段再按 Enter，上屏選定的字與其餘的輸入碼",
 	await expect(composition).toHaveText("");
 });
 
-test("組字中按 z、←、→ 吃下不動作", async ({ page }, testInfo) => {
+// 組字中的 `z` 原本也在這裡吃下不動作，M4 票 11 起是萬用鍵（`wildcard.spec.ts`）。
+test("組字中按 ←、→ 吃下不動作", async ({ page }, testInfo) => {
 	const { text, composition, items } = ui(page);
 	await page.keyboard.type("anr");
 	const before = await items.allTextContents();
-	for (const key of ["z", "ArrowLeft", "ArrowRight", "ArrowLeft"]) {
+	for (const key of ["ArrowLeft", "ArrowRight", "ArrowLeft"]) {
 		await page.keyboard.press(key);
 		await expect(text, key).toHaveValue("");
 		await expect(composition, key).toHaveText("日弓口");
 		// ← → 移動目前分段：分段的候選照不知道前文時單打它的碼（plan §2.1），不一定和接著句首的
 		// 整串候選同序（M3 票 11b 起詞級 trigram 看得出句首），只比首選。
-		if (key === "z") await expect(items, key).toHaveText(before);
-		else await expect(items.first(), key).toHaveText(before[0]);
+		await expect(items.first(), key).toHaveText(before[0]);
 	}
 	await page.screenshot({ path: testInfo.outputPath("swallowed.png") });
 	await page.keyboard.type(" ");
@@ -118,7 +118,8 @@ test("沒有組字時：標點出全形，其他符號、大寫、Enter 照瀏�
 	await page.keyboard.press("Shift+B");
 	await page.keyboard.press("Enter");
 	await page.keyboard.press("ArrowLeft");
-	await page.keyboard.type("z");
-	await expect(text).toHaveValue("，？@Bz\n");
+	// 沒有全形的符號照瀏覽器，打在游標處；`z` 起 M4 票 11 是萬用鍵、會開始組字，不用它。
+	await page.keyboard.type("#");
+	await expect(text).toHaveValue("，？@B#\n");
 	await expect(composition).toHaveText("");
 });

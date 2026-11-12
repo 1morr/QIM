@@ -5,6 +5,7 @@ import {
 	type InspectedCandidate,
 	type InspectedSegment,
 	type SegmentSource,
+	segmentText,
 } from "../src/debug-panel.ts";
 
 function segment(
@@ -51,7 +52,7 @@ test("多段的是連打，各段的來源只列一次；學過的段與個人 b
 	]);
 });
 
-test("英文、emoji、記住的字串、聯想照種類；重排與排位規則另標", () => {
+test("英文、emoji、英文使用者詞、聯想照種類；重排與排位規則另標", () => {
 	const english: InspectedCandidate = {
 		text: "the",
 		kind: "english",
@@ -70,4 +71,13 @@ test("英文、emoji、記住的字串、聯想照種類；重排與排位規則
 	assert.equal(labels[2], "重排插入（第 9 條路徑）");
 	const moved = { ...inserted, rerankInserted: false };
 	assert.deepEqual(candidateSources(moved).codes.at(-1), "rerankMoved");
+});
+
+test("有萬用鍵的段標「萬用鍵」，切段欄附實際對到的碼", () => {
+	const wild = { ...segment("hiz", "的人", "lexicon"), matchedCode: "hio" };
+	const { codes, labels } = candidateSources(word([wild]));
+	assert.deepEqual(codes, ["lexicon", "wildcard"]);
+	assert.deepEqual(labels, ["詞庫", "萬用鍵"]);
+	assert.equal(segmentText(wild), "hiz（hio）→的人");
+	assert.equal(segmentText(segment("hio", "的人", "lexicon")), "hio→的人");
 });

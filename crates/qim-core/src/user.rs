@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::remembered::{self, REMEMBERED_STRINGS_MAX};
+use crate::english_user::{self, ENGLISH_COMPLETION_AFTER, EnglishUserWord, EnglishUserWords};
 use crate::{Date, Engine, Segment};
 
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
@@ -30,7 +30,7 @@ pub(crate) const RECENT_COMMITS: u64 = 10_000;
 const EXPIRY_DAYS: i32 = 365;
 
 /// 日期 `last` 距 `today` 超過 [`EXPIRY_DAYS`]；任一個不知道（殼沒給日期）時不算，時限跳過它。
-fn expired(last: Option<Date>, today: Option<Date>) -> bool {
+pub(crate) fn expired(last: Option<Date>, today: Option<Date>) -> bool {
     matches!((last, today), (Some(last), Some(today)) if today.days_after(last) > EXPIRY_DAYS)
 }
 
@@ -71,11 +71,10 @@ const BIGRAM_LIMIT: usize = 30_000;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UserModel {
     schemes: BTreeMap<String, SchemeModel>,
-    /// 個人 bigram：只看文字，各方案共用（plan §2.4）。它的 tick 也是記住的字串的時間。
+    /// 個人 bigram：只看文字，各方案共用（plan §2.4）。
     bigrams: Bigrams,
-    /// 記住的字串（plan §2.4，M3 票 15）：使用者打過的 email → 衰減值，各方案共用。每記一次共用的
-    /// tick（`bigrams.tick`）加一，衰減同個人 bigram。
-    remembered: BTreeMap<String, Decayed>,
+    /// 英文使用者詞（plan §2.4，M4 票 14）：各方案共用，有自己的 tick。
+    english: EnglishUserWords,
     /// 殼交給核心的今天（[`UserModel::set_today`]）：學到或改到的條目記成最後使用的日期。核心不讀
     /// 系統時間（plan §1.3）；殼還沒給時是 `None`，這時學到的條目沒有日期。
     today: Option<Date>,
@@ -97,21 +96,26 @@ struct Bigrams {
 
 /// 一個衰減值與它最後更新的 tick（librime `formula_d`）。
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-struct Decayed {
+pub(crate) struct Decayed {
     value: f64,
     last_tick: u64,
     /// 最後使用的日期；殼沒給日期時是 `None`。
-    last_used: Option<Date>,
+    pub(crate) last_used: Option<Date>,
 }
 
 impl Decayed {
+    /// 最後更新的 tick。
+    pub(crate) fn last_tick(self) -> u64 {
+        self.last_tick
+    }
+
     /// 衰減到 `tick` 的值。
-    fn at(self, tick: u64) -> f64 {
+    pub(crate) fn at(self, tick: u64) -> f64 {
         self.value * decay(tick - self.last_tick)
     }
 
-    /// 在 `tick`、`today` 又上屏（或記住）一次：衰減到現在再加一（librime `formula_d`）。
-    fn bump(&mut self, tick: u64, today: Option<Date>) {
+    /// 在 `tick`、`today` 又上屏（或打）一次：衰減到現在再加一（librime `formula_d`）。
+    pub(crate) fn bump(&mut self, tick: u64, today: Option<Date>) {
         self.value = 1.0 + self.at(tick);
         self.last_tick = tick;
         self.last_used = today;
@@ -233,14 +237,23 @@ impl Count {
     }
 }
 
-/// 條目過了出現門檻沒有（上限淘汰先刪沒到的）。中文條目沒有出現門檻，都是 `Passed`；英文使用者詞的
-/// 門檻由 M4 票 14 接上（協調者 2026-11-12 決定，票 13 的 Comments）。
+/// 條目過了出現門檻沒有（上限淘汰先刪沒到的）。中文條目沒有出現門檻，都是 `Passed`；英文使用者詞
+/// 一年內打過 [`crate::ENGLISH_SHOWN_AFTER`] 次才算過（UserModel 不知道英文詞典，詞典有的詞打過一次也算沒到）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Threshold {
-    // 中文條目沒有出現門檻，票 13 還沒有條目用到它；票 14 接上英文使用者詞時拿掉這行。
-    #[expect(dead_code, reason = "英文使用者詞的出現門檻由 M4 票 14 接上")]
     Below,
     Passed,
+}
+
+/// 上限淘汰的一個條目：（方案, 輸入碼, 詞）的列或英文使用者詞（鍵是小寫）。同序時依這個順序刪。
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Victim {
+    Row {
+        scheme: String,
+        code: String,
+        text: String,
+    },
+    English(String),
 }
 
 /// 上限淘汰的排序鍵（[`UserModel::enforce_limits`]），[`Eviction::order`] 小的先刪：沒到出現門檻的、
@@ -321,55 +334,39 @@ impl UserModel {
         })
     }
 
-    /// 記住一個字串（[`crate::Session`] 從送出去的字裡認出來的 email）：衰減值加一，共用的 tick 加一。
-    /// email 不分大小寫（網域本來就不分，本地部分實務上也不分）：只留一條，換成這次打的寫法。超過
-    /// [`REMEMBERED_STRINGS_MAX`] 條時淘汰最久沒用的（最後 tick 最小）。
-    pub(crate) fn remember_string(&mut self, text: &str) {
-        self.bigrams.tick += 1;
-        let same = self
-            .remembered
-            .keys()
-            .find(|old| old.eq_ignore_ascii_case(text))
-            .cloned();
-        let mut decayed = same
-            .and_then(|old| self.remembered.remove(&old))
-            .unwrap_or_default();
-        decayed.bump(self.bigrams.tick, self.today);
-        self.remembered.insert(text.to_string(), decayed);
-        if self.remembered.len() > REMEMBERED_STRINGS_MAX
-            && let Some(oldest) = self
-                .remembered
-                .iter()
-                .min_by_key(|(_, d)| d.last_tick)
-                .map(|(text, _)| text.clone())
-        {
-            self.remembered.remove(&oldest);
-        }
+    /// 學一個英文使用者詞（[`crate::Session`] 從送出去的字裡認出來的串，[`english_user::to_learn`]
+    /// 過的）：次數與衰減值加一，英文使用者詞自己的 tick 加一。
+    pub(crate) fn learn_english(&mut self, text: &str) {
+        self.english.learn(text, self.today);
+        self.enforce_limits();
     }
 
-    /// 記住的字串，依文字排；殼的清單用，使用者可以逐條刪（[`UserModel::forget_string`]）。
-    pub fn remembered_strings(&self) -> Vec<String> {
-        self.remembered.keys().cloned().collect()
+    /// 英文使用者詞（最後打的寫法），依小寫排；殼的清單用，使用者可以逐條刪
+    /// （[`UserModel::forget_english_user_word`]）。沒到出現門檻的也列出。
+    pub fn english_user_words(&self) -> Vec<String> {
+        self.english.list()
     }
 
-    /// 忘掉記住的字串 `text`，匯出檔裡不再有它；沒記過時回傳 `false`。
-    pub fn forget_remembered_string(&mut self, text: &str) -> bool {
-        self.remembered.remove(text).is_some()
+    /// 忘掉英文使用者詞 `text`（不分大小寫），匯出檔裡不再有它；沒學過時回傳 `false`。
+    pub fn forget_english_user_word(&mut self, text: &str) -> bool {
+        self.english.forget(text)
     }
 
-    /// 方案字母表 `alphabet` 裡的字母（小寫，[`crate::remembered::letters`]）以 `prefix` 開頭的記住的
-    /// 字串，衰減值大的在前，同值依文字。
-    pub(crate) fn strings_starting_with(&self, prefix: &str, alphabet: &str) -> Vec<&str> {
-        let tick = self.bigrams.tick;
-        let mut found: Vec<(f64, &str)> = self
-            .remembered
-            .iter()
-            .filter(|(_, d)| !expired(d.last_used, self.today))
-            .filter(|(text, _)| remembered::letters(text, alphabet).starts_with(prefix))
-            .map(|(text, d)| (d.at(tick), text.as_str()))
-            .collect();
-        found.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(b.1)));
-        found.into_iter().map(|(_, text)| text).collect()
+    /// 輸入碼 `input` 剛好是打過 [`crate::ENGLISH_SHOWN_AFTER`] 次的英文使用者詞時是它的寫法（排位規則 4，
+    /// [`EnglishUserWords::typed_as`]）。
+    pub(crate) fn english_typed_as(&self, input: &str, alphabet: &str) -> Option<&str> {
+        self.english.typed_as(input, alphabet, self.today)
+    }
+
+    /// 前綴補完（排位規則 5，[`EnglishUserWords::completions`]）；`in_dictionary` 判斷英文詞典有沒有這個詞。
+    pub(crate) fn english_completions(
+        &self,
+        prefix: &str,
+        alphabet: &str,
+        in_dictionary: impl Fn(&str) -> bool,
+    ) -> Vec<&str> {
+        self.english
+            .completions(prefix, alphabet, self.today, in_dictionary)
     }
 
     /// 殼交給核心今天的日期（使用者當地的日曆日）；之後學到或改到的條目記成最後使用的日期。核心不讀
@@ -387,28 +384,51 @@ impl UserModel {
         self.limits = limits;
     }
 
-    /// 條目數到上限的 1.2 倍時清到上限（plan §2.4，LatinIME 的 `truncateEntries`）。淘汰順序：先刪沒到
-    /// 出現門檻的（中文條目沒有出現門檻，都算過了；英文使用者詞的門檻由 M4 票 14 接上），再刪最後使用
-    /// 的日期最舊的（沒有日期的當作最新，同時限跳過它們）、同一天的刪衰減值小的（最近用得少的），再依
-    /// 鍵的順序。手動加詞與常用語不算、不刪。
+    /// 條目數到上限的 1.2 倍時清到上限（plan §2.4，LatinIME 的 `truncateEntries`）。（方案, 輸入碼, 詞）的列
+    /// 與英文使用者詞算同一個上限（LatinIME 的 unigram 也不分來源）。淘汰順序：先刪沒到出現門檻的
+    /// （[`Threshold`]：只有英文使用者詞會沒到），再刪最後使用的日期最舊的（沒有日期的當作最新，同時限
+    /// 跳過它們）、同一天的刪衰減值小的（最近用得少的），再依鍵的順序。手動加詞與常用語不算、不刪。
     fn enforce_limits(&mut self) {
         let Limits { entries, bigrams } = self.limits;
-        let rows: usize = self.schemes.values().map(|m| m.evictable().count()).sum();
+        let rows: usize = self
+            .schemes
+            .values()
+            .map(|m| m.evictable().count())
+            .sum::<usize>()
+            + self.english.words.len();
         if rows >= Limits::hard(entries) {
-            let mut order: Vec<(Eviction, String, String, String)> = Vec::with_capacity(rows);
+            let mut order: Vec<(Eviction, Victim)> = Vec::with_capacity(rows);
             for (scheme, model) in &self.schemes {
                 for (code, text) in model.evictable_rows() {
                     let eviction = model.eviction(&code, &text);
-                    order.push((eviction, scheme.clone(), code, text));
+                    let scheme = scheme.clone();
+                    order.push((eviction, Victim::Row { scheme, code, text }));
                 }
             }
-            order.sort_by(|a, b| {
-                a.0.order(&b.0)
-                    .then_with(|| (&a.1, &a.2, &a.3).cmp(&(&b.1, &b.2, &b.3)))
-            });
-            for (_, scheme, code, text) in order.into_iter().take(rows - entries) {
-                if let Some(model) = self.schemes.get_mut(&scheme) {
-                    model.remove_row(&code, &text);
+            let (today, tick) = (self.today, self.english.tick);
+            order.extend(self.english.words.iter().map(|(key, word)| {
+                let eviction = Eviction {
+                    threshold: if word.passed(today) {
+                        Threshold::Passed
+                    } else {
+                        Threshold::Below
+                    },
+                    last_used: word.decayed.last_used,
+                    used: word.decayed.at(tick),
+                };
+                (eviction, Victim::English(key.clone()))
+            }));
+            order.sort_by(|a, b| a.0.order(&b.0).then_with(|| a.1.cmp(&b.1)));
+            for (_, victim) in order.into_iter().take(rows - entries) {
+                match victim {
+                    Victim::Row { scheme, code, text } => {
+                        if let Some(model) = self.schemes.get_mut(&scheme) {
+                            model.remove_row(&code, &text);
+                        }
+                    }
+                    Victim::English(key) => {
+                        self.english.words.remove(&key);
+                    }
                 }
             }
         }
@@ -894,6 +914,12 @@ impl<'a> SchemeUser<'a> {
             })
     }
 
+    /// 有沒有以 `prefix` 開頭的使用者詞的碼（萬用鍵展開時剪枝用；停用的也算，只是少剪一點，
+    /// 實際列詞仍經 [`SchemeUser::words`] 濾掉停用的）。
+    pub(crate) fn has_word_code_prefix(&self, prefix: &str) -> bool {
+        crate::code_table::has_key_with_prefix(&self.model.words, prefix)
+    }
+
     /// 最長的使用者詞的碼長；lattice 往回找詞的上限要算進它（停用的也算，上限只是放寬）。
     pub(crate) fn longest_word_code(&self) -> usize {
         self.model.words.keys().map(String::len).max().unwrap_or(0)
@@ -959,20 +985,22 @@ enum Version {
 const TICK_KEY: &str = "#@/tick/";
 /// 個人 bigram 的 tick 的 metadata 行開頭，後接 Tab、tick；個人 bigram 各方案共用，所以不帶方案。
 const SHARED_TICK_KEY: &str = "#@/tick\t";
+/// 英文使用者詞自己的 tick 的 metadata 行開頭（v3 起，M4 票 14），後接 Tab、tick。
+const ENGLISH_TICK_KEY: &str = "#@/english_tick\t";
 /// 裝置 id 的 metadata 行開頭（v3 起），後接 Tab、id；照 librime userdb 文字檔的 `#@/user_id`。
 const DEVICE_KEY: &str = "#@/device\t";
 /// v3 的種類：（方案, 輸入碼, 詞）的學習計數與使用者詞。
 const ENTRY: &str = "entry";
 /// v3 的種類：個人 bigram。
 const BIGRAM: &str = "bigram";
-/// v3 的種類：記住的字串。
-const STRING: &str = "string";
+/// v3 的種類：英文使用者詞（M4 票 14）。
+const ENGLISH: &str = "english";
 /// 欄名註解行；匯入時和其他 `#` 開頭的行一樣略過。
 const COLUMNS: &str = "# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger";
 /// 個人 bigram 的欄名註解行，有個人 bigram 時寫在它們前面。
 const BIGRAM_COLUMNS: &str = "# kind\tprevious\tword\tdecayed\tlast_tick\tlast_used";
-/// 記住的字串的欄名註解行，有記住的字串時寫在它們前面。
-const STRING_COLUMNS: &str = "# kind\tstring\tdecayed\tlast_tick\tlast_used";
+/// 英文使用者詞的欄名註解行，有英文使用者詞時寫在它們前面。
+const ENGLISH_COLUMNS: &str = "# kind\tword\tcount\tdecayed\tlast_tick\tlast_used";
 /// 日期欄讀不出來時的原因。
 const BAD_DATE: &str = "最後使用的日期要是 YYYY-MM-DD 的真實日期，不知道時留空";
 
@@ -980,13 +1008,16 @@ const BAD_DATE: &str = "最後使用的日期要是 YYYY-MM-DD 的真實日期�
 enum Kind<'a> {
     Entry(&'a str),
     Bigram(&'a str),
-    Remembered(&'a str),
+    /// v3 的英文使用者詞。
+    English(&'a str),
+    /// v2 方案欄、前一個字詞欄都空的列（記住的字串）：匯入成已過門檻的英文使用者詞。
+    V2String(&'a str),
 }
 
 impl UserModel {
     /// 匯出成 `# qim-userdict v3` 的 TSV（plan §2.4），給殼存檔、換機或備份。每列開頭是種類：
     /// 每個（方案, 輸入碼, 詞）一列 `entry`，依方案、輸入碼、詞的順序；接著個人 bigram 一列一組
-    /// `bigram`，依前一個字詞、這一段的順序；再來記住的字串 `string`。每列都有最後使用的日期欄，
+    /// `bigram`，依前一個字詞、這一段的順序；再來英文使用者詞 `english`，依小寫的順序。每列都有最後使用的日期欄，
     /// 殼沒給過日期時學到的留空（不寫假日期）。
     /// 詞欄與前一個字詞經 [`escape`]。
     pub fn export(&self) -> String {
@@ -996,6 +1027,9 @@ impl UserModel {
         }
         if self.bigrams.tick > 0 {
             out.push_str(&format!("{SHARED_TICK_KEY}{}\n", self.bigrams.tick));
+        }
+        if self.english.tick > 0 {
+            out.push_str(&format!("{ENGLISH_TICK_KEY}{}\n", self.english.tick));
         }
         for (scheme, model) in &self.schemes {
             out.push_str(&format!("{TICK_KEY}{scheme}\t{}\n", model.tick));
@@ -1052,17 +1086,18 @@ impl UserModel {
                 ));
             }
         }
-        if !self.remembered.is_empty() {
-            out.push_str(STRING_COLUMNS);
+        if !self.english.words.is_empty() {
+            out.push_str(ENGLISH_COLUMNS);
             out.push('\n');
         }
-        for (text, decayed) in &self.remembered {
+        for word in self.english.words.values() {
             out.push_str(&format!(
-                "{STRING}\t{}\t{}\t{}\t{}\n",
-                escape(text),
-                decayed.value,
-                decayed.last_tick,
-                DateField(decayed.last_used),
+                "{ENGLISH}\t{}\t{}\t{}\t{}\t{}\n",
+                word.text,
+                word.count,
+                word.decayed.value,
+                word.decayed.last_tick,
+                DateField(word.decayed.last_used),
             ));
         }
         out
@@ -1098,6 +1133,7 @@ impl UserModel {
         let mut warnings = Vec::new();
         let mut ticks: BTreeMap<&str, u64> = BTreeMap::new();
         let mut shared_tick: Option<u64> = None;
+        let mut english_tick: Option<u64> = None;
         let mut seen: BTreeSet<(&str, &str, Cow<str>)> = BTreeSet::new();
         for (line, number) in lines {
             let error = |reason: &str| ImportError::at(number, reason.to_string());
@@ -1126,6 +1162,17 @@ impl UserModel {
                 shared_tick = Some(tick);
                 continue;
             }
+            if let Some(tick) = line.strip_prefix(ENGLISH_TICK_KEY)
+                && version == Version::V3
+            {
+                let tick = tick.parse().map_err(|_| error("tick 不是整數"))?;
+                // 讀到這裡時，英文使用者詞的 tick 是前面各列最大的最後 tick。
+                if user.english.tick > tick {
+                    return Err(error("tick 比前面英文使用者詞列的最後 tick 小"));
+                }
+                english_tick = Some(tick);
+                continue;
+            }
             if let Some(tick) = line.strip_prefix(TICK_KEY) {
                 let (scheme, tick) = tick
                     .split_once('\t')
@@ -1146,7 +1193,7 @@ impl UserModel {
                 match kind {
                     ENTRY => Kind::Entry(fields),
                     BIGRAM => Kind::Bigram(fields),
-                    STRING => Kind::Remembered(fields),
+                    ENGLISH => Kind::English(fields),
                     "" => return Err(error("種類欄不能是空的")),
                     other => {
                         warnings.push(ImportWarning {
@@ -1162,28 +1209,20 @@ impl UserModel {
                     return Err(error("方案不能是空的（v1 沒有個人 bigram 與記住的字串）"));
                 }
                 match shared.strip_prefix('\t') {
-                    Some(string) => Kind::Remembered(string),
+                    Some(string) => Kind::V2String(string),
                     None => Kind::Bigram(shared),
                 }
             } else {
                 Kind::Entry(line)
             };
             match kind {
-                Kind::Remembered(fields) => {
-                    let (text, decayed) = parse_string(fields, version, today).map_err(error)?;
-                    if shared_tick.is_some_and(|t| decayed.last_tick > t) {
-                        return Err(error("最後 tick 比共用的 tick 大"));
-                    }
-                    if user.remembered.insert(text.into_owned(), decayed).is_some() {
-                        return Err(error("記住的字串重複"));
-                    }
-                    if user.remembered.len() > REMEMBERED_STRINGS_MAX {
-                        return Err(ImportError::at(
-                            number,
-                            format!("記住的字串超過 {REMEMBERED_STRINGS_MAX} 條"),
-                        ));
-                    }
-                    user.bigrams.tick = user.bigrams.tick.max(decayed.last_tick);
+                Kind::English(fields) => {
+                    let word = parse_english(fields).map_err(error)?;
+                    insert_english(&mut user, word, english_tick).map_err(error)?;
+                }
+                Kind::V2String(fields) => {
+                    let word = parse_string(fields, today).map_err(error)?;
+                    insert_english(&mut user, word, shared_tick).map_err(error)?;
                 }
                 Kind::Bigram(fields) => {
                     let (previous, text, decayed) =
@@ -1238,6 +1277,12 @@ impl UserModel {
         // 沒有 tick 行時，個人 bigram 的 tick 取最大的最後 tick（同方案）。
         if let Some(tick) = shared_tick {
             user.bigrams.tick = tick;
+        }
+        // v2 的記住的字串用共用的 tick；換成英文使用者詞自己的 tick 時接著用它，衰減的先後不變。
+        if let Some(tick) = english_tick
+            .or(shared_tick.filter(|_| version == Version::V2 && !user.english.words.is_empty()))
+        {
+            user.english.tick = tick;
         }
         Ok(Imported { user, warnings })
     }
@@ -1460,39 +1505,78 @@ fn parse_bigram(
     ))
 }
 
-/// 記住的字串的一列去掉種類欄（v2 是空的方案欄與前一個字詞欄）之後：字串、衰減值、最後 tick，
-/// v3 再接最後使用的日期（v2 取 `today`）。字串要是 email（同打字時記的規則），照詞欄跳脫。
-fn parse_string(
-    line: &str,
-    version: Version,
-    today: Option<Date>,
-) -> Result<(Cow<'_, str>, Decayed), &'static str> {
-    let fields: Vec<&str> = line.split('\t').collect();
-    let ([text, value, last_tick], last_used) = match (version, &fields[..]) {
-        (Version::V3, &[text, value, last_tick, last_used]) => {
-            ([text, value, last_tick], parse_date(last_used)?)
-        }
-        (Version::V3, _) => return Err("string 要有 5 欄（含種類），以 Tab 分隔"),
-        (_, &[text, value, last_tick]) => ([text, value, last_tick], today),
-        _ => return Err("記住的字串（方案欄、前一個字詞欄空的）要有 5 欄，以 Tab 分隔"),
+/// 英文使用者詞的一列去掉種類欄之後（v3）：寫法、次數、衰減值、最後 tick、最後使用的日期。寫法要是
+/// 打字時會學的串（[`english_user::to_learn`]），不跳脫（串裡沒有反斜線、換行與 Tab）。
+fn parse_english(line: &str) -> Result<EnglishUserWord, &'static str> {
+    let &[text, count, value, last_tick, last_used] = &line.split('\t').collect::<Vec<_>>()[..]
+    else {
+        return Err("english 要有 6 欄（含種類），以 Tab 分隔");
     };
-    let text = unescape(text)?;
-    if remembered::to_remember(&text) != Some(&text) {
-        return Err("記住的字串要是 email");
+    let count: u64 = count.parse().map_err(|_| "次數要是正整數")?;
+    if count == 0 {
+        return Err("次數要是正整數");
+    }
+    english_word(text, count, value, last_tick, parse_date(last_used)?)
+}
+
+/// v2 的記住的字串（方案欄、前一個字詞欄空的列）去掉兩個空欄之後：字串、衰減值、最後 tick；最後使用
+/// 的日期取 `today`。匯入成已過門檻的英文使用者詞（次數 [`ENGLISH_COMPLETION_AFTER`]，前綴補完也給）。
+fn parse_string(line: &str, today: Option<Date>) -> Result<EnglishUserWord, &'static str> {
+    let &[text, value, last_tick] = &line.split('\t').collect::<Vec<_>>()[..] else {
+        return Err("記住的字串（方案欄、前一個字詞欄空的）要有 5 欄，以 Tab 分隔");
+    };
+    english_word(
+        &unescape(text)?,
+        ENGLISH_COMPLETION_AFTER,
+        value,
+        last_tick,
+        today,
+    )
+}
+
+/// 把匯入的一個英文使用者詞加進 `user`；最後 tick 比 tick 行（`tick`，沒有時不查）大、或不分大小寫
+/// 重複時是錯誤。
+fn insert_english(
+    user: &mut UserModel,
+    word: EnglishUserWord,
+    tick: Option<u64>,
+) -> Result<(), &'static str> {
+    if tick.is_some_and(|t| word.decayed.last_tick > t) {
+        return Err("最後 tick 比 tick 行的 tick 大");
+    }
+    if !user.english.insert(word) {
+        return Err("英文使用者詞重複（不分大小寫）");
+    }
+    Ok(())
+}
+
+/// 檢查並組成一個英文使用者詞。
+fn english_word(
+    text: &str,
+    count: u64,
+    value: &str,
+    last_tick: &str,
+    last_used: Option<Date>,
+) -> Result<EnglishUserWord, &'static str> {
+    if english_user::to_learn(text) != Some(text) {
+        return Err(
+            "英文使用者詞要是打字時會學的串（英文、數字與 . _ % + - @ '，夠長，頭尾不是 . 或 '）",
+        );
     }
     let value: f64 = value.parse().map_err(|_| "衰減值要是數字")?;
     if !value.is_finite() || value <= 0.0 {
-        return Err("記住的字串的衰減值要是正的有限數");
+        return Err("英文使用者詞的衰減值要是正的有限數");
     }
     let last_tick = last_tick.parse().map_err(|_| "tick 要是非負整數")?;
-    Ok((
-        text,
-        Decayed {
+    Ok(EnglishUserWord {
+        text: text.to_string(),
+        count,
+        decayed: Decayed {
             value,
             last_tick,
             last_used,
         },
-    ))
+    })
 }
 
 /// 詞欄的跳脫（v2）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，照 PostgreSQL `COPY` 的文字格式與

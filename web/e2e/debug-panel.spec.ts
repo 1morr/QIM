@@ -213,13 +213,14 @@ test("候選的來源每種都讀得到", async ({ page }, testInfo) => {
 	);
 	await page.keyboard.press("Escape");
 
-	// 記住的字串：英文打一次 email，中文打開頭的字母。
+	// 英文使用者詞：英文打 3 次 email，中文打開頭的字母（前綴補完）。
 	await place(page, "");
 	await page.keyboard.press("Shift");
-	await page.keyboard.type(`${EMAIL} `);
+	await page.keyboard.type(`${EMAIL} ${EMAIL} ${EMAIL} `);
 	await page.keyboard.press("Shift");
 	await page.keyboard.type("iva");
-	await expect(sources(EMAIL)).toHaveAttribute("data-kind", "remembered");
+	await expect(sources(EMAIL)).toHaveAttribute("data-kind", "englishUserWord");
+	await expect(sources(EMAIL)).toContainText("英文使用者詞");
 	await page.screenshot({ path: testInfo.outputPath("debug-sources.png") });
 	await page.keyboard.press("Escape");
 

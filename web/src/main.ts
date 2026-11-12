@@ -9,20 +9,20 @@ import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
 import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
-import {
-	checkModelPack,
-	NeuralReranker,
-	type PackSource,
-} from "./neural-rerank.ts";
+import { NeuralReranker } from "./neural-rerank.ts";
 import { mountPackSettings } from "./pack-settings.ts";
-import { PackLibrary } from "./packs.ts";
+import { checkModelPack, PackLibrary } from "./packs.ts";
 import { mountPanel } from "./panel.ts";
 import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
 import { fakeRank, rerankScheduler } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
-import { mountRemembered, type Remembered } from "./remembered.ts";
+import {
+	type EnglishUserWords,
+	mountEnglishUserWords,
+} from "./english-user-words.ts";
+import { storage } from "./storage.ts";
 import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
 import { mountUserDict } from "./user-dict.ts";
@@ -88,44 +88,47 @@ async function start(): Promise<void> {
 		load(LAYOUT_URL).then((response) => response.text()),
 		load(NUMBER_ROW_LAYOUT_URL).then((response) => response.text()),
 	]);
+	/** 狀態列一直留著的說明（只用內建的資料包、存不了、模型載入不了）；載入完才換掉「載入中…」。 */
+	const notices: string[] = [];
+	let ready = false;
+	const notify = (notice: string): void => {
+		if (!notices.includes(notice)) {
+			notices.push(notice);
+		}
+		if (ready) {
+			status.textContent = notices.join("；");
+		}
+	};
+	if (library.storeError) {
+		notify(
+			`IndexedDB 打不開，這次只用內建的資料包、匯入的不會存：${library.storeError}`,
+		);
+	}
+	// `localStorage` 打不開或存不下（載入中或之後）：學習資料與設定只留在記憶體。
+	storage.watch((error) =>
+		notify(
+			`學習資料與設定這次不會存（瀏覽器的儲存空間用不了）：${message(error)}`,
+		),
+	);
 	let session: Session;
-	/** 載入時就有要說的事（改用內建的資料包），載入完不清掉狀態列。 */
-	let notice = false;
 	try {
 		session = new Session(library.sessionPacks());
 	} catch (error) {
 		// 選的或匯入的資料包載入不了（例如 IndexedDB 裡的檔壞了）：這次只用內建的，說明原因。
 		library.fallBackToBuiltin();
 		session = new Session(library.sessionPacks());
-		status.textContent = `匯入的資料包載入不了，這次只用內建的：${message(error)}`;
-		notice = true;
+		notify(`匯入的資料包載入不了，這次只用內建的：${message(error)}`);
 	}
 	// 停鍵層模型在 Web Worker 裡載入，打字不等它；載入不了就不重排，打字與候選照常。
-	const neural = new NeuralReranker();
-	/** Worker 正在用的模型的 manifest；沒變就不重載，載入失敗時清掉，下次換資料包再試。 */
-	let loadedModel: string | undefined;
-	const loadModel = (model: PackSource | undefined): void => {
-		loadedModel = model?.manifest;
-		neural.load(model).catch((error: unknown) => {
-			loadedModel = undefined;
-			status.textContent = `停鍵層模型載入不了，不重排：${message(error)}`;
-		});
-	};
-	loadModel(library.modelPack());
-	/**
-	 * 換資料包時的模型：先在這裡核對（不收就丟錯，資料包的改動退回），核心也收下其他資料包之後才呼叫
-	 * 回傳的函式交給 Worker；沒換時是 `undefined`。
-	 */
-	const checkModel = (): (() => void) | undefined => {
-		const model = library.modelPack();
-		if (model?.manifest === loadedModel) {
-			return undefined;
-		}
-		if (model) {
-			checkModelPack(model);
-		}
-		return () => loadModel(model);
-	};
+	const neural = new NeuralReranker({
+		worker: new Worker(new URL("./rerank-worker.ts", import.meta.url), {
+			type: "module",
+		}),
+		check: checkModelPack,
+		onLoadFailed: (error) =>
+			notify(`停鍵層模型載入不了，不重排：${message(error)}`),
+	});
+	neural.load(library.modelPack());
 	/** 正在用的字根提示資料包，查完提示就釋放。 */
 	const radicalHints = (): RadicalHints => {
 		const pack = library.radicalHintPack();
@@ -137,30 +140,30 @@ async function start(): Promise<void> {
 	};
 	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
 	let phrases: Phrases | undefined;
-	/** 記住的 email 清單；同上比 `userDict` 晚掛上。 */
-	let remembered: Remembered | undefined;
+	/** 英文使用者詞的清單；同上比 `userDict` 晚掛上。 */
+	let englishUserWords: EnglishUserWords | undefined;
 	// 殼的日期契約（plan §2.4）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
 	// 今天，過了午夜才不會記成前一天。按鍵、點擊、觸控都從 keydown 或 pointerdown 開始；失焦時核心
-	// 會記住正在打的 email，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
+	// 會把正在打的串學成英文使用者詞，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
 	// 給（blur 不冒泡，但捕獲階段照樣經過 window），比任何處理器早。
 	const giveToday = (): void => session.setToday(localToday());
 	giveToday();
 	for (const type of ["keydown", "pointerdown", "blur"]) {
 		window.addEventListener(type, giveToday, { capture: true });
 	}
-	// 匯入、清空換掉整份使用者詞，常用語與記住的 email 的清單跟著重畫。
+	// 匯入、清空換掉整份使用者詞，常用語與英文使用者詞的清單跟著重畫。
 	const userDict = mountUserDict(session, () => {
 		phrases?.refresh();
-		remembered?.refresh();
+		englishUserWords?.refresh();
 		focusText();
 	});
-	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心記住 email）、失焦。 */
+	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心學英文使用者詞）、失焦。 */
 	const saveLearning = (): void => {
 		userDict.save();
-		remembered?.refresh();
+		englishUserWords?.refresh();
 	};
 	/**
-	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心記住剛打完的 email，要存檔；
+	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心學到剛打完的英文串，要存檔；
 	 * 字母、數字只是接在那串後面，不必存。`kind` 是實體鍵的種類或觸控的動作（觸控字母鍵是 `weighted`）。
 	 */
 	const afterHostKey = (kind: string | undefined): void => {
@@ -232,16 +235,24 @@ async function start(): Promise<void> {
 		touchKeyboard?.refresh();
 		requestRerank(snapshot.generation);
 	};
-	/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
-	const applyHandled = (snapshot: Snapshot, chosen: boolean): void => {
+	/** 交給 `use` 之後釋放 `snapshot`（`use` 丟錯也釋放）；網頁自己向核心要的快照都經這裡。 */
+	const withSnapshot = (
+		snapshot: Snapshot,
+		use: (snapshot: Snapshot) => void,
+	) => {
 		try {
-			if (snapshot.handled) {
-				apply(snapshot, chosen);
-			}
+			use(snapshot);
 		} finally {
 			snapshot.free();
 		}
 	};
+	/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
+	const applyHandled = (snapshot: Snapshot, chosen: boolean): void =>
+		withSnapshot(snapshot, () => {
+			if (snapshot.handled) {
+				apply(snapshot, chosen);
+			}
+		});
 
 	const composition = mountComposition((index) =>
 		applyHandled(session.focusSegment(index), false),
@@ -259,10 +270,10 @@ async function start(): Promise<void> {
 		userDict.save,
 		focusText,
 	);
-	remembered = mountRemembered(session, userDict.save, focusText);
+	englishUserWords = mountEnglishUserWords(session, userDict.save, focusText);
 	mountWordList(session, userDict.save, focusText);
 	// 給前文或失焦後核心可能收起了聯想（游標移走、換欄位）：沒有組字、核心也沒有候選了，就清掉候選列。
-	// 失焦時核心把正在打的 email 當打完記住，要存檔。
+	// 失焦時核心把正在打的串當打完學起來，要存檔。
 	const syncContext = mountContext(
 		text,
 		session,
@@ -292,7 +303,7 @@ async function start(): Promise<void> {
 		text,
 		// 回報：點空白選候選才算「選了」；長按或組字中的動作照綁定回報的實際動作。
 		(snapshot) => apply(snapshot, snapshot.action === "space"),
-		// 交還宿主的鍵也可能收起了聯想（空白、Enter），照樣重畫候選列；也可能讓核心記住剛打完的 email。
+		// 交還宿主的鍵也可能收起了聯想（空白、Enter），照樣重畫候選列；也可能讓核心學到剛打完的英文串。
 		(snapshot) => {
 			hostDefault(text, snapshot);
 			render(snapshot);
@@ -303,15 +314,11 @@ async function start(): Promise<void> {
 	mountPackSettings(
 		library,
 		() => {
-			const changeModel = checkModel();
+			const changeModel = neural.prepare(library.modelPack());
 			const snapshot = session.setPacks(library.sessionPacks());
 			changeModel?.();
 			candidateBar.setRadicalHints(radicalHints());
-			try {
-				render(snapshot);
-			} finally {
-				snapshot.free();
-			}
+			withSnapshot(snapshot, render);
 		},
 		focusText,
 	);
@@ -323,12 +330,7 @@ async function start(): Promise<void> {
 	text.addEventListener("keyup", (event) => {
 		const side = loneShift.up(event.code, event.timeStamp);
 		if (side && !event.isComposing) {
-			const snapshot = session.press("toggleAscii", side);
-			try {
-				apply(snapshot, false);
-			} finally {
-				snapshot.free();
-			}
+			withSnapshot(session.press("toggleAscii", side), (s) => apply(s, false));
 		}
 	});
 	text.addEventListener("keydown", (event) => {
@@ -352,15 +354,10 @@ async function start(): Promise<void> {
 		const key = toKey(remapped.event, shown.composing, shown.inlineAscii);
 		if (!key) {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
-			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作。
+			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作，但也收起
+			// 了聯想。
 			if (!shown.composing) {
-				const snapshot = session.press("other");
-				try {
-					// 也收起了聯想。
-					render(snapshot);
-				} finally {
-					snapshot.free();
-				}
+				withSnapshot(session.press("other"), render);
 			}
 			return;
 		}
@@ -379,10 +376,10 @@ async function start(): Promise<void> {
 		}
 		// 中文模式的字母鍵照實體鍵位送按下的字母與鄰鍵的機率（M4 票 07）。
 		const code = physicalCode(event, shown.ascii);
-		const snapshot = code
+		const pressed = code
 			? session.pressCode(code)
 			: session.press(key.kind, key.value);
-		try {
+		withSnapshot(pressed, (snapshot) => {
 			if (!snapshot.handled) {
 				// 換成美式字元的鍵：瀏覽器會照配列插入 `key`，改由網頁插入核心收到的那個字元。
 				if (remapped.character !== undefined) {
@@ -396,16 +393,13 @@ async function start(): Promise<void> {
 			}
 			event.preventDefault();
 			apply(snapshot, chosen);
-		} finally {
-			snapshot.free();
-		}
+		});
 	});
 
 	text.readOnly = false;
 	text.dataset.ready = "true";
-	if (!notice) {
-		status.textContent = "";
-	}
+	ready = true;
+	status.textContent = notices.join("；");
 	// 載入中已經點進輸入框時 `focus()` 不會再觸發 focus 事件。
 	syncContext();
 	text.focus();

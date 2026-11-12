@@ -1,13 +1,25 @@
 //! 觸控空間模型的性質測試（plan §2.6、§5.3，M4 票 06）：點一下算成各字母的機率。
 //! 點在鍵中心時該鍵最高、離得越遠越低、整頁旋轉或縮放（實體尺寸不變）後結果一致、重疊時上層加成、
-//! 機率和為 1 且只回前 `limit` 個；Gboard 樣式的格子上，機率最高的字母就是點擊判定按到的字母。
+//! 機率和為 1 且只回前 `limit` 個；Gboard 樣式的格子上點中字母鍵時，機率最高的字母就是點擊判定按到的
+//! 字母；離所有鍵都遠、點擊判定與 Gaussian 選的鍵不同時，點中的鍵提到平手、排第一（票 06b）。
 
 use proptest::prelude::*;
 use qim_layout::{Action, Frame, Insets, Key, KeyState, Page, Shape, SpatialModel, Touch};
 
 fn letter_key(letter: char, frame: Frame, rotate: f64, z: i32, radius: f64) -> Key {
+    key(
+        &letter.to_string(),
+        Action::Letter(letter),
+        frame,
+        rotate,
+        z,
+        radius,
+    )
+}
+
+fn key(id: &str, tap: Action, frame: Frame, rotate: f64, z: i32, radius: f64) -> Key {
     Key {
-        id: letter.to_string(),
+        id: id.into(),
         frame,
         rotate,
         z,
@@ -17,7 +29,7 @@ fn letter_key(letter: char, frame: Frame, rotate: f64, z: i32, radius: f64) -> K
         hint: None,
         a11y_label: None,
         style: None,
-        tap: Action::Letter(letter),
+        tap,
         long_press: vec![],
         swipe: None,
         composing: None,
@@ -84,24 +96,30 @@ prop_compose! {
     }
 }
 
-/// Gboard 速成直向的字母格子（`qim-databuild` 的 `gboard.rs`）：一排 10 鍵、每鍵 39 寬、左右各留 2.5、
-/// 上下各留 5.5；第二排內縮半鍵。
+/// Gboard 速成直向字母頁的前三排（`qim-databuild` 的 `gboard.rs`）：一排 10 鍵、每鍵 39 寬、左右各留 2.5、
+/// 上下各留 5.5；第二排內縮半鍵；第三排左 Shift、右刪除，各 1.5 鍵寬。
 fn gboard_grid() -> Page {
     let rows: [&str; 3] = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
     let (unit, row_height, gap_x, gap_y) = (39.0, 54.0, 2.5, 5.5);
+    let cell = |row: usize, from: f64, units: f64| Frame {
+        x: from * unit + gap_x,
+        y: row as f64 * row_height + gap_y,
+        w: units * unit - 2.0 * gap_x,
+        h: row_height - 2.0 * gap_y,
+    };
     let mut keys = Vec::new();
+    // 各排的縮排同 `letters_page`：第三排先放 1.5 鍵寬的 Shift，刪除接在 `m` 後面（1.5 + 7 = 8.5）。
     for (r, row) in rows.iter().enumerate() {
         let indent = [0.0, 0.5, 1.5][r];
         for (i, c) in row.chars().enumerate() {
-            let x = (indent + i as f64) * unit + gap_x;
-            let frame = Frame {
-                x,
-                y: r as f64 * row_height + gap_y,
-                w: unit - 2.0 * gap_x,
-                h: row_height - 2.0 * gap_y,
-            };
-            keys.push(letter_key(c, frame, 0.0, 0, 6.0));
+            keys.push(letter_key(c, cell(r, indent + i as f64, 1.0), 0.0, 0, 6.0));
         }
+    }
+    for (id, tap, from) in [
+        ("shift", Action::Shift, 0.0),
+        ("backspace", Action::Backspace, 8.5),
+    ] {
+        keys.push(key(id, tap, cell(2, from, 1.5), 0.0, 0, 6.0));
     }
     page(keys)
 }
@@ -269,8 +287,8 @@ proptest! {
         prop_assert_eq!(w[0].0, expected, "{:?}", w);
     }
 
-    /// Gboard 樣式的格子上點哪裡都一樣：機率最高的字母就是點擊判定按到的鍵（容錯進核心之前，核心只用
-    /// 機率最高的字母，打字行為不變）。
+    /// Gboard 樣式的格子上點哪裡都一樣：點中字母鍵時，機率最高的字母就是點擊判定按到的鍵（容錯進核心之前，
+    /// 核心只用機率最高的字母，打字行為不變）。點中 Shift、刪除時送的不是字母，不看。
     #[test]
     fn on_a_gboard_grid_the_most_likely_letter_is_the_hit_key(
         x in 0.0..390.0f64,
@@ -278,7 +296,7 @@ proptest! {
     ) {
         let page = gboard_grid();
         let hit = page.hit(x, y).unwrap();
-        let Action::Letter(expected) = page.keys[hit].tap else { unreachable!() };
+        let Action::Letter(expected) = page.keys[hit].tap else { return Ok(()) };
         let w = weights(&page, x, y, MM);
         prop_assert_eq!(w[0].0, expected, "{:?}", w);
         // 一樣大的鍵上不靠「提到最高」：Gaussian 加上加成本身就讓點中的鍵勝出。
@@ -321,6 +339,30 @@ fn between_a_small_and_a_big_key_the_nearer_small_key_stays_on_top() {
     let w = weights(&page, x, y, MM);
     assert_eq!(w[0].0, 'a', "{w:?}");
     assert!((w[0].1 - w[1].1).abs() < 1e-6, "{w:?}");
+}
+
+/// 離所有鍵都遠的空白處（票 06b 的兩個失效點：拿掉刪除鍵後 `m` 右邊、`l` 下面）：點擊判定照直線距離按到
+/// 比較近的 `l`，Gaussian 的縱向 σ 比橫向窄，算出來 `m` 較高；照「點中的鍵一定最高」提到平手、排第一。
+/// 一樣大的鍵上「嚴格最高」只在鍵內與鍵間的窄縫成立：真的 Gboard 直向頁這兩點是刪除鍵，但橫向頁第二排
+/// 兩端內縮的空白一樣會這樣平手，是設計內的行為。
+#[test]
+fn far_off_the_keys_the_hit_key_is_lifted_to_a_tie_with_the_gaussian_winner() {
+    // 票 06b 的兩個種子縮到的點。
+    for (x, y) in [
+        (376.8759717002673, 146.41283071299227),
+        (366.0247247808735, 138.6298953419659),
+    ] {
+        let full = gboard_grid();
+        assert_eq!(full.keys[full.hit(x, y).unwrap()].tap, Action::Backspace);
+
+        let mut letters = full;
+        letters.keys.retain(|k| matches!(k.tap, Action::Letter(_)));
+        assert_eq!(letters.keys[letters.hit(x, y).unwrap()].id, "l");
+        let w = weights(&letters, x, y, MM);
+        let order: Vec<char> = w.iter().map(|&(c, _)| c).collect();
+        assert_eq!(order, ['l', 'm'], "({x}, {y}): {w:?}");
+        assert!((w[0].1 - w[1].1).abs() < 1e-6, "({x}, {y}): {w:?}");
+    }
 }
 
 /// 重疊的鍵各自算機率，最上層（點擊判定按到的）加成；被蓋住的鍵仍有機率。

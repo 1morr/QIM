@@ -34,6 +34,7 @@ fn scheme(radical_hint: Option<&str>) -> Scheme {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::from([
             ('a', "日".into()),
             ('n', "弓".into()),

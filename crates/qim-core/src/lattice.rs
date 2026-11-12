@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use crate::engine::{Spanned, WordHistory};
-use crate::remembered::REMEMBERED_LIMIT;
+use crate::english_user::ENGLISH_COMPLETION_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Following, SchemeUser};
 use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel};
@@ -65,17 +65,20 @@ pub(crate) struct CandidateSpan {
     pub rule: Option<u8>,
 }
 
-/// 候選從哪裡來。英文、emoji 與記住的字串不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、不學。
+/// 候選從哪裡來。英文、emoji 與英文使用者詞不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、
+/// 不學（中文不學；上屏的英文照樣是送出去的字，英文使用者詞會學到它）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SpanKind {
     /// 碼表的字、詞庫的詞、使用者詞或多段路徑。
     Word,
-    /// 英文候選（排位規則 4）。
+    /// 英文詞典的英文候選（排位規則 4）。
     English,
+    /// 整串輸入碼剛好是英文使用者詞（排位規則 4，詞典沒有、打過兩次的）。
+    EnglishUserWord,
     /// 接在字詞後面的 emoji（plan §2.4）。
     Emoji,
-    /// 記住的字串（排位規則 5，plan §2.4）。
-    Remembered,
+    /// 英文使用者詞的前綴補完（排位規則 5，plan §2.4）。
+    EnglishCompletion,
 }
 
 impl SpanKind {
@@ -105,8 +108,9 @@ pub(crate) struct Listing {
     pub english_candidates: bool,
     /// 整串的候選是 emoji 資料包裡的詞時接上它的 emoji（M3 票 16）；目前分段的候選列沒有。
     pub emoji_candidates: bool,
-    /// 整串輸入碼是記住的字串的開頭時加上它（排位規則 5，M3 票 15）；目前分段的候選列沒有。
-    pub remembered_strings: bool,
+    /// 英文使用者詞（M4 票 14）：整串輸入碼剛好是它（排位規則 4）或是它的開頭（排位規則 5）時加上它；
+    /// 目前分段的候選列沒有。
+    pub english_user_words: bool,
     /// 碼表標成簡體字的字排到同一段的其他字詞之後（brief §4.1）：繁體模式、
     /// [`crate::Options::simplified_after_traditional`] 開著時。
     pub simplified_last: bool,
@@ -330,9 +334,10 @@ impl Lattice {
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
 /// 3. 只蓋住開頭一段的字詞，蓋得長的在前，同長依分數排，簡體字排後時簡體字排在同長的最後。
 ///
-/// 文字重複的只留第一個。[`Listing::english_candidates`] 為真、整串輸入碼是英文單字
-/// （[`Engine::english_candidate`]）、又有其他候選時，最後加上那個英文字。接著依序套用排位規則
-/// （[`RULES`]），所以選兩次的簡體字照樣成首選。
+/// 文字重複的只留第一個。又有其他候選時，最後加上整串輸入碼的英文字：[`Listing::english_candidates`]
+/// 為真、是英文詞典的詞（[`Engine::english_candidate`]）時是詞典的寫法，否則
+/// [`Listing::english_user_words`] 為真、是打過兩次的英文使用者詞時是它；再加上英文使用者詞的前綴補完
+/// （[`completions`]）。接著依序套用排位規則（[`RULES`]），所以選兩次的簡體字照樣成首選。
 ///
 /// 分隔記號（[`SEPARATOR`]）：字不跨過它，詞只在它落在兩字的碼之間時跨過它；結尾的分隔記號
 /// 算在最後一段裡，所以 `mi'` 的候選是 `mi` 的、蓋住整串。只蓋住開頭一段的字詞後面緊接分隔記號
@@ -415,25 +420,34 @@ pub(crate) fn candidates(
         list = with_emoji(engine, list, input, &mut seen);
     }
     // 沒有中文候選時不出英文：它不搶首選（brief §4.3）。
-    if let Some(word) = listing
+    let english = listing
         .english_candidates
         .then(|| engine.english_candidate(input))
         .flatten()
+        .map(|word| (word, SpanKind::English))
+        .or_else(|| {
+            listing
+                .english_user_words
+                .then(|| learned_english(engine, user, input))
+                .flatten()
+                .map(|word| (word, SpanKind::EnglishUserWord))
+        });
+    if let Some((word, kind)) = english
         && !list.is_empty()
         && seen.insert(word.to_string())
     {
         list.push(CandidateSpan {
-            kind: SpanKind::English,
+            kind,
             ..CandidateSpan::single(word.to_string(), input)
         });
     }
-    if listing.remembered_strings && !list.is_empty() {
+    if listing.english_user_words && !list.is_empty() {
         list.extend(
-            remembered(engine, user, input)
+            completions(engine, user, input)
                 .filter(|text| seen.insert(text.to_string()))
-                .take(REMEMBERED_LIMIT)
+                .take(ENGLISH_COMPLETION_LIMIT)
                 .map(|text| CandidateSpan {
-                    kind: SpanKind::Remembered,
+                    kind: SpanKind::EnglishCompletion,
                     ..CandidateSpan::single(text.to_string(), input)
                 }),
         );
@@ -456,17 +470,39 @@ pub(crate) fn candidates(
     ranked.into_list()
 }
 
-/// 輸入碼 `input`（去掉分隔記號）是方案打得出的字母開頭（[`crate::remembered::letters`]）的記住的字串，最近常打的在前；
+/// 整串輸入碼 `input` 剛好是打過兩次的英文使用者詞時是它的寫法（排位規則 4）；輸入碼要長過方案一個字的
+/// 最長碼（同英文詞典的候選，速成 3 碼起）。英文詞典有的詞不由這裡出：它們只照
+/// [`Listing::english_candidates`] 由詞典出（關掉英文候選時也不靠學習冒出來），同前綴補完。
+fn learned_english<'a>(engine: &Engine, user: &'a UserModel, input: &str) -> Option<&'a str> {
+    let scheme = engine.scheme();
+    (input.len() > usize::from(scheme.max_code_length) && !engine.in_english_dictionary(input))
+        .then(|| user.english_typed_as(input, &scheme.alphabet))
+        .flatten()
+}
+
+/// 英文使用者詞的前綴補完（排位規則 5，[`UserModel::english_completions`]）：輸入碼 `input`（去掉分隔記號）
+/// 是方案打得出的字母（[`crate::english_user::letters`]）的開頭，最常用的在前；英文詞典有的詞不給。
 /// 輸入碼要長過方案一個字的最長碼（同英文候選，速成 3 碼起），1–2 碼是單字的碼，第 2 位最常用。
-fn remembered<'a>(
+fn completions<'a>(
     engine: &Engine,
     user: &'a UserModel,
     input: &str,
 ) -> impl Iterator<Item = &'a str> {
-    let typed = without_separators(input);
+    // 萬用鍵略過不比：英文使用者詞只比方案字母（[`crate::english_user::letters`]），萬用鍵以前在組字中
+    // 吃下不動作，含 `z` 的 email 照那時一樣打得出（M4 票 11）。整串的英文使用者詞（規則 4）不必另外
+    // 排除萬用鍵：它要整串都是方案字母（[`UserModel::english_typed_as`]）。
+    let wildcard = engine.scheme().wildcard;
+    let typed: String = without_separators(input)
+        .chars()
+        .filter(|&c| Some(c) != wildcard)
+        .collect();
     let long_enough = typed.len() > usize::from(engine.scheme().max_code_length);
     long_enough
-        .then(|| user.strings_starting_with(&typed, &engine.scheme().alphabet))
+        .then(|| {
+            user.english_completions(&typed, &engine.scheme().alphabet, |text| {
+                engine.in_english_dictionary(text)
+            })
+        })
         .into_iter()
         .flatten()
 }
@@ -511,7 +547,7 @@ const RULES: [fn(&mut Ranked); 5] = [
     chosen_twice_first,
     used_word_second,
     english_second,
-    remembered_after_english,
+    completions_after_english,
 ];
 
 /// 套用排位規則中的候選列：排定的候選釘在它的位置，其餘的依原本的順序填進空著的位置。
@@ -679,7 +715,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
         Listing {
             english_candidates: false,
             emoji_candidates: false,
-            remembered_strings: false,
+            english_user_words: false,
             ..ranked.listing
         },
     )
@@ -703,19 +739,24 @@ fn used_word_second(ranked: &mut Ranked) {
     }
 }
 
-/// 規則 4：英文候選排第 2 位（brief §4.3）；第 2 位已由前面的規則排定時排在它後面最前的空位。
+/// 規則 4：英文候選（詞典的詞或打過兩次的英文使用者詞）排第 2 位（brief §4.3）；第 2 位已由前面的規則
+/// 排定時排在它後面最前的空位。
 fn english_second(ranked: &mut Ranked) {
-    if let Some(i) = ranked.free.iter().position(|c| c.kind == SpanKind::English) {
+    if let Some(i) = ranked
+        .free
+        .iter()
+        .position(|c| matches!(c.kind, SpanKind::English | SpanKind::EnglishUserWord))
+    {
         ranked.pin_at_or_after(i, 1, 4);
     }
 }
 
-/// 規則 5：記住的字串依序排在第 2 位起的空位（M3 票 15）：英文候選在第 2 位時排在它後面，不搶首選。
-fn remembered_after_english(ranked: &mut Ranked) {
+/// 規則 5：英文使用者詞的前綴補完依序排在第 2 位起的空位：英文候選在第 2 位時排在它後面，不搶首選。
+fn completions_after_english(ranked: &mut Ranked) {
     while let Some(i) = ranked
         .free
         .iter()
-        .position(|c| c.kind == SpanKind::Remembered)
+        .position(|c| c.kind == SpanKind::EnglishCompletion)
     {
         ranked.pin_at_or_after(i, 1, 5);
     }
