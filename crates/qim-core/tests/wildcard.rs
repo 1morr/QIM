@@ -418,3 +418,25 @@ fn an_expired_auto_phrase_stays_off_under_the_wildcard_until_chosen_again() {
         Some(vec![(Some("arab".into()), SegmentSource::UserWord)])
     );
 }
+
+/// 觸控（M4 票 06）送各字母的機率：點到 z（機率最高的是 `z`）同樣是萬用鍵，和實體鍵盤一致。
+#[test]
+fn a_touch_whose_top_letter_is_the_wildcard_acts_as_the_wildcard() {
+    let tap = |top: char, near: char| {
+        Key::Weighted(qim_core::Weights::new(vec![(top, 0.7), (near, 0.3)]).unwrap())
+    };
+    let mut touch = Ime::new(Some('z'));
+    touch.press(tap('a', 's'));
+    let shown = touch.press(tap('z', 'x'));
+    let mut typed = Ime::new(Some('z'));
+    let expected = typed.type_keys("az");
+    assert_eq!(texts(&shown), texts(&expected));
+    assert_eq!(texts(&shown)[0], "明");
+    let radicals: String = shown
+        .composition
+        .segments
+        .iter()
+        .map(|s| s.radicals.as_str())
+        .collect();
+    assert_eq!(radicals, "日＊");
+}

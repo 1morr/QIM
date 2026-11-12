@@ -93,4 +93,29 @@ test.describe("觸控", () => {
 		await page.getByTestId("key-space").tap();
 		await expect(text).toHaveValue("的人");
 	});
+
+	test("debug 面板：點 z 的觸控機率以 z 最高，候選同時標「萬用鍵」", async ({
+		page,
+	}) => {
+		await page.getByRole("button", { name: "debug" }).tap();
+		const debug = page.locator("#debug");
+		await expect(debug).toBeVisible();
+		for (const id of ["h", "z"]) {
+			await page.getByTestId(`key-${id}`).tap();
+		}
+		await expect(ui(page).composition).toHaveText("竹＊");
+		const touch = debug.getByTestId("debug-touch").locator("code");
+		await expect(touch.first()).toHaveAttribute("data-letter", "z");
+		await page.getByTestId("key-o").tap();
+		await expect(ui(page).items.first()).toHaveText("1的人");
+		const top = debug
+			.getByRole("table", { name: "候選來源" })
+			.locator("tbody tr")
+			.filter({
+				has: page.locator("td:nth-child(2)", { hasText: /^的人$/ }),
+			});
+		await expect(top).toHaveAttribute("data-sources", /\bwildcard\b/);
+		await expect(top.locator("td").nth(5)).toHaveText("hzo（hio）→的人");
+		await expect(touch.first()).toHaveAttribute("data-letter", "o");
+	});
 });
