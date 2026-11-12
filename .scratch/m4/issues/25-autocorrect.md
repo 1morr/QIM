@@ -1,7 +1,7 @@
 # 25: 英文自動修正
 
 Status: ready-for-agent
-Blocked by: 24
+Blocked by: 24, 18c
 讀: brief §4.7、§7；spec〈細節〉〈英文模式〉；票 19、21；spec〈共同規則〉
 
 ## What to build

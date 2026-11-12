@@ -1,7 +1,7 @@
 # 23: 觸控的中英鍵與英文鍵盤
 
 Status: ready-for-agent
-Blocked by: 18
+Blocked by: 18, 18b
 讀: brief §4.4；plan §2.6（佈局格式、動作）、§3.1、§5.3；ADR 0004；spec〈共同規則〉
 
 ## What to build

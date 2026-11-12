@@ -1,7 +1,7 @@
 # 30: 聯想補強
 
 Status: ready-for-agent
-Blocked by: 18
+Blocked by: 18, 18b, 18c
 讀: plan §2.1（聯想）、§2.4；`.scratch/m3/issues/13-association.md`；`docs/research/blackbox-baseline.md` 的 T8；spec〈共同規則〉
 
 ## What to build

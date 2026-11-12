@@ -1,7 +1,7 @@
 # 22: 英文資料包換成 aosp-dictionaries
 
 Status: ready-for-agent
-Blocked by: 18
+Blocked by: 18, 18b
 讀: brief §4.3、§4.7、§5、§11；plan §2.4（規則 4）、§4.4；`docs/research/spatial-correction-swipe.md` §6；spec〈共同規則〉（資料來源）
 
 ## What to build
