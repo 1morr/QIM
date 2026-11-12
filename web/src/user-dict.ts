@@ -1,8 +1,9 @@
 // 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
+// 匯入是合併（M4 票 17）：兩個瀏覽器設定檔的同步就是各自匯出、匯入對方的檔。
 
 import { element, message } from "./dom.ts";
 import { storage } from "./storage.ts";
-import type { Session } from "./wasm/qim_wasm.js";
+import type { Merged, Session } from "./wasm/qim_wasm.js";
 
 /** 學習資料在 `localStorage` 的鍵；值是 `Session.exportUserDict()` 的 TSV。 */
 const USER_DICT_KEY = "qim.userdict";
@@ -32,6 +33,11 @@ function ensureDeviceId(): string {
 	const id = crypto.randomUUID();
 	storage.set(DEVICE_KEY, id);
 	return id;
+}
+
+/** 合併會改的條目數寫成一句。 */
+function changes(merged: Merged): string {
+	return `新增 ${merged.added} 筆、更新 ${merged.updated} 筆、刪除 ${merged.deleted} 筆（對方刪掉的）`;
 }
 
 /** 匯入略過的列（不認得的種類）寫成一句；沒有時是空字串。 */
@@ -72,7 +78,7 @@ export function mountUserDict(
 	if (stored !== null) {
 		try {
 			// 新版存的檔有這版不認得的種類時略過那些列，說一聲（下次存檔就沒有了）。
-			const warnings = session.importUserDict(stored);
+			const warnings = session.loadUserDict(stored);
 			if (warnings.length > 0) {
 				status.textContent = `學習資料讀進來了${skipped(warnings)}`;
 			}
@@ -100,6 +106,9 @@ export function mountUserDict(
 	element<HTMLButtonElement>("#export-user-dict").addEventListener(
 		"click",
 		() => {
+			// 匯出的檔可能合併到別台：之後的退格不能再撤銷檔裡已有的學習，否則合併回來時撤銷掉的又回來
+			//（各台的次數只增不減，ADR 0007）。
+			session.expireUndo();
 			const blob = new Blob([session.exportUserDict()], {
 				type: "text/tab-separated-values",
 			});
@@ -112,55 +121,68 @@ export function mountUserDict(
 		},
 	);
 
-	// 匯入取代整份（plan §2.4）：先檢查格式，再在頁面上說明會覆蓋多少筆、請使用者確認，
-	// 不用瀏覽器原生的對話框。
-	const file = element<HTMLInputElement>("#import-user-dict");
+	// 匯入是合併（plan §2.4〈跨裝置合併〉）：先在複本上合併，在頁面上說明會新增、更新、刪除幾筆，請使用者
+	// 確認，不用瀏覽器原生的對話框。從備份還原另一個鍵：取代目前的、留清空記號（同步到別台也換成備份）。
 	const confirm = element<HTMLElement>("#confirm-import");
 	const confirmText = element<HTMLElement>("#confirm-import-text");
-	let pending: { name: string; text: string } | undefined;
+	const okButton = element<HTMLButtonElement>("#confirm-import-ok");
+	let pending:
+		| { name: string; text: string; mode: "merge" | "restore" }
+		| undefined;
 	const closeConfirm = () => {
 		pending = undefined;
 		confirm.hidden = true;
 	};
-	file.addEventListener("change", async () => {
-		const chosen = file.files?.[0];
-		file.value = "";
-		closeConfirm();
-		if (!chosen) {
-			return;
-		}
-		const text = await chosen.text();
-		let warnings: string[];
-		try {
-			warnings = session.checkUserDict(text);
-		} catch (error) {
-			status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
-			return;
-		}
-		pending = { name: chosen.name, text };
-		const current = rows(session.exportUserDict());
-		confirmText.textContent = `匯入 ${chosen.name}（${rows(text)} 筆${skipped(warnings)}）會覆蓋目前的 ${current} 筆學習資料，原本的不會保留。確定匯入？`;
-		status.textContent = "";
-		confirm.hidden = false;
-	});
-	element<HTMLButtonElement>("#confirm-import-ok").addEventListener(
-		"click",
-		() => {
-			if (!pending) {
+	const chooseFile = (input: HTMLInputElement, mode: "merge" | "restore") =>
+		input.addEventListener("change", async () => {
+			const chosen = input.files?.[0];
+			input.value = "";
+			closeConfirm();
+			if (!chosen) {
 				return;
 			}
-			const { name, text } = pending;
-			closeConfirm();
+			const text = await chosen.text();
+			let preview: Merged;
 			try {
-				const warnings = session.importUserDict(text);
-				save();
-				status.textContent = `已匯入 ${name}${skipped(warnings)}`;
+				preview = session.checkUserDict(text);
 			} catch (error) {
 				status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
+				return;
 			}
-			afterChange();
-		},
-	);
+			pending = { name: chosen.name, text, mode };
+			const lines = `${rows(text)} 列${skipped(preview.warnings)}`;
+			confirmText.textContent =
+				mode === "merge"
+					? `匯入 ${chosen.name}（${lines}）會合併進目前的學習資料：${changes(preview)}，其餘不變。確定匯入？`
+					: `從 ${chosen.name}（${lines}）還原會取代目前的 ${rows(session.exportUserDict())} 列學習資料，並留清空記號：同步後別台原本的也換成這份備份。確定還原？`;
+			preview.free();
+			okButton.textContent = mode === "merge" ? "確定匯入" : "確定還原";
+			status.textContent = "";
+			confirm.hidden = false;
+		});
+	chooseFile(element<HTMLInputElement>("#import-user-dict"), "merge");
+	chooseFile(element<HTMLInputElement>("#restore-user-dict"), "restore");
+	okButton.addEventListener("click", () => {
+		if (!pending) {
+			return;
+		}
+		const { name, text, mode } = pending;
+		closeConfirm();
+		try {
+			if (mode === "merge") {
+				const merged = session.mergeUserDict(text);
+				status.textContent = `已合併 ${name}：${changes(merged)}${skipped(merged.warnings)}`;
+				merged.free();
+			} else {
+				const warnings = session.restoreUserDict(text);
+				status.textContent = `已從 ${name} 還原${skipped(warnings)}`;
+			}
+			save();
+		} catch (error) {
+			status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
+		}
+		afterChange();
+	});
 	element<HTMLButtonElement>("#confirm-import-cancel").addEventListener(
 		"click",
 		() => {

@@ -1,0 +1,21 @@
+# qim-userdict v3
+#@/device	6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f
+#@/tick	4
+#@/english_tick	3
+#@/tick/quick	4
+# kind	scheme	word	code	commits	last_commit_tick	decayed	last_tick	last_used	last_commit_date	source	trigger
+entry	quick	九龍\n3 樓		0	0	0	0	2026-11-11		phrase	mir
+entry	quick	台	ir	0	0	1	1	2026-11-10		learned	
+entry	quick	一	m	0	0	1	1	2026-11-10		learned	
+entry	quick	一台	mir	1	1	1	1	2026-11-10	2026-11-10	auto	
+entry	quick	九龍\n3 樓	mir	1	4	1	4	2026-11-11	2026-11-11	learned	
+entry	quick	口	r	2	3	1.9950124791926824	3	2026-11-11	2026-11-11	learned	
+entry	quick	口口	rr	0	0	0	0	2026-11-11		manual	kk
+# kind	previous	word	decayed	last_tick	last_used
+bigram	一	台	1	1	2026-11-10
+bigram	口	九龍\n3 樓	1	4	2026-11-11
+bigram	口	口	1	3	2026-11-11
+bigram	台	口	1	2	2026-11-11
+# kind	word	count	decayed	last_tick	last_used
+english	ivan.test@example.com	2	1.990049833749168	3	2026-11-12
+english	rrrrrr	1	1	2	2026-11-12

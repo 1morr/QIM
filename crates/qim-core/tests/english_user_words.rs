@@ -471,7 +471,14 @@ fn an_english_user_word_can_be_forgotten() {
     assert!(!ime.user.forget_english_user_word(EMAIL));
     assert!(ime.learned().is_empty());
     assert!(!ime.offers("iva", EMAIL));
-    assert!(!ime.user.export().contains(EMAIL));
+    // 匯出檔只剩墓碑（M4 票 17）：鍵的雜湊、各台打過的次數（刪除時都記成不算的）與刪除時的合計，不留原文。
+    let exported = ime.user.export();
+    assert!(!exported.contains(EMAIL), "{exported}");
+    let tombstone = exported
+        .lines()
+        .find(|l| l.starts_with("deleted\tenglish\t\t"))
+        .map(|l| l.split('\t').skip(4).collect::<Vec<_>>());
+    assert_eq!(tombstone, Some(vec!["0:3:3:", "3", ""]), "{exported}");
 }
 
 /// 撤銷學習（M4 票 16）：組字中清掉英文使用者詞的候選（規則 4 或前綴補完）就是忘掉那個英文使用者詞。
@@ -505,14 +512,16 @@ fn english_user_words_have_their_own_tick() {
     assert!(exported.contains("#@/english_tick\t2\n"), "{exported}");
 }
 
-/// 匯出 v3：種類 `english` 的列，含次數；沒到門檻的照樣匯出（同步才湊得到兩台各打一次）。
+/// 匯出 v3：種類 `english` 的列，含各台打過的次數（「編號:打過:不算的:最後打的日期」）；沒到門檻的照樣匯出
+/// （同步才湊得到兩台各打一次）。
 const TWO_WORDS: &str = "\
 # qim-userdict v3
+#@/device/0\t
 #@/english_tick\t3
-# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger
-# kind\tword\tcount\tdecayed\tlast_tick\tlast_used
-english\tivan.test@example.com\t2\t1.990049833749168\t3\t
-english\trrrrrr\t1\t1\t2\t
+# kind\tscheme\tword\tcode\tcounts\tdeleted\tdeleted_on\tversion\tdecayed\tlast_tick\tlast_commit_tick\tlast_used\tsource\ttrigger\tword_version\tword_last_used
+# kind\tword\tcounts\tdeleted\tdeleted_on\tversion\tdecayed\tlast_tick\tlast_used
+english\tivan.test@example.com\t0:2:0:\t\t\t2\t1.990049833749168\t3\t
+english\trrrrrr\t0:1:0:\t\t\t1\t1\t2\t
 ";
 
 #[test]
@@ -552,7 +561,7 @@ fn remembered_strings_from_v2_import_as_english_user_words_past_the_threshold() 
     );
     let exported = ime.user.export();
     assert!(
-        exported.contains("english\tivan@work.example.org\t3\t1\t2\t\n"),
+        exported.contains("english\tivan@work.example.org\t0:3:0:\t\t\t3\t1\t2\t\n"),
         "{exported}"
     );
     assert!(exported.contains("#@/english_tick\t3\n"), "{exported}");
@@ -560,28 +569,32 @@ fn remembered_strings_from_v2_import_as_english_user_words_past_the_threshold() 
 
 #[test]
 fn a_row_that_is_not_an_english_user_word_is_an_error_with_its_line() {
-    let header = "# qim-userdict v3\n";
+    let header = "# qim-userdict v3\n#@/device/0\t\n";
+    let good = "english\tabcd\t0:1:0:\t\t\t1\t1\t1\t";
+    assert!(UserModel::import(&format!("{header}{good}\n"), None).is_ok());
     for row in [
-        "english\t台灣台灣\t1\t1\t1\t",
-        "english\tabc\t1\t1\t1\t",
-        "english\tab cd\t1\t1\t1\t",
-        "english\tabcd.\t1\t1\t1\t",
-        "english\tabcd\t0\t1\t1\t",
-        "english\tabcd\t1\t0\t1\t",
-        "english\tabcd\t1\t1\t1",
+        good.replace("abcd", "台灣台灣"),
+        good.replace("abcd", "abc"),
+        good.replace("abcd", "ab cd"),
+        good.replace("abcd", "abcd."),
+        good.replace("0:1:0:", "0:1:2:"),   // 不算的比打過的多
+        good.replace("0:1:0:", "0:1:0:0:"), // 英文的格子是「編號:打過:不算的:日期」
+        good.replace("\t1\t1\t1\t", "\t1\t0\t1\t"), // 衰減值要是正的
+        good.replace("\t1\t1\t1\t", "\t2\t1\t1\t"), // 版本比打過的多
+        good.replace("\t1\t1\t1\t", "\t1\t1\t1"), // 少一欄
     ] {
         let error = UserModel::import(&format!("{header}{row}\n"), None)
             .map(|i| i.user)
             .unwrap_err();
-        assert_eq!(error.line, 2, "{row:?}");
+        assert_eq!(error.line, 3, "{row:?}");
     }
-    let rows = "english\tabcd\t1\t1\t1\t\nenglish\tABCD\t1\t1\t1\t\n";
+    let rows = format!("{good}\n{}\n", good.replace("abcd", "ABCD"));
     assert_eq!(
         UserModel::import(&format!("{header}{rows}"), None)
             .map(|i| i.user)
             .unwrap_err()
             .line,
-        3,
+        4,
         "不分大小寫重複"
     );
     let row = "\t\tivan@localhost\t1\t1\n";

@@ -124,7 +124,7 @@ test("觸發詞有方案以外的鍵時存不進去", async ({ page }) => {
 	await expect(list).toHaveCount(0);
 });
 
-test("匯出、清空、匯入後常用語還在", async ({ page }) => {
+test("匯出、清空、從備份還原後常用語還在", async ({ page }) => {
 	const { list } = await ready(page);
 	await addPhrase(page, ADDRESS, "qim");
 	const download = page.waitForEvent("download");
@@ -133,15 +133,15 @@ test("匯出、清空、匯入後常用語還在", async ({ page }) => {
 	const exported = await readFile(file, "utf8");
 	expect(exported.split("\n")[0]).toBe("# qim-userdict v3");
 	expect(exported).toMatch(
-		/\nentry\tquick\t九龍彌敦道 1 號\\n3 樓 A 室\t\t0\t0\t0\t0\t\d{4}-\d\d-\d\d\t\tphrase\tqim\n/,
+		/\nentry\tquick\t九龍彌敦道 1 號\\n3 樓 A 室\t\t0:1:0:0:\t\t\t\t\t\t\t\tphrase\tqim\t1\t\d{4}-\d\d-\d\d\n/,
 	);
 
 	await page.getByRole("button", { name: "清空學習資料" }).click();
 	await expect(list).toHaveCount(0);
-	await page.getByLabel("匯入學習資料（取代目前的）").setInputFiles(file);
+	await page.getByLabel("從備份還原（取代目前的）").setInputFiles(file);
 	await page
 		.getByRole("group", { name: "確認匯入" })
-		.getByRole("button", { name: "確定匯入" })
+		.getByRole("button", { name: "確定還原" })
 		.click();
 	await expect(list).toHaveCount(1);
 	expect(await typeAndCommit(page, "qim")).toBe(ADDRESS);

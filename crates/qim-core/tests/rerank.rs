@@ -269,12 +269,13 @@ fn an_inserted_path_commits_and_learns_like_a_sentence() {
         .filter(|l| l.starts_with("entry\tquick\t"))
         .map(|l| l.split('\t').skip(1).take(4).collect())
         .collect();
+    // 第 4 欄是各台的次數「編號:用過:整串上屏:不算的:日期」：只有整串記一次整串上屏。
     assert_eq!(
         rows,
         [
-            ["quick", "晶", "a", "0"],
-            ["quick", "晶月", "ab", "1"],
-            ["quick", "月", "b", "0"],
+            ["quick", "晶", "a", "0:1:0:0:"],
+            ["quick", "晶月", "ab", "0:1:1:0:"],
+            ["quick", "月", "b", "0:1:0:0:"],
         ],
         "{export}"
     );
@@ -344,7 +345,7 @@ fn an_inserted_path_after_a_selected_beginning_commits_with_it() {
         ime.user
             .export()
             .lines()
-            .any(|l| l.starts_with("entry\tquick\t月晶月\tbab\t1\t")),
+            .any(|l| l.starts_with("entry\tquick\t月晶月\tbab\t0:1:1:0:\t")),
         "{}",
         ime.user.export()
     );

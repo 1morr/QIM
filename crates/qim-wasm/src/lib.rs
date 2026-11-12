@@ -290,21 +290,37 @@ impl WebSession {
         self.user.export()
     }
 
-    /// 檢查 `text` 是不是匯入得了的檔，不動目前的資料；網頁請使用者確認覆蓋之前先檢查。回傳會略過的
-    /// 列（不認得的種類），每條是「第 N 行：原因」。
-    #[wasm_bindgen(js_name = checkUserDict)]
-    pub fn check_user_dict(&self, text: &str) -> Result<Vec<String>, JsError> {
-        let imported = UserModel::import(text, self.user.today()).map_err(js_error)?;
-        Ok(warnings(&imported))
-    }
-
-    /// 讀匯出的檔，取代目前的使用者詞與學習計數；不合格式時整份不收、原本的不動。今天與這台裝置的
-    /// id 留著（檔可能是別台匯出的）。回傳略過的列，同 [`WebSession::check_user_dict`]。
-    #[wasm_bindgen(js_name = importUserDict)]
-    pub fn import_user_dict(&mut self, text: &str) -> Result<Vec<String>, JsError> {
+    /// 讀回網頁自己存在 `localStorage` 的學習資料（載入時），取代目前的；不合格式時整份不收、原本的不動。
+    /// 今天與這台裝置的 id 留著。回傳略過的列（不認得的種類），每條是「第 N 行：原因」。
+    #[wasm_bindgen(js_name = loadUserDict)]
+    pub fn load_user_dict(&mut self, text: &str) -> Result<Vec<String>, JsError> {
         let imported = UserModel::import(text, self.user.today()).map_err(js_error)?;
         let warnings = warnings(&imported);
         self.user.replace_learning(imported.user);
+        Ok(warnings)
+    }
+
+    /// 先看匯入學習資料檔 `text`（別台匯出的、備份）會合併幾筆（在個人模型的複本上合併），不動目前的資料；
+    /// 網頁請使用者確認之前呼叫。不合格式時丟例外。
+    #[wasm_bindgen(js_name = checkUserDict)]
+    pub fn check_user_dict(&self, text: &str) -> Result<WebMerged, JsError> {
+        merge_text(&mut self.user.clone(), text)
+    }
+
+    /// 匯入學習資料檔 `text`：合併進目前的（M4 票 17，plan §2.4〈跨裝置合併〉），不合格式時整份不收、原本的
+    /// 不動。兩個瀏覽器設定檔的同步就是各自匯出、匯入對方的檔。
+    #[wasm_bindgen(js_name = mergeUserDict)]
+    pub fn merge_user_dict(&mut self, text: &str) -> Result<WebMerged, JsError> {
+        merge_text(&mut self.user, text)
+    }
+
+    /// 從備份還原（plan §2.4〈跨裝置合併〉，和合併的匯入分開）：取代目前的學習資料、留新的清空記號，備份的條目
+    /// 當成之後學到的；不合格式時整份不收、原本的不動。回傳略過的列（不認得的種類）。
+    #[wasm_bindgen(js_name = restoreUserDict)]
+    pub fn restore_user_dict(&mut self, text: &str) -> Result<Vec<String>, JsError> {
+        let imported = UserModel::import(text, self.user.today()).map_err(js_error)?;
+        let warnings = warnings(&imported);
+        self.user.restore(imported.user);
         Ok(warnings)
     }
 
@@ -341,10 +357,11 @@ impl WebSession {
         Ok(report.into())
     }
 
-    /// 清掉全部使用者詞與學習計數；今天與這台裝置的 id 留著。
+    /// 清空全部學習資料（使用者詞與學習計數），留清空記號：跨裝置合併時把清空傳到別台（plan §2.4〈跨裝置
+    /// 合併〉）。今天與這台裝置的 id 留著。
     #[wasm_bindgen(js_name = clearUserDict)]
     pub fn clear_user_dict(&mut self) {
-        self.user.replace_learning(UserModel::default());
+        self.user.clear();
     }
 
     /// 簡體模式（M1 票 16）：候選、組字與上屏轉成簡體，學習仍記繁體。組字中切換也立刻
@@ -946,6 +963,36 @@ impl WebRadicalHints {
             })
             .collect())
     }
+}
+
+/// 合併學習資料檔的結果（[`qim_core::Merged`]）：新增、更新、刪除了幾個條目，與略過的列。JS 端叫 `Merged`。
+#[wasm_bindgen(js_name = Merged, getter_with_clone)]
+pub struct WebMerged {
+    /// 這台原本沒有、合併後有的條目數。
+    #[wasm_bindgen(readonly)]
+    pub added: usize,
+    /// 兩邊都有、值變了的條目數。
+    #[wasm_bindgen(readonly)]
+    pub updated: usize,
+    /// 別台刪掉、這台跟著刪的條目數。
+    #[wasm_bindgen(readonly)]
+    pub deleted: usize,
+    /// 略過的列（不認得的種類），每條是「第 N 行：原因」。
+    #[wasm_bindgen(readonly)]
+    pub warnings: Vec<String>,
+}
+
+/// 讀學習資料檔 `text`、合併進 `user`。
+fn merge_text(user: &mut UserModel, text: &str) -> Result<WebMerged, JsError> {
+    let imported = UserModel::import(text, user.today()).map_err(js_error)?;
+    let warnings = warnings(&imported);
+    let merged = user.merge(imported.user);
+    Ok(WebMerged {
+        added: merged.added,
+        updated: merged.updated,
+        deleted: merged.deleted,
+        warnings,
+    })
 }
 
 /// 詞表匯入的結果。JS 端叫 `WordListReport`。

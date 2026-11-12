@@ -226,7 +226,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字；打完有兩段以上的另量「選開頭一段」那一鍵（見上）。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，各題共用那份學習資料的一份複本（打字與選開頭一段都不上屏、不學），只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。
-- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，順序不拘；每份旁邊的 `manifest.json` 給種類並經核心核對，plan §4.6），學過的那次另給 `--user-dict <檔>`（`UserModel::export` 的文字寫到暫存檔，腳本 `importUserDict`、不計入載入），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（分段、輸入碼、候選），每題之間按 Esc（不計時）；輸出格式見 `qim_bench::parse_timing`。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
+- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，順序不拘；每份旁邊的 `manifest.json` 給種類並經核心核對，plan §4.6），學過的那次另給 `--user-dict <檔>`（`UserModel::export` 的文字寫到暫存檔，腳本 `loadUserDict`、不計入載入），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（分段、輸入碼、候選），每題之間按 Esc（不計時）；輸出格式見 `qim_bench::parse_timing`。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
 - 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`；經 Swift 綁定的同一批輸入：`scripts/experiments/ffi-swift/README.md`。
 - 載入（M3 票 11b）：表後一行「載入」，原生是 `qim_bench::load_engine` 解開各資料包加建 `Engine` 的毫秒數（不含讀檔與算 sha256），WebAssembly 是 `latency.ts` 的 `new Session(packs)`（`Engine::open`：核對 manifest 與 sha256、解開、建 `Engine`，同網頁），由輸出第一行 ` | ` 後的數字帶回；只報不擋。載入一行是空白那次的；學過那次另花的時間在學完全部公開集合（約 1 萬句的模擬），整個 `cargo xtask bench` 約 3 分鐘（Apple M6）。
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
