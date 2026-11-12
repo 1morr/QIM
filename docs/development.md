@@ -151,7 +151,7 @@ cargo xtask data                                     # 建模型資料包
 
 ```sh
 cargo xtask bench                     # 印結果
-cargo xtask bench --check             # 固定題全過、各集合答錯數與修正次數 ≤ baseline、每題打得出，否則 exit 非零
+cargo xtask bench --check             # 固定題全過、各集合答錯數與修正次數 ≤ baseline、每題打得出、原生每鍵延遲 p95 在上限內（〈每鍵延遲〉），否則 exit 非零
 cargo xtask bench --update-baseline   # 用這次的結果改寫 bench/baseline.json（有個人集時連 bench/personal/baseline.json）
 cargo xtask bench --learning          # 學習模式：比學習開關的修正次數，見〈學習模式〉
 cargo xtask bench --lexicon quick-lexicon-words-hk --check   # 換成粵典詞庫，和預設詞庫的 baseline 比
@@ -222,14 +222,16 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 ### 每鍵延遲
 
-每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分三組：「全部」；「第 20 碼起」只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋，「輸入數」是長到 20 碼的輸入有幾個；「選開頭一段」是打完有兩段以上的輸入再按分段數那麼多次 ←（不計時）移到第一段、選它的首選（`select(0)`）的那一次，選定後剩下的輸入碼從頭重建 lattice，是最重的一種鍵（規則在 `qim_bench::lefts_to_first_segment`）。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上、量選開頭一段的輸入和原生不同）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分三組：「全部」；「第 20 碼起」只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋，「輸入數」是長到 20 碼的輸入有幾個；「選開頭一段」是打完有兩段以上的輸入再按分段數那麼多次 ←（不計時）移到第一段、選它的首選（`select(0)`）的那一次，選定後剩下的輸入碼從頭重建 lattice，是最重的一種鍵（規則在 `qim_bench::lefts_to_first_segment`）。三組再各量兩份學習資料：「空白」是空白的 `UserModel`（同基準其他部分），「學過」是一個 `UserModel` 依序照修正次數的模擬學完各語料集合與「有前文」的題（給前文，同 `--learning` 的學習開）之後（M3 票 12 的量法），計時的輸入就是學過的句子，偏向最壞情況。原生的 p95 由 `--check` 擋，上限在 [M4 spec〈每鍵延遲上限〉](../.scratch/m4/spec.md#每鍵延遲上限)（`qim_bench::p95_limits_ms`），報告的「p95 上限」欄列出、超過的註明；WebAssembly 只報；baseline 都不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上、量選開頭一段的輸入和原生不同）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來），每題從空的組字逐鍵打輸入碼、不選字；打完有兩段以上的另量「選開頭一段」那一鍵（見上）。不含載入資料包。
-- 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。
-- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，順序不拘；每份旁邊的 `manifest.json` 給種類並經核心核對，plan §4.6），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（分段、輸入碼、候選），每題之間按 Esc（不計時）；輸出格式見 `qim_bench::parse_timing`。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
+- 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，各題共用那份學習資料的一份複本（打字與選開頭一段都不上屏、不學），只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。
+- WebAssembly：`qim-bench` 用 Node 跑 `web/bench/latency.ts <資料包>…`（基準載入的每份資料包，順序不拘；每份旁邊的 `manifest.json` 給種類並經核心核對，plan §4.6），學過的那次另給 `--user-dict <檔>`（`UserModel::export` 的文字寫到暫存檔，腳本 `importUserDict`、不計入載入），它載入網頁同一份綁定 `web/src/wasm/`，每鍵計 `inputChar()` 加讀出網頁畫候選要的欄位（分段、輸入碼、候選），每題之間按 Esc（不計時）；輸出格式見 `qim_bench::parse_timing`。`cargo xtask bench` 先以 release 重編綁定（同〈網頁〉第 1 步）再跑基準，所以要有 `wasm-bindgen-cli` 與 Node；直接 `cargo run -p qim-bench` 時綁定不存在就失敗。
 - 為什麼用 Node 不用瀏覽器、兩者差多少：`scripts/experiments/wasm-latency-browser/README.md`；經 Swift 綁定的同一批輸入：`scripts/experiments/ffi-swift/README.md`。
-- 載入（M3 票 11b）：表後一行「載入」，原生是 `qim_bench::load_engine` 解開各資料包加建 `Engine` 的毫秒數（不含讀檔與算 sha256），WebAssembly 是 `latency.ts` 的 `new Session(packs)`（`Engine::open`：核對 manifest 與 sha256、解開、建 `Engine`，同網頁），由輸出第一行 ` | ` 後的數字帶回；只報不擋。
+- 載入（M3 票 11b）：表後一行「載入」，原生是 `qim_bench::load_engine` 解開各資料包加建 `Engine` 的毫秒數（不含讀檔與算 sha256），WebAssembly 是 `latency.ts` 的 `new Session(packs)`（`Engine::open`：核對 manifest 與 sha256、解開、建 `Engine`，同網頁），由輸出第一行 ` | ` 後的數字帶回；只報不擋。載入一行是空白那次的；學過那次另花的時間在學完全部公開集合（約 1 萬句的模擬），整個 `cargo xtask bench` 約 3 分鐘（Apple M6）。
 - 百分位數取 nearest-rank（排序後第 ⌈p/100 × n⌉ 個）。macOS 上原生與 Node 的計時解析度約 0.04 µs，現在的核心每鍵多在這個量級，p50 印 0.00 表示比解析度還快。
+
+`--check` 因每鍵延遲紅時（stderr 的「每鍵延遲超過上限」），先在負載低時（關掉其他 build、測試與別的 worktree 的基準）單獨重跑一次 `cargo xtask bench --check`，仍超過才算紅；重跑通過的話在票的 Comments 記兩次的數字。上限只在 spec 寫的條件下改，不因某張票超過而放寬。
 
 改核心的票貼前後對照時，在同一台機器、不跑其他重負載時跑；差距小於幾成多半是雜訊，重跑兩三次看是否穩定。
 

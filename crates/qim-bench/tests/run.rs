@@ -9,7 +9,7 @@
 //!
 //! 合計修正 2、按鍵 11、字數 4（KSPC 2.75）、跳動 1，答錯第 2、3 行。
 //!
-//! WebAssembly 的每鍵延遲一律用 [`slow_wasm`]：每鍵都遠超預算，`--check` 與 baseline 照樣不受影響。
+//! WebAssembly 的每鍵延遲一律用 [`slow_wasm`]：每鍵都遠超預算，它只報，`--check` 與 baseline 照樣不受影響。
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -130,17 +130,25 @@ fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
     qim_bench::run(root, mode, None, &slow_wasm)
 }
 
-/// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒，遠超每鍵 50 ms 的預算。
-/// 選開頭一段花 1000 毫秒，量哪些輸入照原生的規則（[`qim_bench::lefts_to_first_segment`]），用同一份資料包算。
-fn slow_wasm(packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
+/// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒（有學習資料時 200 × i），
+/// 遠超每鍵 50 ms 的預算。選開頭一段花 1000 毫秒，量哪些輸入照原生的規則
+/// （[`qim_bench::lefts_to_first_segment`]），用同一份資料包與匯入的學習資料算，同 `web/bench/latency.ts`。
+fn slow_wasm(
+    packs: &[PathBuf],
+    user_dict: Option<&str>,
+    inputs: &[String],
+) -> Result<Timing, String> {
     let engine = engine_from(packs);
+    let per_key = if user_dict.is_some() { 200.0 } else { 100.0 };
+    let mut user =
+        user_dict.map_or_else(UserModel::default, |text| UserModel::import(text).unwrap());
     Ok(Timing {
         runtime: "假".into(),
         per_key_ms: inputs
             .iter()
             .map(|input| {
                 (1..=input.chars().count())
-                    .map(|i| 100.0 * i as f64)
+                    .map(|i| per_key * i as f64)
                     .collect()
             })
             .collect(),
@@ -148,7 +156,6 @@ fn slow_wasm(packs: &[PathBuf], inputs: &[String]) -> Result<Timing, String> {
             .iter()
             .map(|input| {
                 let mut session = Session::default();
-                let mut user = UserModel::default();
                 let mut last = Snapshot::default();
                 for c in input.chars() {
                     last = session.handle(&engine, &mut user, Key::for_input(c));
@@ -1117,7 +1124,7 @@ fn repo_with_long_input() -> TempDir {
 }
 
 #[test]
-fn latency_reports_native_and_wasm_percentiles_with_a_long_input_group() {
+fn latency_reports_native_and_wasm_percentiles_for_blank_and_learned_user_data() {
     let repo = repo_with_long_input();
     let outcome = run(repo.path(), Mode::Report).unwrap();
     let report = outcome.report();
@@ -1130,44 +1137,78 @@ fn latency_reports_native_and_wasm_percentiles_with_a_long_input_group() {
         })
         .collect();
     // 全部：固定題 `a`（1 鍵）、toy `a`、`a`、`ab`（4 鍵）、long（21 鍵），共 5 個輸入 26 鍵。
-    // 假計時器的 26 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、21），p50 第 13 個是 8、p95 第 25 個是 20。
-    // 第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
-    // 選開頭一段：只有 long 打完有兩段以上，一次。
-    assert_eq!(rows.len(), 6, "{report}");
+    // 假計時器的 26 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、21），p50 第 13 個是 8、p95 第 25 個是 20；
+    // 學過的學習資料下每鍵加倍。第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
+    // 選開頭一段：只有 long 打完有兩段以上，一次；學過的學習資料下 long 整句已造詞、只有一段，不量。
+    assert_eq!(rows.len(), 12, "{report}");
     let native = if cfg!(debug_assertions) {
         "原生（debug）"
     } else {
         "原生（release）"
     };
-    assert!(
-        rows[0].starts_with(&format!("| {native} | 全部 | 5 | 26 | ")),
-        "{report}"
-    );
-    assert!(
-        rows[1].starts_with(&format!("| {native} | 第 20 碼起 | 1 | 2 | ")),
-        "{report}"
-    );
-    assert!(
-        rows[2].starts_with(&format!("| {native} | 選開頭一段 | 1 | 1 | ")),
-        "{report}"
-    );
+    for (rows, user, selects, limits) in [
+        (&rows[..6], "空白", "1 | 1", ["≤ 1000", "≤ 1000", "≤ 5000"]),
+        (&rows[6..], "學過", "0 | 0", ["≤ 3000", "≤ 3000", "≤ 10000"]),
+    ] {
+        for (row, (group, counts)) in rows[..3].iter().zip([
+            ("全部", "5 | 26"),
+            ("第 20 碼起", "1 | 2"),
+            ("選開頭一段", selects),
+        ]) {
+            assert!(
+                row.starts_with(&format!("| {user} | {native} | {group} | {counts} | ")),
+                "{report}"
+            );
+        }
+        for (row, limit) in rows[..3].iter().zip(limits) {
+            assert!(row.ends_with(&format!(" | {limit} |")), "{report}");
+        }
+    }
     assert_eq!(
         rows[3],
-        "| WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 |"
+        "| 空白 | WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 | 只報 |"
     );
     assert_eq!(
         rows[4],
-        "| WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 |"
+        "| 空白 | WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 | 只報 |"
     );
     assert_eq!(
         rows[5],
-        "| WebAssembly（假） | 選開頭一段 | 1 | 1 | 1000000.00 | 1000000.00 |"
+        "| 空白 | WebAssembly（假） | 選開頭一段 | 1 | 1 | 1000000.00 | 1000000.00 | 只報 |"
     );
-    assert!(report.contains("只報不擋"), "{report}");
+    assert_eq!(
+        rows[9],
+        "| 學過 | WebAssembly（假） | 全部 | 5 | 26 | 1600000.00 | 4000000.00 | 只報 |"
+    );
+}
+
+/// 學過的學習資料：一個 `UserModel` 依序學完各語料集合與「有前文」的題，WebAssembly 拿到它的匯出；
+/// 空白那次不給。
+#[test]
+fn the_learned_run_gives_wasm_the_user_model_that_learned_every_public_set() {
+    let repo = repo_with_long_input();
+    let dicts = std::cell::RefCell::new(Vec::new());
+    qim_bench::run(
+        repo.path(),
+        Mode::Report,
+        None,
+        &|packs: &[PathBuf], user_dict: Option<&str>, inputs: &[String]| {
+            dicts.borrow_mut().push(user_dict.map(String::from));
+            slow_wasm(packs, user_dict, inputs)
+        },
+    )
+    .unwrap();
+    let dicts = dicts.into_inner();
+    assert_eq!(dicts.len(), 2, "{dicts:?}");
+    assert_eq!(dicts[0], None);
+    let dict = dicts[1].as_deref().unwrap();
+    assert_ne!(UserModel::import(dict).unwrap(), UserModel::default());
+    // toy 第 2 行選了「曰」上屏，學習計數有它。
+    assert!(dict.contains('曰'), "{dict}");
 }
 
 #[test]
-fn check_and_update_baseline_ignore_latency() {
+fn check_blocks_native_latency_only_and_update_baseline_ignores_latency() {
     let repo = repo_with_long_input();
     run(repo.path(), Mode::UpdateBaseline).unwrap();
     let written = fs::read_to_string(repo.path().join("bench/baseline.json")).unwrap();
@@ -1175,16 +1216,19 @@ fn check_and_update_baseline_ignore_latency() {
         !written.contains("ms") && !written.contains("latency"),
         "{written}"
     );
+    // WebAssembly 每鍵都遠超上限，原生的小資料包在上限內：只報 WebAssembly，不擋。
     let outcome = run(repo.path(), Mode::Check).unwrap();
     assert!(
         outcome
             .latency
+            .blank
             .wasm
             .per_key_ms
             .iter()
             .flatten()
             .all(|&ms| ms >= 100.0)
     );
+    assert_eq!(outcome.latency.violations(), Vec::<String>::new());
     assert_eq!(outcome.violations, Vec::<String>::new());
 }
 
@@ -1195,7 +1239,7 @@ fn a_wasm_timer_that_misses_keys_is_an_error() {
         repo.path(),
         Mode::Report,
         None,
-        &|_: &[PathBuf], _: &[String]| {
+        &|_: &[PathBuf], _: Option<&str>, _: &[String]| {
             Ok(Timing {
                 runtime: "假".into(),
                 per_key_ms: vec![vec![1.0]],
@@ -1215,8 +1259,8 @@ fn a_wasm_timer_that_selects_on_other_inputs_than_native_is_an_error() {
         repo.path(),
         Mode::Report,
         None,
-        &|packs: &[PathBuf], inputs: &[String]| {
-            let mut timing = slow_wasm(packs, inputs)?;
+        &|packs: &[PathBuf], user_dict: Option<&str>, inputs: &[String]| {
+            let mut timing = slow_wasm(packs, user_dict, inputs)?;
             assert_eq!(timing.select_ms.iter().flatten().count(), 1);
             timing.select_ms = vec![Some(1.0); inputs.len()];
             Ok(timing)
