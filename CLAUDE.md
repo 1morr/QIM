@@ -65,6 +65,7 @@
 - 做票：一張票一個 session，`/implement`；整批跑票：`/1morr:ticket-coordinator`。
 - 核心（碼表查詢、候選、排序）的新功能與修 bug：`mattpocock-skills:tdd`。
 - 設計核心與各平台殼的邊界：`mattpocock-skills:codebase-design`。
+- 網頁的 UI（`web/` 的原型頁、觸控鍵盤、設定與面板、`web/editor/` 佈局編輯器）的設計、改版與打磨：`impeccable:impeccable`；觸控鍵盤要照 Gboard 的行為時，行為以 Gboard 實測為準，impeccable 管外觀與互動細節。
 - 用實驗回答設計問題（平台框架行為、按鍵延遲實測）：`mattpocock-skills:prototype`，結論寫回 brief。實驗腳本留在 `scripts/experiments/`，換版本時要重量。
 - 查證外部事實：`mattpocock-skills:research`，輸出放 `docs/research/`，結論摘進 brief〈查證過的事實〉並連結。
 - 每張票與里程碑收尾：`mattpocock-skills:code-review`（Spec 軸讀票，Standards 軸讀本檔）；難 bug 或效能退化：`mattpocock-skills:diagnosing-bugs`。
