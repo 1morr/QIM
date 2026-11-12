@@ -1,7 +1,8 @@
 // 資料包庫（plan §4.6）：內建的從 `/packs/<id>/` fetch，匯入的存在 IndexedDB；每種用哪份存
 // `localStorage`。交給核心的都是 manifest 加位元組（`Pack`），由核心核對。
 
-import { createStore, del, entries, set } from "idb-keyval";
+import { createStore, del, entries, set, type UseStore } from "idb-keyval";
+import { message } from "./dom.ts";
 import type { PackSource } from "./neural-rerank.ts";
 import {
 	activeIds,
@@ -13,7 +14,8 @@ import {
 	parseManifest,
 	RADICAL_HINT,
 } from "./pack-choice.ts";
-import { manifestIsNewer, Pack } from "./wasm/qim_wasm.js";
+import { storage } from "./storage.ts";
+import { manifestIsNewer, Pack, Reranker } from "./wasm/qim_wasm.js";
 
 /**
  * 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。同種的第一份是預設：
@@ -46,7 +48,8 @@ const MANIFEST_FILE = "manifest.json";
 /** 每種用哪份：`{ 種類: id }`，沒選的種類用內建那份。 */
 const ACTIVE_KEY = "qim.packs.active";
 /** 匯入的資料包：IndexedDB `qim-packs` 庫的 `packs` 表，鍵是 id。 */
-const store = createStore("qim-packs", "packs");
+const DB_NAME = "qim-packs";
+const STORE_NAME = "packs";
 
 /** 一份資料包的原料：manifest 的 JSON 與資料包檔。存進 IndexedDB 的另記從哪來（舊的紀錄沒有，算匯入的）。 */
 interface Stored {
@@ -91,12 +94,22 @@ async function fetchBuiltin(id: string): Promise<Loaded | undefined> {
 
 function readChosen(): Record<string, string> {
 	try {
-		const value: unknown = JSON.parse(localStorage.getItem(ACTIVE_KEY) ?? "{}");
+		const value: unknown = JSON.parse(storage.get(ACTIVE_KEY) ?? "{}");
 		return typeof value === "object" && value !== null
 			? (value as Record<string, string>)
 			: {};
 	} catch {
 		return {};
+	}
+}
+
+/** 核心與 `qim-neural` 收不收這份停鍵層模型資料包：不收時丟錯（訊息說明原因）。 */
+export function checkModelPack(source: PackSource): void {
+	const pack = new Pack(source.manifest, source.bytes);
+	try {
+		new Reranker(pack).free();
+	} finally {
+		pack.free();
 	}
 }
 
@@ -109,28 +122,55 @@ export class PackLibrary {
 	private builtin: Loaded[];
 	private imported: Map<string, Loaded>;
 	private chosen: Record<string, string>;
+	/** IndexedDB；打不開時是 `undefined`，匯入、下載的只留在記憶體。 */
+	private readonly store: UseStore | undefined;
+	/** IndexedDB 打不開的原因（網頁在狀態列說明）；打得開時是 `undefined`。 */
+	readonly storeError: string | undefined;
 
-	private constructor(builtin: Loaded[], imported: Map<string, Loaded>) {
+	private constructor(
+		builtin: Loaded[],
+		imported: Map<string, Loaded>,
+		store: UseStore | undefined,
+		storeError: string | undefined,
+	) {
 		this.builtin = builtin;
 		this.imported = imported;
 		this.chosen = readChosen();
+		this.store = store;
+		this.storeError = storeError;
 	}
 
-	/** 讀內建的與 IndexedDB 裡匯入的；IndexedDB 裡讀不懂的那筆略過。 */
+	/**
+	 * 讀內建的與 IndexedDB 裡匯入的；IndexedDB 裡讀不懂的那筆略過。IndexedDB 打不開（瀏覽器封鎖網站
+	 * 資料）時只用內建的，`storeError` 記原因。
+	 */
 	static async open(): Promise<PackLibrary> {
 		const builtin = (await Promise.all(BUILTIN_IDS.map(fetchBuiltin))).filter(
 			(pack) => pack !== undefined,
 		);
 		const imported = new Map<string, Loaded>();
-		for (const [id, value] of await entries<string, Stored>(store)) {
-			try {
-				const entry = parseManifest(value.manifest, value.origin ?? "imported");
-				imported.set(id, { ...value, entry });
-			} catch {
-				// 舊版或壞掉的紀錄：不列出，也不刪，留著查。
+		let store: UseStore | undefined;
+		let storeError: string | undefined;
+		try {
+			// `createStore` 當下就呼叫 `indexedDB.open`，可能直接丟錯。
+			store = createStore(DB_NAME, STORE_NAME);
+			for (const [id, value] of await entries<string, Stored>(store)) {
+				try {
+					const entry = parseManifest(
+						value.manifest,
+						value.origin ?? "imported",
+					);
+					imported.set(id, { ...value, entry });
+				} catch {
+					// 舊版或壞掉的紀錄：不列出，也不刪，留著查。
+				}
 			}
+		} catch (error) {
+			imported.clear();
+			store = undefined;
+			storeError = message(error);
 		}
-		return new PackLibrary(builtin, imported);
+		return new PackLibrary(builtin, imported, store, storeError);
 	}
 
 	private listedEntries(): PackEntry[] {
@@ -210,7 +250,7 @@ export class PackLibrary {
 	/** 換 `kind` 用的那份。 */
 	choose(kind: string, id: string): void {
 		this.chosen = { ...this.chosen, [kind]: id };
-		localStorage.setItem(ACTIVE_KEY, JSON.stringify(this.chosen));
+		storage.set(ACTIVE_KEY, JSON.stringify(this.chosen));
 	}
 
 	/**
@@ -219,7 +259,7 @@ export class PackLibrary {
 	 */
 	fallBackToBuiltin(): void {
 		this.chosen = {};
-		localStorage.removeItem(ACTIVE_KEY);
+		storage.remove(ACTIVE_KEY);
 		this.imported.clear();
 	}
 
@@ -295,7 +335,8 @@ export class PackLibrary {
 				choose();
 			},
 			apply,
-			() => set(entry.id, { manifest, bytes, origin } satisfies Stored, store),
+			(store) =>
+				set(entry.id, { manifest, bytes, origin } satisfies Stored, store),
 		);
 	}
 
@@ -304,18 +345,18 @@ export class PackLibrary {
 		await this.change(
 			() => this.imported.delete(id),
 			apply,
-			() => del(id, store),
+			(store) => del(id, store),
 		);
 	}
 
 	/**
 	 * 改清單（`edit`）、交給核心（`apply`）、再寫進儲存空間（`persist`）；前兩步之後任一步失敗就
-	 * 退回改之前的清單與選擇，核心那邊也換回去。
+	 * 退回改之前的清單與選擇，核心那邊也換回去。IndexedDB 打不開時不寫，只留在記憶體。
 	 */
 	private async change(
 		edit: () => void,
 		apply: () => void,
-		persist: () => Promise<void>,
+		persist: (store: UseStore) => Promise<void>,
 	): Promise<void> {
 		const imported = new Map(this.imported);
 		const chosen = this.chosen;
@@ -329,13 +370,15 @@ export class PackLibrary {
 			throw error;
 		}
 		try {
-			await persist();
+			if (this.store) {
+				await persist(this.store);
+			}
 		} catch (error) {
 			this.imported = imported;
 			this.chosen = chosen;
 			apply();
 			throw error;
 		}
-		localStorage.setItem(ACTIVE_KEY, JSON.stringify(this.chosen));
+		storage.set(ACTIVE_KEY, JSON.stringify(this.chosen));
 	}
 }

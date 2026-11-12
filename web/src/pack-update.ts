@@ -6,6 +6,7 @@
 
 import { message } from "./dom.ts";
 import type { PackLibrary } from "./packs.ts";
+import { storage } from "./storage.ts";
 import { packUpdates } from "./wasm/qim_wasm.js";
 
 /** 更新索引在開發伺服器上的位置；資料包檔的 `url` 相對於它。 */
@@ -18,14 +19,14 @@ const PACK_TIMEOUT_MS = 120_000;
 const SWITCH_KEY = "qim.packs.update";
 
 export function updatesEnabled(): boolean {
-	return localStorage.getItem(SWITCH_KEY) !== "off";
+	return storage.get(SWITCH_KEY) !== "off";
 }
 
 export function setUpdatesEnabled(on: boolean): void {
 	if (on) {
-		localStorage.removeItem(SWITCH_KEY);
+		storage.remove(SWITCH_KEY);
 	} else {
-		localStorage.setItem(SWITCH_KEY, "off");
+		storage.set(SWITCH_KEY, "off");
 	}
 }
 
