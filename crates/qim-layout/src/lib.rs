@@ -1,10 +1,12 @@
-//! 佈局：畫布模型的資料格式 `qim-layout/1`、JSON Schema 與兩級驗證、點擊判定（plan §2.6、ADR 0004）。
+//! 佈局：畫布模型的資料格式 `qim-layout/1`、JSON Schema 與兩級驗證、點擊判定與觸控空間模型
+//!（plan §2.6、ADR 0004）。
 //!
 //! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
 
 mod geometry;
 mod keyboard;
 mod model;
+mod spatial;
 mod validate;
 
 pub use keyboard::{Keyboard, KeyboardError, Output};
@@ -12,6 +14,7 @@ pub use model::{
     Action, Composing, Device, FORMAT, Frame, Grid, Insets, Key, KeyState, Layout, LayoutVariant,
     Orientation, Page, Shape, Shift, Size, Style, Swipe, ThemeColor, When,
 };
+pub use spatial::{SpatialModel, Touch};
 pub use validate::{
     LayoutError, Report, SCHEMA, StrictIssue, Target, Warning, check_builtin, validate,
 };

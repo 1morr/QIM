@@ -361,7 +361,7 @@ fn z_and_other_keys_are_swallowed_and_change_nothing() {
     for key in [Key::Letter('z'), Key::Other] {
         let mut ime = Ime::new(&men_kou());
         let typed = ime.type_code("anr");
-        let pressed = ime.press(key);
+        let pressed = ime.press(key.clone());
         assert!(pressed.handled, "{key:?}");
         assert_eq!(pressed.commit, None, "{key:?}");
         assert_eq!(pressed.composition, typed.composition, "{key:?}");
@@ -456,7 +456,7 @@ fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_
         Key::Right,
         Key::Other,
     ] {
-        let pressed = ime.press(key);
+        let pressed = ime.press(key.clone());
         assert!(!pressed.handled, "{key:?}");
         assert_eq!(pressed.commit, None, "{key:?}");
     }
@@ -839,7 +839,7 @@ fn shift_again_commits_english_that_is_not_all_scheme_letters() {
         let mut ime = Ime::new(&men_kou());
         ime.type_code("anr");
         ime.press(Key::ToggleAscii(ShiftKey::Left));
-        let typed = ime.press(key);
+        let typed = ime.press(key.clone());
         let english = typed.composition.input.clone();
         let back = ime.press(Key::ToggleAscii(ShiftKey::Left));
         assert_eq!(back.commit.as_deref(), Some(english.as_str()), "{key:?}");
@@ -889,11 +889,15 @@ fn digits_punctuation_and_capitals_join_the_inline_english_as_typed() {
         Key::Digit(2),
         Key::Punct('-'),
     ] {
-        assert!(ime.press(key).handled, "{key:?}");
+        assert!(ime.press(key.clone()).handled, "{key:?}");
     }
     // 方向鍵、翻頁鍵吃下不動作。
     for key in [Key::Left, Key::PageDown, Key::Other] {
-        assert_eq!(ime.press(key).composition.input, "anr.Cz2-", "{key:?}");
+        assert_eq!(
+            ime.press(key.clone()).composition.input,
+            "anr.Cz2-",
+            "{key:?}"
+        );
     }
     assert_eq!(ime.press(Key::Enter).commit.as_deref(), Some("anr.Cz2-"));
 }

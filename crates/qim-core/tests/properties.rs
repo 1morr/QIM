@@ -48,7 +48,7 @@ fn key() -> impl Strategy<Value = Key> {
 }
 
 /// 殼對 `Session` 做的事：按鍵、點組字的某一段、點某個候選（全部候選的位置）。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Action {
     Key(Key),
     Focus(usize),
@@ -218,7 +218,7 @@ proptest! {
         let mut user = UserModel::default();
         let mut session = Session::default();
         for action in actions {
-            let snapshot = act(&mut session, &engine, &mut user, action);
+            let snapshot = act(&mut session, &engine, &mut user, action.clone());
             if !snapshot.handled {
                 prop_assert_eq!(&snapshot.composition.input, "", "{:?} 交還宿主，組字還在", action);
                 prop_assert_eq!(snapshot.commit, None, "{:?} 交還宿主，卻有要上屏的字", action);
@@ -246,7 +246,7 @@ proptest! {
         let mut user = UserModel::default();
         let mut session = Session::default();
         for action in actions {
-            let snapshot = act(&mut session, &engine, &mut user, action);
+            let snapshot = act(&mut session, &engine, &mut user, action.clone());
             // 沒有組字時的候選是聯想（M3 票 13），不由輸入碼打出。
             if snapshot.composition.input.is_empty() {
                 continue;
@@ -272,7 +272,7 @@ proptest! {
         let mut user = UserModel::default();
         let mut session = Session::default();
         for action in actions {
-            let snapshot = act(&mut session, &engine, &mut user, action);
+            let snapshot = act(&mut session, &engine, &mut user, action.clone());
             // 沒有組字時的候選是聯想（M3 票 13），不是輸入碼的候選。
             if snapshot.composition.input.is_empty() {
                 continue;
@@ -301,7 +301,7 @@ proptest! {
         let mut user = UserModel::default();
         let mut session = Session::default();
         for action in actions {
-            let snapshot = act(&mut session, &engine, &mut user, action);
+            let snapshot = act(&mut session, &engine, &mut user, action.clone());
             let composition = &snapshot.composition;
             let codes: String = composition.segments.iter().map(|s| s.code.as_str()).collect();
             prop_assert_eq!(&codes, &composition.input, "{:?} 後", action);
@@ -337,12 +337,12 @@ proptest! {
         let mut user = UserModel::default();
         let mut session = Session::default();
         for action in learning {
-            act(&mut session, &engine, &mut user, action);
+            act(&mut session, &engine, &mut user, action.clone());
         }
         let before = user.clone();
         session.set_options(Options { incognito: true, ..Options::default() });
         for action in actions {
-            act(&mut session, &engine, &mut user, action);
+            act(&mut session, &engine, &mut user, action.clone());
             prop_assert_eq!(&user, &before, "{:?} 後", action);
         }
     }
@@ -359,12 +359,12 @@ proptest! {
         let mut user = UserModel::default();
         let mut session = Session::default();
         for action in learning {
-            act(&mut session, &engine, &mut user, action);
+            act(&mut session, &engine, &mut user, action.clone());
         }
         let before = user.clone();
         session.set_options(Options { learning: false, ..Options::default() });
         for action in actions {
-            act(&mut session, &engine, &mut user, action);
+            act(&mut session, &engine, &mut user, action.clone());
             prop_assert_eq!(&user, &before, "{:?} 後", action);
         }
     }
@@ -389,7 +389,7 @@ proptest! {
             let i = usize::from(second);
             let other = &engines[1 - i].scheme().id;
             let before = rows_of(&shared.export(), other);
-            act(&mut sessions[i], &engines[i], &mut shared, action);
+            act(&mut sessions[i], &engines[i], &mut shared, action.clone());
             prop_assert_eq!(rows_of(&shared.export(), other), before, "方案 {} 做 {:?} 後", engines[i].scheme().id, action);
         }
         for i in 0..2 {

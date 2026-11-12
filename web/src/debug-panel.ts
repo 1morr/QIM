@@ -50,6 +50,8 @@ interface Inspection {
 	precedingWord?: string;
 	segments: { code: string; text: string; selected: boolean }[];
 	candidates: InspectedCandidate[];
+	/** 最近一個鍵是觸控字母鍵時各字母的機率，由高到低（M4 票 06）；其他鍵是空的。 */
+	touch: { letter: string; probability: number }[];
 }
 
 /** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
@@ -98,6 +100,10 @@ function read(inspection: WasmInspection): Inspection {
 				rerankInserted: c.rerankInserted,
 			})),
 		),
+		touch: i.touchLetters.map((letter, k) => ({
+			letter,
+			probability: i.touchProbabilities[k],
+		})),
 	}));
 }
 
@@ -297,6 +303,24 @@ export function mountDebugPanel(
 		return line;
 	};
 
+	// 觸控的空間模型：最近一下點擊算出的各字母機率；容錯進核心之前核心只用第一個。
+	const touchLine = (inspection: Inspection): HTMLElement => {
+		const line = make("p", "觸控機率：", { "data-testid": "debug-touch" });
+		if (inspection.touch.length === 0) {
+			line.append("（最近一個鍵不是觸控字母鍵）");
+		}
+		for (const { letter, probability } of inspection.touch) {
+			line.append(
+				make("code", `${letter} ${(probability * 100).toFixed(1)}%`, {
+					"data-letter": letter,
+					"data-probability": String(probability),
+				}),
+				" ",
+			);
+		}
+		return line;
+	};
+
 	const topLine = (inspection: Inspection): HTMLElement => {
 		const top = inspection.candidates[0];
 		const line = make("p", "", { "data-testid": "debug-top" });
@@ -417,6 +441,7 @@ export function mountDebugPanel(
 		root.replaceChildren(
 			contextLine(inspection),
 			segmentsLine(inspection),
+			touchLine(inspection),
 			topLine(inspection),
 			candidateTable(inspection),
 			rerankSection(),

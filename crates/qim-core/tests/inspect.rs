@@ -10,7 +10,7 @@ use qim_core::{
     CandidateKind, CodeEntry, CodeTable, ContextState, EmojiPack, EmojiTable, Engine, EnglishPack,
     EnglishWords, InspectedCandidate, Inspection, Key, Lexicon, LexiconPack, Options, Packs,
     PrecedingChar, Ranking, Reranked, Scheme, SchemePack, SegmentSource, Session, Snapshot,
-    UserModel, Word,
+    UserModel, Weights, Word,
 };
 
 /// `ab` 是「甲」「乙」「丙」，甲的字頻遠高；`c`「丁」、`d`「天」，`cd` 是詞「丁天」（接 🙂）；
@@ -437,4 +437,32 @@ fn the_input_code_is_shown_cut_into_segments() {
             ("c".into(), "丁".into(), false)
         ]
     );
+}
+
+/// 觸控的 `Key::Weighted`（M4 票 06）：容錯進核心之前打字行為同機率最高的字母，面板看得到這組機率，
+/// 下一個不是觸控字母的鍵清掉。
+#[test]
+fn a_weighted_tap_types_its_top_letter_and_shows_its_probabilities() {
+    let weights = Weights::new(vec![('b', 0.3), ('a', 0.7)]).unwrap();
+    let mut touch = Ime::new();
+    let mut letters = Ime::new();
+    let tapped = touch.press(Key::Weighted(weights.clone()));
+    assert_eq!(tapped, letters.press(Key::Letter('a')));
+    assert_eq!(touch.inspect().touch_weights, Some(weights));
+    assert_eq!(letters.inspect().touch_weights, None);
+
+    let second = Weights::new(vec![('b', 1.0)]).unwrap();
+    assert_eq!(
+        touch.press(Key::Weighted(second.clone())),
+        letters.press(Key::Letter('b'))
+    );
+    assert_eq!(touch.inspect().touch_weights, Some(second));
+
+    touch.press(Key::Backspace);
+    assert_eq!(touch.inspect().touch_weights, None);
+
+    // 觸控的文字鍵（`Session::text`）也是一個鍵。
+    touch.press(Key::Weighted(Weights::new(vec![('a', 1.0)]).unwrap()));
+    touch.session.text(&touch.engine, &mut touch.user, "，");
+    assert_eq!(touch.inspect().touch_weights, None);
 }
