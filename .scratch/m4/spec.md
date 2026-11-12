@@ -170,6 +170,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [05b](issues/05b-latency-test-fake-timer.md) | — | 修復票（協調者插入）：qim-bench 的 check 測試改用假計時器，不再因機器負載而紅 |
 | [05c](issues/05c-page-turn-e2e-race.md) | — | 修復票（協調者插入）：翻頁 e2e 在高負載下被停鍵重排改了候選順序 |
 | [06](issues/06-weighted-touch.md) | 01 | `Key::Weighted`；`qim-layout` 依點擊與按鍵形狀算機率；核心先取最高的，行為不變 |
+| [06b](issues/06b-gboard-tie-proptest.md) | — | 修復票（協調者插入）：Gboard 格子上點中的鍵與鄰鍵機率平手，proptest 偶爾紅 |
 | [07](issues/07-physical-geometry.md) | 06 | 網頁傳 `KeyboardEvent.code`，`qim-layout` 依實體鍵位轉成 `Weighted` |
 | [08](issues/08-typo-bench.md) | 07 | 「含打錯碼」「觸控模擬」集合、改錯比例、不容錯的基線；〈容錯採用門檻〉經使用者確認寫進本檔 |
 | [09](issues/09-tolerance-experiment.md) | 05, 08 | 四種修正的正確率、改錯比例、延遲；過門檻的進核心 |

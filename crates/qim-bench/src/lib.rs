@@ -26,9 +26,9 @@ use sha2::{Digest, Sha256};
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
 pub use items::{Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal};
 pub use latency::{
-    LONG_INPUT_KEYS, Latency, Runs, Summary, Timing, UserData, WASM_BINDINGS, WasmTimer,
-    lefts_to_first_segment, native_timing, native_timing_with, node_wasm_timer, parse_timing,
-    percentile,
+    LONG_INPUT_KEYS, Latency, NativeTimer, Runs, Summary, Timers, Timing, UserData, WASM_BINDINGS,
+    WasmTimer, lefts_to_first_segment, native_timing, native_timing_with, node_wasm_timer,
+    parse_timing, percentile,
 };
 /// 照修正次數的模擬依序學完題目的 `UserModel`（延遲的「學過」那組）；萬用鍵實驗也用它（M4 票 11）。
 pub use score::learned_model;
@@ -203,14 +203,15 @@ fn inputs_of(fixed: &[Item], corpora: &[(String, Vec<Item>)]) -> Vec<String> {
         .collect()
 }
 
-/// 在 repo 根目錄 `root` 跑基準；WebAssembly 的每鍵延遲用 `wasm` 量（實際用 [`node_wasm_timer`]）。
+/// 在 repo 根目錄 `root` 跑基準；每鍵延遲用 `timers` 量（實際是 [`native_timing_with`] 與
+/// [`node_wasm_timer`]）。
 /// `lexicon` 是另一份詞庫資料包的 id（`--lexicon`），換掉方案指名的那份；baseline 是預設詞庫的數字，
 /// 所以換了詞庫不能 [`Mode::UpdateBaseline`]，`--check` 照樣和它比（「不變差」）。
 pub fn run(
     root: &Path,
     mode: Mode,
     lexicon: Option<&str>,
-    wasm: WasmTimer,
+    timers: Timers,
 ) -> Result<Outcome, String> {
     if mode == Mode::UpdateBaseline
         && let Some(id) = lexicon
@@ -250,7 +251,7 @@ pub fn run(
             .chain(&context_sets)
             .flat_map(|(_, items)| items),
     );
-    let mut latency = latency::measure(&engine, &pack_paths, &latency_inputs, &learned, wasm)?;
+    let mut latency = latency::measure(&engine, &pack_paths, &latency_inputs, &learned, timers)?;
     latency.blank.native.load_ms = Some(load_ms);
     // 改寫 baseline 時舊檔的格式不對（例如格式改了）不算錯，當作沒有；讀不到檔照樣是錯。
     let tolerate_bad_format = mode == Mode::UpdateBaseline;

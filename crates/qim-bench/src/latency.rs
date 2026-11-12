@@ -71,6 +71,17 @@ pub struct Timing {
 /// 實際用 [`node_wasm_timer`]；測試可以換成假的。
 pub type WasmTimer<'a> = &'a dyn Fn(&[PathBuf], Option<&str>, &[String]) -> Result<Timing, String>;
 
+/// 在原生上量時間的方式：給引擎、學習資料與輸入碼，逐鍵打每個輸入。實際用 [`native_timing_with`]；
+/// 測試換成數字固定的假計時器，結果才不受機器負載影響。
+pub type NativeTimer<'a> = &'a dyn Fn(&Engine, &UserModel, &[String]) -> Timing;
+
+/// [`measure`] 用的兩個計時器。
+#[derive(Clone, Copy)]
+pub struct Timers<'a> {
+    pub native: NativeTimer<'a>,
+    pub wasm: WasmTimer<'a>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Latency {
     /// CPU、作業系統與架構，報告註明在哪台機器量的。
@@ -190,12 +201,12 @@ pub fn measure(
     packs: &[PathBuf],
     inputs: &[String],
     learned: &UserModel,
-    wasm: WasmTimer,
+    timers: Timers,
 ) -> Result<Latency, String> {
     Ok(Latency {
         machine: machine(),
-        blank: measure_runs(engine, packs, inputs, None, wasm)?,
-        learned: measure_runs(engine, packs, inputs, Some(learned), wasm)?,
+        blank: measure_runs(engine, packs, inputs, None, timers)?,
+        learned: measure_runs(engine, packs, inputs, Some(learned), timers)?,
     })
 }
 
@@ -206,11 +217,11 @@ fn measure_runs(
     packs: &[PathBuf],
     inputs: &[String],
     user: Option<&UserModel>,
-    wasm: WasmTimer,
+    timers: Timers,
 ) -> Result<Runs, String> {
-    let native = native_timing_with(engine, user.unwrap_or(&UserModel::default()), inputs);
+    let native = (timers.native)(engine, user.unwrap_or(&UserModel::default()), inputs);
     let user_dict = user.map(UserModel::export);
-    let wasm = wasm(packs, user_dict.as_deref(), inputs)?;
+    let wasm = (timers.wasm)(packs, user_dict.as_deref(), inputs)?;
     let shape = |timing: &Timing| timing.per_key_ms.iter().map(Vec::len).collect::<Vec<_>>();
     let keys: Vec<usize> = inputs.iter().map(|input| input.chars().count()).collect();
     let selects = |timing: &Timing| {
