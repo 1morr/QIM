@@ -230,7 +230,7 @@ _Avoid_: rerank（程式碼識別符除外）
 
 **停鍵層模型**：
 停鍵層做重排的字級神經模型（Gboard 級 1.4M CIFG-LSTM），給 lattice 的前幾條路徑打神經分，照 `路徑分 + λ·神經分` 排名次（plan §2.7）。推論在 `qim-neural`（`Reranker`）；它的資料包叫模型資料包（`ModelPack`，manifest 的種類 `model`），不交給 `Engine`。
-_Avoid_: 神經網路、AI 模型；說「語言模型」時指同步層的字級 bigram
+_Avoid_: 神經網路、AI 模型；「語言模型」指同步層的 n-gram（字級 bigram、詞級 trigram），不指它
 
 **首選字基準**：
 一份「輸入碼 → 期望首選」的測試資料，用來量核心選首選的正確率。

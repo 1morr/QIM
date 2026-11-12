@@ -150,3 +150,28 @@ fn a_phrase_is_not_empty_has_no_other_control_characters_and_its_trigger_uses_sc
     assert_eq!(user, UserModel::default());
     user.add_phrase(&engine, "一\t台", None).unwrap();
 }
+
+/// 刪掉常用語後方案只剩 tick 行、沒有資料列：匯出再匯入要一模一樣。
+#[test]
+fn exporting_then_importing_keeps_a_tick_left_after_removing_the_only_phrase() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    user.add_phrase(&engine, ADDRESS, Some("mir")).unwrap();
+    type_code(&engine, &mut user, &mut session, "mir");
+    session.handle(&engine, &mut user, Key::Space);
+    assert!(user.remove_phrase(&engine, ADDRESS));
+
+    let exported = user.export();
+    assert_eq!(UserModel::import(&exported), Ok(user), "{exported}");
+}
+
+/// 空模型上刪不到常用語，不該留下空的方案：模型不變，匯出再匯入也一樣。
+#[test]
+fn removing_a_missing_phrase_from_an_empty_model_changes_nothing() {
+    let engine = engine();
+    let mut user = UserModel::default();
+    assert!(!user.remove_phrase(&engine, ADDRESS));
+    assert_eq!(user, UserModel::default());
+    assert_eq!(UserModel::import(&user.export()), Ok(user));
+}

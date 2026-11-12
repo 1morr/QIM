@@ -15,7 +15,7 @@ WRITE=6 cargo run --release -q -p qim-databuild --example emoji-keywords   # 另
 
 ## 結果
 
-2026-11-11，Apple M6、macOS 27.0.1，commit `3543c83` 之上（票 16 未 commit 的工作區），CLDR `release-49`（`96e54b2`）、emoji-test 18.0。每鍵經 `Session` 打（預設選項、每列最多 3 個 emoji），字取它排得最前的碼。
+2026-11-11，Apple M6、macOS 27.0.1、rustc 1.99.1（`rust-toolchain.toml`），commit `3543c83` 之上（票 16 未 commit 的工作區），CLDR `release-49`（`96e54b2`）、emoji-test 18.0。每鍵經 `Session` 打（預設選項、每列最多 3 個 emoji），字取它排得最前的碼。
 
 | 門檻 | 太泛不收的關鍵字 | 收的字詞 | 笑 `hk` | 貓 `bw` | 多謝 `niyi` | 打開 `qnat` | 眼 `bv` | 臉 `bo` | 嘴 `rb` |
 | --- | ---: | ---: | --- | --- | --- | --- | --- | --- | --- |

@@ -32,10 +32,6 @@ impl Vocab {
         self.index.len() + 2
     }
 
-    pub fn is_empty(&self) -> bool {
-        false
-    }
-
     /// 路徑裡每個字表外的字多扣的分（nat）：`ln(unknown_chars)`。
     pub fn unknown_penalty(&self) -> f32 {
         self.unknown_penalty

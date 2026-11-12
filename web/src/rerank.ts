@@ -157,6 +157,7 @@ export function rerankScheduler(
 		}
 		rerankedAt = asked;
 		busy = true;
+		let reported = false;
 		const delay = options.extraDelayMs ?? 0;
 		options.models[mode](job)
 			.then((ranked) =>
@@ -166,13 +167,19 @@ export function rerankScheduler(
 						)
 					: ranked,
 			)
-			.then(
-				(ranked) => options.onResult?.(finish(asked, ranked), ranked),
-				(error: unknown) => {
-					console.error("重排失敗", error);
+			.then((ranked) => {
+				const outcome = finish(asked, ranked);
+				// 回報過了（`onResult` 自己丟錯）就不再回報第二次。
+				reported = true;
+				options.onResult?.(outcome, ranked);
+			})
+			// 模型、`finish`（含 `show`）、`onResult` 丟的錯都在這裡接：只記 console.error，沒回報過就記成沒有結果。
+			.catch((error: unknown) => {
+				console.error("重排失敗", error);
+				if (!reported) {
 					options.onResult?.("none", undefined);
-				},
-			)
+				}
+			})
 			.finally(() => {
 				busy = false;
 				if (again) {

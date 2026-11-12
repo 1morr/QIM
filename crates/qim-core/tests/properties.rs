@@ -417,7 +417,8 @@ proptest! {
         words in random_words(),
         keys in prop::collection::vec((any::<bool>(), key(), prop::option::weighted(0.1, r"[一a\\\t，]{0,3}")), 0..100),
         added in prop::collection::vec(("[一-十]{1,3}", prop::option::of("[abc]{1,3}")), 0..5),
-        phrases in prop::collection::vec((r"[一a \\\n\t]{1,6}", prop::option::of("[abc]{1,3}")), 0..5),
+        phrases in prop::collection::vec((r"[一a \\\n\t]{1,6}", prop::option::of("[abc]{1,3}"), any::<bool>()), 0..5),
+        removed in prop::collection::vec(r"[一a \\\n\t]{1,6}", 0..5),
     ) {
         let (other_table, other_words) = other_scheme(&table, &words);
         let engines = [
@@ -438,8 +439,14 @@ proptest! {
             // 字沒有碼又沒給觸發詞時加不進去，那就不加。
             let _ = user.add_word(&engines[0], text, trigger.as_deref());
         }
-        for (text, trigger) in &phrases {
+        for (text, trigger, _) in &phrases {
             user.add_phrase(&engines[1], text, trigger.as_deref()).unwrap();
+        }
+        // 刪掉一部分常用語（留下的照樣匯出）：刪常用語會連它學到的計數一起刪，方案可能只剩 tick 行；
+        // 刪不到的也不該留下痕跡。
+        let dropped = phrases.iter().filter(|(_, _, drop)| *drop).map(|(text, _, _)| text);
+        for text in dropped.chain(&removed) {
+            user.remove_phrase(&engines[1], text);
         }
 
         let exported = user.export();

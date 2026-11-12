@@ -386,7 +386,8 @@ impl Engine {
         is_char || self.lexicon.lookup(code).iter().any(|w| w.text == text)
     }
 
-    /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；`prev` 是 `None` 表示它是組字的開頭。
+    /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；組字開頭接前文最後一字或句首（`CLAUSE_START`），
+    /// `prev` 是 `None` 表示沒有統計可接、用 unigram（同 `Preceding::character`）。
     /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan §2.3）；`bigram` 是這條邊接在
     /// 前一個字詞後面的個人 bigram（[`crate::user::Following::probability`]），沒有是 0。
     /// 掛上詞級 trigram 時，靜態機率改用它（退回現行打分），`before` 是前面兩段的編號。
