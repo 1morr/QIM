@@ -1,4 +1,4 @@
-// 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v2`（也讀得進 v1）。
+// 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
 
 import { element, message } from "./dom.ts";
 import type { Session } from "./wasm/qim_wasm.js";
@@ -7,6 +7,8 @@ import type { Session } from "./wasm/qim_wasm.js";
 const USER_DICT_KEY = "qim.userdict";
 /** 載入時匯入失敗的資料搬到這裡，免得下次上屏被空白資料蓋掉。 */
 const BROKEN_KEY = "qim.userdict.broken";
+/** 這台裝置的 id 在 `localStorage` 的鍵：第一次載入時產生，匯出檔頭帶著它（plan §2.4）。 */
+const DEVICE_KEY = "qim.device";
 /** 匯出檔名；副檔名照內容是 TSV。 */
 const EXPORT_NAME = "qim-userdict.tsv";
 
@@ -15,6 +17,27 @@ function rows(tsv: string): number {
 	return tsv
 		.split("\n")
 		.filter((line) => line.trim() !== "" && !line.startsWith("#")).length;
+}
+
+/**
+ * 這台裝置的 id：存過就用存的，沒有就產生一個 UUID 存起來（照 librime 每次安裝一個 `installation_id`）。
+ * 清掉網站資料等於換一台裝置。
+ */
+function ensureDeviceId(): string {
+	const stored = localStorage.getItem(DEVICE_KEY);
+	if (stored !== null) {
+		return stored;
+	}
+	const id = crypto.randomUUID();
+	localStorage.setItem(DEVICE_KEY, id);
+	return id;
+}
+
+/** 匯入略過的列（不認得的種類）寫成一句；沒有時是空字串。 */
+function skipped(warnings: string[]): string {
+	return warnings.length === 0
+		? ""
+		: `，略過 ${warnings.length} 列：${warnings.join("；")}`;
 }
 
 export interface UserDict {
@@ -37,10 +60,21 @@ export function mountUserDict(
 		localStorage.setItem(USER_DICT_KEY, session.exportUserDict());
 	};
 
+	// 存的 id 壞了（手動改過）就換一個新的。
+	try {
+		session.setDevice(ensureDeviceId());
+	} catch {
+		localStorage.removeItem(DEVICE_KEY);
+		session.setDevice(ensureDeviceId());
+	}
 	const stored = localStorage.getItem(USER_DICT_KEY);
 	if (stored !== null) {
 		try {
-			session.importUserDict(stored);
+			// 新版存的檔有這版不認得的種類時略過那些列，說一聲（下次存檔就沒有了）。
+			const warnings = session.importUserDict(stored);
+			if (warnings.length > 0) {
+				status.textContent = `學習資料讀進來了${skipped(warnings)}`;
+			}
 		} catch (error) {
 			localStorage.setItem(BROKEN_KEY, stored);
 			localStorage.removeItem(USER_DICT_KEY);
@@ -95,15 +129,16 @@ export function mountUserDict(
 			return;
 		}
 		const text = await chosen.text();
+		let warnings: string[];
 		try {
-			session.checkUserDict(text);
+			warnings = session.checkUserDict(text);
 		} catch (error) {
 			status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
 			return;
 		}
 		pending = { name: chosen.name, text };
 		const current = rows(session.exportUserDict());
-		confirmText.textContent = `匯入 ${chosen.name}（${rows(text)} 筆）會覆蓋目前的 ${current} 筆學習資料，原本的不會保留。確定匯入？`;
+		confirmText.textContent = `匯入 ${chosen.name}（${rows(text)} 筆${skipped(warnings)}）會覆蓋目前的 ${current} 筆學習資料，原本的不會保留。確定匯入？`;
 		status.textContent = "";
 		confirm.hidden = false;
 	});
@@ -116,9 +151,9 @@ export function mountUserDict(
 			const { name, text } = pending;
 			closeConfirm();
 			try {
-				session.importUserDict(text);
+				const warnings = session.importUserDict(text);
 				save();
-				status.textContent = `已匯入 ${name}`;
+				status.textContent = `已匯入 ${name}${skipped(warnings)}`;
 			} catch (error) {
 				status.textContent = `匯入失敗，學習資料沒動：${message(error)}`;
 			}

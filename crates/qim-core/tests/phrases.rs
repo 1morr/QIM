@@ -163,7 +163,11 @@ fn exporting_then_importing_keeps_a_tick_left_after_removing_the_only_phrase() {
     assert!(user.remove_phrase(&engine, ADDRESS));
 
     let exported = user.export();
-    assert_eq!(UserModel::import(&exported), Ok(user), "{exported}");
+    assert_eq!(
+        UserModel::import(&exported, None).map(|i| i.user),
+        Ok(user),
+        "{exported}"
+    );
 }
 
 /// 空模型上刪不到常用語，不該留下空的方案：模型不變，匯出再匯入也一樣。
@@ -173,5 +177,8 @@ fn removing_a_missing_phrase_from_an_empty_model_changes_nothing() {
     let mut user = UserModel::default();
     assert!(!user.remove_phrase(&engine, ADDRESS));
     assert_eq!(user, UserModel::default());
-    assert_eq!(UserModel::import(&user.export()), Ok(user));
+    assert_eq!(
+        UserModel::import(&user.export(), None).map(|i| i.user),
+        Ok(user)
+    );
 }

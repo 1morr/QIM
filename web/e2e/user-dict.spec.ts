@@ -84,7 +84,7 @@ test("匯出、清空、匯入後讀回相同", async ({ page }, testInfo) => {
 	await page.getByRole("button", { name: "匯出學習資料" }).click();
 	const file = await (await download).path();
 	const exported = await readFile(file, "utf8");
-	expect(exported.split("\n")[0]).toBe("# qim-userdict v2");
+	expect(exported.split("\n")[0]).toBe("# qim-userdict v3");
 	expect(exported).toContain("\t雲口\tmir\t1\t");
 
 	await page.getByRole("button", { name: "清空學習資料" }).click();
@@ -103,6 +103,90 @@ test("匯出、清空、匯入後讀回相同", async ({ page }, testInfo) => {
 	const again = page.waitForEvent("download");
 	await page.getByRole("button", { name: "匯出學習資料" }).click();
 	expect(await readFile(await (await again).path(), "utf8")).toBe(exported);
+});
+
+/** 按「匯出學習資料」下載的檔。 */
+async function exportedFile(page: Page): Promise<string> {
+	const download = page.waitForEvent("download");
+	await page.getByRole("button", { name: "匯出學習資料" }).click();
+	return readFile(await (await download).path(), "utf8");
+}
+
+/** 匯出檔裡種類 `entry`、詞是 `word` 的列，拆成欄。 */
+function entryRows(exported: string, word: string): string[][] {
+	return exported
+		.split("\n")
+		.map((line) => line.split("\t"))
+		.filter((columns) => columns[0] === "entry" && columns[2] === word);
+}
+
+// 學習資料 v3（M4 票 12）：檔頭有裝置 id，每列有最後使用的日期；日期由網頁每次操作前交給核心，
+// 測試用 `page.clock` 換日。
+test("匯出 v3 的檔頭有裝置 id、每列有日期，換一天上屏後日期跟著變", async ({
+	page,
+}, testInfo) => {
+	await page.clock.setFixedTime(new Date(2026, 10, 12, 23, 50));
+	await learnYunHau(page);
+	const first = await exportedFile(page);
+	const lines = first.split("\n");
+	expect(lines[0]).toBe("# qim-userdict v3");
+	expect(lines[1]).toMatch(/^#@\/device\t[0-9a-f-]{36}$/);
+	const [yunHau] = entryRows(first, "雲口");
+	// kind scheme word code commits last_commit_tick decayed last_tick last_used source trigger
+	expect(yunHau?.slice(3, 5)).toEqual(["mir", "1"]);
+	expect(yunHau?.slice(8, 10)).toEqual(["2026-11-12", "auto"]);
+	const [yun] = entryRows(first, "雲");
+	expect(yun?.[8]).toBe("2026-11-12");
+
+	// 過了午夜（同一個分頁沒重新整理），選第 2 位的「雲口」。
+	await page.clock.setFixedTime(new Date(2026, 10, 13, 0, 10));
+	await page.keyboard.type("mir");
+	await pick(page, "雲口");
+	const second = await exportedFile(page);
+	expect(second.split("\n")[1]).toBe(lines[1]);
+	const [again] = entryRows(second, "雲口");
+	expect(again?.[4]).toBe("2");
+	expect(again?.[8]).toBe("2026-11-13");
+	expect(entryRows(second, "雲")[0]?.[8]).toBe("2026-11-12");
+
+	// 重新整理後裝置 id 不變（存在 localStorage）。
+	await page.reload();
+	await ready(page);
+	expect((await exportedFile(page)).split("\n")[1]).toBe(lines[1]);
+	await page.screenshot({ path: testInfo.outputPath("userdict-v3-date.png") });
+});
+
+/** v3 的檔帶一列之後版本才有的種類：略過並說明，其他列照收。 */
+test("匯入 v3 時不認得的種類略過並說明，其他列照收", async ({ page }) => {
+	const { status } = await ready(page);
+	const file = [
+		"# qim-userdict v3",
+		"#@/device\tother-device",
+		"#@/tick/quick\t0",
+		"entry\tquick\t速成\tqim\t0\t0\t0\t0\t2026-01-02\tmanual\tqc",
+		"tombstone\tquick\t速成\tqim\t2026-01-03",
+		"",
+	].join("\n");
+	await page.getByLabel("匯入學習資料（取代目前的）").setInputFiles({
+		name: "future.tsv",
+		mimeType: "text/plain",
+		buffer: Buffer.from(file),
+	});
+	const confirm = page.getByRole("group", { name: "確認匯入" });
+	await expect(confirm).toContainText("略過 1 列：第 5 行");
+	await confirm.getByRole("button", { name: "確定匯入" }).click();
+	await expect(status).toHaveText(
+		/已匯入 future\.tsv，略過 1 列：第 5 行：不認得的種類「tombstone」/,
+	);
+	const exported = await exportedFile(page);
+	expect(entryRows(exported, "速成")[0]?.slice(8)).toEqual([
+		"2026-01-02",
+		"manual",
+		"qc",
+	]);
+	// 這台裝置的 id 留著，不換成檔裡的。
+	expect(exported).not.toContain("other-device");
+	expect(exported.split("\n")[1]).toMatch(/^#@\/device\t[0-9a-f-]{36}$/);
 });
 
 test("匯入不是 qim-userdict 的檔時報錯，學習資料不動", async ({ page }) => {

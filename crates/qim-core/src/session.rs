@@ -1271,8 +1271,7 @@ impl Session {
             .collect();
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         if !engine.has_entry(&code, &text) {
-            user.for_scheme_mut(&engine.scheme().id)
-                .add_auto_phrase(&code, &text);
+            user.add_auto_phrase(&engine.scheme().id, &code, &text);
         }
     }
 
