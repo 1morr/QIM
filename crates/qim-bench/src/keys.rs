@@ -1,6 +1,6 @@
 //! 基準照殼的做法把按鍵交給核心（M4 票 08）：實體鍵盤的字母鍵經 `qim_layout::PhysicalModel` 轉成
 //! `Key::Weighted`（同網頁的 `pressCode`，票 07），觸控點擊經 `qim_layout::SpatialModel` 轉成
-//! `Key::Weighted`（同網頁的 `tap`，票 06）。容錯進核心後，基準量到的就是殼實際送的機率。
+//! `Key::Weighted`（同網頁的 `tap`，票 06）。會用到機率的功能進核心後，基準量到的就是殼實際送的機率。
 
 use qim_core::{Key, Weights};
 use qim_layout::{

@@ -3,7 +3,7 @@
 //! 每個字母鍵依點擊到它觸控範圍的距離（在鍵自己的座標，旋轉、圓角都只是距離函式不同；橢圓與多邊形
 //! 在 M6 換距離函式）套 2D Gaussian：σ 跟該鍵的大小成比例，並有手指精度的下限，單位是毫米。不搬 AOSP
 //! 的 `ProximityInfo`：它假設矩形、共用尺度、以排為單位（`docs/research/spatial-correction-swipe.md` §1.2）。
-//! 參數的初值與來源在 [`SpatialModel::default`]，容錯的票在基準的 dev 切分上調。
+//! 參數的初值與來源在 [`SpatialModel::default`]，還沒在基準上調過。
 
 use crate::model::{Action, Key, KeyState, Page};
 
@@ -39,7 +39,7 @@ impl Default for SpatialModel {
     /// - `size_ratio_x` 0.21、`size_ratio_y` 0.12：Fowler 2015 量到的 σx 1.97 mm、σy 1.88 mm（鍵寬 6.16 mm、
     ///   高 9.42 mm）照 FFitts 拆成 σa² 加上跟鍵大小有關的部分：√(1.97² − 1.5²) ≈ 1.28 mm 是鍵寬的 0.21，
     ///   √(1.88² − 1.5²) ≈ 1.13 mm 是鍵高的 0.12。Fowler 的 σ 量的是到鍵中心的距離，這裡套在到觸控範圍的距離
-    ///   （鍵內是 0），分布因此比 Fowler 的寬；當初值用，容錯的票再調。
+    ///   （鍵內是 0），分布因此比 Fowler 的寬；當初值用，還沒調過。
     /// - `radius_mm` 7.99：Fowler 2015 的剪枝半徑。
     /// - `limit` 5：Fowler 的剪枝半徑內通常只有 3–6 個鍵（研究筆記〈推論〉）。
     /// - `top_boost` 2：沒有來源，重疊而一樣近的兩個鍵上層得 2/3。
@@ -91,9 +91,9 @@ impl SpatialModel {
         }
         // 穩定排序：一樣高時留著由上層往下的順序。
         letters.sort_by(|a, b| b.1.total_cmp(&a.1));
-        // 點中的鍵的字母一定最高（容錯進核心之前核心只用最高的，打字要同點擊判定）：大小不一的鍵之間，
-        // 大鍵的 σ 寬，可能贏過比較近的小鍵；這時把點中的字母提到和最高的一樣、排第一，留著「兩個一樣可能」
-        // 給容錯。
+        // 點中的鍵的字母一定最高（核心只用最高的，打字要同點擊判定）：大小不一的鍵之間，
+        // 大鍵的 σ 寬，可能贏過比較近的小鍵；這時把點中的字母提到和最高的一樣、排第一，留著「兩個一樣
+        // 可能」的資訊。
         let hit_letter = hit.and_then(|index| letter_of(&page.keys[index], state));
         if let Some(at) = hit_letter.and_then(|c| letters.iter().position(|&(d, _)| d == c))
             && at > 0

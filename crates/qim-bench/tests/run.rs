@@ -1712,7 +1712,7 @@ fn typo_sets_type_the_typed_keys_first_and_retype_the_code_when_stuck() {
         ),
         (1, 1, 3, 0)
     );
-    // 容錯進核心前，原樣讀法就是實際的讀法：沒打錯而原樣正確的 1 題，改錯 0。
+    // 核心沒有容錯（M4 票 09），原樣讀法就是實際的讀法：沒打錯而原樣正確的 1 題，改錯 0。
     assert_eq!((stats.literal_correct, stats.false_corrections), (1, 0));
     assert_eq!(stats.false_correction_rate(), 0.0);
     // 一般的集合沒有打錯碼的統計。

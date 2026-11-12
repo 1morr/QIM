@@ -287,8 +287,8 @@ proptest! {
         prop_assert_eq!(w[0].0, expected, "{:?}", w);
     }
 
-    /// Gboard 樣式的格子上點哪裡都一樣：點中字母鍵時，機率最高的字母就是點擊判定按到的鍵（容錯進核心之前，
-    /// 核心只用機率最高的字母，打字行為不變）。點中 Shift、刪除時送的不是字母，不看。
+    /// Gboard 樣式的格子上點哪裡都一樣：點中字母鍵時，機率最高的字母就是點擊判定按到的鍵（核心只用機率
+    /// 最高的字母，打字行為不變）。點中 Shift、刪除時送的不是字母，不看。
     #[test]
     fn on_a_gboard_grid_the_most_likely_letter_is_the_hit_key(
         x in 0.0..390.0f64,
@@ -305,7 +305,7 @@ proptest! {
 }
 
 /// 點在小鍵與大鍵之間的空隙、靠小鍵那側：大鍵的 σ 寬，算出來會贏過比較近的小鍵；點中的是小鍵，
-/// 機率最高的就要是它（容錯進核心之前核心只用最高的，打字行為不變）。被拉上來的小鍵和大鍵一樣高。
+/// 機率最高的就要是它（核心只用最高的，打字行為不變）。被拉上來的小鍵和大鍵一樣高。
 #[test]
 fn between_a_small_and_a_big_key_the_nearer_small_key_stays_on_top() {
     let small = letter_key(

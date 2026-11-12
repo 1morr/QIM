@@ -1,6 +1,6 @@
 # 10: 容錯進核心
 
-Status: ready-for-agent
+Status: wontfix
 Blocked by: 09
 讀: brief §4.8、§7；plan §2.1（`Composition`、分段、Enter）、§2.2、§2.4、§2.7；spec〈細節〉〈容錯〉；票 09 的結論；spec〈容錯採用門檻〉〈共同規則〉
 
@@ -21,3 +21,8 @@ Blocked by: 09
 - [ ] `model-ladder` 的 `neural --split test` 與 `compare` 結果附在 Comments。
 - [ ] Playwright：打錯碼的詞讀到修正讀法（面板標修正）；關掉容錯後打錯碼不出修正讀法；原樣讀得通的照原樣排首選。
 - [ ] plan §2.1、§2.4、§2.7 與 brief §4.8 依決定改寫；名詞表加詞；`cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-13（票 09）：wontfix。票 09 照 dev 挑的懲罰在 test 跑一次：四種修正逐種加入各自都過，但合起來的組合沒過〈容錯採用門檻〉：修正次數含打錯碼 −3.9%、觸控 −5.8%（要 −10%），改錯 1.81%／2.58%（上限 1.0%），沒打錯的 12 個集合都退步超過上限；照單開與逐種加入推，任何組合都碰不到觸控的修正次數那條（研究文件〈結論〉）。核心的容錯程式照協調者的決定在票 09 刪掉。數字、原因與重評條件：`docs/research/tolerance.md`。
+- 重評時（票 09 實作過一版，在 `scripts/experiments/tolerance/` README 記的 commit 上）要補的：修正過的分段學到的是打出的碼（要改記修正後的碼）；放回選定的分段、改選某一段時按鍵機率沒跟著（鄰鍵替換只在剩下的輸入碼是原本的結尾時有）；debug 面板沒有修正的標記；蓋滿整串的修正詞要限量，否則把開頭一段的候選擠到下一頁；含 `z` 的輸入與容錯一起時的延遲見票 09 Comments。

@@ -215,7 +215,7 @@ pub enum Key {
     /// 不記沒有字元的鍵）。
     Modifier,
     /// 觸控點一下字母鍵：各字母的機率，由殼經 `qim-layout` 依點擊位置與按鍵幾何算出（M4 票 06）。
-    /// 容錯進核心之前只用機率最高的字母，其餘同 `Letter`；[`Session::inspect`] 看得到這組機率。
+    /// 核心只用機率最高的字母，其餘同 `Letter`；[`Session::inspect`] 看得到這組機率。
     Weighted(Weights),
 }
 
@@ -484,7 +484,7 @@ pub struct Session {
     /// 沒變（候選沒變）才套用（[`Session::apply_rerank`]）。
     waiting_rerank: Option<(u64, Vec<usize>)>,
     /// 最近一個鍵是 [`Key::Weighted`]（觸控或實體鍵盤的字母鍵）時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
-    /// 其他鍵與 [`Session::text`] 清掉。容錯的票再決定要不要逐碼記。
+    /// 其他鍵與 [`Session::text`] 清掉。
     key_weights: Option<Weights>,
     /// 停鍵結果快取（plan §2.7，M4 票 03）：重排要求 → 模型給的名次，都是 `reranker` 排的。
     rerank_cache: RerankCache,
@@ -855,7 +855,7 @@ impl Session {
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
-        // 容錯進核心之前，按鍵機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
+        // 按鍵機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
         let key = match key {
             Key::Weighted(weights) => {
                 let top = weights.top();
