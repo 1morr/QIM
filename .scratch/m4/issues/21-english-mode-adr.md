@@ -1,7 +1,7 @@
 # 21: 英文模式 ADR 與 `delete_before`
 
 Status: ready-for-agent
-Blocked by: 19
+Blocked by: 19, 18b
 讀: brief §4.7、§12.3；plan §1.3、§2.1（`Snapshot`、英文直通、臨時英文）、§4.4；spec〈細節〉〈英文模式〉；票 19 的結論；spec〈共同規則〉
 
 ## What to build

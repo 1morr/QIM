@@ -1,7 +1,7 @@
 # 29: 譯詞資料包
 
 Status: ready-for-agent
-Blocked by: 20
+Blocked by: 20, 18b
 讀: brief §1.5、§5；plan §2.1、§4.6（manifest）；票 20 的結論；spec〈共同規則〉
 
 ## What to build

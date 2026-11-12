@@ -110,7 +110,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 - 「原樣正確卻被改錯」：每種打錯集合（兩個語料合計）≤ 1.0%（Fowler 2015 選的工作點）。觸控沒打錯的題較少（分母約 390），判斷時一起看沒打錯的集合那條。
 - 延遲：照〈每鍵延遲上限〉，照殼送的按鍵機率量（票 10）。
 - 程序：懲罰與空間模型、鄰鍵先驗的參數只在 dev 切分（`dev-typo.tsv`、`dev-touch.tsv` 與 dev 的一般題）調；test 與個人集在設定定案後只跑一次，門檻只看那一次。
-- 可以改門檻的條件：期中檢查（票 18）試用後使用者覺得改錯太多或幫不上忙，由使用者決定（2026-11-13 期中檢查：使用者決定容錯暫時放棄、門檻不改）；錯誤模型依真實打字資料修正後重新產生集合（門檻的增量與上限不變）；brief §4.8 改了。不因某張票沒過而放寬。
+- 可以改門檻的條件：期中檢查（票 18）試用後使用者覺得改錯太多或幫不上忙，由使用者決定；錯誤模型依真實打字資料修正後重新產生集合（門檻的增量與上限不變）；brief §4.8 改了。不因某張票沒過而放寬。
 
 ## 細節（由 plan §7.5 搬來）
 
@@ -207,17 +207,17 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [17](issues/17-sync-merge.md) | 13, 14, 15, 16 | G-Counter、墓碑、匯入改合併；ADR；交換律、結合律、冪等；兩個瀏覽器設定檔互相同步 |
 | [18](issues/18-midpoint-check.md) | 03, 04, 11, 17（10 wontfix） | 期中檢查：`bench`、延遲、使用者試用第一期；改第二期的票 |
 | [18b](issues/18b-wildcard-latency.md) | 18 | 修復票（期中檢查插入）：先優化萬用鍵展開，含萬用鍵的輸入加進每鍵延遲閘門，上限不變 |
-| [18c](issues/18c-prediction-backspace.md) | 18 | 修復票（期中檢查插入）：有聯想時第一下退格就刪字並收起聯想（使用者決定，偏離 librime-predict 與 Gboard） |
+| [18c](issues/18c-association-backspace.md) | 18 | 修復票（期中檢查插入）：有聯想時第一下退格就刪字並收起聯想（使用者決定，偏離 librime-predict 與 Gboard） |
 | [19](issues/19-gboard-english-blackbox.md) | 18 | Gboard 英文鍵盤黑箱實測，寫到 `docs/research/` |
 | [20](issues/20-translation-sources.md) | 18 | 譯詞的來源與授權研究 |
-| [21](issues/21-english-mode-adr.md) | 19 | 英文模式 ADR；三個平台刪除前文的 API 查證；`Snapshot.delete_before` 與網頁照做 |
+| [21](issues/21-english-mode-adr.md) | 19, 18b | 英文模式 ADR；三個平台刪除前文的 API 查證；`Snapshot.delete_before` 與網頁照做 |
 | [22](issues/22-aosp-english-pack.md) | 18, 18b | 英文資料包換成 aosp-dictionaries；規則 4 不多搶第 2 位 |
 | [23](issues/23-touch-english-keyboard.md) | 18, 18b | 觸控中英鍵與 QWERTY 英文頁（先接英文直通） |
 | [24](issues/24-english-mode.md) | 14, 21, 22, 23 | 英文模式組字、英文建議列的前綴補完、Shift 與句首大寫 |
-| [25](issues/25-autocorrect.md) | 24 | 自動修正（預設關、退格還原、AOSP 的保守條件） |
+| [25](issues/25-autocorrect.md) | 24, 18c | 自動修正（預設關、退格還原、AOSP 的保守條件） |
 | [26](issues/26-field-types.md) | 25 | email、網址進英文模式並關自動修正；數字欄開數字頁 |
 | [27](issues/27-smart-punctuation.md) | 24 | 成對符號自動配對、英文模式連按兩下空白輸出句點 |
 | [28](issues/28-inline-english-experiment.md) | 22 | 句中英文混輸實驗；純中文集不退步才採用 |
-| [29](issues/29-translation-pack.md) | 20 | 譯詞資料包、候選旁顯示、修飾鍵加數字上屏 |
+| [29](issues/29-translation-pack.md) | 20, 18b | 譯詞資料包、候選旁顯示、修飾鍵加數字上屏 |
 | [30](issues/30-association-boost.md) | 18, 18b, 18c | emoji 聯想、句首建議、量詞聯想：評估後做 |
 | [31](issues/31-m4-close.md) | 01–30（含 18b、18c） | 收尾：里程碑 code-review、乾淨 checkout 重驗、v3 定稿、使用者試用第二期、封存 |

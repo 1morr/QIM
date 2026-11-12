@@ -20,6 +20,6 @@ Blocked by: 18
 - [ ] 改後含萬用鍵的輸入在〈每鍵延遲上限〉內（負載低時單獨量），前後對照貼在 Comments。
 - [ ] `bench --check` 量並擋含萬用鍵的輸入；閘門的判斷有雙向測試（假計時器：含萬用鍵那組超過時紅、在內不紅）。
 - [ ] `bench --check` 各集合與翻盤清單前後相同；含萬用鍵的輸入的候選列前後逐字相同的測試或比對。
-- [ ] `docs/development.md`〈每鍵延遲〉、spec〈每鍵延遲上限〉已更新；`cargo xtask check` 綠燈。
+- [ ] `docs/development.md`〈每鍵延遲〉、spec〈每鍵延遲上限〉、brief §4.3 萬用鍵那條的延遲數字已更新；`cargo xtask check` 綠燈。
 
 ## Comments
