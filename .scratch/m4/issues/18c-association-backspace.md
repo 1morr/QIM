@@ -1,6 +1,6 @@
 # 18c: 有聯想時第一下退格就刪字
 
-Status: ready-for-agent
+Status: done
 Blocked by: 18
 讀: plan §2.1 聯想那條（「Esc 與退格只收起聯想」）、§2.4〈退格撤銷〉；brief §12.2 librime-predict 與退格撤銷、§12.4 黑箱 T11；票 15 的 Comments；spec〈共同規則〉
 
@@ -14,9 +14,15 @@ Blocked by: 18
 
 ## 驗收
 
-- [ ] 核心測試（先紅）：上屏後有聯想時按退格，`Snapshot` 交還宿主（宿主刪字）、聯想收起；Esc 照舊只收起；這下退格撤銷這次上屏的學習（匯出比對）。
-- [ ] Playwright（桌面，觸控鍵盤的刪除鍵也驗）：上屏後出聯想，按一下退格，輸入框少一個字、聯想列不見；截圖存 `.scratch/m4/evidence/`。
-- [ ] Playwright：有聯想時按 Esc，聯想列不見、輸入框的字還在、學習還在（匯出或 debug 面板讀回）；之後按退格只刪字、不撤銷這次上屏的學習。
-- [ ] plan §2.1、§2.4 與 brief 的 QIM 行為已改；`bench --check` 不變；`cargo xtask check` 綠燈。
+- [x] 核心測試（先紅）：上屏後有聯想時按退格，`Snapshot` 交還宿主（宿主刪字）、聯想收起；Esc 照舊只收起；這下退格撤銷這次上屏的學習（匯出比對）。
+- [x] Playwright（桌面，觸控鍵盤的刪除鍵也驗）：上屏後出聯想，按一下退格，輸入框少一個字、聯想列不見；截圖存 `.scratch/m4/evidence/`。
+- [x] Playwright：有聯想時按 Esc，聯想列不見、輸入框的字還在、學習還在（匯出或 debug 面板讀回）；之後按退格只刪字、不撤銷這次上屏的學習。
+- [x] plan §2.1、§2.4 與 brief 的 QIM 行為已改；`bench --check` 不變；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 核心：`handle_association` 只剩 Esc 吃下，退格收起聯想後回 `None`，照沒有組字的退格交還宿主；`handle` 裡「只收起聯想的退格放回撤銷紀錄」那支刪掉，退格照〈退格撤銷〉撤銷（`tests/backspace_undo.rs`、`tests/association.rs` 先紅後綠）。網頁殼不必改：交還宿主的退格本來就重畫候選列並存檔，3 秒計時照舊。plan §2.4 的「只收起聯想的退格不重新計時」那句跟著刪。
+- 有聯想時聯想的選項一定開著、不在臨時英文與英文直通、沒有組字（那些上屏不出聯想），所以退格一定落到交還宿主那支；聯想留著但選項剛關掉（`showing_association` 假）的路徑沒變。
+- `bench --check`（開工的 `0acd204` 之上，資料包本 session 建）：`bench 通過`，固定題 84/84，各集合沒有翻盤、答錯與修正都等於 baseline。原生每鍵 p95：空白 70.38／74.38／1251.75 µs、學過 196.67／294.04／2301.21 µs（全部／第 20 碼起／選開頭一段），都在上限內。`--learning` 學習關／開 yue-wiki 3239／3216、zh-wiki 3493／3578、common-voice-yue 3249／3108、hkcancor 2148／1719、yue-wiki·前文 1738／1715、zh-wiki·前文 1729／1764、common-voice-yue·前文 594／550、hkcancor·前文 1512／1179，和票 16 記的逐項相同（模擬不按退格，碰不到這次的改動）。本機沒有個人集。
+- 亂按：開發伺服器實打兩輪（固定種子），第一輪 400 鍵雜鍵（字母、空白、退格、Esc、數字、Enter、標點、方向鍵、Shift），第二輪 120 次上屏後隨機退格／Esc／Esc 加退格／快速連按四下退格，有聯想時的退格 67 次都少一字、聯想列收起，Esc 都不刪字，沒有頁面錯誤（console 只有開發伺服器沒起靜態伺服器的 404）。證據 `.scratch/m4/evidence/18c-*.png`：桌面、觸控刪除鍵、撤銷後、Esc 收起後與面板讀回排位規則 2、亂按。
+- code-review（`0acd204` 起，Standards／Spec 兩軸）：已處理：理由散在六處，程式與測試註解改成指到 plan §2.1；brief §4.5 誤寫「不照 Rime」，改成 librime-predict；brief §12.4 事實節後的決定句縮成「QIM 的取捨見 plan §2.1」（同第 329 行的前例）；e2e 檔頭重新折行；Esc 的 e2e 改用 debug 面板讀回排位規則 2，原本兩張截圖一模一樣也換掉。未處理：觸控的刪除鍵只驗刪字與收起，撤銷沒在觸控上驗（票沒要求，核心路徑和實體鍵盤相同）。

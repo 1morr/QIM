@@ -1,7 +1,8 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
 // 聯想（M3 票 13）：上屏之後候選列給接下來可能要打的字詞，數字鍵或點選選了就上屏、接著出下一輪；
-// 空白不選、Esc 只收起、打字母照常組字，設定區的「聯想」關掉時沒有（plan §2.1）。
+// 空白不選、Esc 只收起、退格刪字並收起（M4 票 18c）、打字母照常組字，設定區的「聯想」關掉時沒有
+// （plan §2.1）。
 
 function ui(page: Page) {
 	return {
@@ -70,7 +71,9 @@ test.describe("實體鍵盤", () => {
 		await expect(text).toHaveValue("門日");
 	});
 
-	test("空白不選聯想、照打空格；Esc、退格只收起聯想", async ({ page }) => {
+	test("空白不選聯想、照打空格；Esc 只收起聯想，退格刪字並收起", async ({
+		page,
+	}, testInfo) => {
 		const { text, items } = ui(page);
 		await page.keyboard.type("a  ");
 		await expect(text).toHaveValue("日 ");
@@ -85,11 +88,13 @@ test.describe("實體鍵盤", () => {
 
 		await page.keyboard.type("a ");
 		await expect(items.first()).toBeVisible();
-		await page.keyboard.press("Backspace");
-		await expect(items).toHaveCount(0);
 		await expect(text).toHaveValue("日 日日");
 		await page.keyboard.press("Backspace");
 		await expect(text).toHaveValue("日 日");
+		await expect(items).toHaveCount(0);
+		await page.screenshot({
+			path: testInfo.outputPath("desktop-backspace-deletes.png"),
+		});
 	});
 
 	test("設定區關掉「聯想」時上屏後沒有聯想，數字照打", async ({ page }) => {
@@ -173,14 +178,22 @@ test.describe("觸控", () => {
 		await page.screenshot({ path: testInfo.outputPath("touch-after-ren.png") });
 	});
 
-	test("觸控的刪除鍵第一下只收起聯想，空白照打空格", async ({ page }) => {
+	test("觸控的刪除鍵刪字並收起聯想，空白照打空格", async ({
+		page,
+	}, testInfo) => {
 		const { text, items } = ui(page);
 		await page.getByTestId("key-a").tap();
 		await page.getByTestId("key-space").tap();
+		await page.getByTestId("key-a").tap();
+		await page.getByTestId("key-space").tap();
+		await expect(text).toHaveValue("日日");
 		await expect(items.first()).toBeVisible();
 		await page.getByTestId("key-backspace").tap();
-		await expect(items).toHaveCount(0);
 		await expect(text).toHaveValue("日");
+		await expect(items).toHaveCount(0);
+		await page.screenshot({
+			path: testInfo.outputPath("touch-backspace-deletes.png"),
+		});
 
 		await page.getByTestId("key-a").tap();
 		await page.getByTestId("key-space").tap();
