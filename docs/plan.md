@@ -183,6 +183,7 @@ impl Session {
     pub fn rerank_request(&self, engine: &Engine) -> Option<RerankRequest>; // generation + 前文（最多 RERANK_CONTEXT 字，簡體模式用 engine 的簡繁資料包轉回繁體）+ 前 RERANK_PATHS 條路徑
     pub fn apply_rerank(&mut self, engine: &Engine, generation: u64, order: &[usize]) -> Option<Snapshot>; // order 是路徑的序號
     pub fn paths(&self, limit: usize) -> Vec<ScoredPath>;            // lattice 蓋滿沒選定輸入碼的前 limit 條路徑：文字、分段、路徑分
+    pub fn inspect(&self, engine: &Engine, user: &UserModel) -> Inspection; // 只給網頁的 debug 面板（§3.1，M4 票 01），不進 Snapshot
 }
 ```
 
@@ -474,6 +475,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 上下文（M3 票 05，`web/src/context.ts`）：輸入框聚焦、`input`、`selectionchange` 時把游標前最多 `contextLimit()` 字交給 `setContext`、失焦時 `clearContext`，另外每個實體鍵送進核心前（沒有組字時）再給一次：交還瀏覽器的鍵讓核心作廢前文，游標沒動（結尾按 End）時不會有 `selectionchange` 補給。無痕時不給，改完設定區的開關後重給一次。
   - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
   - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；沒有模型時不重排、打字與候選照常。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
+- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、記住的字串、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram，路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因（容錯修正、空間模型的機率），在 `Inspection` 與面板加一欄，測試用面板讀回原因。
 - 使用者資料存 `localStorage`；提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。

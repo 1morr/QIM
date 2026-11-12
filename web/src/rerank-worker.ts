@@ -40,13 +40,22 @@ function handle(request: WorkerRequest): WorkerReply {
 				return { id: request.id, type: "ranked" };
 			}
 			const start = performance.now();
-			const order = reranker.rank(
+			const ranking = reranker.rank(
 				request.job.context,
 				request.job.paths,
 				request.job.scores,
 			);
 			const ms = performance.now() - start;
-			return { id: request.id, type: "ranked", ranked: { order, ms } };
+			try {
+				const { order, totals } = ranking;
+				return {
+					id: request.id,
+					type: "ranked",
+					ranked: { order, ms, totals },
+				};
+			} finally {
+				ranking.free();
+			}
 		}
 	}
 }
