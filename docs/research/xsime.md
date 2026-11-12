@@ -18,7 +18,7 @@
 - 沙盒應用（AppContainer / LPAC）走另一條 `.input` pipe，只開普通輸入，沒有 Buffer、設定、AI；沙盒端不啟動外部程序，Broker 須已在跑（同文件 :39-60）。要註冊 `IMMERSIVESUPPORT`、`UIELEMENTENABLED`（同文件 :33-35）。
 - 宿主可能在 test callback 持有 text-store 鎖，所以預判按鍵時不讀文件；真正的 key callback 才在讀鎖下驗 input scope（同文件 :121-123）。
 - x86 與 x64 TSF DLL 都要建、都要註冊，共用 x64 Broker（同文件 :295-322；`docs/platforms/windows/manual-testing.md`）。
-- 對 QIM 的意義：M9 要比較「Rust 核心直接載入 TSF DLL」與「薄 TSF DLL + 程序外引擎」。前者的風險是引擎崩潰拖垮宿主，且 x86 宿主要另外建；後者多一條 IPC 與冷啟動等待（CHANGELOG 有冷引擎回覆等待、首鍵傳輸失敗兩類修正）。Windows EXE 目前未簽章。
+- 對 QIM 的意義：M10 要比較「Rust 核心直接載入 TSF DLL」與「薄 TSF DLL + 程序外引擎」。前者的風險是引擎崩潰拖垮宿主，且 x86 宿主要另外建；後者多一條 IPC 與冷啟動等待（CHANGELOG 有冷引擎回覆等待、首鍵傳輸失敗兩類修正）。Windows EXE 目前未簽章。
 
 ### 2.2 macOS
 
@@ -26,7 +26,7 @@
 - 輸入源註冊：沙盒 App 靠需要 root 才能重建的 `/System/Library/Caches/com.apple.IntlDataCache.le*` 認輸入法；1.1.1 前安裝器只以使用者身分註冊，之後 pkg `postinstall` 以 root 再註冊一次（`docs/macos/input-source-cache-recovery.md:11,53-55`；`scripts/pkg/scripts/postinstall:80-84,366-369`，實際呼叫在 `Sources/RimeBuffer/InputSourceInstaller.swift:322` 的 `TISRegisterInputSource`，由 `--rimes-tis-register` 觸發）。macOS 27.0 上沙盒版微信 / QQ 切到該輸入法會閃退（`CFRelease(NULL)`），維護者未重現，文件只是紀錄回報。
 - 更新：安裝前執行 `RIMES --prepare-update` 把當前輸入源切到 ASCII 備援，失敗則拒絕熱替換（`build_install.sh:288,342`；`Sources/RimeBuffer/main.swift:1391,2034-2071`）；CI 斷言 `build_install.sh` 至少出現兩次（`.github/workflows/ci.yml:190`）。`.new` / `.bak` 原子替換與還原函式：本次只確認用途描述，未逐行核對。
 - `dev-reload.sh` 只換二進位並重啟輸入法行程，不 `lsregister`、不殺 TextInputMenuAgent。
-- 對 QIM 的意義：M6 要把簽章身分、TCC、root 註冊輸入源、更新前切走輸入源、開發迴圈（dev-reload）列入任務。
+- 對 QIM 的意義：M7 要把簽章身分、TCC、root 註冊輸入源、更新前切走輸入源、開發迴圈（dev-reload）列入任務。
 
 ### 2.3 iOS
 
@@ -37,12 +37,12 @@
 - Keychain group 在 `platforms/ios/project.yml:29-30` 寫死為 `585J2TL9U6.org.scholay.rimes.ios.shared`，註解理由：未簽章 CI archive 的 `AppIdentifierPrefix` 為空。`Support/Settings.swift:83` 用 `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`，只存 AI 金鑰。
 - 冷啟動高度：宿主先給暫時高度會畫出空面板；暫時高度到達時請求高度多加 1 pt、0.25 秒後還原，並有界重送（`KeyboardViewController.swift:640-660`，`gapRecoveryDelays` :255-258；測試 `Tests/KeyboardSizingTests.swift:176,268`）。
 - 引擎生命週期：每 controller 一個 session、每行程初始化一次，`recursive_mutex` + `engineGeneration`（`Bridge/RimeMobile.mm:39-62`）。
-- 對 QIM 的意義：M7 的 Full Access 閘控、單寫者 App Group、詞庫私有、Keychain group 寫死與 `phys_footprint` 取樣都能直接當檢查項；記憶體數字只能當量級參考。
+- 對 QIM 的意義：M8 的 Full Access 閘控、單寫者 App Group、詞庫私有、Keychain group 寫死與 `phys_footprint` 取樣都能直接當檢查項；記憶體數字只能當量級參考。
 
 ### 2.4 Android 與 Linux
 
 - 宿主發布 `TYPE_NULL`（聊天類編輯器）仍保持中文輸入；數字欄、密碼欄走字面輸入，密碼欄不學習、不呼叫服務（`platforms/android/README.md:36-39,196,257`；`CHANGELOG.md:146`）。`testhost` App 驗證原生、私密、密碼、WebView 欄位（README :310），「OEM 安全鍵盤取代」與「略過的密碼案例」分開記（:342）。
-- 引擎工作進序列佇列，非同步結果帶 editor lease，提交前重驗。對 QIM 的意義：M8 要有測試宿主 App，且 `TYPE_NULL` 不能當成「不要中文輸入」。
+- 引擎工作進序列佇列，非同步結果帶 editor lease，提交前重驗。對 QIM 的意義：M9 要有測試宿主 App，且 `TYPE_NULL` 不能當成「不要中文輸入」。
 - Linux：完整 addon 只做 Fcitx5，IBus 引擎尚未開始（`platforms/linux/README.md:16`）；使用者目錄 `$XDG_DATA_HOME/rimes`，背景部署期間按鍵放行，全程序鎖防兩實例寫同目錄（`platforms/linux/ime/README.md:46-65,138-146`）。沒有寫為何選 Fcitx5。
 
 ## 3. 核心與資料
@@ -70,7 +70,7 @@
 - Apple 沒有文件把 DR 這一點明確套到 Personal Team 的憑證。TN3127 的例子是一般 Apple Development 身分，Personal Team 的憑證同樣是 Apple Development 類型，推論 DR 形狀相同，但未見官方明說。
 - TCC 是否因此跨重建保留：TN3127 只講 DR 設計目的；輔助功能授權的實際比對行為沒有 Apple 文件說明。xsime 在 `build_install.sh:254-262` 自述「授權可跨重建保留」，是維護者的觀察，不是 Apple 說法。
 - 7 天限制是否適用 macOS：Apple 該節只談裝置安裝用的 provisioning profile，沒有提到 macOS。一個不使用受限 entitlement 的輸入法本機簽章不需要 provisioning profile（這是一般性推論，未找到明說的官方文字）。Personal Team 的 Apple Development 憑證本身有效期、憑證到期重簽後 `subject.CN` 是否不變，也沒有查到。
-- 下一步建議：M6 開工時在實機用 Personal Team 簽一次，用 `codesign -d -r-` 讀回 DR，重建兩次後讀回輔助功能授權是否保留，把結果補進本文。
+- 下一步建議：M7 開工時在實機用 Personal Team 簽一次，用 `codesign -d -r-` 讀回 DR，重建兩次後讀回輔助功能授權是否保留，把結果補進本文。
 
 ## 5. 工程流程
 

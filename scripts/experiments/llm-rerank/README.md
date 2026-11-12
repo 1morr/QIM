@@ -246,7 +246,7 @@ M2 票 10 在 iPhone 18 Pro Max 上用短提示量的連續請求是 185–194 m
 ## 限制
 
 - 只在打完整串輸入碼時重排一次，和框架相同（`../model-ladder/README.md`〈限制〉）；雲端 p50 約 0.74 s，使用者在結果回來前就選字的比例沒量。
-- 延遲是這台 Mac 在 load average 5–10 時量的，Foundation Models 的連續請求在空著的機器可能更快；iPhone 上的停頓尾巴要在 M6 接上時重量。雲端延遲取決於網路，只量了這台機器、這一天。
+- 延遲是這台 Mac 在 load average 5–10 時量的，Foundation Models 的連續請求在空著的機器可能更快；iPhone 上的停頓尾巴要在 M7 接上時重量。雲端延遲取決於網路，只量了這台機器、這一天。
 - DeepSeek 的回覆用 `temperature: 0`，同一題重送不保證相同；調參的 500 題只送一次。
 - 調參的子集合 500 題，寫法之間差 1–2 點時分不出高下（`hint-paths` 與 `hint2-paths` 同分）。
 - `deepseek-v4-pro` 沒量（上面〈模型與環境〉）。

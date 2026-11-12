@@ -147,7 +147,7 @@
           "items": { "$ref": "#/$defs/action" }
         },
         "swipe": {
-          "description": "四個方向的滑動動作；M5 才有作用。",
+          "description": "四個方向的滑動動作；M6 才有作用。",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -179,7 +179,7 @@
       }
     },
     "shape": {
-      "description": "rect 可帶圓角；ellipse、polygon 的繪製與點擊判定在 M5，現在當矩形並警告。",
+      "description": "rect 可帶圓角；ellipse、polygon 的繪製與點擊判定在 M6，現在當矩形並警告。",
       "oneOf": [
         {
           "type": "object",

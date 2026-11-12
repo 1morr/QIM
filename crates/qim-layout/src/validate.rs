@@ -73,14 +73,14 @@ pub enum Warning {
         device: Device,
         orientation: Orientation,
     },
-    /// 形狀還不支援（M5），現在當矩形。
+    /// 形狀還不支援（M6），現在當矩形。
     UnsupportedShape {
         variant: usize,
         page: String,
         key: String,
         shape: &'static str,
     },
-    /// 滑動還沒有作用（M5）。
+    /// 滑動還沒有作用（M6）。
     UnsupportedSwipe {
         variant: usize,
         page: String,

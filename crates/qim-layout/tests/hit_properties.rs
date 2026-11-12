@@ -1,5 +1,5 @@
 //! 點擊判定的性質測試（plan §5.3）：上層優先、旋轉後內外判定正確、縮放後結果不變。
-//! 多邊形的內外判定在 M5。
+//! 多邊形的內外判定在 M6。
 
 use proptest::prelude::*;
 use qim_layout::{Action, Frame, Insets, Key, Page, Shape};

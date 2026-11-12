@@ -206,7 +206,7 @@ pub struct Key {
     /// 長按出現的選項，依序排；第一個是預設。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub long_press: Vec<Action>,
-    /// 往四個方向滑時的動作；M5 才有作用，現在只存。
+    /// 往四個方向滑時的動作；M6 才有作用，現在只存。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub swipe: Option<Swipe>,
     /// 組字中改用的標籤與動作（同 Trime 的 `composing`）；`null` 與省略相同。
@@ -403,7 +403,7 @@ pub struct Frame {
     pub h: f64,
 }
 
-/// 按鍵的形狀。`ellipse`、`polygon` 的欄位已定，繪製與點擊判定在 M5；現在當矩形並給警告。
+/// 按鍵的形狀。`ellipse`、`polygon` 的欄位已定，繪製與點擊判定在 M6；現在當矩形並給警告。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Shape {
@@ -430,7 +430,7 @@ impl Shape {
         *self == Shape::default()
     }
 
-    /// 現在畫與點擊判定用的圓角半徑：矩形照寫；橢圓與多邊形在 M5，現在當直角矩形。
+    /// 現在畫與點擊判定用的圓角半徑：矩形照寫；橢圓與多邊形在 M6，現在當直角矩形。
     pub fn corner_radius(&self) -> f64 {
         match self {
             Shape::Rect { radius } => *radius,
