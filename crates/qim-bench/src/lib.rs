@@ -30,9 +30,9 @@ pub use items::{
 };
 pub use keys::{TouchSurface, physical_key, top_char};
 pub use latency::{
-    LONG_INPUT_KEYS, Latency, NativeTimer, Runs, Summary, Timers, Timing, UserData, WASM_BINDINGS,
-    WasmTimer, lefts_to_first_segment, native_timing, native_timing_with, node_wasm_timer,
-    parse_timing, percentile,
+    InputBatch, LONG_INPUT_KEYS, Latency, NativeTimer, Runs, Summary, Timers, Timing, UserData,
+    WASM_BINDINGS, WasmTimer, lefts_to_first_segment, native_timing, native_timing_with,
+    node_wasm_timer, parse_timing, percentile, wildcard_inputs,
 };
 /// 照修正次數的模擬依序學完題目的 `UserModel`（延遲的「學過」那組）；萬用鍵實驗也用它（M4 票 11）。
 pub use score::learned_model;

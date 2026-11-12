@@ -14,6 +14,11 @@ use qim_core::{
 /// 碼表：`a` 日、`b` 月、`n` 弓、`r` 口，`ab` 明、`an` 門、`ar` 晶、`nr` 同、`br` 骨；
 /// 詞庫：`anr` 門口、`abanar` 明門晶。
 fn engine(wildcard: Option<char>) -> Engine {
+    engine_without(wildcard, &[])
+}
+
+/// 同 [`engine`]，碼表拿掉 `dropped` 的字（換資料包的測試用）。
+fn engine_without(wildcard: Option<char>, dropped: &[char]) -> Engine {
     let mut radicals = BTreeMap::from([
         ('a', "日".to_string()),
         ('b', "月".to_string()),
@@ -49,14 +54,19 @@ fn engine(wildcard: Option<char>) -> Engine {
         ("nr", '同'),
         ("br", '骨'),
     ];
-    let code_table = CodeTable::from_entries(table.iter().map(|&(code, text)| {
-        let entry = CodeEntry {
-            text,
-            extension: false,
-            simplified: false,
-        };
-        (code.to_string(), vec![entry])
-    }));
+    let code_table = CodeTable::from_entries(
+        table
+            .iter()
+            .filter(|(_, text)| !dropped.contains(text))
+            .map(|&(code, text)| {
+                let entry = CodeEntry {
+                    text,
+                    extension: false,
+                    simplified: false,
+                };
+                (code.to_string(), vec![entry])
+            }),
+    );
     let chars = [
         ('日', 100),
         ('月', 80),
@@ -439,4 +449,20 @@ fn a_touch_whose_top_letter_is_the_wildcard_acts_as_the_wildcard() {
         .map(|s| s.radicals.as_str())
         .collect();
     assert_eq!(radicals, "日＊");
+}
+
+/// 換資料包後殼呼叫 `refresh`（網頁的 `setPacks`）：整串與開頭各段的字詞照新的資料包重列，候選列重用的
+/// 開頭各段（M4 票 18b）不能留著舊資料包算的。多段路徑來自 lattice 已算好的欄，`refresh` 本來就不重建
+/// （票 18b 的 Comments），這裡不驗。
+#[test]
+fn refresh_after_switching_packs_lists_words_from_the_new_packs() {
+    let mut ime = Ime::new(Some('z'));
+    let typed = texts(&ime.type_keys("zr"));
+    assert!(typed.contains(&"晶".to_string()) && typed.contains(&"日".to_string()));
+    let switched = engine_without(Some('z'), &['晶', '日']);
+    let refreshed = texts(&ime.session.refresh(&switched, &ime.user));
+    assert!(
+        !refreshed.contains(&"晶".to_string()) && !refreshed.contains(&"日".to_string()),
+        "{refreshed:?}"
+    );
 }
