@@ -18,7 +18,7 @@
 第一期前置：
 
 - 網頁的 debug 面板（第一張票，使用者 2026-11-12 要求，之後各票測試都用）：可開關、預設關；顯示殼給核心的前文與核心是否「不知道前文」（無痕時註明不讀）、停鍵重排的要求與結果（各路徑分數、選了哪條、毫秒、套用或作廢）、每個候選的來源（詞庫、使用者詞、個人 bigram、英文、英文使用者詞、emoji、重排插入）、首選的路徑分數與學習加分、輸入碼的切段。資料由只給網頁用的查詢（例如 `Session::inspect()`）給，不進 `Snapshot`。之後的票加了新來源（容錯修正、空間模型的機率）就在面板加一欄。
-- M3 留下的修補（`.scratch/m3/issues/23-m3-close.md` Comments 的 M4 各條）：`main.ts` 換模型 A→B 的競態、模型載入與核對搬進 `NeuralReranker`、`try … finally snapshot.free()` 收成一處；IndexedDB 打不開時網頁照樣能打字（學習資料只在記憶體、狀態列說明）；停鍵層「同一串輸入碼的舊結果留快取」（plan §2.7）；簡體模式下同步層 bigram 與詞級 trigram 的前文轉回繁體。
+- M3 留下的修補（`.scratch/m3/issues/23-m3-close.md` Comments 的 M4 各條）：`main.ts` 換模型 A→B 的競態、模型載入與核對搬進 `NeuralReranker`、`try … finally snapshot.free()` 收成一處；IndexedDB 或 `localStorage` 打不開時網頁照樣能打字（存不了的只在記憶體、狀態列說明；票 02）；停鍵層「同一串輸入碼的舊結果留快取」（plan §2.7）；簡體模式下同步層 bigram 與詞級 trigram 的前文轉回繁體。
 - 每鍵延遲改成會擋的閘門（下面〈每鍵延遲上限〉）；學過的學習資料下另量一次。
 
 第一期：
@@ -163,7 +163,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | 票 | 被誰擋 | 交付 |
 | --- | --- | --- |
 | [01](issues/01-debug-panel.md) | — | 網頁 debug 面板：前文、重排要求與結果、候選來源、路徑分數與學習加分、切段；`Session::inspect()` 不進 `Snapshot` |
-| [02](issues/02-web-hardening.md) | 01 | 換模型競態、模型載入搬進 `NeuralReranker`、`snapshot.free()` 收一處；IndexedDB 打不開照樣能打字 |
+| [02](issues/02-web-hardening.md) | 01 | 換模型競態、模型載入搬進 `NeuralReranker`、`snapshot.free()` 收一處；IndexedDB 或 `localStorage` 打不開照樣能打字 |
 | [03](issues/03-rerank-cache.md) | 02 | 同一串輸入碼的重排結果留快取，退格回來不再等停鍵 |
 | [04](issues/04-simplified-context.md) | — | 簡體模式下同步層 n-gram 的前文轉回繁體 |
 | [05](issues/05-latency-gate.md) | — | `bench --check` 擋每鍵 p95（〈每鍵延遲上限〉）；學過的學習資料另量一組 |

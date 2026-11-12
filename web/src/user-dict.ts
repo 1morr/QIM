@@ -1,6 +1,7 @@
 // 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
 
 import { element, message } from "./dom.ts";
+import { storage } from "./storage.ts";
 import type { Session } from "./wasm/qim_wasm.js";
 
 /** 學習資料在 `localStorage` 的鍵；值是 `Session.exportUserDict()` 的 TSV。 */
@@ -24,12 +25,12 @@ function rows(tsv: string): number {
  * 清掉網站資料等於換一台裝置。
  */
 function ensureDeviceId(): string {
-	const stored = localStorage.getItem(DEVICE_KEY);
+	const stored = storage.get(DEVICE_KEY);
 	if (stored !== null) {
 		return stored;
 	}
 	const id = crypto.randomUUID();
-	localStorage.setItem(DEVICE_KEY, id);
+	storage.set(DEVICE_KEY, id);
 	return id;
 }
 
@@ -57,17 +58,17 @@ export function mountUserDict(
 	const trigger = element<HTMLInputElement>("#trigger");
 	const status = element<HTMLElement>("#user-dict-status");
 	const save = () => {
-		localStorage.setItem(USER_DICT_KEY, session.exportUserDict());
+		storage.set(USER_DICT_KEY, session.exportUserDict());
 	};
 
 	// 存的 id 壞了（手動改過）就換一個新的。
 	try {
 		session.setDevice(ensureDeviceId());
 	} catch {
-		localStorage.removeItem(DEVICE_KEY);
+		storage.remove(DEVICE_KEY);
 		session.setDevice(ensureDeviceId());
 	}
-	const stored = localStorage.getItem(USER_DICT_KEY);
+	const stored = storage.get(USER_DICT_KEY);
 	if (stored !== null) {
 		try {
 			// 新版存的檔有這版不認得的種類時略過那些列，說一聲（下次存檔就沒有了）。
@@ -76,8 +77,8 @@ export function mountUserDict(
 				status.textContent = `學習資料讀進來了${skipped(warnings)}`;
 			}
 		} catch (error) {
-			localStorage.setItem(BROKEN_KEY, stored);
-			localStorage.removeItem(USER_DICT_KEY);
+			storage.set(BROKEN_KEY, stored);
+			storage.remove(USER_DICT_KEY);
 			status.textContent = `學習資料讀不進來，已另存到 ${BROKEN_KEY}：${message(error)}`;
 		}
 	}

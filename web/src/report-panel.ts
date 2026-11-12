@@ -2,6 +2,7 @@
 
 import { element } from "./dom.ts";
 import { fixedLine, initialReport, observe } from "./report.ts";
+import { storage } from "./storage.ts";
 import type { Snapshot } from "./wasm/qim_wasm.js";
 
 /** 回報清單存在 `localStorage`，重新整理不會不見。 */
@@ -23,9 +24,9 @@ export function mountReportPanel(
 	const reports = element<HTMLTextAreaElement>("#reports");
 	let report = initialReport;
 
-	reports.value = localStorage.getItem(REPORTS_KEY) ?? "";
+	reports.value = storage.get(REPORTS_KEY) ?? "";
 	reports.addEventListener("input", () => {
-		localStorage.setItem(REPORTS_KEY, reports.value);
+		storage.set(REPORTS_KEY, reports.value);
 	});
 	// 把剛才那次組字加到回報清單最後一行；同一次只加一次。
 	reportButton.addEventListener("click", () => {
@@ -35,7 +36,7 @@ export function mountReportPanel(
 		const lines = reports.value === "" ? [] : reports.value.split("\n");
 		lines.push(fixedLine(report.last));
 		reports.value = lines.join("\n");
-		localStorage.setItem(REPORTS_KEY, reports.value);
+		storage.set(REPORTS_KEY, reports.value);
 		reportButton.disabled = true;
 		afterAdd();
 	});
