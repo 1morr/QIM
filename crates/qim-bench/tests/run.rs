@@ -10,7 +10,7 @@
 //! 合計修正 2、按鍵 11、字數 4（KSPC 2.75）、跳動 1，答錯第 2、3 行。
 //!
 //! 每鍵延遲一律用假計時器，數字固定、不受機器負載影響：原生用 [`fast_native`]（在上限內），
-//! 測延遲閘門的測試另給慢的 [`native_at`]；WebAssembly 用 [`slow_wasm`]：每鍵都遠超預算，它只報，
+//! 測延遲閘門的測試另給慢的 [`fixed_native`]；WebAssembly 用 [`slow_wasm`]：每鍵都遠超預算，它只報，
 //! `--check` 與 baseline 照樣不受影響。
 
 use std::collections::BTreeMap;
@@ -142,11 +142,11 @@ fn with_wasm(wasm: WasmTimer) -> Timers {
 
 /// 假的原生計時器：每鍵 0.05 ms、選開頭一段 0.5 ms，都在每鍵延遲上限內。
 fn fast_native(engine: &Engine, user: &UserModel, inputs: &[String]) -> Timing {
-    native_at(0.05, 0.5)(engine, user, inputs)
+    fixed_native(0.05, 0.5)(engine, user, inputs)
 }
 
 /// 假的原生計時器：每鍵 `key_ms`、選開頭一段 `select_ms` 毫秒（[`fake_timing`]）。
-fn native_at(key_ms: f64, select_ms: f64) -> impl Fn(&Engine, &UserModel, &[String]) -> Timing {
+fn fixed_native(key_ms: f64, select_ms: f64) -> impl Fn(&Engine, &UserModel, &[String]) -> Timing {
     move |engine, user, inputs| fake_timing(engine, user, inputs, |_| key_ms, select_ms)
 }
 
@@ -1285,12 +1285,12 @@ fn check_blocks_the_native_latency_groups_over_their_limit() {
     let repo = repo_with_long_input();
     run(repo.path(), Mode::UpdateBaseline).unwrap();
     // 每鍵 2 ms：空白的「全部」「第 20 碼起」超過上限，學過的與選開頭一段（0.5 ms）都在內。
-    let slow_native = native_at(2.0, 0.5);
-    let timers = || Timers {
+    let slow_native = fixed_native(2.0, 0.5);
+    let timers = Timers {
         native: &slow_native,
         wasm: &slow_wasm,
     };
-    let outcome = qim_bench::run(repo.path(), Mode::Check, None, timers()).unwrap();
+    let outcome = qim_bench::run(repo.path(), Mode::Check, None, timers).unwrap();
     let violations = &outcome.violations;
     assert_eq!(violations.len(), 2, "{violations:?}");
     for (v, group) in violations.iter().zip(["全部", "第 20 碼起"]) {
@@ -1305,8 +1305,40 @@ fn check_blocks_the_native_latency_groups_over_their_limit() {
         "{}",
         outcome.report()
     );
-    let report = qim_bench::run(repo.path(), Mode::Report, None, timers()).unwrap();
+    let report = qim_bench::run(repo.path(), Mode::Report, None, timers).unwrap();
     assert_eq!(report.violations, Vec::<String>::new());
+}
+
+/// CLI 用的真實原生計時（`native_timing_with`）：只驗量了哪些鍵、哪些輸入量選開頭一段與環境欄，
+/// 不驗時間，所以不受機器負載影響。量選開頭一段的輸入和 [`slow_wasm`] 不同時 `run` 是錯誤，
+/// 所以這裡也驗了原生在學過的學習資料下照同一條規則選。
+#[test]
+fn the_real_native_timer_times_every_key_and_the_same_selects_as_wasm() {
+    let repo = repo_with_long_input();
+    let timers = Timers {
+        native: &qim_bench::native_timing_with,
+        wasm: &slow_wasm,
+    };
+    let outcome = qim_bench::run(repo.path(), Mode::Report, None, timers).unwrap();
+    let native = if cfg!(debug_assertions) {
+        "原生（debug）"
+    } else {
+        "原生（release）"
+    };
+    let report = outcome.report();
+    for (user, selects) in [("空白", "1 | 1"), ("學過", "0 | 0")] {
+        for (group, counts) in [
+            ("全部", "5 | 26"),
+            ("第 20 碼起", "1 | 2"),
+            ("選開頭一段", selects),
+        ] {
+            let row = format!("| {user} | {native} | {group} | {counts} | ");
+            assert!(
+                report.lines().any(|line| line.starts_with(&row)),
+                "{row}\n{report}"
+            );
+        }
+    }
 }
 
 #[test]
