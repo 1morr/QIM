@@ -6,7 +6,7 @@ use crate::lexicon::WordsByText;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::session::SegmentSource;
-use crate::user::{SchemeModel, personal_bonus};
+use crate::user::{SchemeUser, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
@@ -324,7 +324,7 @@ impl Engine {
     }
 
     /// 碼 `code` 的一個字的邊：第一個字就是它，不看前文的部分只有 −γ。
-    fn char_edge(&self, user: &SchemeModel, code: &str, start: usize, entry: &CodeEntry) -> Edge {
+    fn char_edge(&self, user: SchemeUser<'_>, code: &str, start: usize, entry: &CodeEntry) -> Edge {
         let text = entry.text.to_string();
         Edge {
             start,
@@ -341,7 +341,7 @@ impl Engine {
 
     /// 一個詞的邊（plan §2.3）：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，
     /// 第一個字之後由詞頻換算，所以詞頻仍分得出同碼的詞；再加 β − γ。
-    fn word_edge(&self, user: &SchemeModel, code: &str, start: usize, word: &Word) -> Edge {
+    fn word_edge(&self, user: SchemeUser<'_>, code: &str, start: usize, word: &Word) -> Edge {
         let ranking = &self.scheme.ranking;
         let first = word.text.chars().next().expect("詞不是空的");
         let rest = (word.frequency.max(1) as f64).ln()
@@ -362,7 +362,7 @@ impl Engine {
 
     /// 一個使用者詞的邊（plan §2.4）：沒有詞頻，詞內由字級 bigram 一字接一字估，不加 β；
     /// 只算一段，所以比拆成單字的路徑少扣 γ。
-    fn user_word_edge(&self, user: &SchemeModel, code: &str, start: usize, text: &str) -> Edge {
+    fn user_word_edge(&self, user: SchemeUser<'_>, code: &str, start: usize, text: &str) -> Edge {
         let mut chars = text.chars();
         let first = chars.next().expect("使用者詞不是空的");
         let (rest, _) = chars.fold((0.0, first), |(sum, prev), c| {
@@ -563,7 +563,7 @@ impl Engine {
     /// `input` 中間可以有分隔記號（[`SEPARATOR`]，不在頭尾）：這裡一定要斷字，所以沒有字，只有
     /// 每個分隔記號都剛好落在兩字的碼之間的詞與使用者詞（[`Engine::splits_at`]），照 Rime 速成
     /// （M1 票 28b，brief §12.2）。查碼表、詞庫與學習計數的碼都去掉分隔記號。
-    fn exact(&self, user: &SchemeModel, input: &str, start: usize, limit: usize) -> Vec<Edge> {
+    fn exact(&self, user: SchemeUser<'_>, input: &str, start: usize, limit: usize) -> Vec<Edge> {
         debug_assert!(!input.starts_with(SEPARATOR) && !input.ends_with(SEPARATOR));
         let cuts = separator_cuts(input);
         if cuts.is_empty() {
@@ -586,7 +586,7 @@ impl Engine {
     /// 沒有分隔記號的碼 `code` 的字、詞與使用者詞，見 [`Engine::exact`]。
     fn exact_code<'a>(
         &'a self,
-        user: &'a SchemeModel,
+        user: SchemeUser<'a>,
         code: &'a str,
         start: usize,
         limit: usize,

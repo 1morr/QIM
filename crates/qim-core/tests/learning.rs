@@ -6,8 +6,8 @@ mod common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Packs, Ranking, Scheme,
-    SchemePack, Session, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Date, Engine, Key, Lexicon, LexiconPack, Limits, Options, Packs, Ranking,
+    Scheme, SchemePack, Session, Snapshot, UserModel, Word,
 };
 
 /// 碼表的一列：碼、字（依建置時的字序）。
@@ -650,10 +650,364 @@ fn changing_a_later_segment_before_committing_also_learns_an_auto_phrase() {
 
     assert!(
         user.export()
-            .contains("entry\tquick\t日肉\tab\t1\t1\t1\t1\t\tauto\t\n"),
+            .contains("entry\tquick\t日肉\tab\t1\t1\t1\t1\t\t\tauto\t\n"),
         "{}",
         user.export()
     );
     let shown = ime.type_code(&mut user, "ab");
     assert_eq!(texts(&shown)[1], "日肉");
+}
+
+// 學習的時限（plan §2.4，M4 票 13）：殼交今天的日期，一年是 365 天。2026 年不是閏年，
+// 2026-01-01 之後 365 天是 2027-01-01、366 天是 2027-01-02。
+
+fn date(text: &str) -> Date {
+    text.parse().unwrap()
+}
+
+/// 匯出檔裡（方案 quick 的）碼是 `code`、詞是 `text` 的 `entry` 列。
+fn entry_row(user: &UserModel, code: &str, text: &str) -> Option<String> {
+    user.export()
+        .lines()
+        .find(|l| l.starts_with(&format!("entry\tquick\t{text}\t{code}\t")))
+        .map(String::from)
+}
+
+/// 整串上屏距上一次超過 365 天從 1 重算：中間在連打裡用過（條目沒有過期）也不延長，「兩次」要在一年內。
+#[test]
+fn a_whole_commit_over_365_days_after_the_last_one_counts_from_one() {
+    for (second, top) in [("2027-01-01", "丙"), ("2027-01-02", "甲")] {
+        let mut ime = Ime::new(&ab());
+        let mut user = UserModel::default();
+        user.set_today(date("2026-01-01"));
+        ime.choose(&mut user, "ab", "丙");
+        user.set_today(date("2026-09-01"));
+        ime.choose_segments(&mut user, "abc", &["丙", "丁"]);
+        user.set_today(date(second));
+        ime.choose(&mut user, "ab", "丙");
+        assert_eq!(ime.top_of(&mut user, "ab"), top, "第二次在 {second}");
+    }
+}
+
+/// 規則 2 的「一年內選兩次」：最近一次整串上屏過了一年就不再是首選，即使在 1 萬次上屏內、條目還在用。
+#[test]
+fn a_candidate_chosen_twice_is_no_longer_the_top_a_year_after_the_last_whole_commit() {
+    for (later, top) in [("2027-01-01", "丙"), ("2027-01-02", "甲")] {
+        let mut ime = Ime::new(&ab());
+        let mut user = UserModel::default();
+        user.set_today(date("2026-01-01"));
+        ime.choose(&mut user, "ab", "丙");
+        ime.choose(&mut user, "ab", "丙");
+        user.set_today(date("2026-09-01"));
+        ime.choose_segments(&mut user, "abc", &["丙", "丁"]);
+        user.set_today(date(later));
+        assert_eq!(ime.top_of(&mut user, "ab"), top, "{later}");
+        assert!(entry_row(&user, "ab", "丙").is_some(), "連打用過，條目還在");
+    }
+}
+
+/// 規則 3：使用者詞一年沒整串上屏就不再釘在第 2 位，回到一般排序（仍是候選）。中間在連打裡用過，
+/// 所以條目沒有過期。
+#[test]
+fn a_user_word_not_committed_for_a_year_is_no_longer_pinned_second_but_is_still_listed() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰"), ("b", "月肉")],
+        words: vec![],
+        chars: vec![('日', 1000), ('曰', 500), ('月', 100), ('肉', 1)],
+    };
+    for (later, second) in [("2027-01-01", true), ("2027-01-02", false)] {
+        let mut ime = Ime::new(&data);
+        let mut user = UserModel::default();
+        user.set_today(date("2026-01-01"));
+        ime.choose_segments(&mut user, "ab", &["日", "肉"]);
+        user.set_today(date("2026-09-01"));
+        ime.choose_segments(&mut user, "abab", &["日肉", "日月"]);
+        user.set_today(date(later));
+        let shown = ime.candidates_of(&mut user, "ab");
+        let at = shown.iter().position(|t| t == "日肉");
+        assert_eq!(at == Some(1), second, "{later}：{shown:?}");
+        assert!(at.is_some(), "{later}：仍是候選 {shown:?}");
+    }
+}
+
+/// 一年沒用的條目停用（使用者 2026-11-12 決定）：學習計數、自動造詞、個人 bigram 不再影響排序，候選列和
+/// 從沒學過一樣；但留在資料裡，365 天的還在作用。手動加詞與常用語一直有效。
+#[test]
+fn entries_unused_for_over_a_year_stop_affecting_ranking_but_stay_in_the_data() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰"), ("b", "月肉"), ("c", "丁")],
+        words: vec![],
+        chars: vec![('日', 1000), ('曰', 500), ('月', 100), ('肉', 1), ('丁', 1)],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    user.set_today(date("2026-01-01"));
+    ime.session.set_context("丁");
+    ime.choose_segments(&mut user, "ab", &["日", "肉"]);
+    ime.choose(&mut user, "b", "肉");
+    user.add_word(&ime.engine, "曰月", Some("yy")).unwrap();
+    user.add_phrase(&ime.engine, "早晨", Some("jj")).unwrap();
+    let learned = user.export();
+
+    // 同樣的前文下，只有手動加詞與常用語、沒學過時的候選列。
+    let mut blank_ime = Ime::new(&data);
+    let mut blank = UserModel::default();
+    blank
+        .add_word(&blank_ime.engine, "曰月", Some("yy"))
+        .unwrap();
+    blank
+        .add_phrase(&blank_ime.engine, "早晨", Some("jj"))
+        .unwrap();
+    let unlearned = |ime: &mut Ime, user: &mut UserModel, code: &str| {
+        ime.session.set_context("丁");
+        ime.candidates_of(user, code)
+    };
+    let fresh: Vec<Vec<String>> = ["ab", "b", "a"]
+        .iter()
+        .map(|code| unlearned(&mut blank_ime, &mut blank, code))
+        .collect();
+
+    user.set_today(date("2027-01-01"));
+    assert_ne!(
+        unlearned(&mut ime, &mut user, "ab"),
+        fresh[0],
+        "365 天還在作用"
+    );
+
+    user.set_today(date("2027-01-02"));
+    for (code, fresh) in ["ab", "b", "a"].iter().zip(&fresh) {
+        let shown = unlearned(&mut ime, &mut user, code);
+        assert_eq!(&shown, fresh, "`{code}` 一年沒用，和沒學過一樣");
+    }
+    assert_eq!(user.export(), learned, "停用但不刪");
+    assert_eq!(ime.top_of(&mut user, "yy"), "曰月", "手動加詞照樣有效");
+    assert_eq!(ime.top_of(&mut user, "jj"), "早晨", "常用語照樣有效");
+}
+
+/// 停用的學習計數不再給個人分：學過的詞在連打裡加分（plan §2.3），一年沒用就不加，日期改回來又加。
+#[test]
+fn an_expired_count_gives_no_personal_score_until_the_date_comes_back() {
+    let mut ime = Ime::new(&men_kou());
+    let mut user = UserModel::default();
+    user.set_today(date("2026-01-01"));
+    ime.choose(&mut user, "anr", "門口");
+    assert!(ime.top_of(&mut user, "anrkbo").contains("門口"));
+
+    user.set_today(date("2027-01-02"));
+    let expired = ime.top_of(&mut user, "anrkbo");
+    assert!(!expired.contains("門口"), "一年沒用還在加分：{expired}");
+
+    user.set_today(date("2026-06-01"));
+    assert!(ime.top_of(&mut user, "anrkbo").contains("門口"));
+}
+
+/// 停用的自動造詞不進 lattice：學之前候選列沒有的分段選字串，一年沒用後又不在候選列。
+#[test]
+fn an_expired_auto_phrase_is_not_a_candidate() {
+    let data = Data {
+        scheme: "quick",
+        table: vec![("a", "日曰甲乙"), ("b", "月肉丙丁")],
+        words: vec![],
+        chars: vec![
+            ('日', 1000),
+            ('曰', 500),
+            ('甲', 300),
+            ('乙', 1),
+            ('月', 1000),
+            ('肉', 500),
+            ('丙', 300),
+            ('丁', 1),
+        ],
+    };
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    user.set_today(date("2026-01-01"));
+    ime.choose_segments(&mut user, "ab", &["乙", "丁"]);
+    assert!(
+        ime.candidates_of(&mut user, "ab")
+            .contains(&"乙丁".to_string())
+    );
+
+    user.set_today(date("2027-01-02"));
+    let shown = ime.candidates_of(&mut user, "ab");
+    assert!(!shown.contains(&"乙丁".to_string()), "{shown:?}");
+    assert!(entry_row(&user, "ab", "乙丁").is_some(), "停用但不刪");
+}
+
+/// 殼的時鐘可能錯：日期跳到幾年後再跳回來，條目仍在、恢復作用（使用者 2026-11-12 決定）。
+#[test]
+fn a_date_jump_years_ahead_and_back_keeps_the_entries_and_they_work_again() {
+    let mut ime = Ime::new(&ab());
+    let mut user = UserModel::default();
+    user.set_today(date("2026-01-01"));
+    ime.choose(&mut user, "ab", "丙");
+    ime.choose(&mut user, "ab", "丙");
+    assert_eq!(ime.top_of(&mut user, "ab"), "丙");
+    let learned = user.export();
+
+    user.set_today(date("2030-06-01"));
+    assert_eq!(ime.top_of(&mut user, "ab"), "甲");
+    assert_eq!(user.export(), learned);
+
+    user.set_today(date("2026-01-02"));
+    assert_eq!(ime.top_of(&mut user, "ab"), "丙");
+}
+
+/// 沒有日期的條目（殼沒給過日期時學到的）不算過期（plan §2.4 的日期契約）。
+#[test]
+fn entries_learned_before_the_shell_gave_a_date_do_not_expire() {
+    let mut ime = Ime::new(&ab());
+    let mut user = UserModel::default();
+    ime.choose(&mut user, "ab", "丙");
+    ime.choose(&mut user, "ab", "丙");
+    user.set_today(date("2030-01-01"));
+    assert_eq!(ime.top_of(&mut user, "ab"), "丙");
+}
+
+/// 匯入一年多前的備份並取代學習資料：條目全部保留（一年沒用的停用），日期改回當時就恢復作用。
+#[test]
+fn replacing_the_learning_with_a_backup_over_a_year_old_keeps_its_entries() {
+    let mut ime = Ime::new(&ab());
+    let mut old = UserModel::default();
+    old.set_today(date("2026-01-01"));
+    ime.choose(&mut old, "ab", "丙");
+    ime.choose(&mut old, "ab", "丙");
+    let backup = old.export();
+
+    let mut user = UserModel::default();
+    user.set_today(date("2027-06-01"));
+    let imported = UserModel::import(&backup, user.today()).unwrap().user;
+    user.replace_learning(imported);
+    assert!(entry_row(&user, "ab", "丙").is_some(), "{}", user.export());
+    assert_eq!(ime.top_of(&mut user, "ab"), "甲", "一年沒用，停用");
+    user.set_today(date("2026-06-01"));
+    assert_eq!(ime.top_of(&mut user, "ab"), "丙");
+}
+
+/// `a`–`l` 各一個字，給上限的測試：每個碼上屏一次是一列。
+fn twelve() -> Data<'static> {
+    Data {
+        scheme: "quick",
+        table: vec![
+            ("a", "甲"),
+            ("b", "乙"),
+            ("c", "丙"),
+            ("d", "丁"),
+            ("e", "戊"),
+            ("f", "己"),
+            ("g", "庚"),
+            ("h", "辛"),
+            ("i", "壬"),
+            ("j", "癸"),
+            ("k", "子"),
+            ("l", "丑"),
+        ],
+        words: vec![],
+        chars: vec![],
+    }
+}
+
+/// 匯出檔裡學習計數與自動造詞的列（不含手動加詞與常用語）的碼。
+fn learned_codes(user: &UserModel) -> Vec<String> {
+    user.export()
+        .lines()
+        .filter(|l| l.starts_with("entry\t"))
+        .filter(|l| matches!(l.split('\t').nth(10), Some("learned" | "auto")))
+        .map(|l| l.split('\t').nth(3).unwrap().to_string())
+        .collect()
+}
+
+/// 條目上限照 LatinIME：到上限的 1.2 倍才清，清到上限，先刪最後使用的日期最舊的。手動加詞與常用語
+/// 不算、不刪。
+#[test]
+fn entries_are_trimmed_to_the_limit_only_when_they_reach_1_2_times_it_oldest_first() {
+    let data = twelve();
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    user.set_limits(Limits {
+        entries: 10,
+        bigrams: 1_000,
+    });
+    user.set_today(date("2026-01-01"));
+    user.add_word(&ime.engine, "甲乙", Some("yy")).unwrap();
+    ime.choose(&mut user, "ab", "甲乙");
+    user.add_phrase(&ime.engine, "早晨", None).unwrap();
+    let codes = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
+    for (day, code) in codes.iter().enumerate() {
+        user.set_today(date(&format!("2026-02-{:02}", day + 1)));
+        let text = &data.table[day].1;
+        ime.choose(&mut user, code, text);
+        let expected = if day < 11 { day + 1 } else { 10 };
+        assert_eq!(learned_codes(&user).len(), expected, "第 {} 列", day + 1);
+    }
+    assert_eq!(learned_codes(&user), &codes[2..], "刪最舊的兩列");
+    let exported = user.export();
+    assert!(
+        exported.contains("\t甲乙\tab\t"),
+        "手動加詞不刪：{exported}"
+    );
+    assert!(exported.contains("\t早晨\t\t"), "常用語不刪：{exported}");
+}
+
+/// 同一天的列先刪次數（衰減到現在的衰減值）小的；沒有日期的排在有日期的後面。
+#[test]
+fn among_entries_last_used_the_same_day_the_less_used_go_first_and_undated_ones_last() {
+    let data = twelve();
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    user.set_limits(Limits {
+        entries: 5,
+        bigrams: 1_000,
+    });
+    // 沒有日期的 `a`：最舊、只用一次，但排在有日期的後面。
+    ime.choose(&mut user, "a", "甲");
+    user.set_today(date("2026-03-01"));
+    for (code, text, times) in [
+        ("b", "乙", 2),
+        ("c", "丙", 1),
+        ("d", "丁", 2),
+        ("e", "戊", 2),
+    ] {
+        for _ in 0..times {
+            ime.choose(&mut user, code, text);
+        }
+    }
+    assert_eq!(learned_codes(&user), ["a", "b", "c", "d", "e"]);
+    ime.choose(&mut user, "f", "己");
+    assert_eq!(
+        learned_codes(&user),
+        ["a", "b", "d", "e", "f"],
+        "刪只用一次的 c"
+    );
+}
+
+/// 個人 bigram 有自己的上限，同樣到 1.2 倍才清到上限、先刪最舊的。
+#[test]
+fn personal_bigrams_have_their_own_limit() {
+    let data = twelve();
+    let mut ime = Ime::new(&data);
+    let mut user = UserModel::default();
+    user.set_limits(Limits {
+        entries: 1_000,
+        bigrams: 5,
+    });
+    let bigrams = |user: &UserModel| -> Vec<String> {
+        user.export()
+            .lines()
+            .filter(|l| l.starts_with("bigram\t"))
+            .map(|l| l.split('\t').nth(2).unwrap().to_string())
+            .collect()
+    };
+    for (day, (code, text)) in data.table.iter().take(6).enumerate() {
+        user.set_today(date(&format!("2026-02-{:02}", day + 1)));
+        ime.session.set_context("前");
+        ime.choose(&mut user, code, text);
+    }
+    assert_eq!(
+        bigrams(&user),
+        ["丁", "丙", "乙", "己", "戊"],
+        "刪最舊的「甲」"
+    );
 }

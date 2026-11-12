@@ -380,7 +380,7 @@ fn choosing_segments_split_by_a_separator_adds_an_auto_phrase_without_it() {
     let exported = ime.user.export();
     let auto: Vec<&str> = exported
         .lines()
-        .filter(|l| l.split('\t').nth(9) == Some("auto"))
+        .filter(|l| l.split('\t').nth(10) == Some("auto"))
         .collect();
     assert_eq!(auto.len(), 1, "{exported}");
     assert_eq!(auto[0].split('\t').nth(3), Some("mir"));

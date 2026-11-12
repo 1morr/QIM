@@ -56,11 +56,11 @@ const ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD: &str = "\
 #@/device\tdevice-a
 #@/tick\t1
 #@/tick/quick\t1
-# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tsource\ttrigger
-entry\tquick\t台\tir\t0\t0\t1\t1\t2026-11-12\tlearned\t
-entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\tlearned\t
-entry\tquick\t一台\tmir\t1\t1\t1\t1\t2026-11-12\tauto\t
-entry\tquick\t口口\trr\t0\t0\t0\t0\t2026-11-13\tmanual\tkk
+# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger
+entry\tquick\t台\tir\t0\t0\t1\t1\t2026-11-12\t\tlearned\t
+entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\t\tlearned\t
+entry\tquick\t一台\tmir\t1\t1\t1\t1\t2026-11-12\t2026-11-12\tauto\t
+entry\tquick\t口口\trr\t0\t0\t0\t0\t2026-11-13\t\tmanual\tkk
 # kind\tprevious\tword\tdecayed\tlast_tick\tlast_used
 bigram\t一\t台\t1\t1\t2026-11-12
 ";
@@ -129,11 +129,12 @@ fn using_an_entry_on_a_later_day_moves_only_its_date() {
     assert_eq!(committed.commit.as_deref(), Some("口口"));
     let exported = user.export();
     assert!(
-        exported.contains("entry\tquick\t口口\tkk\t1\t2\t1\t2\t2027-03-04\tlearned\t\n"),
+        exported
+            .contains("entry\tquick\t口口\tkk\t1\t2\t1\t2\t2027-03-04\t2027-03-04\tlearned\t\n"),
         "{exported}"
     );
     assert!(
-        exported.contains("entry\tquick\t口口\trr\t0\t0\t0\t0\t2026-11-13\tmanual\tkk\n"),
+        exported.contains("entry\tquick\t口口\trr\t0\t0\t0\t0\t2026-11-13\t\tmanual\tkk\n"),
         "{exported}"
     );
 }
@@ -200,12 +201,33 @@ fn a_file_that_is_not_userdict_v1_v2_or_v3_or_has_a_bad_row_is_an_error_with_its
         (v1, "quick\t一\tm\t0\t0\t1\t1\tlearned\tkk"), // 學到的不是使用者詞，沒有觸發詞
         (v1, "quick\t一\tm\t0\t0\t0\t0\tlearned\t"),   // 學到的卻沒有計數
         (v1, "quick\t\tm\t0\t0\t1\t1\tlearned\t"),     // 詞是空的
-        (v1, "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\tlearned\t"), // v1 沒有種類欄
+        (
+            v1,
+            "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\t\tlearned\t",
+        ), // v1 沒有種類欄
         (v3, "\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\tlearned\t"), // 種類是空的
         (v3, "entry\tquick\t一\tm\t0\t0\t1\t1\tlearned\t"), // 少了日期
-        (v3, "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-02-30\tlearned\t"), // 不是真的日期
-        (v3, "entry\tquick\t一\tm\t0\t0\t1\t1\t2026/11/12\tlearned\t"), // 日期的寫法
-        (v3, "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\tlexicon\t"), // 已知種類照舊嚴格
+        (v3, "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\tlearned\t"), // 少了最後整串上屏的日期
+        (
+            v3,
+            "entry\tquick\t一\tm\t1\t1\t1\t1\t2026-11-12\t2026-13-01\tlearned\t",
+        ), // 最後整串上屏的日期不是真的日期
+        (
+            v3,
+            "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\t2026-11-12\tlearned\t",
+        ), // 沒整串上屏過卻有最後整串上屏的日期
+        (
+            v3,
+            "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-02-30\t\tlearned\t",
+        ), // 不是真的日期
+        (
+            v3,
+            "entry\tquick\t一\tm\t0\t0\t1\t1\t2026/11/12\t\tlearned\t",
+        ), // 日期的寫法
+        (
+            v3,
+            "entry\tquick\t一\tm\t0\t0\t1\t1\t2026-11-12\t\tlexicon\t",
+        ), // 已知種類照舊嚴格
     ];
     for (header, row) in bad_rows {
         assert_eq!(line_of(&format!("{header}{row}\n")), 2, "{row}");
@@ -286,7 +308,10 @@ fn learning_before_the_shell_gives_a_date_writes_no_date() {
     assert!(rows.len() >= 3, "{exported}");
     for row in &rows {
         let last_used = match row.split('\t').next() {
-            Some("entry") => row.split('\t').nth(8),
+            Some("entry") => {
+                assert_eq!(row.split('\t').nth(9), Some(""), "整串上屏的日期：{row}");
+                row.split('\t').nth(8)
+            }
             Some("bigram") => row.split('\t').nth(5),
             _ => None,
         };
@@ -296,15 +321,17 @@ fn learning_before_the_shell_gives_a_date_writes_no_date() {
     assert_eq!(again, user);
     // 匯入時知道今天，v3 的空日期仍是不知道（只有沒有日期欄的 v1、v2 取匯入那天）。
     assert_eq!(import(&exported, "2026-11-12").unwrap().export(), exported);
+    let dated = import(V2_FILE, "2026-11-12").unwrap().export();
+    let entries = dated.lines().filter(|l| l.starts_with("entry\t"));
     assert!(
-        !import(V2_FILE, "2026-11-12")
-            .unwrap()
-            .export()
-            .contains("\t\tlearned")
+        entries
+            .map(|l| l.split('\t').nth(8))
+            .all(|d| d == Some("2026-11-12")),
+        "{dated}"
     );
     let undated = UserModel::import(V2_FILE, None).unwrap().user.export();
     assert!(
-        undated.contains("entry\tquick\t一台\tmir\t1\t1\t1\t1\t\tauto\t\n"),
+        undated.contains("entry\tquick\t一台\tmir\t1\t1\t1\t1\t\t\tauto\t\n"),
         "{undated}"
     );
 }
@@ -370,7 +397,7 @@ fn a_bad_bigram_row_is_an_error_with_its_line() {
 #[test]
 fn bigram_rows_unescape_and_without_a_tick_line_the_tick_is_the_latest() {
     let user = import("# qim-userdict v2\n\t九龍\\n\t3 樓\t2.5\t7\n", "2026-11-12").unwrap();
-    let expected = "# qim-userdict v3\n#@/tick\t7\n# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tsource\ttrigger\n# kind\tprevious\tword\tdecayed\tlast_tick\tlast_used\nbigram\t九龍\\n\t3 樓\t2.5\t7\t2026-11-12\n";
+    let expected = "# qim-userdict v3\n#@/tick\t7\n# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger\n# kind\tprevious\tword\tdecayed\tlast_tick\tlast_used\nbigram\t九龍\\n\t3 樓\t2.5\t7\t2026-11-12\n";
     assert_eq!(user.export(), expected);
     let v3 = expected.replace("#@/tick\t7\n", "");
     assert_eq!(import(&v3, "2030-01-01").unwrap().export(), expected);
@@ -394,10 +421,10 @@ const TWO_PHRASES: &str = "\
 # qim-userdict v3
 #@/tick\t1
 #@/tick/quick\t1
-# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tsource\ttrigger
-entry\tquick\tC:\\\\ 與\\t\t\t0\t0\t0\t0\t2026-11-12\tphrase\t
-entry\tquick\t九龍\\n3 樓\t\t0\t0\t0\t0\t2026-11-12\tphrase\tmir
-entry\tquick\t九龍\\n3 樓\tmir\t1\t1\t1\t1\t2026-11-14\tlearned\t
+# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger
+entry\tquick\tC:\\\\ 與\\t\t\t0\t0\t0\t0\t2026-11-12\t\tphrase\t
+entry\tquick\t九龍\\n3 樓\t\t0\t0\t0\t0\t2026-11-12\t\tphrase\tmir
+entry\tquick\t九龍\\n3 樓\tmir\t1\t1\t1\t1\t2026-11-14\t2026-11-14\tlearned\t
 ";
 
 /// 同一份常用語寫成 v2（M3 票 23 定稿，固定）。
@@ -449,8 +476,8 @@ fn a_bad_phrase_row_or_escape_is_an_error_with_its_line() {
         assert_eq!(line_of(&format!("{header}{row}\n")), 2, "{row}");
         let v3 = row
             .replacen("quick", "entry\tquick", 1)
-            .replace("\tphrase", "\t2026-11-12\tphrase")
-            .replace("\tlearned", "\t2026-11-12\tlearned");
+            .replace("\tphrase", "\t2026-11-12\t\tphrase")
+            .replace("\tlearned", "\t2026-11-12\t\tlearned");
         assert_eq!(line_of(&format!("# qim-userdict v3\n{v3}\n")), 2, "{v3}");
     }
     let v1_phrase = "# qim-userdict v1\nquick\t一\t\t0\t0\t0\t0\tphrase\t\n";
@@ -474,7 +501,7 @@ fn a_tick_line_after_rows_smaller_than_their_last_tick_is_an_error() {
             "v3 個人 bigram",
         ),
         (
-            "# qim-userdict v3\nentry\tquick\t一\tm\t0\t0\t1\t5\t2026-11-12\tlearned\t\n#@/tick/quick\t3\n",
+            "# qim-userdict v3\nentry\tquick\t一\tm\t0\t0\t1\t5\t2026-11-12\t\tlearned\t\n#@/tick/quick\t3\n",
             "v3 方案",
         ),
     ];

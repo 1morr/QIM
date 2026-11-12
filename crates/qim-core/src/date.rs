@@ -23,6 +23,11 @@ impl Date {
         })
     }
 
+    /// `earlier` 之後過了幾天；`earlier` 比自己晚時是負的。
+    pub(crate) fn days_after(self, earlier: Date) -> i32 {
+        self.days - earlier.days
+    }
+
     /// （年, 月, 日）。
     fn ymd(self) -> (i32, u32, u32) {
         civil_from_days(self.days)
