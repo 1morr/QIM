@@ -868,7 +868,6 @@ impl Session {
             }
         };
         let action = self.begin_action(user);
-        let closes_association = self.showing_association();
         let snapshot = self.handle_key(engine, user, key.clone());
         if !snapshot.handled {
             self.passed_to_host(user, key.clone());
@@ -882,11 +881,9 @@ impl Session {
                 }
                 self.last_sent = None;
             }
-            // 不送字元的修飾鍵、只收起聯想的退格不算夾在中間（librime 的 `OnUnhandledKey` 收不到
-            // 被 predictor 吃下的退格）：下一個鍵還能撤銷。其他鍵（含單按 Shift 切中英、Esc 收起
-            // 聯想）都算夾在中間。
+            // 不送字元的修飾鍵不算夾在中間：下一個鍵還能撤銷。其他鍵（含單按 Shift 切中英、Esc
+            // 收起聯想）都算夾在中間。
             Key::Modifier => user.keep_undo(action.pending),
-            Key::Backspace if closes_association => user.keep_undo(action.pending),
             _ => {
                 let sent = if snapshot.handled {
                     snapshot.commit.clone()
@@ -1131,10 +1128,10 @@ impl Session {
         }
     }
 
-    /// 聯想顯示中的鍵（plan §2.1），照 macOS 速成：數字鍵選這頁的聯想；Esc 與退格只收起聯想
-    /// （librime-predict、Gboard 的第一下退格也是），不交還宿主；不送字元的修飾鍵不動它。其他鍵
-    /// 收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，空白、Enter、方向鍵、沒有
-    /// 那個聯想的數字交還宿主，標點照常上屏。
+    /// 聯想顯示中的鍵（plan §2.1），照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
+    /// 不送字元的修飾鍵不動它。其他鍵收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，
+    /// 退格、空白、Enter、方向鍵、沒有那個聯想的數字交還宿主，標點照常上屏。退格交還宿主刪字
+    /// 是使用者的決定（M4 票 18c），偏離 librime-predict 與 Gboard 第一下只收起的慣例。
     fn handle_association(
         &mut self,
         engine: &Engine,
@@ -1156,7 +1153,7 @@ impl Session {
                     None
                 }
             },
-            Key::Escape | Key::Backspace => {
+            Key::Escape => {
                 self.end_association();
                 Some(self.snapshot(engine, true, None))
             }

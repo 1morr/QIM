@@ -222,10 +222,10 @@ fn text_from_the_touch_keyboard_between_the_commit_and_the_backspace_keeps_the_l
     assert_eq!(ime.user.export(), learned);
 }
 
-/// 上屏後出了聯想：第一下退格只收起聯想（不刪字，plan §2.1），不算夾在中間；第二下交還宿主刪字，
-/// 這時撤銷（同 librime：被 predictor 吃下的退格不到 `OnUnhandledKey`）。
+/// 上屏後出了聯想：退格交還宿主刪字、聯想收起（M4 票 18c），是上屏後第一個交還宿主的鍵，撤銷這次
+/// 上屏的學習，和沒有聯想時一致；第二下只是刪字。
 #[test]
-fn the_backspace_that_only_closes_the_association_waits_for_the_next_key() {
+fn backspace_while_the_association_shows_undoes_the_commit() {
     let mut ime = Ime::with_options(Options::default());
     ime.choose("ab", &["日", "月"]);
     ime.press(Key::Escape);
@@ -234,27 +234,32 @@ fn the_backspace_that_only_closes_the_association_waits_for_the_next_key() {
     ime.type_text("a");
     let committed = ime.press(Key::Space);
     assert_eq!(texts(&committed), ["月"], "聯想：個人 bigram 日 → 月");
-    let closed = ime.press(Key::Backspace);
-    assert!(closed.handled && closed.candidates.is_empty(), "只收起聯想");
-    assert_ne!(ime.user.export(), before, "還沒撤銷");
-    assert!(!ime.press(Key::Backspace).handled);
+    assert_ne!(ime.user.export(), before, "上屏學到東西");
+    let deleted = ime.press(Key::Backspace);
+    assert!(
+        !deleted.handled && deleted.candidates.is_empty(),
+        "刪字、聯想收起"
+    );
     assert_eq!(ime.user.export(), before);
+
+    ime.press(Key::Backspace);
+    assert_eq!(ime.user.export(), before, "更早的上屏不撤銷");
 }
 
-/// 只收起聯想之後打了別的鍵：照樣是夾在中間，不撤銷。
+/// Esc 收起聯想算夾在中間：之後的退格只刪字，不撤銷。
 #[test]
-fn closing_the_association_then_typing_keeps_the_learning() {
+fn escape_closing_the_association_keeps_the_learning() {
     let mut ime = Ime::with_options(Options::default());
     ime.choose("ab", &["日", "月"]);
     ime.press(Key::Escape);
     ime.type_text("a");
-    ime.press(Key::Space);
+    let committed = ime.press(Key::Space);
+    assert_eq!(texts(&committed), ["月"], "聯想：個人 bigram 日 → 月");
     let learned = ime.user.export();
 
-    ime.press(Key::Backspace);
-    ime.type_text("c");
-    ime.press(Key::Escape);
-    ime.press(Key::Backspace);
+    let closed = ime.press(Key::Escape);
+    assert!(closed.handled && closed.candidates.is_empty(), "只收起聯想");
+    assert!(!ime.press(Key::Backspace).handled);
     assert_eq!(ime.user.export(), learned);
 }
 
