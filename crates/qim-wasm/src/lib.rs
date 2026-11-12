@@ -448,7 +448,7 @@ impl WebSession {
 
     /// 給背景模型的重排要求（plan §2.1、§2.7）；沒有組字、移到某一段改字時是 `undefined`。
     #[wasm_bindgen(js_name = rerankRequest)]
-    pub fn rerank_request(&self) -> Option<WebRerankRequest> {
+    pub fn rerank_request(&mut self) -> Option<WebRerankRequest> {
         self.session
             .rerank_request(&self.engine)
             .map(|r| WebRerankRequest {
@@ -466,6 +466,13 @@ impl WebSession {
         self.session
             .apply_rerank(&self.engine, generation, &order)
             .map(Into::into)
+    }
+
+    /// 正在用的停鍵層模型的識別（`Session::set_reranker_id`，plan §2.7）：模式加上模型資料包；關掉重排或
+    /// 沒有模型時是 `undefined`。換了就清掉停鍵結果快取、給舊模型的要求作廢，`undefined` 時不留快取。
+    #[wasm_bindgen(js_name = setRerankerId)]
+    pub fn set_reranker_id(&mut self, reranker_id: Option<String>) {
+        self.session.set_reranker_id(reranker_id.as_deref());
     }
 
     /// debug 面板（plan §3.1，M4 票 01）：核心為什麼這樣排（`Session::inspect`）。網頁只在面板開著時呼叫。
@@ -712,6 +719,9 @@ pub struct WebInspection {
     /// `weightLetters` 各字母的機率，和為 1。
     #[wasm_bindgen(readonly, js_name = weightProbabilities)]
     pub weight_probabilities: Vec<f32>,
+    /// 候選列的停鍵重排來自快取（M4 票 03）：沒等停鍵、沒跑模型。
+    #[wasm_bindgen(readonly, js_name = rerankCached)]
+    pub rerank_cached: bool,
 }
 
 /// debug 面板的一個候選（`qim_core::InspectedCandidate`）。JS 端叫 `InspectedCandidate`。
@@ -778,6 +788,7 @@ impl From<Inspection> for WebInspection {
         Self {
             weight_letters: weights.iter().map(|&(c, _)| String::from(c)).collect(),
             weight_probabilities: weights.iter().map(|&(_, p)| p).collect(),
+            rerank_cached: i.rerank_cached,
             context_state: context_state.into(),
             context,
             preceding_kind: preceding_kind.into(),

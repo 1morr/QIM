@@ -62,11 +62,14 @@ test("換模型 A→B、A 晚失敗：不報錯，B 照樣算正在用的", asyn
 test("正在換的那份失敗：報錯，下次換資料包再試", async () => {
 	const { worker, failures, neural } = setUp();
 	neural.load(modelA);
+	assert.equal(neural.manifest, "A");
 	neural.prepare(modelB)?.();
+	assert.equal(neural.manifest, "B", "換上就算 B（核心的快取跟著換）");
 	worker.reply(0, { type: "loaded" });
 	worker.reply(1, { type: "failed", message: "B 壞了" });
 	await settle();
 	assert.deepEqual(failures, ["B 壞了"]);
+	assert.equal(neural.manifest, undefined);
 	assert.notEqual(neural.prepare(modelB), undefined, "B 要再載一次");
 });
 

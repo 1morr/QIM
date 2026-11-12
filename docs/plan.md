@@ -36,6 +36,7 @@
 | 停鍵層模型（資料包） | `ModelPack`（種類 `model`，id `zh-hant-neural-rerank`） | 神經重排 | `qim_neural::Reranker` |
 | 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
 | 學習的時限 / 最後整串上屏的日期 | `EXPIRY_DAYS` / `last_commit_date` | 條目上限 | `Limits`（`UserModel::set_limits`） |
+| 停鍵結果快取 | `RerankCache`（`RERANK_CACHE_LIMIT`、`Inspection::rerank_cached`） | 重排識別（殼正在用的停鍵層模型） | `Session::set_reranker_id`（網頁 `rerankerId`） |
 | 按鍵機率 | `Weights`（`Key::Weighted`、`Inspection::key_weights`、`qim_layout::Output::Weighted`） | 點擊位置 | `qim_layout::Touch` |
 | 鄰鍵先驗 | `qim_layout::PhysicalModel` | 實體鍵位 | `KeyboardEvent.code`（網頁綁定 `Session.pressCode`） |
 
@@ -184,8 +185,9 @@ impl Session {
     pub fn composing(&self) -> bool;                                  // 有還沒上屏的輸入碼（臨時英文也算）
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot; // 換選項後依新選項重列候選
     pub fn all_candidates(&self) -> Vec<Candidate>;                  // 不分頁，候選展開面板用
-    pub fn rerank_request(&self, engine: &Engine) -> Option<RerankRequest>; // generation + 前文（最多 RERANK_CONTEXT 字，簡體模式用 engine 的簡繁資料包轉回繁體）+ 前 RERANK_PATHS 條路徑
+    pub fn rerank_request(&mut self, engine: &Engine) -> Option<RerankRequest>; // 記下給出的要求（停鍵結果快取）；generation + 前文（最多 RERANK_CONTEXT 字，簡體模式用 engine 的簡繁資料包轉回繁體）+ 前 RERANK_PATHS 條路徑
     pub fn apply_rerank(&mut self, engine: &Engine, generation: u64, order: &[usize]) -> Option<Snapshot>; // order 是路徑的序號
+    pub fn set_reranker_id(&mut self, reranker_id: Option<&str>);  // 殼正在用的停鍵層模型（模式 + 模型資料包），變了清掉停鍵結果快取、給舊模型的要求作廢（§2.7，M4 票 03）
     pub fn paths(&self, limit: usize) -> Vec<ScoredPath>;            // lattice 蓋滿沒選定輸入碼的前 limit 條路徑：文字、分段、路徑分
     pub fn inspect(&self, engine: &Engine, user: &UserModel) -> Inspection; // 只給網頁的 debug 面板（§3.1，M4 票 01），不進 Snapshot
 }
@@ -233,6 +235,7 @@ impl Session {
   - `order` 是路徑的序號、好的在前：取第一條和首選文字不同的路徑（超出路徑數的序號不算），放在第 2 位；排位規則 3、4、5 排在第 2 位起的候選不讓位，它排在那些後面最前的位置（§2.4）。候選列有同樣文字的就移上來（已排在那個位置之前的不動），沒有就插入，其餘照原順序往後接、不重複。插入的候選是那條路徑本身：選了照它的分段上屏與學習，同選一條多段的整句（§2.4）。首選不動（ADR 0005）。
   - 不給要求（`None`）：沒有組字、聯想、臨時英文、換了選項還沒重列、沒有蓋滿的路徑，以及移到某一段改字時（候選是那一段單打的字詞，整句插不進去；使用者決定，票 11c）。
   - 名次真的變了才算候選變動、`generation` +1：同一份要求的其他結果照舊順序排，要作廢；原樣回傳不作廢。殼只在按鍵等事件之後要求，不因套用了重排結果再要求。
+  - 停鍵結果快取（§2.7，M4 票 03）：收下的結果記在 `Session`，候選列重列時同一份要求有結果就照它排、`rerank_request` 回 `None`（`Inspection::rerank_cached` 為真）；只在殼給了 `set_reranker_id` 時記。`apply_rerank` 只收這個 `generation` 給過要求、之後沒換模型的結果。
   - 翻頁不是候選變動，`generation` 不加（M1 票 23）。翻到後面的頁時收到的結果先記著、名次不變：插入會把第一頁最後一個擠到下一頁，看得到的那頁會變。回到第一頁時候選沒變（`generation` 相同）才套用，那次翻頁的快照帶新的 `generation`（票 11c）。
   - `apply_rerank` 要 `Engine` 才回得出快照（組字的簡繁與字根），比原本的簽章多一個參數。
   - `paths(limit)`（M3 票 07）：lattice 蓋滿沒選定的輸入碼的前 `limit` 條路徑（最多 beam 條）：文字、各段的字詞、同步層的路徑分，繁體原文、不套排位規則；模型階梯也讀它。
@@ -464,7 +467,12 @@ sentences = 3         # 候選列最多放幾條多段路徑
 | 停鍵 | 停鍵後在背景執行 | Gboard 級 1.4M 神經模型（`qim-neural`，M3 票 11d） | 最高第 2 位 |
 | 雲端 | 停鍵後，非同步 | 雲端 LLM，標示來源；M3 階梯沒過門檻，暫不做 | 最高第 2 位 |
 
-- 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法；網頁還沒做，退格回到同一串碼會再等停鍵、再跑一次，留給 M4，M3 票 23）。要求帶前文（最多 50 字）與 lattice 的前 9 條整句路徑，結果是路徑的名次，排出的路徑放第 2 位（規則 3、4、5 排在第 2 位起的在它前面），候選列沒有就插入（§2.1，M3 票 11c）；`Reranker::rank` 的輸入就是要求的前文與各路徑的文字、路徑分。
+- 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法）。要求帶前文（最多 50 字）與 lattice 的前 9 條整句路徑，結果是路徑的名次，排出的路徑放第 2 位（規則 3、4、5 排在第 2 位起的在它前面），候選列沒有就插入（§2.1，M3 票 11c）；`Reranker::rank` 的輸入就是要求的前文與各路徑的文字、路徑分。
+- 停鍵結果快取（M4 票 03）放在核心的 `Session`，五個平台共用一份，比對規則在 `crates/qim-core/tests/rerank.rs` 測一次：
+  - 鍵就是模型的輸入：前文（含選定的分段）與各路徑的文字、分段、路徑分。輸入碼、選項、學習、資料包改了路徑或路徑分，鍵就不同；結果是路徑的名次，模型輸入相同時名次相同。上屏後退格撤銷（票 15）把學習資料還原到上屏前時，路徑分與鍵也回到上屏前，照快取排的就是模型會給的名次（`tests/backspace_undo.rs`）。`apply_rerank` 收下目前 `generation` 的結果時記（名次沒變的也記；作廢的不記，那時要求已經不是目前的）；候選列重列（`refresh_candidates`：打字、退格、選開頭一段、換選項）時有同一份要求的結果就照它排，`rerank_request` 回 `None`，殼不等停鍵、不跑模型。快取是空的時不算鍵；每次都算鍵時學過的每鍵 p95 由 154 µs 到 161 µs（第 20 碼起 242 → 278 µs，原生，票 03）。
+  - 記的是給出要求時的鍵：`rerank_request` 記下 `generation` 與鍵，結果回來時當下的鍵和它相同才記進快取。要求之後前文變了（組字中殼再給前文，`generation` 不變）的結果照樣套用在這份候選列，但不記到新前文的鍵下（票 03 的 code-review 找到）。
+  - 殼的契約：`set_reranker_id(識別)` 告訴核心正在用的模型，開始、換重排模式（含關掉）、換模型資料包、模型載入失敗後給；識別變了清掉整份快取，給舊模型的要求一起作廢（在途的結果回來時 `apply_rerank` 不收），`None`（關掉重排、沒有模型）時不記也不套用。殼沒給就是 `None`，漏給只是沒有快取，不會套用別的模型排的名次（協調者 2026-11-12 要求「殼漏不掉」）。網頁的識別是模式，神經模型再接模型資料包的 manifest（`web/src/rerank.ts` 的 `rerankerId`）。無痕開或關都清掉，無痕期間算的不留到之後（brief §8）。
+  - 上限 `RERANK_CACHE_LIMIT` 32 份，滿了丟最久沒用的：速成每字最多兩碼，32 份蓋得住一句 16 字的每個前綴；一份約 2 KB（前文 50 字、9 條路徑），滿了約 64 KB，對 iOS 鍵盤擴充的記憶體預算（brief §12.3）可忽略。只存在記憶體，不進學習資料。
 - 重排結果只決定名次，不寫回分數：神經分數只在同一串按鍵內可比（青簡踩過，`docs/research/open-source-imes.md` §5）。
 - `cargo xtask bench` 只跑同步層，不跑停鍵層的重排：`bench --check` 的個人集 baseline 守不到重排把哪些詞翻好或翻壞。換掉或重訓停鍵層的模型時，要跑 `scripts/experiments/model-ladder/` 的 `neural --split test` 與 `compare`（README〈怎麼重跑〉），報口語、維基、個人集的前 2 名與翻盤數；個人集只列數字與題號、只報不擋（`.scratch/m3/spec.md`〈採用門檻〉，M3 票 25）。1.4M 在新基線上個人集前 2 名 85.76% → 85.23%（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。
 - `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。殼經 `ModelPack::open` 核對模型資料包（§4.6），把欄位交給 `Reranker::new(權重, 字表, 字表外的字數, λ)`，再呼叫 `Reranker::rank(前文, 路徑的文字與路徑分)` 拿到路徑序號（好的在前）；前文只取最後 50 字（`CONTEXT_CHARS`），標點、空白、符號連續的收成 `<sep>`，字表外的字母數字連續的收成 `<unk>`；路徑裡字表外的字當 `<unk>`、另扣 `ln(字表外的字數)`；前文只算一次、各路徑共用（前綴快取），路徑補齊成一樣長一批算、補的位置遮掉；空字串的路徑神經分是 0。這台 Mac 上重排一次（9 條 × 18 字、前文 50 字，2 條執行緒）p95 約 6 ms（M3 票 11d，`cargo run --release -p qim-neural --example latency`）；網頁在 Web Worker 裡單執行緒、開 SIMD128 是 p95 27 ms（M3 票 11e，§3.1）。
@@ -490,8 +498,8 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 英文使用者詞（M4 票 14）：設定區的「英文使用者詞」一段列出核心學到的英文串（沒到出現門檻的也列）、可逐條刪（`web/src/english-user-words.ts`），開關「英文使用者詞」在設定表裡。學習資料除了上屏後存，交還瀏覽器的空白、標點、Enter、Tab 與失焦之後也存：核心這時可能剛學到打完的英文串。
   - 上下文（M3 票 05，`web/src/context.ts`）：輸入框聚焦、`input`、`selectionchange` 時把游標前最多 `contextLimit()` 字交給 `setContext`、失焦時 `clearContext`，另外每個實體鍵送進核心前（沒有組字時）再給一次：交還瀏覽器的鍵讓核心作廢前文，游標沒動（結尾按 End）時不會有 `selectionchange` 補給。無痕時不給，改完設定區的開關後重給一次。
   - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
-  - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗報不報由 `web/src/neural-rerank.ts` 的 `NeuralReranker` 管，換模型 A→B 時 A 晚失敗不報（M4 票 02）；沒有模型時不重排、打字與候選照常。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
-- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、英文使用者詞、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram、萬用鍵實際對到的碼（M4 票 11），路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）、最近一個字母鍵的按鍵機率（觸控或實體鍵盤，M4 票 06、07，`Inspection::key_weights`，面板 `debug-weights`）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因（容錯修正、空間模型的機率），在 `Inspection` 與面板加一欄，測試用面板讀回原因。
+  - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗報不報由 `web/src/neural-rerank.ts` 的 `NeuralReranker` 管，換模型 A→B 時 A 晚失敗不報（M4 票 02）；沒有模型時不重排、打字與候選照常。開始、改設定、換資料包、模型載入失敗之後把重排識別交給 `Session.setRerankerId`（§2.7 停鍵結果快取）。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
+- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、英文使用者詞、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram、萬用鍵實際對到的碼（M4 票 11），路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）、最近一個字母鍵的按鍵機率（觸控或實體鍵盤，M4 票 06、07，`Inspection::key_weights`，面板 `debug-weights`）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）；候選列是否照停鍵結果快取排（`Inspection::rerank_cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`）也在這一段（M4 票 03）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因（容錯修正、空間模型的機率），在 `Inspection` 與面板加一欄，測試用面板讀回原因。
 - 使用者資料存 `localStorage`（經 `web/src/storage.ts`）；瀏覽器封鎖網站資料或存不下時，第一次出錯起寫入只留在記憶體、照樣能打字，狀態列說明學習資料與設定這次不會存（M4 票 02）。提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。

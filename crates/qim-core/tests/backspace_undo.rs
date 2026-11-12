@@ -433,3 +433,54 @@ fn an_english_word_ended_by_a_key_that_moves_the_cursor_is_not_undone() {
     ime.press(Key::Backspace);
     assert!(ime.user.english_user_words().is_empty(), "Enter 之後的退格");
 }
+
+/// 退格撤銷與停鍵結果快取（M4 票 03、15）：快取的鍵含路徑分，路徑分含學到的加分。上屏學到了，同一串碼
+/// 同樣的前文也不用上屏前的結果；上屏後退格撤銷，學習資料回到上屏前，模型的輸入逐字相同，照快取排的
+/// 就是模型會給的名次。
+#[test]
+fn the_rerank_cache_follows_learning_and_its_undo() {
+    let rerank_ab = |ime: &mut Ime| {
+        ime.session.set_reranker_id(Some("test"));
+        ime.type_text("ab");
+        let request = ime.session.rerank_request(&ime.engine).unwrap();
+        let second = request.paths.iter().position(|p| p.text == "曰肉").unwrap();
+        let reranked = ime
+            .session
+            .apply_rerank(&ime.engine, request.generation, &[second])
+            .unwrap();
+        assert_eq!(texts(&reranked)[1], "曰肉");
+        (request, texts(&reranked))
+    };
+
+    // 學到了：前文同樣是不知道（換欄位），路徑分變了，不用快取。
+    let mut learned = Ime::new();
+    let (before, _) = rerank_ab(&mut learned);
+    assert_eq!(learned.press(Key::Space).commit.as_deref(), Some("日月"));
+    learned.session.clear_context(&mut learned.user);
+    learned.type_text("ab");
+    let after = learned.session.rerank_request(&learned.engine).unwrap();
+    assert_eq!(after.context, before.context);
+    assert_ne!(after.paths, before.paths, "學到的加分進了路徑分");
+    assert!(
+        !learned
+            .session
+            .inspect(&learned.engine, &learned.user)
+            .rerank_cached
+    );
+
+    // 上屏後退格撤銷：學習資料回到上屏前，同一份要求用快取。
+    let mut undone = Ime::new();
+    let exported = undone.user.export();
+    let (_, reranked) = rerank_ab(&mut undone);
+    undone.press(Key::Space);
+    assert!(!undone.press(Key::Backspace).handled);
+    assert_eq!(undone.user.export(), exported);
+    assert_eq!(texts(&undone.type_text("ab")), reranked);
+    assert_eq!(undone.session.rerank_request(&undone.engine), None);
+    assert!(
+        undone
+            .session
+            .inspect(&undone.engine, &undone.user)
+            .rerank_cached
+    );
+}

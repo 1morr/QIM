@@ -52,6 +52,8 @@ interface Inspection {
 	candidates: InspectedCandidate[];
 	/** 最近一個鍵送了按鍵機率（觸控或實體鍵盤的字母鍵，M4 票 06、07）時各字母的機率，由高到低；其他鍵是空的。 */
 	weights: { letter: string; probability: number }[];
+	/** 候選列的停鍵重排來自核心的快取（M4 票 03）：沒等停鍵、沒跑模型。 */
+	rerankCached: boolean;
 }
 
 /** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
@@ -104,6 +106,7 @@ function read(inspection: WasmInspection): Inspection {
 			letter,
 			probability: i.weightProbabilities[k],
 		})),
+		rerankCached: i.rerankCached,
 	}));
 }
 
@@ -251,7 +254,10 @@ export function mountDebugPanel(
 	let open = false;
 	let inspections = 0;
 	let rerank: RerankRecord | undefined;
+	/** 交給模型的要求有幾次（`data-rerank-requests`）；面板關著也記，e2e 讀它看快取有沒有省下一次。 */
+	let requests = 0;
 	root.dataset.inspectCount = "0";
+	root.dataset.rerankRequests = "0";
 
 	const contextLine = (inspection: Inspection): HTMLElement => {
 		const state = inspection.contextState;
@@ -365,8 +371,16 @@ export function mountDebugPanel(
 		return list;
 	};
 
-	const rerankSection = (): HTMLElement => {
+	const rerankSection = (inspection: Inspection): HTMLElement => {
 		const section = make("div", "", { "data-testid": "debug-rerank" });
+		const cached = inspection.rerankCached;
+		section.append(
+			make(
+				"p",
+				`停鍵結果快取：${cached ? "這份候選列用快取的結果排（沒等停鍵、沒跑模型）" : "沒用"}　模型跑過 ${requests} 次`,
+				{ "data-testid": "debug-rerank-cache", "data-cached": String(cached) },
+			),
+		);
 		if (!rerank) {
 			section.append(make("p", "停鍵重排：還沒有要求"));
 			return section;
@@ -444,7 +458,7 @@ export function mountDebugPanel(
 			weightsLine(inspection),
 			topLine(inspection),
 			candidateTable(inspection),
-			rerankSection(),
+			rerankSection(inspection),
 		);
 	};
 
@@ -465,6 +479,8 @@ export function mountDebugPanel(
 		refresh: draw,
 		rerankRequested(generation, job) {
 			rerank = { generation, job };
+			requests += 1;
+			root.dataset.rerankRequests = String(requests);
 			draw();
 		},
 		rerankResult(outcome, ranked) {

@@ -15,7 +15,7 @@ import { checkModelPack, PackLibrary } from "./packs.ts";
 import { mountPanel } from "./panel.ts";
 import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
-import { fakeRank, rerankScheduler } from "./rerank.ts";
+import { fakeRank, rerankerId, rerankScheduler } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
 import {
@@ -126,10 +126,17 @@ async function start(): Promise<void> {
 			type: "module",
 		}),
 		check: checkModelPack,
-		onLoadFailed: (error) =>
-			notify(`停鍵層模型載入不了，不重排：${message(error)}`),
+		onLoadFailed: (error) => {
+			notify(`停鍵層模型載入不了，不重排：${message(error)}`);
+			// 載入是非同步的，失敗回報時 `syncReranker` 已經定義好了。
+			syncReranker();
+		},
 	});
 	neural.load(library.modelPack());
+	// 告訴核心正在用哪個停鍵層模型（plan §2.7）：換模式或模型資料包後都要給，舊模型排的快取才不會套用。
+	const syncReranker = (): void =>
+		session.setRerankerId(rerankerId(settings.rerank(), neural.manifest));
+	syncReranker();
 	/** 正在用的字根提示資料包，查完提示就釋放。 */
 	const radicalHints = (): RadicalHints => {
 		const pack = library.radicalHintPack();
@@ -300,6 +307,7 @@ async function start(): Promise<void> {
 		session,
 		(snapshot) => apply(snapshot, false),
 		() => {
+			syncReranker();
 			syncContext();
 			// 無痕時不給前文、上面不會重畫面板；開關都可能改了排序的原因。
 			debugPanel.refresh();
@@ -326,6 +334,7 @@ async function start(): Promise<void> {
 			const changeModel = neural.prepare(library.modelPack());
 			const snapshot = session.setPacks(library.sessionPacks());
 			changeModel?.();
+			syncReranker();
 			candidateBar.setRadicalHints(radicalHints());
 			withSnapshot(snapshot, render);
 		},

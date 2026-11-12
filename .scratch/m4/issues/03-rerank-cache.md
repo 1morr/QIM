@@ -1,6 +1,6 @@
 # 03: 停鍵結果快取
 
-Status: ready-for-agent
+Status: done
 Blocked by: 02
 讀: plan §2.1（`rerank_request` / `apply_rerank`）、§2.7、§3.1（停鍵層）；spec〈共同規則〉
 
@@ -12,7 +12,19 @@ Blocked by: 02
 
 ## 驗收
 
-- [ ] Playwright：打 `hjtt` 停鍵得到重排，再打一碼後退格回 `hjtt`，debug 面板讀到這次用的是快取（模型次數沒增加、沒等停鍵），第 2 位和先前相同。
-- [ ] 前文變了、選了開頭一段之後，同一串碼不用舊結果：有測試守。
-- [ ] 快取有上限，數字與理由寫在 plan §2.7；刪掉 §2.7「網頁還沒做」那半句。
-- [ ] `cargo xtask check` 綠燈。
+- [x] Playwright：打 `hjtt` 停鍵得到重排，再打一碼後退格回 `hjtt`，debug 面板讀到這次用的是快取（模型次數沒增加、沒等停鍵），第 2 位和先前相同。
+- [x] 前文變了、選了開頭一段之後，同一串碼不用舊結果：有測試守。
+- [x] 快取有上限，數字與理由寫在 plan §2.7；刪掉 §2.7「網頁還沒做」那半句。
+- [x] `cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-12 快取放核心 `Session`（`crates/qim-core/src/session/rerank_cache.rs`）：五個平台共用一份，鍵的比對在 `tests/rerank.rs` 測一次；放殼要每個平台各寫一次。鍵就是模型的輸入：前文（含選定的分段）與各路徑的文字、分段、路徑分，所以輸入碼、選項、學習、資料包都含在內；上限 32 份、LRU，理由在 plan §2.7。
+- 2026-11-12 協調者要求殼「漏不掉」：核心加 `set_reranker_id`（殼給模式 + 模型資料包的識別），變了清快取、給舊模型的要求作廢；沒給或 `None`（關掉重排、沒有模型）時不記也不套用，所以漏給只是沒有快取。網頁在開始、改設定、換資料包、模型載入失敗後給（`rerankerId`）。另補了 Heads up 建議的「關掉重排後退格回同一串碼，第 2 位不變」與「換模型」e2e，契約寫進 plan §2.7。
+- 2026-11-12 `rerank_request` 改成 `&mut self`：記下給出的 `(generation, 鍵)`，`apply_rerank` 只收給過要求的 `generation`，當下的鍵和要求時相同才記進快取（code-review 找到兩個存錯鍵的情況：重排在途時換模式、組字中殼再給前文）。兩條先紅再修：核心 `a_result_from_the_previous_reranker_is_dropped`、`a_result_asked_before_the_context_changed_…`，e2e「重排在途時換模式」（拿掉作廢那行時讀到 `applied`）。
+- 2026-11-12 驗收第 1 條的 `hjtt`：現在的神經模型在空前文下挑的「科藍」本來就在第 2 位，結果是「名次沒變」。e2e 驗結果回來、退格後面板 `data-cached=true`、模型次數仍是 2、第 2 位相同；名次真的被改過的快取由 `raise-last` 的三條 e2e 守（插入的路徑在退格後馬上回來、關掉或換模型後不回來）。
+- 2026-11-12 無痕開或關都清快取（無痕期間算的不留到之後，brief §8）；快取只在記憶體，不進學習資料。
+- 2026-11-12 `bench --check`：各集合答錯、修正與 baseline 相同、沒有翻盤，固定題 84/84（bench 不設重排識別，快取永遠是空的）。每鍵延遲（原生 p95，µs，全部 / 第 20 碼起 / 選開頭一段）：空白 70.0 / 75.1 / 1277；學過 153.6 / 242.4 / 1894。暫時讓每次重列都算鍵（實際有快取時的成本）：空白 70.1 / 75.5 / 1238；學過 161.0 / 277.7 / 1919，都在 spec〈每鍵延遲上限〉內。沒動停鍵層的輸入，不跑 `model-ladder`。
+- 2026-11-12 實際亂按（桌面）：700 下隨機按鍵（字母、退格、Esc、空白、數字、←→、翻頁、Tab、分隔記號、逗號）夾雜切四種重排模式、開關無痕、隨機停頓；沒有 pageerror，重排關著時面板從沒讀到用快取。截圖 `.scratch/m4/evidence/03-rerank-cache-panel.png`、`03-rerank-cache.png`、`03-monkey.png`。
+- 2026-11-12 code-review 沒處理的（判斷題）：`RerankKey` 與 `RerankRequest` 欄位重疊（Data Clumps；`RerankRequest` 是對外型別、多一個 `generation`，不合併）；重排識別是字串、神經模型帶整份 manifest（核心只比相等，不另立型別）；e2e 的 `ui()` 照各 spec 慣例各寫一份。已知剩下的縫：同一個 `generation` 被要求兩次、中間前文變了時，先回來的結果會記到後來的鍵下；網頁的排程每個 `generation` 只要求一次，碰不到。
+- 2026-11-12 合併 main（票 07、15）後補 `tests/backspace_undo.rs` 的 `the_rerank_cache_follows_learning_and_its_undo`（協調者要求）：上屏學到了，同一串碼同樣的前文不用上屏前的結果；上屏後退格撤銷，學習資料逐字回到上屏前，用快取（排法就是模型對同一份輸入會給的）。讓快取忽略路徑分時這條會紅。plan §2.7 補一句。
