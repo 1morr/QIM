@@ -46,7 +46,7 @@ pub use session::{
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{
-    ImportError, ImportWarning, Imported, InvalidDeviceId, Phrase, UserModel, UserWordError,
+    ImportError, ImportWarning, Imported, InvalidDeviceId, Limits, Phrase, UserModel, UserWordError,
 };
 pub use word_list::{
     Shortcuts, SkipReason, SkippedLine, TriggerShortcut, UnusedShortcut, WordListError,

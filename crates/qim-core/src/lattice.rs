@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::engine::{Spanned, WordHistory};
 use crate::remembered::REMEMBERED_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
-use crate::user::{Following, SchemeModel};
+use crate::user::{Following, SchemeUser};
 use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
@@ -514,8 +514,8 @@ struct Ranked<'a> {
     engine: &'a Engine,
     /// 這列候選的選項；規則 2 比對不學習時的首選要用同樣的。
     listing: Listing,
-    /// 這個方案的個人模型。
-    user: &'a SchemeModel,
+    /// 這個方案的個人模型（照殼給的今天看，規則 2、3 只看一年內的整串上屏）。
+    user: SchemeUser<'a>,
     /// 輸入碼前面的字詞後面的個人 bigram；規則 2 看單打的候選有沒有學到的分。
     following: Option<Following<'a>>,
     /// 這列候選的輸入碼，含分隔記號。
@@ -532,7 +532,7 @@ struct Ranked<'a> {
     pinned: BTreeMap<usize, CandidateSpan>,
 }
 
-impl Ranked<'_> {
+impl<'a> Ranked<'a> {
     /// 還沒排定、蓋滿整串的候選與它在 `free` 的位置。
     fn free_full(&self) -> impl Iterator<Item = (usize, &CandidateSpan)> {
         let n = self.input.len();
@@ -543,9 +543,12 @@ impl Ranked<'_> {
     }
 
     /// 還沒排定、蓋滿整串的候選裡，`tick` 有值且最大（最近）的一個在 `free` 的位置。
-    fn most_recent(&self, tick: impl Fn(&SchemeModel, &str, &str) -> Option<u64>) -> Option<usize> {
+    fn most_recent(
+        &self,
+        tick: impl Fn(&SchemeUser<'a>, &str, &str) -> Option<u64>,
+    ) -> Option<usize> {
         self.free_full()
-            .filter_map(|(i, c)| Some((tick(self.user, &self.user_code, &c.text)?, i)))
+            .filter_map(|(i, c)| Some((tick(&self.user, &self.user_code, &c.text)?, i)))
             .max()
             .map(|(_, i)| i)
     }
@@ -608,7 +611,7 @@ impl Ranked<'_> {
     }
 }
 
-/// 規則 1：觸發詞剛好是整串的使用者詞成首選；多個時取 [`SchemeModel::triggered`] 的第一個。
+/// 規則 1：觸發詞剛好是整串的使用者詞成首選；多個時取 [`SchemeUser::triggered`] 的第一個。
 fn triggered_first(ranked: &mut Ranked) {
     let first = ranked.user.triggered(ranked.lookup_code).into_iter().next();
     let at = first.and_then(|text| ranked.free_full().find(|(_, c)| c.text == text));
@@ -620,7 +623,7 @@ fn triggered_first(ranked: &mut Ranked) {
 /// 規則 2：蓋滿整串、上屏次數 ≥ 2 且最近上屏過的候選成首選；多個取最近上屏的。沒有這樣的
 /// 候選時，整串上屏剛好 1 次的不靠學到的分數成首選（[`once_chosen_keeps_the_unlearned_top`]）。
 fn chosen_twice_first(ranked: &mut Ranked) {
-    if let Some(i) = ranked.most_recent(SchemeModel::last_tick_if_chosen_twice) {
+    if let Some(i) = ranked.most_recent(SchemeUser::last_tick_if_chosen_twice) {
         ranked.pin_at_most(i, 0);
     } else {
         once_chosen_keeps_the_unlearned_top(ranked);
@@ -684,7 +687,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
 
 /// 規則 3：碼是整串、上屏過的使用者詞（含自動造詞）至少排第 2 位；多個取最近上屏的。
 fn used_word_second(ranked: &mut Ranked) {
-    if let Some(i) = ranked.most_recent(SchemeModel::last_tick_if_used_word) {
+    if let Some(i) = ranked.most_recent(SchemeUser::last_tick_if_used_word) {
         ranked.pin_at_most(i, 1);
     }
 }

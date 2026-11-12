@@ -29,9 +29,12 @@
 | 2026-11-12 | M4 拆票 | plan §7.5 細化成 `.scratch/m4/spec.md`（每鍵延遲上限、§7.5 細節搬進 spec〈細節〉）；使用者同意切法，31 張票 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
 | 2026-11-12 | M4 12 | 殼給日期（`set_today`，沒給不寫假日期）、匯出 v3（種類欄、`last_used`、裝置 id）、v1/v2 照收；plan §2.4 改成 v3 草稿；見票 12 | 新 session 下 `/implement .scratch/m4/issues/13-learning-expiry.md` |
 | 2026-11-12 | M4 05 | `bench --check` 擋原生每鍵 p95（空白、學過兩組），WebAssembly 只報；數字與翻頁 e2e 的既有競態見票 05 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
+| 2026-11-12 | M4 13 | 一年時限（整串上屏另記日期、規則 2、3 只看一年內、一年沒用的停用不刪）、條目上限 2 萬列／3 萬組（LatinIME 1.2 倍）；v3 entry 12 欄；見票 13 | 新 session 下 `/implement .scratch/m4/issues/14-english-user-words.md` |
 
 ## 偏差與決定
 
+- 2026-11-12 M4 票 13（使用者決定）：一年沒用的條目停用、不刪（時鐘錯了改回來要恢復、舊備份照收），實體刪除只在到上限時淘汰；改 plan §2.4、brief §4.5、spec〈細節〉。
+- 2026-11-12 M4 票 13（協調者決定）：中文條目沒有出現門檻，上限淘汰「先刪沒到門檻的」由票 14 驗；v3 的 entry 加 `last_commit_date`（12 欄）；改 plan §2.4、brief §4.5。
 - 2026-11-12 M4 票 12（協調者要求）：殼沒給日期時條目沒有日期（`Option`，匯出留空），不寫 1970-01-01，票 13 的時限跳過它們；plan §2.4 加殼的日期契約。
 - 2026-11-12 M4（拆票，使用者決定）：每鍵延遲改成會擋，原生 p95 空白 ≤ 1 ms／選開頭一段 ≤ 5 ms、學過 ≤ 3／10 ms（spec〈每鍵延遲上限〉）；第二期的研究票也等期中檢查。
 - 2026-11-12 M4（檢視，使用者決定）：照子代理審查改 D1–D8：學習時限改一年日曆、退格撤銷、v3 各台計數相加、改刪字的 Snapshot、M4 分兩期；改 brief §4.5、plan §7.5、§7.9。
