@@ -5,6 +5,7 @@ function ui(page: Page) {
 		text: page.getByRole("textbox", { name: "輸入框" }),
 		composition: page.getByTestId("composition"),
 		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		rerank: page.getByRole("combobox", { name: "重排" }),
 	};
 }
 
@@ -41,8 +42,12 @@ test("打 ar 翻頁找到「問」，用數字鍵上屏", async ({ page }, testI
 	await page.screenshot({ path: testInfo.outputPath("ar-committed.png") });
 });
 
+// 只驗翻頁鍵，關掉停鍵重排：它在翻頁中途回來時，回到第一頁才插入（rerank.spec），順序就和翻頁前讀的
+// 不同；高負載時常碰到（M4 票 05c）。
 test("- = 與 PageUp PageDown 翻頁", async ({ page }, testInfo) => {
-	const { items } = ui(page);
+	const { text, items, rerank } = ui(page);
+	await rerank.selectOption("off");
+	await text.focus();
 	await page.keyboard.type("ar");
 	const first = await items.allTextContents();
 	await page.screenshot({ path: testInfo.outputPath("page-1.png") });

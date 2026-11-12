@@ -33,6 +33,7 @@
 | 2026-11-12 | M4 01 | debug 面板：核心 `Session::inspect`（不進 Snapshot）、網頁面板與重排模型總分；bench、--learning 前後逐行相同，延遲高負載下交替量在雜訊內；見票 01 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
 | 2026-11-12 | M4 13 | 一年時限（整串上屏另記日期、規則 2、3 只看一年內、一年沒用的停用不刪）、條目上限 2 萬列／3 萬組（LatinIME 1.2 倍）；v3 entry 12 欄；見票 13 | 新 session 下 `/implement .scratch/m4/issues/14-english-user-words.md` |
 | 2026-11-12 | M4 06 | `Key::Weighted` 與 `qim-layout` 的空間模型（到形狀的距離加 2D Gaussian、點中的鍵一定最高）；網頁觸控送機率、面板顯示；bench 前後相同；見票 06 | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
+| 2026-11-12 | M4 05c | 翻頁 e2e 的競態是測試的問題（重排翻頁中回來照 plan 延到第一頁）：兩個翻頁測試關掉重排，補翻頁中途回來的 e2e；見票 05c | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
 
 ## 偏差與決定
 
