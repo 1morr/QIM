@@ -10,6 +10,13 @@ use crate::remembered::TypedRun;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
+mod inspect;
+
+pub use inspect::{
+    CandidateKind, ContextState, InspectedCandidate, InspectedSegment, Inspection, PrecedingChar,
+    Reranked, SegmentSource,
+};
+
 /// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
 pub const PAGE_SIZE: usize = 9;
 
@@ -378,6 +385,8 @@ struct ShownCandidate {
     span: CandidateSpan,
     /// 簡體模式轉換後的文字；不轉換時是 `None`，顯示原文。
     converted: Option<String>,
+    /// 停鍵重排放到這裡的（[`Session::apply_rerank`]）；debug 面板顯示。
+    rerank: Option<Reranked>,
 }
 
 impl ShownCandidate {
@@ -663,35 +672,38 @@ impl Session {
         let Some(top) = self.candidates.first().map(|c| c.text().to_string()) else {
             return false;
         };
-        let Some(path) = order
+        let Some((k, path)) = order
             .iter()
             .filter(|&&k| k < RERANK_PATHS)
-            .filter_map(|&k| self.lattice.whole_path(k))
-            .map(|span| ShownCandidate {
-                converted: self.options.simplified.then(|| self.display(engine, &span)),
-                span,
+            .filter_map(|&k| Some((k, self.lattice.whole_path(k)?)))
+            .map(|(k, span)| {
+                let shown = ShownCandidate {
+                    converted: self.options.simplified.then(|| self.display(engine, &span)),
+                    span,
+                    rerank: None,
+                };
+                (k, shown)
             })
-            .find(|c| c.text() != top)
+            .find(|(_, c)| c.text() != top)
         else {
             return false;
         };
         // 排位規則排在第 2 位起的候選之後。
         let slot = 1 + self.candidates[1..]
             .iter()
-            .take_while(|c| c.span.pinned_after_top)
+            .take_while(|c| c.span.rule.is_some())
             .count();
-        match self.candidates.iter().position(|c| c.text() == path.text()) {
-            Some(at) if at <= slot => false,
-            Some(at) => {
-                let moved = self.candidates.remove(at);
-                self.candidates.insert(slot, moved);
-                true
-            }
-            None => {
-                self.candidates.insert(slot, path);
-                true
-            }
-        }
+        let (moved, inserted) = match self.candidates.iter().position(|c| c.text() == path.text()) {
+            Some(at) if at <= slot => return false,
+            Some(at) => (self.candidates.remove(at), false),
+            None => (path, true),
+        };
+        let moved = ShownCandidate {
+            rerank: Some(Reranked { path: k, inserted }),
+            ..moved
+        };
+        self.candidates.insert(slot, moved);
+        true
     }
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
@@ -1503,6 +1515,7 @@ impl Session {
             .map(|span| ShownCandidate {
                 converted: self.options.simplified.then(|| self.display(engine, &span)),
                 span,
+                rerank: None,
             })
             .filter(|c| c.converted.as_ref().is_none_or(|t| seen.insert(t.clone())))
             .collect()

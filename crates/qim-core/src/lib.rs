@@ -41,8 +41,10 @@ pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use remembered::{REMEMBERED_LIMIT, REMEMBERED_STRINGS_MAX};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
-    CONTEXT_LIMIT, Candidate, Composition, Key, KeyError, Options, PAGE_SIZE, RERANK_CONTEXT,
-    RERANK_PATHS, RerankRequest, ScoredPath, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
+    CONTEXT_LIMIT, Candidate, CandidateKind, Composition, ContextState, InspectedCandidate,
+    InspectedSegment, Inspection, Key, KeyError, Options, PAGE_SIZE, PrecedingChar, RERANK_CONTEXT,
+    RERANK_PATHS, RerankRequest, Reranked, ScoredPath, Segment, SegmentSource, Session, ShiftKey,
+    ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{

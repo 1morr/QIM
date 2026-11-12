@@ -4,6 +4,7 @@
 import { mountCandidateBar } from "./candidate-bar.ts";
 import { mountComposition } from "./composition.ts";
 import { mountContext } from "./context.ts";
+import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
@@ -166,6 +167,12 @@ async function start(): Promise<void> {
 		}
 	};
 	const reportPanel = mountReportPanel(status, focusText);
+	// debug 面板（plan §3.1）：開著時每次重畫後問核心為什麼這樣排，關著時不問。
+	const debugPanel = mountDebugPanel(
+		element("#debug"),
+		element("#debug-toggle"),
+		session,
+	);
 	/** 觸控鍵盤；掛上前是 `undefined`（開關的初始套用比它早）。 */
 	let touchKeyboard: Keyboard | undefined;
 
@@ -182,6 +189,7 @@ async function start(): Promise<void> {
 		);
 		panel.show(composingChinese());
 		phrases?.setComposing(shown.composing);
+		debugPanel.refresh();
 	};
 	const candidateList = element<HTMLOListElement>("#candidates");
 	const requestRerank = rerankScheduler(session, {
@@ -195,8 +203,10 @@ async function start(): Promise<void> {
 			render(snapshot);
 			touchKeyboard?.refresh();
 		},
+		onRequest: (generation, job) => debugPanel.rerankRequested(generation, job),
 		// 給 e2e 與量延遲讀：各種結果的次數、模型上次算了幾毫秒。
 		onResult: (outcome, ranked) => {
+			debugPanel.rerankResult(outcome, ranked);
 			const key = `rerank${outcome[0].toUpperCase()}${outcome.slice(1)}`;
 			candidateList.dataset[key] = String(
 				Number(candidateList.dataset[key] ?? 0) + 1,
@@ -258,6 +268,7 @@ async function start(): Promise<void> {
 			if (!shown.composing && session.allCandidates().length === 0) {
 				candidateBar.show([], [], false);
 			}
+			debugPanel.refresh();
 		},
 		saveLearning,
 	);
@@ -267,6 +278,8 @@ async function start(): Promise<void> {
 		(snapshot) => apply(snapshot, false),
 		() => {
 			syncContext();
+			// 無痕時不給前文、上面不會重畫面板；開關都可能改了排序的原因。
+			debugPanel.refresh();
 			focusText();
 		},
 	);
