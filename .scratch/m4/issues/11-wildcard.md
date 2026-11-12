@@ -44,6 +44,8 @@ Blocked by: 01, 05
 - 2026-11-12 亂按一輪：開著 debug 面板，隨機按 720 下（字母夾 `z`、`'`、退格、Esc、空白、數字、Enter、Tab、方向鍵、Shift、翻頁、標點、大寫 Z），中間切簡體與無痕，每輪再快速連打 `zzzzzzzzzzazazazaz`；沒有頁面錯誤或 console error（臨時的 Playwright 腳本，沒進 repo）。
 - 2026-11-12 驗證：`cargo xtask check` 通過（cargo test 1021 passed、e2e 238 passed）；`cargo test --workspace` 通過；`cargo xtask bench --check` 通過。`web/e2e/composition-keys.spec.ts` 兩則測的是改前的 `z`（組字中吃下、沒有組字時照打），改成只測 ← →、沒有組字時改打 `#`。
 - 2026-11-12 code-review（`main` 起，Standards、Spec 兩軸）已處理：自動造詞沒換碼、把 `z` 寫進使用者詞（補測試後修，`learn` 與自動造詞共用 `learned_segments`）；記住的字串遇到含 `z` 的 email 退化（同上一條，補測試後修）；實驗結論補進 `docs/research/wildcard.md` 再摘進 brief；brief 寫明組字中按 `z` 的前後差別；補分隔記號加萬用鍵的測試；`InspectedSegment::matched` 改名 `matched_code`。
+- 2026-11-12 含 `z` 的輸入的每鍵延遲 `bench --check` 守不到（閘門只量沒有 `z` 的輸入），高負載下選開頭一段量到 6.4 ms、超過 5 ms 上限；要不要把含 `z` 的輸入加進閘門，留給票 09／10 決定（容錯同樣放大 lattice）。
+- 2026-11-12 合併票 13（學習時限與上限）：`SchemeModel` 換成帶日期的 `SchemeUser`，萬用鍵的剪枝改讀它包的模型；列詞仍經 `SchemeUser::words`，停用的自動造詞在萬用鍵之下也不出。補測試：一年沒用的自動造詞在 `azab` 之下不當一段使用者詞，用萬用鍵分段重選後照實際的碼 `arab` 重新啟用、更新日期，學習資料裡仍沒有 `z`。
 - 2026-11-12 code-review 沒處理：
   - 學習與 debug 面板的實際碼由 `matched_code` 重跑一次 `matching_codes` 推回來，不是 lattice 建邊時帶著走：要帶的話 `Segment` 得多一個欄位、路徑重建時一路傳，改動大；兩邊取法一致（同樣的展開、取第一個對得上的），擴展區的字在兩邊都不會出現。
   - `Scheme` 加一個欄位要改約 30 個測試檔的字面值：給測試共用的建構函式是另一個重構，不在本票。

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use qim_core::{
     CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Packs, Ranking, Scheme, SchemePack,
-    Session, Snapshot, UserModel, Word,
+    SegmentSource, Session, Snapshot, UserModel, Word,
 };
 
 /// 碼表：`a` 日、`b` 月、`n` 弓、`r` 口，`ab` 明、`an` 門、`ar` 晶、`nr` 同、`br` 骨；
@@ -349,4 +349,72 @@ fn a_separator_with_a_wildcard_splits_by_the_matched_codes() {
     let mut ime = Ime::new(Some('z'));
     let all = texts(&ime.type_keys("a'nz"));
     assert!(!all.iter().any(|t| t.contains('門')), "{all:?}");
+}
+
+/// 和學習時限（M4 票 13）一起成立：一年沒用的自動造詞只停用，在萬用鍵之下也不當一段使用者詞；
+/// 用萬用鍵分段重選後照實際的碼 `arab` 重新啟用，學習資料裡仍沒有 `z`。
+#[test]
+fn an_expired_auto_phrase_stays_off_under_the_wildcard_until_chosen_again() {
+    let date = |text: &str| text.parse::<qim_core::Date>().unwrap();
+    let phrase_segments = |ime: &mut Ime| {
+        ime.session.handle(&ime.engine, &mut ime.user, Key::Escape);
+        ime.type_keys("azab");
+        let inspection = ime.session.inspect(&ime.engine, &ime.user);
+        let found = inspection
+            .candidates
+            .iter()
+            .find(|c| c.text == "晶明")
+            .map(|c| {
+                c.segments
+                    .iter()
+                    .map(|s| (s.matched_code.clone(), s.source))
+                    .collect::<Vec<_>>()
+            });
+        ime.press(Key::Escape);
+        found
+    };
+    let row = |user: &UserModel| {
+        user.export()
+            .lines()
+            .find(|l| l.starts_with("entry\tquick\t晶明\tarab\t"))
+            .map(String::from)
+    };
+    let mut ime = Ime::new(Some('z'));
+    ime.user.set_today(date("2026-01-01"));
+    let shown = ime.type_keys("azab");
+    ime.choose(&shown, "晶");
+    let shown = ime.session.refresh(&ime.engine, &ime.user);
+    assert_eq!(ime.choose(&shown, "明").as_deref(), Some("晶明"));
+    assert_eq!(
+        phrase_segments(&mut ime),
+        Some(vec![(Some("arab".into()), SegmentSource::UserWord)]),
+        "學過的自動造詞是一段使用者詞"
+    );
+
+    ime.user.set_today(date("2027-01-02"));
+    // 停用後不是一段使用者詞：拆成兩字的路徑排不上候選列時整個不在，排得上時是碼表的字。
+    let stopped = phrase_segments(&mut ime);
+    assert!(
+        stopped
+            .iter()
+            .flatten()
+            .all(|(_, source)| *source != SegmentSource::UserWord),
+        "停用的自動造詞不當一段使用者詞：{stopped:?}"
+    );
+    assert!(row(&ime.user).is_some(), "停用但不刪");
+
+    let shown = ime.type_keys("azab");
+    ime.choose(&shown, "晶");
+    let shown = ime.session.refresh(&ime.engine, &ime.user);
+    assert_eq!(ime.choose(&shown, "明").as_deref(), Some("晶明"));
+    let row = row(&ime.user).unwrap();
+    assert!(
+        row.contains("2027-01-02"),
+        "重選後照實際的碼更新日期：{row}"
+    );
+    assert!(!ime.user.export().contains('z'), "學習不記萬用鍵");
+    assert_eq!(
+        phrase_segments(&mut ime),
+        Some(vec![(Some("arab".into()), SegmentSource::UserWord)])
+    );
 }
