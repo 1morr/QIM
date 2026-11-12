@@ -252,7 +252,7 @@ fn enter_and_tab_end_the_email_and_a_full_stop_after_it_is_left_out() {
     for (end, key) in [("", Key::Enter), ("", Key::Other), (".", Key::Space)] {
         let mut ime = Ime::new();
         ime.type_in_english_without_ending(&format!("{EMAIL}{end}"));
-        ime.press(key);
+        ime.press(key.clone());
         assert_eq!(
             ime.user.remembered_strings(),
             vec![EMAIL.to_string()],

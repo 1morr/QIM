@@ -193,7 +193,7 @@ fn keys_passed_to_the_host_that_edit_or_move_forget_the_context() {
         let mut user = UserModel::default();
         let mut session = Session::default();
         session.set_context("今天");
-        assert!(!session.handle(&engine, &mut user, key).handled);
+        assert!(!session.handle(&engine, &mut user, key.clone()).handled);
         let snapshot = session.handle(&engine, &mut user, Key::Letter('a'));
         assert_eq!(snapshot.candidates[0].text, "甲", "{key:?} 後");
     }

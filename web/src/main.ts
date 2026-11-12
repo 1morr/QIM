@@ -159,10 +159,10 @@ async function start(): Promise<void> {
 	};
 	/**
 	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心記住剛打完的 email，要存檔；
-	 * 字母、數字只是接在那串後面，不必存。`kind` 是實體鍵的種類或觸控的動作。
+	 * 字母、數字只是接在那串後面，不必存。`kind` 是實體鍵的種類或觸控的動作（觸控字母鍵是 `weighted`）。
 	 */
 	const afterHostKey = (kind: string | undefined): void => {
-		if (kind !== "letter" && kind !== "digit") {
+		if (kind !== "letter" && kind !== "weighted" && kind !== "digit") {
 			saveLearning();
 		}
 	};

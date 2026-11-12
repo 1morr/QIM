@@ -35,6 +35,7 @@
 | 停鍵層模型（資料包） | `ModelPack`（種類 `model`，id `zh-hant-neural-rerank`） | 神經重排 | `qim_neural::Reranker` |
 | 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
 | 學習的時限 / 最後整串上屏的日期 | `EXPIRY_DAYS` / `last_commit_date` | 條目上限 | `Limits`（`UserModel::set_limits`） |
+| 觸控機率 | `Weights`（`Key::Weighted`、`Inspection::touch_weights`、`qim_layout::Output::Weighted`） | 點擊位置 | `qim_layout::Touch` |
 
 ## 1. 架構總覽
 
@@ -152,7 +153,7 @@ pub struct Engine;      // 不可變：方案 + 資料包，多個 Session 共�
 pub struct UserModel;   // 可變：使用者詞、學習計數；export() / import() 給殼存檔
 pub struct Session;     // 一個輸入框的組字狀態
 
-pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp, PageDown, Left, Right, ToggleAscii(ShiftKey), Other, Modifier }
+pub enum Key { Letter(char), Punct(char), Space, Enter, Backspace, Escape, Digit(u8), PageUp, PageDown, Left, Right, ToggleAscii(ShiftKey), Other, Modifier, Weighted(Weights) }
 pub enum ShiftKey { Left, Right }
 impl Key { pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError>; } // 綁定收「種類 + 值」
 pub enum ShiftSwitch { Rime, CommitText, InlineAscii } // 組字中單按 Shift，預設 Rime
@@ -220,7 +221,7 @@ impl Session {
   - `Composition.focus` 預設是分段數（像 librime 的 caret 在最後）：候選列剩下沒選定的整串；← 從最後一段往前，→ 走過最後一段回到整串；打字、退格回到整串。`select(index)` 的 `index` 是全部候選的位置（librime `select_candidate`）。
   - 改選第 i 段時，前面的分段照顯示的字固定、不重算（使用者確認）：重算的輸入碼從頭建 lattice，開頭的字接最後一個選定分段的最後一字（和選開頭一段時相同，M3 票 04），單獨重算前面只會丟掉跨段 bigram 選出、使用者看過的字。目前分段的候選照舊和不知道前文時單打那個碼相同，不接前一段。選的只蓋住第 i 段開頭時，那段剩下的碼和後面的分段一起重算；否則後面已選定的不動、沒選定的重算。都選定了就上屏。所以選定的分段永遠在開頭（M1 票 21）。
   - 移到某一段時空白上屏整個組字，和組字中按標點相同。
-- 觸控機率（M4）：`Key` 加 `Weighted(Vec<(char, f32)>)`，由 `qim-layout` 依點擊位置與按鍵幾何算出，殼轉交；`qim-core` 不知道佈局。當時平台殼還沒開工，只改網頁綁定。
+- 觸控機率（M4 票 06，名詞表）：`Key::Weighted(Weights)`，`Weights` 是一組「字母, 機率」（`f32`）：至少一個、字母不重複、機率是正的有限數，建構時正規化成和為 1、由高到低（一樣高時照殼給的順序）。由 `qim-layout` 依點擊位置與按鍵幾何算出（§2.6〈空間模型〉），殼轉交；`qim-core` 不知道佈局。`Key::parse("weighted", "a:0.62,s:0.38")`（`字母:機率` 以逗號分隔）。容錯進核心之前，`handle` 把它換成機率最高的字母、其餘同 `Letter`，打字行為不變；這組機率記到下一個鍵（`Session::text` 也算）為止，`Inspection::touch_weights` 給 debug 面板。`Key` 因此不再是 `Copy`。觸控的字母鍵送它，`Snapshot` 的 `action` 是 `weighted`、`character` 是機率最高的字母（核心沒吃下時宿主照打）。平台殼還沒開工，只改網頁綁定。
 - 欄位類型（M4）：`Options` 加 `field: FieldKind`（一般、email、網址、數字），由殼依平台的欄位資訊給。
 - 重排：`apply_rerank` 只接受目前的 `generation`，過期結果丟棄；重排過的候選最高只到第 2 位（afm-ime 做法，brief §1.3）。M1 只有介面與網頁的假實作；M3 階梯定停鍵層用小型神經模型、雲端不做（§2.7）。
   - 以路徑為單位（M3 票 11c）：`RerankRequest` 帶 `generation`、前文與 `paths(RERANK_PATHS)`（9 條，`ScoredPath` 的文字、分段、路徑分），不帶候選列。候選列只放 `ranking.sentences` 條多段路徑，答案常在 lattice 裡卻不在候選列（口語 dev：候選列 57%、前 9 條路徑 68%）；只在第一頁內排時 1.4M 的增益從 8.5 點剩 2.3～6.3 點（票 09、10，`docs/research/model-ladder.md`）。
@@ -431,11 +432,12 @@ sentences = 3         # 候選列最多放幾條多段路徑
 
 - 佈局版本的選法（`Layout::select`，傳入要的 `when`）：裝置與方向都符合的版本；其次方向符合的；再其次第一個版本等比例縮放（給警告）。網頁以螢幕短邊 600 px 為手機與平板的界線（Android `sw600dp` 的慣例）。
 - 動作（`tap`、`composing.tap`、`longPress` 的項目、`swipe` 的四向）：不帶資料的寫名字 `"backspace"`、`"space"`、`"enter"`、`"nextKeyboard"`、`"toggleAscii"`、`"shift"`；帶資料的寫單一鍵的物件 `{ "letter": "a" }`（`a`–`z`）、`{ "punct": "," }`（ASCII 的可見標點，同實體鍵盤按那個鍵：綁定轉成 `Key::Punct`，全形、半形、組字中與臨時英文的處理都由核心決定；M1 票 27 加，只加不改；預設佈局只用在組字中的分隔鍵）、`{ "text": "，" }`（照原樣直接輸入，不經組字；組字中先上屏組字、臨時英文中接在英文後，經 `Session::text`）、`{ "switchPage": "symbols" }`（同一個版本的頁 id；組字留著）。預設佈局的字母鍵長按是 `text`（英文字母直接上屏，不含數字）。逗號、句號、符號、數字、表情、常用語與長按清單都是 `text`，鍵上寫什麼就打什麼（使用者決定，M1 票 27b，同 Gboard）：字母頁的「，」「。」全形；符號頁 Gboard 實測打全形的 `：；！？（）［］` 標全形、打全形，其餘 ASCII 標點半形（使用者決定，以 Gboard 實測為準；英文直通時觸控打不出這幾個半形符號是已知限制，見 brief §4.4）；`databuild` 的測試檢查每個 `text` 鍵的標籤等於它打的字。打完都留在符號頁。數字列（brief §4.4）是另一份佈局檔 `gboard-quick-number-row.json`：畫布每個版本只有一個高度，多一排就要換畫布，所以不放進同一份。
-- 殼上的狀態（M2 票 03）：`qim_layout::Keyboard` 記選到的佈局版本、目前頁與觸控 Shift，各平台共用；`Keyboard::tap(index, composing, quick_repeat)`、`long_press(index, choice)` 做完切頁與 Shift，回傳交給核心的 `Output`（字母、標點、文字、空白、刪除、Enter、中英鍵，切頁、⇧、換鍵盤都是 `Modifier`）。綁定只把 `Output` 一對一轉成 `Key`（中英鍵是 `ToggleAscii(Right)`）或 `Session::text`，`composing` 取自 `Session::composing`。
+- 殼上的狀態（M2 票 03）：`qim_layout::Keyboard` 記選到的佈局版本、目前頁與觸控 Shift，各平台共用；`Keyboard::tap(index, composing, quick_repeat, touch)`、`long_press(index, choice)` 做完切頁與 Shift，回傳交給核心的 `Output`（字母、有點擊位置的字母的各字母機率 `Weighted`（下面〈空間模型〉）、標點、文字、空白、刪除、Enter、中英鍵，切頁、⇧、換鍵盤都是 `Modifier`）。綁定只把 `Output` 一對一轉成 `Key`（中英鍵是 `ToggleAscii(Right)`）或 `Session::text`，`composing` 取自 `Session::composing`。
 - `"shift"`（M1 票 27 加，格式還沒發佈、只加不改所以不升版本）：狀態 `qim_layout::Shift`（關、開一次、鎖定）由 `Keyboard` 記著，轉換規則在 `qim-layout`（`Shift::after_shift_tap`、`Shift::after_other_key`）。Shift 開著時字母鍵（`tap` 是 `letter` 的）顯示大寫字母、不顯示角標、讀屏不念角標，點一下改成 `{ "text": "A" }`；大寫字母的字級是 `labelSize` 的 1.85 倍，照 Gboard 實測（`Key::tap_action`、`display_label`、`display_hint`、`display_label_size` 收 `KeyState`，M1 票 27b）；開一次的點或長按了任何別的鍵（字母、標點、空白、刪除、切頁）就解除，鎖定的不解除，照 Gboard 實測（M1 票 27b）。核心收到 `Key::Modifier`（同切頁），不是 `ToggleAscii`：觸控 ⇧ 不切中英，和 `Options.shift_switch`（實體鍵盤的左右 Shift，§2.1）無關。預設佈局的 ⇧ 寫了 `composing`：組字中標籤「'詞」、讀屏念「分隔」、動作 `{ "punct": "'" }`，送核心的分隔記號（brief §4.4，M1 票 28）。
 - `composing.a11yLabel`（M1 票 28 加，只加不改、不升版本）：`composing` 換了標籤時，組字中讀屏念它，沒寫就念顯示的標籤；鍵本身的 `a11yLabel` 說的是沒在組字時的動作，組字中換了標籤就不用（`Key::accessibility_label` 收 `KeyState`）。
 - 殼的觸控行為（網頁在 M1 票 20 先做，平台殼照做）：放開時才做動作，按住 400 ms 出長按清單、橫向滑動換選項、放開做選到的（第一個是預設）；會輸入字的鍵按住時顯示放大預覽；長按清單一排最多 8 個、多的換排，手指移到哪個選項取最近的；同一個鍵 300 ms 內點第二下算快速點兩下（Shift 鎖定用，Android 的雙擊門檻）；Shift 鍵依狀態畫空心、實心、鎖定三種圖示；前一指還沒放開就按下一鍵時，前一鍵先當點一下做掉（長按清單開著時不理新的手指）。轉向時重選佈局版本，新版本有同 id 的頁就留在那頁。顏色依淺色或深色取佈局的那一半。
 - 點擊判定在 `qim-layout`（`Page::hit`）：依 `z` 由上往下，落在形狀內（含 `extendedEdges`）的第一個按鍵；都沒有時取距離最近的按鍵，一樣近時取上層的。旋轉前的左、上邊算在內，右、下邊不算；圓角外的角落不算。橢圓與多邊形的判定在 M6，現在當矩形。各平台共用同一份。
+- 空間模型（M4 票 06，`qim_layout::SpatialModel`）：`Keyboard::tap` 多收點擊位置 `Option<Touch>`（畫布座標與「畫布一單位幾毫米」），動作是字母時回 `Output::Weighted`，綁定轉成核心的 `Key::Weighted`；點擊位置按到的不是 `index` 時照沒給位置。對每個點一下會送字母的鍵（照 `KeyState`，Shift 開著時的字母鍵輸入文字、不算；功能鍵不算），取點到觸控範圍的向量（`Key::offset`，在鍵自己的座標，範圍內是 0；圓角、旋轉都在距離函式裡，橢圓與多邊形在 M6 換距離函式），套兩軸各自的 Gaussian：`σ = √(σa² + (k·該軸的鍵長)²)`，橫縱各一個 k，單位毫米。同一字母多個鍵時機率相加；點中的鍵（`Page::hit`，重疊時是最上層）乘上加成；離點擊超過剪枝半徑的鍵不算（點中的除外）；只留前 `limit` 個再正規化。點中的鍵的字母不是最高時提到和最高的一樣、排第一：大小不一的鍵之間大鍵的 σ 寬，會贏過比較近的小鍵，而容錯進核心之前打字要同點擊判定（協調者決定，票 06）。初值與來源在 `SpatialModel::default`：σa 1.5 mm（FFitts）、k 橫 0.21、縱 0.12（Fowler 2015 量到的 σ 照 FFitts 扣掉 σa²）、剪枝半徑 7.99 mm（Fowler）、`limit` 5、加成 2（沒有來源）；容錯的票在基準的 dev 切分上調。網頁量不到螢幕密度，CSS px 當 1/160 吋（Android dp）；平台殼用系統給的密度。
 - 容錯與滑動輸入用按鍵的實際位置算鄰近關係，不假設有「排」。佈局亂排時準確度下降但不會壞。
 - 驗證分兩級（brief §4.6，`qim_layout::validate`）：先過 JSON Schema，再查 Schema 表達不了的。
   - 錯誤（不能存檔），每個佈局版本各自檢查：檔案壞掉（不是 JSON、不符合 Schema、頁或鍵的 `id` 重複、`initialPage` 或 `switchPage` 指到不存在的頁）；從一開始的頁面切得到的頁中，有頁切不回有字母的頁面（頁面之間只算點一下的 `switchPage`；長按、滑動、組字中的動作不是隨時都在，只靠它們回去的頁仍算切不回；「有字母」也只看 `tap`）；需要切換鍵盤鍵時（iOS `needsInputModeSwitchKey`，由殼傳入），有頁切不到有 `nextKeyboard` 鍵的頁面。
@@ -478,7 +480,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 上下文（M3 票 05，`web/src/context.ts`）：輸入框聚焦、`input`、`selectionchange` 時把游標前最多 `contextLimit()` 字交給 `setContext`、失焦時 `clearContext`，另外每個實體鍵送進核心前（沒有組字時）再給一次：交還瀏覽器的鍵讓核心作廢前文，游標沒動（結尾按 End）時不會有 `selectionchange` 補給。無痕時不給，改完設定區的開關後重給一次。
   - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
   - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；沒有模型時不重排、打字與候選照常。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
-- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、記住的字串、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram，路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因（容錯修正、空間模型的機率），在 `Inspection` 與面板加一欄，測試用面板讀回原因。
+- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、記住的字串、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram，路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）、最近一下觸控字母鍵的各字母機率（M4 票 06，`Inspection::touch_weights`，面板 `debug-touch`）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因（容錯修正、空間模型的機率），在 `Inspection` 與面板加一欄，測試用面板讀回原因。
 - 使用者資料存 `localStorage`；提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。

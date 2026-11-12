@@ -35,11 +35,21 @@ const HINT_RIGHT = 3.1;
 const HINT_ABOVE_CENTRE = 17.8;
 const HINT_MIN_TOP = 1.5;
 
+/**
+ * 一個 CSS px 約幾毫米，給空間模型換成實體尺寸（M4 票 06）。網頁量不到螢幕的實體密度；手機瀏覽器的
+ * CSS px 約等於 Android 的 dp（1/160 吋）與 iOS 的 pt（1/163 吋），取 1/160 吋。平台殼改用系統給的密度。
+ */
+const MM_PER_CSS_PX = 25.4 / 160;
+
 /** 一根手指按下到放開之間的狀態。 */
 interface Press {
 	pointerId: number;
 	/** 按到的鍵在 `keys` 的位置。 */
 	index: number;
+	/** 按下的位置（畫布座標）與畫布一單位幾毫米，字母鍵依它算各字母的機率。 */
+	x: number;
+	y: number;
+	mmPerUnit: number;
 	timer: number | undefined;
 	/** 長按清單出現後，目前選的選項；`undefined` 是還沒出現。 */
 	choice: number | undefined;
@@ -334,6 +344,9 @@ export function mountKeyboard(
 		press = {
 			pointerId: event.pointerId,
 			index,
+			x,
+			y,
+			mmPerUnit: (rect.width / layout.canvasWidth) * MM_PER_CSS_PX,
 			choice: undefined,
 			timer:
 				key.longPress.length > 0
@@ -361,7 +374,7 @@ export function mountKeyboard(
 		if (!press) {
 			return;
 		}
-		const { index, choice } = press;
+		const { index, choice, x, y, mmPerUnit } = press;
 		cancel();
 		if (choice !== undefined) {
 			lastTap = undefined;
@@ -376,7 +389,7 @@ export function mountKeyboard(
 			now - lastTap.at < QUICK_REPEAT_MS;
 		// 快速點兩下用掉了就重算，第三下不再算「快速再點」。
 		lastTap = quickRepeat ? undefined : { page: layout.pageId, index, at: now };
-		finish(session.tap(layout, index, quickRepeat));
+		finish(session.tap(layout, index, quickRepeat, x, y, mmPerUnit));
 	}
 
 	container.addEventListener("pointerup", (event) => {

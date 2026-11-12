@@ -4,9 +4,9 @@ use qim_core::{
     CandidateKind, CangjieVersion, ContextState, Date, Engine, Imported, IndexEntry, Inspection,
     Key, Manifest, ModelPack, Options, Pack, PackIndex, PrecedingChar, RadicalHintPack,
     RadicalHints, Scheme, SegmentSource, Session, ShiftKey, Shortcuts, Snapshot, UserModel,
-    WordListReport,
+    Weights, WordListReport,
 };
-use qim_layout::{Action, Keyboard, Output, Target, When};
+use qim_layout::{Action, Keyboard, Output, Target, Touch, When};
 use wasm_bindgen::prelude::*;
 
 /// 核心與 `qim-layout` 的錯誤轉成 JS 的例外，訊息照原樣。
@@ -470,19 +470,24 @@ impl WebSession {
             .into()
     }
 
-    /// 點一下 `layout` 目前頁第 `index` 個鍵（[`WebLayout::hit`] 的結果），見 [`Keyboard::tap`]。
-    /// `quick_repeat` 是同一個鍵剛點過（網頁量時間）。
+    /// 點一下 `layout` 目前頁第 `index` 個鍵（點在畫布座標 `(x, y)`，`index` 是 [`WebLayout::hit`] 的結果），
+    /// 見 [`Keyboard::tap`]；字母鍵依點擊位置送各字母的機率（`Key::Weighted`，M4 票 06）。
+    /// `mm_per_unit` 是畫布一單位幾毫米，`quick_repeat` 是同一個鍵剛點過（網頁量時間）。
     pub fn tap(
         &mut self,
         layout: &mut WebLayout,
         index: usize,
         quick_repeat: bool,
+        x: f64,
+        y: f64,
+        mm_per_unit: f64,
     ) -> Result<WebSnapshot, JsError> {
+        let touch = Touch { x, y, mm_per_unit };
         let output = layout
             .keyboard
-            .tap(index, self.session.composing(), quick_repeat)
+            .tap(index, self.session.composing(), quick_repeat, Some(touch))
             .map_err(js_error)?;
-        Ok(self.send(output))
+        self.send(output)
     }
 
     /// 長按 `layout` 目前頁第 `index` 個鍵、選了長按清單第 `choice` 個（0 是預設）。
@@ -497,7 +502,7 @@ impl WebSession {
             .keyboard
             .long_press(index, choice)
             .map_err(js_error)?;
-        Ok(self.send(output))
+        self.send(output)
     }
 }
 
@@ -515,10 +520,15 @@ impl WebSession {
 
     /// 觸控鍵盤的輸入交給核心：`Output` 轉成 `Key`，文字經 `Session::text`。結果帶著輸入的種類與
     /// 字元，核心沒吃下時網頁照它做。
-    fn send(&mut self, output: Output) -> WebSnapshot {
+    fn send(&mut self, output: Output) -> Result<WebSnapshot, JsError> {
         let snapshot = match &output {
             Output::Text(text) => self.session.text(&self.engine, &mut self.user, text),
             Output::Letter(c) => self.handle(Key::Letter(*c)),
+            // `qim-layout` 給的一定收得下（字母、不重複、正數）；收不下是 bug，照例外丟給網頁。
+            Output::Weighted(weights) => {
+                let weights = Weights::new(weights.clone()).map_err(js_error)?;
+                self.handle(Key::Weighted(weights))
+            }
             Output::Punct(c) => self.handle(Key::Punct(*c)),
             Output::Space => self.handle(Key::Space),
             Output::Backspace => self.handle(Key::Backspace),
@@ -529,7 +539,7 @@ impl WebSession {
         let mut snapshot = WebSnapshot::from(snapshot);
         snapshot.action = Some(output.kind().into());
         snapshot.character = output.character().map(String::from);
-        snapshot
+        Ok(snapshot)
     }
 }
 
@@ -677,6 +687,12 @@ pub struct WebInspection {
     /// 全部候選，依目前的順序。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<WebInspectedCandidate>,
+    /// 最近一個鍵是觸控字母鍵時的各字母（M4 票 06），由機率高到低；其他鍵是空的。
+    #[wasm_bindgen(readonly, js_name = touchLetters)]
+    pub touch_letters: Vec<String>,
+    /// `touchLetters` 各字母的機率，和為 1。
+    #[wasm_bindgen(readonly, js_name = touchProbabilities)]
+    pub touch_probabilities: Vec<f32>,
 }
 
 /// debug 面板的一個候選（`qim_core::InspectedCandidate`）。JS 端叫 `InspectedCandidate`。
@@ -736,7 +752,10 @@ impl From<Inspection> for WebInspection {
             PrecedingChar::Char(c) => ("char", Some(String::from(c))),
             PrecedingChar::Unigram => ("unigram", None),
         };
+        let touch = i.touch_weights.as_ref().map_or(&[][..], Weights::entries);
         Self {
+            touch_letters: touch.iter().map(|&(c, _)| String::from(c)).collect(),
+            touch_probabilities: touch.iter().map(|&(_, p)| p).collect(),
             context_state: context_state.into(),
             context,
             preceding_kind: preceding_kind.into(),
