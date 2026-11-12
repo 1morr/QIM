@@ -19,6 +19,11 @@ pub(crate) struct Lattice {
     /// `before.segment()`，詞級 trigram 用（[`Lattice::history`]）。
     before_segment: Option<String>,
     columns: Vec<Vec<Node>>,
+    /// `spans[len]` 是輸入碼開頭 `len` 碼的 [`Engine::span`]，候選列用到時才算（[`Lattice::spans`]）；
+    /// 逐鍵打字時開頭各段不變，留著下一鍵重用（M4 票 18b：萬用鍵在開頭時每段都要展開它，每鍵重算是
+    /// 含萬用鍵的輸入每鍵延遲的大半）。退格時連同那一欄刪掉。和 `columns` 一樣，假設同一個 lattice
+    /// 用的學習資料不變：學習資料變了的呼叫端從頭建 lattice。
+    spans: Vec<Option<Vec<Spanned>>>,
 }
 
 /// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（plan §2.3）。
@@ -134,6 +139,7 @@ impl Default for Lattice {
                 text: String::new(),
                 prev: None,
             }]],
+            spans: Vec::new(),
         }
     }
 }
@@ -270,7 +276,17 @@ impl Lattice {
     pub fn pop(&mut self) {
         if self.input.pop().is_some() {
             self.columns.pop();
+            self.spans.truncate(self.input.len() + 1);
         }
+    }
+
+    /// 輸入碼開頭 `len` 碼的 [`Engine::span`]（接在 [`Lattice::before`] 後面）；第一次用到時算，之後重用。
+    fn spans(&mut self, engine: &Engine, user: &UserModel, len: usize) -> &[Spanned] {
+        if self.spans.len() <= len {
+            self.spans.resize(len + 1, None);
+        }
+        let (input, before) = (&self.input, &self.before);
+        self.spans[len].get_or_insert_with(|| engine.span(user, before, &input[..len]))
     }
 
     /// 蓋滿整串的前 `limit` 條路徑的文字、各段的字詞與分數，依分數由高到低（最多 beam 條）；
@@ -345,23 +361,45 @@ impl Lattice {
 pub(crate) fn candidates(
     engine: &Engine,
     user: &UserModel,
-    lattice: &Lattice,
+    lattice: &mut Lattice,
     listing: Listing,
 ) -> Vec<CandidateSpan> {
-    let input = lattice.input();
-    let n = input.len();
+    let n = lattice.input.len();
     if n == 0 {
         return Vec::new();
     }
     // 碼表、詞庫查的碼：結尾的分隔記號去掉；中間的分隔記號由 `Engine::span` 處理。
-    let lookup_code = input.trim_end_matches(SEPARATOR);
+    let lookup_len = lattice.input.trim_end_matches(SEPARATOR).len();
+    // 只蓋住開頭一段的：開頭各段的長度與它蓋住的長度，長的在前。
+    let prefix_lens: Vec<(usize, usize)> = {
+        let input = &lattice.input;
+        (1..n)
+            .rev()
+            .filter(|&len| !input[..len].ends_with(SEPARATOR))
+            .filter_map(|len| {
+                let covered = n - input[len..].trim_start_matches(SEPARATOR).len();
+                // 後面只剩分隔記號的是蓋滿整串的，上面已經列過。
+                (covered < n).then_some((len, covered))
+            })
+            .collect()
+    };
+    for len in std::iter::once(lookup_len).chain(prefix_lens.iter().map(|&(len, _)| len)) {
+        lattice.spans(engine, user, len);
+    }
+    let lattice = &*lattice;
+    let input = lattice.input();
+    let lookup_code = &input[..lookup_len];
     let before = &lattice.before;
-    let mut full: Vec<(f64, bool, CandidateSpan)> = engine
-        .span(user, before, lookup_code)
-        .into_iter()
+    let cached = |len: usize| -> &[Spanned] {
+        lattice.spans[len]
+            .as_deref()
+            .expect("上面算過開頭各段的 span")
+    };
+    let mut full: Vec<(f64, bool, CandidateSpan)> = cached(lookup_len)
+        .iter()
         .map(|s| {
-            let late = listing.demotes(&s);
-            (s.score, late, CandidateSpan::single(s.text, input))
+            let late = listing.demotes(s);
+            (s.score, late, CandidateSpan::single(s.text.clone(), input))
         })
         .collect();
     full.extend(
@@ -393,22 +431,16 @@ pub(crate) fn candidates(
         .triggered(lookup_code)
         .into_iter()
         .map(|text| CandidateSpan::single(text.to_string(), input));
-    let prefixes = (1..n)
-        .rev()
-        .filter(|&len| !input[..len].ends_with(SEPARATOR))
-        .filter_map(|len| {
-            let covered = n - input[len..].trim_start_matches(SEPARATOR).len();
-            // 後面只剩分隔記號的是蓋滿整串的，上面已經列過。
-            (covered < n).then_some((len, covered))
-        })
-        .flat_map(|(len, covered)| {
-            let mut spans = engine.span(user, before, &input[..len]);
-            // 穩定排序：同一組裡仍依分數。
-            spans.sort_by_key(|s| listing.demotes(s));
-            spans
-                .into_iter()
-                .map(move |s| CandidateSpan::single(s.text, &input[..covered]))
-        });
+    let prefixes = prefix_lens.iter().flat_map(|&(len, covered)| {
+        let spans = cached(len);
+        // 同一組裡仍依分數：先列不排後的，再列排後的（同穩定排序）。
+        let (early, late): (Vec<&Spanned>, Vec<&Spanned>) =
+            spans.iter().partition(|s| !listing.demotes(s));
+        early
+            .into_iter()
+            .chain(late)
+            .map(move |s| CandidateSpan::single(s.text.clone(), &input[..covered]))
+    });
     let mut seen = HashSet::new();
     let mut list: Vec<CandidateSpan> = full
         .chain(triggered)
@@ -711,7 +743,7 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
     let unlearned_top = candidates(
         engine,
         &blank,
-        &Lattice::from_input(engine, &blank, ranked.before.clone(), input),
+        &mut Lattice::from_input(engine, &blank, ranked.before.clone(), input),
         Listing {
             english_candidates: false,
             emoji_candidates: false,

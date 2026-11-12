@@ -99,13 +99,23 @@ fn engine_for(
     table: &BTreeMap<String, Vec<char>>,
     words: &BTreeMap<String, Vec<String>>,
 ) -> Engine {
+    engine_with_wildcard(id, None, table, words)
+}
+
+/// 同 [`engine_for`]，方案另設萬用鍵 `wildcard`（`z` 不在字母表裡）。
+fn engine_with_wildcard(
+    id: &str,
+    wildcard: Option<char>,
+    table: &BTreeMap<String, Vec<char>>,
+    words: &BTreeMap<String, Vec<String>>,
+) -> Engine {
     let scheme = Scheme {
         id: id.into(),
         name: id.into(),
         version: "1".into(),
         alphabet: "abc".into(),
         max_code_length: MAX_CODE_LENGTH,
-        wildcard: None,
+        wildcard,
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: Some("lexicon".into()),
@@ -274,6 +284,33 @@ proptest! {
         for action in actions {
             let snapshot = act(&mut session, &engine, &mut user, action.clone());
             // 沒有組字時的候選是聯想（M3 票 13），不是輸入碼的候選。
+            if snapshot.composition.input.is_empty() {
+                continue;
+            }
+            let from_scratch = engine.candidates(&user, listed_input(&snapshot));
+            let page: Vec<String> = from_scratch
+                .into_iter()
+                .skip(snapshot.page * PAGE_SIZE)
+                .take(PAGE_SIZE)
+                .collect();
+            let texts: Vec<String> = snapshot.candidates.iter().map(|c| c.text.clone()).collect();
+            prop_assert_eq!(texts, page, "{:?} 後", action);
+        }
+    }
+
+    /// 同上，方案有萬用鍵 `z`（M4 票 18b）：候選列重用 lattice 逐鍵算過的開頭各段（退格後也是），
+    /// 要和從頭建的逐字相同。
+    #[test]
+    fn wildcard_candidates_computed_key_by_key_equal_those_computed_from_scratch(
+        table in random_table(),
+        words in random_words(),
+        actions in prop::collection::vec(action(), 0..40),
+    ) {
+        let engine = engine_with_wildcard("quick", Some('z'), &table, &words);
+        let mut user = UserModel::default();
+        let mut session = Session::default();
+        for action in actions {
+            let snapshot = act(&mut session, &engine, &mut user, action.clone());
             if snapshot.composition.input.is_empty() {
                 continue;
             }

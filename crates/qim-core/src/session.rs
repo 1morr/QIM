@@ -1449,7 +1449,7 @@ impl Session {
             top = lattice::candidates(
                 engine,
                 user,
-                &Lattice::from_input(engine, user, before, &rest),
+                &mut Lattice::from_input(engine, user, before, &rest),
                 self.listing(false),
             )
             .into_iter()
@@ -1725,11 +1725,14 @@ impl Session {
                 lattice::candidates(
                     engine,
                     user,
-                    &Lattice::from_input(engine, user, Preceding::default(), code),
+                    &mut Lattice::from_input(engine, user, Preceding::default(), code),
                     self.listing(false),
                 )
             }
-            None => lattice::candidates(engine, user, &self.lattice, self.listing(true)),
+            None => {
+                let listing = self.listing(true);
+                lattice::candidates(engine, user, &mut self.lattice, listing)
+            }
         };
         self.candidates = self.shown_candidates(engine, spans);
         self.listed_with = self.options;

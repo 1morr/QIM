@@ -1,6 +1,7 @@
 //! 每鍵延遲（plan §5.2）：逐鍵打基準的每個輸入碼，量每次按鍵到 `Snapshot` 回來的時間，
-//! 原生與 WebAssembly 各量一次，報 p50 / p95；空白的學習資料與學過的（[`UserData`]）各一組。
-//! 原生的 p95 由 `--check` 擋（[`p95_limits_ms`]），WebAssembly 只報；baseline 不記。
+//! 原生與 WebAssembly 各量一次，報 p50 / p95；空白的學習資料與學過的（[`UserData`]）各一組，
+//! 基準的輸入與含萬用鍵的輸入（[`Inputs`]）各量一次。原生的 p95 由 `--check` 擋（[`p95_limits_ms`]），
+//! WebAssembly 只報；baseline 不記。
 //!
 //! 每個輸入都從空的組字打起；載入資料包不算在內，另報一次載入的時間（[`Timing::load_ms`]）。
 //! 打完有兩段以上的輸入另量「選開頭一段」那一鍵（[`lefts_to_first_segment`]）：選定後剩下的輸入碼
@@ -32,7 +33,26 @@ impl UserData {
     }
 }
 
-/// 原生 p95 的上限，毫秒，順序同 [`Timing::groups`]（全部、第 20 碼起、選開頭一段）。
+/// 計時的哪一批輸入。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Inputs {
+    /// 固定題與各語料集合的每一題（[`crate::latency_inputs`]）。
+    Bench,
+    /// 同一批，每個輸入的第一碼換成萬用鍵（[`wildcard_inputs`]，M4 票 18b）。
+    Wildcard,
+}
+
+impl Inputs {
+    pub fn label(self) -> &'static str {
+        match self {
+            Inputs::Bench => "基準的輸入",
+            Inputs::Wildcard => "含萬用鍵的輸入",
+        }
+    }
+}
+
+/// 原生 p95 的上限，毫秒，順序同 [`Timing::groups`]（全部、第 20 碼起、選開頭一段）；兩批輸入（[`Inputs`]）
+/// 同一組上限。
 /// 數字與改上限的條件在 `.scratch/m4/spec.md`〈每鍵延遲上限〉：比 M3 收尾時留約 7–13 倍的餘裕，
 /// 擋倍數級的變慢，不擋機器負載的雜訊。
 pub fn p95_limits_ms(user: UserData) -> [f64; 3] {
@@ -40,6 +60,20 @@ pub fn p95_limits_ms(user: UserData) -> [f64; 3] {
         UserData::Blank => [1.0, 1.0, 5.0],
         UserData::Learned => [3.0, 3.0, 10.0],
     }
+}
+
+/// 含萬用鍵的輸入（M4 票 18b）：每個輸入的第一碼換成萬用鍵 `wildcard`，其餘照舊。萬用鍵在開頭時
+/// 每個開頭長度的碼都含它；取法同 M4 票 09 量容錯延遲時的那批（`docs/research/tolerance.md`〈每鍵延遲〉）。
+pub fn wildcard_inputs(inputs: &[String], wildcard: char) -> Vec<String> {
+    inputs
+        .iter()
+        .map(|input| {
+            let mut chars = input.chars();
+            chars.next().map_or_else(String::new, |_| {
+                std::iter::once(wildcard).chain(chars).collect()
+            })
+        })
+        .collect()
 }
 
 /// 組字已有這麼多碼時的按鍵另成一組：連打變長時延遲會不會跟著長（票 12 的延遲預算要看它）。
@@ -86,8 +120,12 @@ pub struct Timers<'a> {
 pub struct Latency {
     /// CPU、作業系統與架構，報告註明在哪台機器量的。
     pub machine: String,
+    /// 基準的輸入（[`Inputs::Bench`]）。
     pub blank: Runs,
     pub learned: Runs,
+    /// 含萬用鍵的輸入（[`Inputs::Wildcard`]）。
+    pub wildcard_blank: Runs,
+    pub wildcard_learned: Runs,
 }
 
 /// 同一份學習資料下原生與 WebAssembly 各量一次。
@@ -98,18 +136,20 @@ pub struct Runs {
 }
 
 impl Latency {
-    /// 空白與學過兩組，依序。
-    pub fn runs(&self) -> [(UserData, &Runs); 2] {
+    /// 基準的輸入的空白、學過，接著含萬用鍵的輸入的空白、學過。
+    pub fn runs(&self) -> [(Inputs, UserData, &Runs); 4] {
         [
-            (UserData::Blank, &self.blank),
-            (UserData::Learned, &self.learned),
+            (Inputs::Bench, UserData::Blank, &self.blank),
+            (Inputs::Bench, UserData::Learned, &self.learned),
+            (Inputs::Wildcard, UserData::Blank, &self.wildcard_blank),
+            (Inputs::Wildcard, UserData::Learned, &self.wildcard_learned),
         ]
     }
 
     /// 原生的 p95 超過 [`p95_limits_ms`] 的每一格一條；WebAssembly 只報不擋。組裡沒有按鍵的不比。
     pub fn violations(&self) -> Vec<String> {
         let mut violations = Vec::new();
-        for (user, runs) in self.runs() {
+        for (inputs, user, runs) in self.runs() {
             for ((group, summary), limit) in
                 runs.native.groups().into_iter().zip(p95_limits_ms(user))
             {
@@ -117,8 +157,9 @@ impl Latency {
                     && s.p95 > limit
                 {
                     violations.push(format!(
-                        "每鍵延遲超過上限：原生、學習資料{}、{group} 的 p95 {:.0} µs > {:.0} µs\
+                        "每鍵延遲超過上限：原生、{}、學習資料{}、{group} 的 p95 {:.0} µs > {:.0} µs\
                          （先在負載低時單獨重跑一次，仍超過才算，見 docs/development.md〈每鍵延遲〉）",
+                        inputs.label(),
                         user.label(),
                         s.p95 * 1000.0,
                         limit * 1000.0
@@ -194,8 +235,9 @@ fn summary(timing: &Timing, skip: usize) -> Option<Summary> {
     })
 }
 
-/// 空白與學過的學習資料（`learned`）下，原生與 WebAssembly 各量一次 `inputs`：固定題與各語料集合的
-/// 每一題（個人集不量，各機器才比得起來）。
+/// 空白與學過的學習資料（`learned`）下，原生與 WebAssembly 各量一次 `inputs`（固定題與各語料集合的
+/// 每一題；個人集不量，各機器才比得起來）與它的含萬用鍵版本（[`wildcard_inputs`]）。方案沒有萬用鍵時
+/// 量不了含萬用鍵的輸入，是錯誤。
 pub fn measure(
     engine: &Engine,
     packs: &[PathBuf],
@@ -203,10 +245,19 @@ pub fn measure(
     learned: &UserModel,
     timers: Timers,
 ) -> Result<Latency, String> {
+    let wildcard = engine.scheme().wildcard.ok_or_else(|| {
+        format!(
+            "方案 {} 沒有萬用鍵，量不了含萬用鍵的輸入的每鍵延遲",
+            engine.scheme().id
+        )
+    })?;
+    let wildcard_inputs = wildcard_inputs(inputs, wildcard);
     Ok(Latency {
         machine: machine(),
         blank: measure_runs(engine, packs, inputs, None, timers)?,
         learned: measure_runs(engine, packs, inputs, Some(learned), timers)?,
+        wildcard_blank: measure_runs(engine, packs, &wildcard_inputs, None, timers)?,
+        wildcard_learned: measure_runs(engine, packs, &wildcard_inputs, Some(learned), timers)?,
     })
 }
 

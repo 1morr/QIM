@@ -73,19 +73,33 @@ mod gate {
         }
     }
 
-    /// WebAssembly 每鍵都遠超上限：它只報，不影響判斷。
+    /// WebAssembly 每鍵都遠超上限：它只報，不影響判斷。含萬用鍵的輸入在上限內。
     fn latency(blank: Timing, learned: Timing) -> Latency {
-        let slow = || timing(100.0, 100.0, 100.0);
+        with_wildcard(
+            blank,
+            learned,
+            timing(1.0, 1.0, 5.0),
+            timing(3.0, 3.0, 10.0),
+        )
+    }
+
+    /// 基準的輸入與含萬用鍵的輸入各一組空白、學過（原生）；WebAssembly 一律遠超上限。
+    fn with_wildcard(
+        blank: Timing,
+        learned: Timing,
+        wildcard_blank: Timing,
+        wildcard_learned: Timing,
+    ) -> Latency {
+        let runs = |native| Runs {
+            native,
+            wasm: timing(100.0, 100.0, 100.0),
+        };
         Latency {
             machine: "假".into(),
-            blank: Runs {
-                native: blank,
-                wasm: slow(),
-            },
-            learned: Runs {
-                native: learned,
-                wasm: slow(),
-            },
+            blank: runs(blank),
+            learned: runs(learned),
+            wildcard_blank: runs(wildcard_blank),
+            wildcard_learned: runs(wildcard_learned),
         }
     }
 
@@ -132,9 +146,56 @@ mod gate {
             assert_eq!(violations.len(), 1, "{user} {group}：{violations:?}");
             let v = &violations[0];
             assert!(
-                v.contains("每鍵延遲") && v.contains(user) && v.contains(group),
+                v.contains("每鍵延遲")
+                    && v.contains("基準的輸入")
+                    && v.contains(user)
+                    && v.contains(group),
                 "{v}"
             );
         }
     }
+
+    /// 含萬用鍵的輸入（M4 票 18b）照同一組上限擋：剛好在上限上不擋。
+    #[test]
+    fn wildcard_inputs_within_the_same_limits_pass() {
+        let outcome = with_wildcard(
+            timing(1.0, 1.0, 5.0),
+            timing(3.0, 3.0, 10.0),
+            timing(1.0, 1.0, 5.0),
+            timing(3.0, 3.0, 10.0),
+        );
+        assert_eq!(outcome.violations(), Vec::<String>::new());
+    }
+
+    /// 含萬用鍵的輸入超過時是違規，註明是含萬用鍵的輸入；基準的輸入在上限內也一樣擋。
+    #[test]
+    fn wildcard_inputs_over_a_limit_are_a_violation_naming_them() {
+        let blank_ok = || timing(1.0, 1.0, 5.0);
+        let learned_ok = || timing(3.0, 3.0, 10.0);
+        let cases = [
+            (timing(1.01, 1.0, 5.0), learned_ok(), "空白", "全部"),
+            (timing(1.0, 1.0, 5.01), learned_ok(), "空白", "選開頭一段"),
+            (blank_ok(), timing(3.0, 3.01, 10.0), "學過", "第 20 碼起"),
+        ];
+        for (wildcard_blank, wildcard_learned, user, group) in cases {
+            let outcome = with_wildcard(blank_ok(), learned_ok(), wildcard_blank, wildcard_learned);
+            let violations = outcome.violations();
+            assert_eq!(violations.len(), 1, "{user} {group}：{violations:?}");
+            let v = &violations[0];
+            assert!(
+                v.contains("含萬用鍵的輸入") && v.contains(user) && v.contains(group),
+                "{v}"
+            );
+        }
+    }
+}
+
+/// 含萬用鍵的輸入（M4 票 18b）：每個輸入的第一碼換成萬用鍵，其餘照舊，長度不變。
+#[test]
+fn wildcard_inputs_replace_the_first_code_of_every_input() {
+    let inputs = ["a", "ab", "hqi'mbc", "oiargi"].map(String::from);
+    assert_eq!(
+        qim_bench::wildcard_inputs(&inputs, 'z'),
+        ["z", "zb", "zqi'mbc", "ziargi"]
+    );
 }

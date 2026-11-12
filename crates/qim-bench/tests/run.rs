@@ -61,7 +61,7 @@ fn scheme_bytes(
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
-        wildcard: None,
+        wildcard: Some('z'),
         radicals: BTreeMap::new(),
         packs: Packs {
             lexicon: lexicon.map(Into::into),
@@ -1176,16 +1176,34 @@ fn latency_reports_native_and_wasm_percentiles_for_blank_and_learned_user_data()
     // 學過的學習資料下每鍵加倍。第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
     // 選開頭一段：只有 long 打完有兩段以上，一次；學過的學習資料下 long 整句已造詞、只有一段，不量。
     // 原生是 [`fast_native`]：每鍵 50 µs、選開頭一段 500 µs，報告附 p95 上限。
-    assert_eq!(rows.len(), 12, "{report}");
-    for (rows, user, selects, limits) in [
+    // 含萬用鍵的輸入（`z`、`z`、`z`、`zb`、`zbab…a`）鍵數相同；選開頭一段也一樣：空白時 long 有兩段以上，
+    // 學過時萬用鍵照樣對上學過的整句、只有一段。上限同基準的輸入。
+    assert_eq!(rows.len(), 24, "{report}");
+    for (rows, inputs, user, selects, limits) in [
         (
             &rows[..6],
+            "基準的輸入",
             "空白",
             "| 1 | 1 | 500.00 | 500.00",
             ["1000", "1000", "5000"],
         ),
         (
-            &rows[6..],
+            &rows[6..12],
+            "基準的輸入",
+            "學過",
+            "| 0 | 0 | — | —",
+            ["3000", "3000", "10000"],
+        ),
+        (
+            &rows[12..18],
+            "含萬用鍵的輸入",
+            "空白",
+            "| 1 | 1 | 500.00 | 500.00",
+            ["1000", "1000", "5000"],
+        ),
+        (
+            &rows[18..],
+            "含萬用鍵的輸入",
             "學過",
             "| 0 | 0 | — | —",
             ["3000", "3000", "10000"],
@@ -1193,15 +1211,15 @@ fn latency_reports_native_and_wasm_percentiles_for_blank_and_learned_user_data()
     ] {
         let expected = [
             format!(
-                "| {user} | 原生（假） | 全部 | 5 | 26 | 50.00 | 50.00 | ≤ {} |",
+                "| {inputs} | {user} | 原生（假） | 全部 | 5 | 26 | 50.00 | 50.00 | ≤ {} |",
                 limits[0]
             ),
             format!(
-                "| {user} | 原生（假） | 第 20 碼起 | 1 | 2 | 50.00 | 50.00 | ≤ {} |",
+                "| {inputs} | {user} | 原生（假） | 第 20 碼起 | 1 | 2 | 50.00 | 50.00 | ≤ {} |",
                 limits[1]
             ),
             format!(
-                "| {user} | 原生（假） | 選開頭一段 {selects} | ≤ {} |",
+                "| {inputs} | {user} | 原生（假） | 選開頭一段 {selects} | ≤ {} |",
                 limits[2]
             ),
         ];
@@ -1209,19 +1227,23 @@ fn latency_reports_native_and_wasm_percentiles_for_blank_and_learned_user_data()
     }
     assert_eq!(
         rows[3],
-        "| 空白 | WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 | 只報 |"
+        "| 基準的輸入 | 空白 | WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 | 只報 |"
     );
     assert_eq!(
         rows[4],
-        "| 空白 | WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 | 只報 |"
+        "| 基準的輸入 | 空白 | WebAssembly（假） | 第 20 碼起 | 1 | 2 | 2000000.00 | 2100000.00 | 只報 |"
     );
     assert_eq!(
         rows[5],
-        "| 空白 | WebAssembly（假） | 選開頭一段 | 1 | 1 | 1000000.00 | 1000000.00 | 只報 |"
+        "| 基準的輸入 | 空白 | WebAssembly（假） | 選開頭一段 | 1 | 1 | 1000000.00 | 1000000.00 | 只報 |"
     );
     assert_eq!(
         rows[9],
-        "| 學過 | WebAssembly（假） | 全部 | 5 | 26 | 1600000.00 | 4000000.00 | 只報 |"
+        "| 基準的輸入 | 學過 | WebAssembly（假） | 全部 | 5 | 26 | 1600000.00 | 4000000.00 | 只報 |"
+    );
+    assert_eq!(
+        rows[15],
+        "| 含萬用鍵的輸入 | 空白 | WebAssembly（假） | 全部 | 5 | 26 | 800000.00 | 2000000.00 | 只報 |"
     );
 }
 
@@ -1243,9 +1265,12 @@ fn the_learned_run_gives_wasm_the_user_model_that_learned_every_public_set() {
         ),
     )
     .unwrap();
+    // 基準的輸入、含萬用鍵的輸入各量空白、學過一次。
     let dicts = dicts.into_inner();
-    assert_eq!(dicts.len(), 2, "{dicts:?}");
+    assert_eq!(dicts.len(), 4, "{dicts:?}");
     assert_eq!(dicts[0], None);
+    assert_eq!(dicts[2], None);
+    assert_eq!(dicts[1], dicts[3]);
     let dict = dicts[1].as_deref().unwrap();
     assert_ne!(
         UserModel::import(dict, None).unwrap().user,
@@ -1285,7 +1310,7 @@ fn check_blocks_native_latency_only_and_update_baseline_ignores_latency() {
 fn check_blocks_the_native_latency_groups_over_their_limit() {
     let repo = repo_with_long_input();
     run(repo.path(), Mode::UpdateBaseline).unwrap();
-    // 每鍵 2 ms：空白的「全部」「第 20 碼起」超過上限，學過的與選開頭一段（0.5 ms）都在內。
+    // 每鍵 2 ms：兩批輸入的空白「全部」「第 20 碼起」超過上限，學過的與選開頭一段（0.5 ms）都在內。
     let slow_native = fixed_native(2.0, 0.5);
     let timers = Timers {
         native: &slow_native,
@@ -1293,21 +1318,96 @@ fn check_blocks_the_native_latency_groups_over_their_limit() {
     };
     let outcome = qim_bench::run(repo.path(), Mode::Check, None, timers).unwrap();
     let violations = &outcome.violations;
-    assert_eq!(violations.len(), 2, "{violations:?}");
-    for (v, group) in violations.iter().zip(["全部", "第 20 碼起"]) {
+    assert_eq!(violations.len(), 4, "{violations:?}");
+    let expected = [
+        ("基準的輸入", "全部"),
+        ("基準的輸入", "第 20 碼起"),
+        ("含萬用鍵的輸入", "全部"),
+        ("含萬用鍵的輸入", "第 20 碼起"),
+    ];
+    for (v, (inputs, group)) in violations.iter().zip(expected) {
         assert!(
-            v.contains("每鍵延遲") && v.contains("空白") && v.contains(&format!("{group} 的 p95")),
+            v.contains("每鍵延遲")
+                && v.contains(inputs)
+                && v.contains("空白")
+                && v.contains(&format!("{group} 的 p95")),
             "{v}"
         );
     }
     assert_eq!(
         outcome.report().matches("，超過 |").count(),
-        2,
+        4,
         "{}",
         outcome.report()
     );
     let report = qim_bench::run(repo.path(), Mode::Report, None, timers).unwrap();
     assert_eq!(report.violations, Vec::<String>::new());
+}
+
+/// 含萬用鍵的輸入（M4 票 18b）由 `--check` 擋：只有它慢時紅、只註明它；它在上限內時不紅。
+#[test]
+fn check_blocks_the_wildcard_inputs_over_their_limit() {
+    let repo = repo_with_long_input();
+    run(repo.path(), Mode::UpdateBaseline).unwrap();
+    // 假計時器：交給它的輸入有開頭是萬用鍵的（含萬用鍵的那批）時每鍵 `wildcard_ms`，否則 0.05 ms。
+    let native_with = |wildcard_ms: f64| {
+        move |engine: &Engine, user: &UserModel, inputs: &[String]| {
+            let wildcard = inputs.iter().all(|input| input.starts_with('z'));
+            let key_ms = if wildcard { wildcard_ms } else { 0.05 };
+            fake_timing(engine, user, inputs, |_| key_ms, 0.5)
+        }
+    };
+    let slow = native_with(2.0);
+    let outcome = qim_bench::run(
+        repo.path(),
+        Mode::Check,
+        None,
+        Timers {
+            native: &slow,
+            wasm: &slow_wasm,
+        },
+    )
+    .unwrap();
+    let violations = &outcome.violations;
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    for (v, group) in violations.iter().zip(["全部", "第 20 碼起"]) {
+        assert!(
+            v.contains("含萬用鍵的輸入")
+                && v.contains("空白")
+                && v.contains(&format!("{group} 的 p95")),
+            "{v}"
+        );
+    }
+    let within = native_with(1.0);
+    let outcome = qim_bench::run(
+        repo.path(),
+        Mode::Check,
+        None,
+        Timers {
+            native: &within,
+            wasm: &slow_wasm,
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome.violations, Vec::<String>::new());
+}
+
+/// 方案沒有萬用鍵時量不了含萬用鍵的輸入：整個基準失敗，免得那組安靜地缺席。
+#[test]
+fn a_scheme_without_a_wildcard_is_an_error() {
+    let repo = repo();
+    let mut scheme = SchemePack::from_bytes(
+        &fs::read(repo.path().join("build/packs/quick/quick.pack")).unwrap(),
+    )
+    .unwrap();
+    scheme.scheme.wildcard = None;
+    write(
+        repo.path(),
+        "build/packs/quick/quick.pack",
+        &scheme.to_bytes().unwrap(),
+    );
+    let error = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(error.contains("萬用鍵"), "{error}");
 }
 
 /// CLI 用的真實原生計時（`native_timing_with`）：只驗量了哪些鍵、哪些輸入量選開頭一段與環境欄，
@@ -1327,13 +1427,16 @@ fn the_real_native_timer_times_every_key_and_the_same_selects_as_wasm() {
         "原生（release）"
     };
     let report = outcome.report();
-    for (user, selects) in [("空白", "1 | 1"), ("學過", "0 | 0")] {
+    let runs = ["基準的輸入", "含萬用鍵的輸入"]
+        .into_iter()
+        .flat_map(|inputs| [(inputs, "空白", "1 | 1"), (inputs, "學過", "0 | 0")]);
+    for (inputs, user, selects) in runs {
         for (group, counts) in [
             ("全部", "5 | 26"),
             ("第 20 碼起", "1 | 2"),
             ("選開頭一段", selects),
         ] {
-            let row = format!("| {user} | {native} | {group} | {counts} | ");
+            let row = format!("| {inputs} | {user} | {native} | {group} | {counts} | ");
             assert!(
                 report.lines().any(|line| line.starts_with(&row)),
                 "{row}\n{report}"

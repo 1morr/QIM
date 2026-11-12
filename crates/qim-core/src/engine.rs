@@ -313,14 +313,14 @@ impl Engine {
     /// 順序見 [`lattice::candidates`]。不含英文候選、emoji 與英文使用者詞：它們是 [`crate::Session`] 的選項。
     /// [`crate::Session`] 逐鍵補算，結果和這裡相同。
     pub fn candidates(&self, user: &UserModel, input: &str) -> Vec<String> {
-        let lattice = Lattice::from_input(self, user, Preceding::default(), input);
+        let mut lattice = Lattice::from_input(self, user, Preceding::default(), input);
         let listing = Listing {
             english_candidates: false,
             emoji_candidates: false,
             english_user_words: false,
             simplified_last: true,
         };
-        lattice::candidates(self, user, &lattice, listing)
+        lattice::candidates(self, user, &mut lattice, listing)
             .into_iter()
             .map(|c| c.text)
             .collect()
@@ -658,8 +658,9 @@ impl Engine {
                         .map(move |e| (code.as_str(), e))
                 })
                 .collect();
-            // 穩定排序：同字頻照碼的字典序、碼內的字序。
-            chars.sort_by_key(|(_, e)| Reverse(self.lexicon.char_frequency(e.text)));
+            // 穩定排序：同字頻照碼的字典序、碼內的字序。字頻每個字只查一次：`az` 這類碼對上近千個字，
+            // 每次比較都查會佔掉這裡的大半時間（M4 票 18b）。
+            chars.sort_by_cached_key(|(_, e)| Reverse(self.lexicon.char_frequency(e.text)));
             let mut rank = 0;
             for (code, e) in chars {
                 let text = e.text.to_string();

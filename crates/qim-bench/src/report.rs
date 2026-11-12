@@ -288,18 +288,24 @@ fn latency(latency: &Latency) -> String {
          打完有兩段以上的題再按 ← 到第一段（不計時）、選它的首選，「選開頭一段」計那一次。\
          學習資料「空白」是空白的 UserModel，「學過」是一個 UserModel 依序學完各語料集合與「有前文」的題\
          （給前文）之後（WebAssembly 先 loadUserDict）。\
+         「含萬用鍵的輸入」是同一批輸入、每個輸入的第一碼換成萬用鍵（`qim_bench::wildcard_inputs`），上限相同。\
          WebAssembly 用 {WASM_BINDINGS}（`cargo xtask bench` 以 release 編）。\n\n\
-         | 學習資料 | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 | p95 上限 |\n\
-         | --- | --- | --- | ---: | ---: | ---: | ---: | --- |\n",
+         | 輸入碼 | 學習資料 | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 | p95 上限 |\n\
+         | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |\n",
         latency.machine
     );
-    for (user, runs) in latency.runs() {
+    for (inputs, user, runs) in latency.runs() {
         for (environment, timing, limits) in [
             ("原生", &runs.native, p95_limits_ms(user).map(Some)),
             ("WebAssembly", &runs.wasm, [None; 3]),
         ] {
             for ((group, summary), limit) in timing.groups().into_iter().zip(limits) {
-                let label = format!("{} | {environment}（{}）", user.label(), timing.runtime);
+                let label = format!(
+                    "{} | {} | {environment}（{}）",
+                    inputs.label(),
+                    user.label(),
+                    timing.runtime
+                );
                 let limit_cell = match limit {
                     None => "只報".to_string(),
                     Some(limit) => {
