@@ -620,9 +620,10 @@ impl Engine {
     /// 由 [`Engine::matching_codes`] 列出。字跨各個碼依字頻取最高的 `limit` 個（同 [`by_frequency`]）
     /// 與學過的；同一個字詞對到幾個碼時只留第一個。學習計數與個人機率照實際的碼查。
     ///
-    /// 單獨一個萬用鍵是任一個一碼的字；其餘一段的碼裡萬用鍵不能多於已知的碼，免得 `zz`、`azzz`
-    /// 這類碼對上大半個碼表或詞庫、每鍵延遲倍增。兩種規則在 dev 切分上比過（M4 票 11 Comments）：
-    /// 單獨的萬用鍵也不收時，一碼字換成 `z` 的題有一成多打不出，首碼、尾碼的題沒有分別。
+    /// 單獨一個萬用鍵是任一個一碼的字；其餘一段的碼裡萬用鍵不能多於已知的碼，也最多
+    /// [`MAX_WILDCARDS`] 個，免得 `zz`、`azzz`、`mzmzmz` 這類碼對上大半個碼表或詞庫、每鍵延遲倍增。
+    /// 規則在 dev 切分上比過（M4 票 11 Comments）：單獨的萬用鍵也不收時，一碼字換成 `z` 的題有一成
+    /// 多打不出，首碼、尾碼的題沒有分別。
     fn wildcard_edges(
         &self,
         user: &SchemeModel,
@@ -635,7 +636,7 @@ impl Engine {
             .chars()
             .filter(|&c| Some(c) == self.scheme.wildcard)
             .count();
-        if pattern.len() > 1 && wildcards * 2 > pattern.len() {
+        if pattern.len() > 1 && (wildcards * 2 > pattern.len() || wildcards > MAX_WILDCARDS) {
             return Vec::new();
         }
         let codes = self.matching_codes(user, pattern);
@@ -684,8 +685,10 @@ impl Engine {
     /// 有萬用鍵的碼 `pattern`（不含分隔記號）對得上的實際的碼，依字典序：萬用鍵的位置換成方案的
     /// 每個鍵，碼表、詞庫與使用者詞都沒有以它開頭的碼時就不往下展開。
     fn matching_codes(&self, user: &SchemeModel, pattern: &str) -> Vec<String> {
+        // 比字的最長碼長的只可能是詞的碼，不查碼表。
+        let longest_char = usize::from(self.scheme.max_code_length);
         let exists = |prefix: &str| {
-            self.code_table.has_prefix(prefix)
+            (prefix.len() <= longest_char && self.code_table.has_prefix(prefix))
                 || self.lexicon.has_code_prefix(prefix)
                 || user.has_word_code_prefix(prefix)
         };
@@ -714,14 +717,23 @@ impl Engine {
         codes
     }
 
-    /// 學習記的碼（plan §2.4）：輸入碼 `code`（已去掉分隔記號）有萬用鍵時換成 `text` 實際的碼——
-    /// 碼表、詞庫或使用者詞裡對得上的第一個；都對不上時是 `None`。沒有萬用鍵時照原樣。
+    /// 學習記的碼（plan §2.4）：輸入碼 `code`（已去掉分隔記號）有萬用鍵時換成 `text` 實際的碼
+    /// （[`Engine::matched_code`]），都對不上時是 `None`；沒有萬用鍵時照原樣。
     pub(crate) fn learned_code(&self, user: &UserModel, code: &str, text: &str) -> Option<String> {
         if !self.scheme.has_wildcard(code) {
             return Some(code.to_string());
         }
+        self.matched_code(user, code, text)
+    }
+
+    /// 有萬用鍵的輸入碼 `code`（可含分隔記號）裡字詞 `text` 實際對到的碼，不含分隔記號：碼表、
+    /// 詞庫或使用者詞裡對得上的第一個。碼沒有萬用鍵、或都對不上時是 `None`（debug 面板標萬用鍵）。
+    pub(crate) fn matched_code(&self, user: &UserModel, code: &str, text: &str) -> Option<String> {
+        if !self.scheme.has_wildcard(code) {
+            return None;
+        }
         let user = user.for_scheme(&self.scheme.id);
-        self.matching_codes(user, code)
+        self.matching_codes(user, &without_separators(code))
             .into_iter()
             .find(|c| self.has_entry(c, text) || user.words(c).any(|t| t == text))
     }
@@ -817,6 +829,10 @@ impl Engine {
             .map(|e| e.text)
     }
 }
+
+/// 一段的碼裡最多幾個萬用鍵（[`Engine::wildcard_edges`]）：每隔一碼一個 `z` 打 20 碼時，不設上限
+/// 每鍵最慢約 27 ms、選開頭一段約 54 ms（Apple M6）；兩個夠一個兩字詞各忘一碼。
+const MAX_WILDCARDS: usize = 2;
 
 /// 每個分隔記號在去掉分隔記號後的碼裡的位置：`vi'vd'jg` 是 2、4。
 fn separator_cuts(input: &str) -> Vec<usize> {

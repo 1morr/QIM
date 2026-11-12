@@ -722,6 +722,9 @@ pub struct WebInspectedSegment {
     pub learned: bool,
     #[wasm_bindgen(readonly, js_name = personalBigram)]
     pub personal_bigram: bool,
+    /// 碼有萬用鍵時實際對到的碼；沒有萬用鍵時沒有。
+    #[wasm_bindgen(readonly, js_name = matchedCode)]
+    pub matched_code: Option<String>,
 }
 
 impl From<Inspection> for WebInspection {
@@ -770,6 +773,7 @@ impl From<Inspection> for WebInspection {
                             .into(),
                             learned: s.learned,
                             personal_bigram: s.personal_bigram,
+                            matched_code: s.matched_code,
                         })
                         .collect(),
                     score: c.score,

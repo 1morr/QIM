@@ -1255,14 +1255,7 @@ impl Session {
         if !self.writes_learning() {
             return;
         }
-        let Some(segments) = segments
-            .iter()
-            .map(|s| {
-                let code = engine.learned_code(user, &without_separators(&s.code), &s.text)?;
-                Some(Segment::new(code, s.text.clone()))
-            })
-            .collect::<Option<Vec<Segment>>>()
-        else {
+        let Some(segments) = learned_segments(engine, user, segments) else {
             return;
         };
         let previous = self.composition_word.as_deref();
@@ -1279,15 +1272,16 @@ impl Session {
     }
 
     /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
-    /// 詞，`docs/research/libime-user-model.md` §5）。無痕或學習關掉時不記。
+    /// 詞，`docs/research/libime-user-model.md` §5）。無痕或學習關掉時不記。碼同 [`Session::learn`]
+    /// 去掉分隔記號、萬用鍵換成實際的碼，換不了時不記。
     fn add_auto_phrase(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
         if !self.writes_learning() {
             return;
         }
-        let code: String = segments
-            .iter()
-            .map(|s| without_separators(&s.code))
-            .collect();
+        let Some(segments) = learned_segments(engine, user, segments) else {
+            return;
+        };
+        let code: String = segments.iter().map(|s| s.code.as_str()).collect();
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         if !engine.has_entry(&code, &text) {
             user.add_auto_phrase(&engine.scheme().id, &code, &text);
@@ -1600,6 +1594,22 @@ impl Session {
             generation: self.generation,
         }
     }
+}
+
+/// 學習記的分段（plan §2.4）：碼去掉分隔記號，有萬用鍵的換成字詞實際的碼
+/// （[`Engine::learned_code`]）；有一段換不了時是 `None`。
+fn learned_segments(
+    engine: &Engine,
+    user: &UserModel,
+    segments: &[Segment],
+) -> Option<Vec<Segment>> {
+    segments
+        .iter()
+        .map(|s| {
+            let code = engine.learned_code(user, &without_separators(&s.code), &s.text)?;
+            Some(Segment::new(code, s.text.clone()))
+        })
+        .collect()
 }
 
 /// 補上各分段的字根：分段在 `Session` 裡不帶字根，公開的方法回傳前都經過這裡。

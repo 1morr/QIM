@@ -14,13 +14,18 @@ const EMAIL: &str = "ivan.test@example.com";
 
 /// 每個字母都是一個字的碼（`a` 日、`b` 月…），所以任何字母串都有中文候選。
 fn engine() -> Engine {
+    engine_with(None)
+}
+
+/// 同 [`engine`]，萬用鍵是 `wildcard`。
+fn engine_with(wildcard: Option<char>) -> Engine {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
-        wildcard: None,
+        wildcard,
         radicals: BTreeMap::new(),
         packs: Packs {
             language_model: Some("model".into()),
@@ -503,4 +508,16 @@ fn an_import_with_more_than_the_limit_is_an_error() {
     }
     let error = UserModel::import(&text, None).map(|i| i.user).unwrap_err();
     assert_eq!(error.line, REMEMBERED_STRINGS_MAX + 2);
+}
+
+/// 記住的字串只比方案字母：方案設了萬用鍵時，中文組字打含 `z` 的 email 照萬用鍵以前一樣略過 `z`
+/// 比對（以前組字中 `z` 吃下不動作），`lizzy` 照樣出 `lizzy@example.com`（M4 票 11）。
+#[test]
+fn the_wildcard_is_skipped_when_matching_a_remembered_string() {
+    let email = "lizzy@example.com";
+    let mut ime = Ime::new();
+    ime.engine = engine_with(Some('z'));
+    ime.type_in_english(email);
+    let shown = ime.candidates("lizzy");
+    assert_eq!(shown.get(1).map(String::as_str), Some(email), "{shown:?}");
 }

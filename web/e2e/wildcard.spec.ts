@@ -40,6 +40,30 @@ test.describe("實體鍵盤", () => {
 		await expect(composition).toHaveText("");
 	});
 
+	test("debug 面板：萬用鍵的候選標「萬用鍵」，切段附實際的碼", async ({
+		page,
+	}, testInfo) => {
+		const debug = page.locator("#debug");
+		await page.getByRole("button", { name: "debug" }).click();
+		await expect(debug).toBeVisible();
+		await ui(page).text.focus();
+		await page.keyboard.type("hiz");
+		await expect(ui(page).items.first()).toHaveText("1的人");
+		const rows = debug
+			.getByRole("table", { name: "候選來源" })
+			.locator("tbody tr");
+		const top = rows.filter({
+			has: page.locator("td:nth-child(2)", { hasText: /^的人$/ }),
+		});
+		await expect(top).toHaveAttribute("data-sources", /\bwildcard\b/);
+		await expect(top.locator("td").nth(2)).toContainText("萬用鍵");
+		await expect(top.locator("td").nth(5)).toHaveText("hiz（hio）→的人");
+		await page.screenshot({ path: testInfo.outputPath("debug-panel.png") });
+		await page.keyboard.press("Escape");
+		await page.keyboard.type("hio");
+		await expect(top).not.toHaveAttribute("data-sources", /\bwildcard\b/);
+	});
+
 	test("沒有組字時 z 開始組字，Enter 原樣上屏 z", async ({ page }) => {
 		const { text, composition } = ui(page);
 		await page.keyboard.type("z");

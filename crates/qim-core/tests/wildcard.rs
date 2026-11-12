@@ -12,7 +12,7 @@ use qim_core::{
 };
 
 /// 碼表：`a` 日、`b` 月、`n` 弓、`r` 口，`ab` 明、`an` 門、`ar` 晶、`nr` 同、`br` 骨；
-/// 詞庫：`anr` 門口。
+/// 詞庫：`anr` 門口、`abanar` 明門晶。
 fn engine(wildcard: Option<char>) -> Engine {
     let mut radicals = BTreeMap::from([
         ('a', "日".to_string()),
@@ -68,13 +68,22 @@ fn engine(wildcard: Option<char>) -> Engine {
         ('同', 400),
         ('骨', 10),
     ];
-    let words = BTreeMap::from([(
-        "anr".to_string(),
-        vec![Word {
-            text: "門口".into(),
-            frequency: 1000,
-        }],
-    )]);
+    let words = BTreeMap::from([
+        (
+            "anr".to_string(),
+            vec![Word {
+                text: "門口".into(),
+                frequency: 1000,
+            }],
+        ),
+        (
+            "abanar".to_string(),
+            vec![Word {
+                text: "明門晶".into(),
+                frequency: 1000,
+            }],
+        ),
+    ]);
     let lexicon = LexiconPack {
         id: "lexicon".into(),
         lexicon: Lexicon::new(words, chars),
@@ -267,4 +276,77 @@ fn without_a_wildcard_in_the_scheme_z_is_swallowed_during_a_composition() {
 
     let mut idle = Ime::new(None);
     assert!(!idle.press(Key::Letter('z')).handled, "沒有組字時交還宿主");
+}
+
+/// debug 面板（M4 票 01）標萬用鍵：有萬用鍵的段帶它實際對到的碼，其他段沒有。
+#[test]
+fn inspect_shows_the_code_each_wildcard_matched() {
+    let mut ime = Ime::new(Some('z'));
+    ime.type_keys("az");
+    let inspection = ime.session.inspect(&ime.engine, &ime.user);
+    let matched = |text: &str| {
+        let candidate = inspection
+            .candidates
+            .iter()
+            .find(|c| c.text == text)
+            .unwrap_or_else(|| panic!("沒有 {text}"));
+        candidate
+            .segments
+            .iter()
+            .map(|s| (s.code.clone(), s.matched_code.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(matched("晶"), [("az".into(), Some("ar".into()))]);
+    assert_eq!(matched("明"), [("az".into(), Some("ab".into()))]);
+
+    let mut plain = Ime::new(Some('z'));
+    plain.type_keys("ar");
+    let inspection = plain.session.inspect(&plain.engine, &plain.user);
+    assert!(
+        inspection
+            .candidates
+            .iter()
+            .flat_map(|c| &c.segments)
+            .all(|s| s.matched_code.is_none())
+    );
+}
+
+/// 一段最多兩個萬用鍵：`azazar` 對得上六碼的「明門晶」，`zbznzr` 有三個就對不上。
+#[test]
+fn a_segment_has_at_most_two_wildcards() {
+    let engine = engine(Some('z'));
+    assert_eq!(
+        engine.candidates(&UserModel::default(), "azazar")[0],
+        "明門晶"
+    );
+    let all = engine.candidates(&UserModel::default(), "zbznzr");
+    assert!(!all.iter().any(|t| t == "明門晶"), "{all:?}");
+}
+
+/// 分段選字後的自動造詞也記實際的碼：`az` 選「晶」、`ab` 選「明」，造的是 `arab` → 晶明。
+#[test]
+fn an_auto_phrase_records_the_codes_the_wildcards_matched() {
+    let mut ime = Ime::new(Some('z'));
+    let shown = ime.type_keys("azab");
+    assert_eq!(ime.choose(&shown, "晶"), None, "選了開頭一段還沒上屏");
+    let shown = ime.session.refresh(&ime.engine, &ime.user);
+    assert_eq!(ime.choose(&shown, "明").as_deref(), Some("晶明"));
+
+    let exported = ime.user.export();
+    assert!(exported.contains("\t晶明\tarab\t"), "{exported}");
+    assert!(!exported.contains('z'), "學習不記萬用鍵：{exported}");
+}
+
+/// 分隔記號加萬用鍵：詞照實際的碼看分隔落不落在字界。`an'z` 的分隔在「門」（`an`）「口」（`r`）
+/// 之間，仍是一個詞；`a'nz` 的分隔在「門」的碼裡，詞不跨過它。
+#[test]
+fn a_separator_with_a_wildcard_splits_by_the_matched_codes() {
+    let mut ime = Ime::new(Some('z'));
+    let shown = ime.type_keys("an'z");
+    assert_eq!(texts(&shown)[0], "門口", "{:?}", texts(&shown));
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("門口"));
+
+    let mut ime = Ime::new(Some('z'));
+    let all = texts(&ime.type_keys("a'nz"));
+    assert!(!all.iter().any(|t| t.contains('門')), "{all:?}");
 }

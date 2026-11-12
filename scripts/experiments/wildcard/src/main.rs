@@ -1,7 +1,8 @@
 //! 萬用鍵實驗（M4 票 11）：dev 切分每句挑一個字，把它的一碼換成萬用鍵 `z`，量整句首選、修正次數
 //! 與每鍵延遲；和原樣的碼、現在的行為（組字中 `z` 吃下不動作，等於少打那一碼）並列。
 //!
-//! 用法（repo 根目錄先跑 `cargo xtask data`）：`cargo run --release -- [repo 根目錄]`。
+//! 用法（repo 根目錄先跑 `cargo xtask data`）：`cargo run --release -- [repo 根目錄] [--latency-only]`；
+//! `--latency-only` 只量每鍵延遲（延遲超過上限時在負載低時單獨重量用）。
 
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -149,8 +150,11 @@ fn variants(items: &[Item]) -> Vec<(String, Vec<Item>)> {
 }
 
 fn main() {
-    let root = std::env::args()
-        .nth(1)
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let latency_only = args.iter().any(|a| a == "--latency-only");
+    let root = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
         .map_or_else(|| PathBuf::from("../../.."), PathBuf::from);
     let loaded = qim_bench::load_engine(&root, &[], None).unwrap();
     let engine = &loaded.engine;
@@ -176,6 +180,9 @@ fn main() {
             }
         }
     }
+    if latency_only {
+        jobs.clear();
+    }
     let rows: Vec<Row> = thread::scope(|scope| {
         let handles: Vec<_> = jobs
             .iter()
@@ -183,9 +190,16 @@ fn main() {
             .collect();
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
+    if !latency_only {
+        print_rows(&rows);
+    }
+    print_latency(engine, &root, &wildcard_inputs);
+}
+
+fn print_rows(rows: &[Row]) {
     println!("| 集合 | 組 | 題數 | 整句首選正確 | 修正/句 | 打不出 |");
     println!("| --- | --- | ---: | ---: | ---: | ---: |");
-    for row in &rows {
+    for row in rows {
         println!(
             "| {} | {} | {} | {} ({:.1}%) | {:.3} | {} |",
             row.set,
@@ -197,10 +211,12 @@ fn main() {
             row.unfinished
         );
     }
+}
 
-    // 每鍵延遲：句子的「換成 z」各組（首碼、尾碼、一碼字）合起來，空白與學過的學習資料各一次；
-    // 學過的照基準學完全部公開集合的句子（不含「有前文」的題，比基準少約 3 千句）。
-    let corpora = qim_bench::load_corpora(&root).unwrap();
+/// 每鍵延遲：句子的「換成 z」各組（首碼、尾碼、一碼字）合起來，空白與學過的學習資料各一次；
+/// 學過的照基準學完全部公開集合的句子（不含「有前文」的題，比基準少約 3 千句）。
+fn print_latency(engine: &Engine, root: &Path, wildcard_inputs: &[String]) {
+    let corpora = qim_bench::load_corpora(root).unwrap();
     let learned = learned_model(engine, corpora.iter().flat_map(|(_, items)| items));
     println!();
     println!(
@@ -211,7 +227,7 @@ fn main() {
     println!("| 學習資料 | 組 | 按鍵數 | p50 | p95 |");
     println!("| --- | --- | ---: | ---: | ---: |");
     for (label, user) in [("空白", UserModel::default()), ("學過", learned)] {
-        let timing = native_timing_with(engine, &user, &wildcard_inputs);
+        let timing = native_timing_with(engine, &user, wildcard_inputs);
         for (group, summary) in timing.groups() {
             if let Some(s) = summary {
                 println!(
