@@ -138,7 +138,7 @@ impl Keyboard {
 
     /// 點一下目前頁第 `index` 個鍵：做它的 [`Key::tap_action`]（組字中照 `composing`，Shift 開著時
     /// 字母鍵輸入大寫字母）。`quick_repeat` 是同一個鍵剛點過（殼量時間），快速點兩下 Shift 鎖定。
-    /// `touch` 是點擊位置（`index` 是它的 [`Page::hit`]）：有給而動作是字母時，送出各字母的機率
+    /// `touch` 是點擊位置（`index` 是它的 [`Page::hit`]，不是時照沒給）：有給而動作是字母時，送出各字母的機率
     /// （[`Output::Weighted`]，空間模型用 [`SpatialModel::default`]）。
     pub fn tap(
         &mut self,
@@ -149,8 +149,11 @@ impl Keyboard {
     ) -> Result<Output, KeyboardError> {
         let state = self.key_state(composing);
         let action = self.key(index)?.tap_action(state);
+        // 點擊位置按到的不是 `index` 時不算機率：打的字照殼按下的鍵（空間模型保證點中的鍵最高）。
         let weights = match (&action, touch) {
-            (Action::Letter(_), Some(touch)) => {
+            (Action::Letter(_), Some(touch))
+                if self.page().hit(touch.x, touch.y) == Some(index) =>
+            {
                 Some(SpatialModel::default().letter_weights(self.page(), touch, state))
             }
             _ => None,

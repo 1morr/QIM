@@ -5,7 +5,7 @@
 //! 的 `ProximityInfo`：它假設矩形、共用尺度、以排為單位（`docs/research/spatial-correction-swipe.md` §1.2）。
 //! 參數的初值與來源在 [`SpatialModel::default`]，容錯的票在基準的 dev 切分上調。
 
-use crate::model::{Action, KeyState, Page};
+use crate::model::{Action, Key, KeyState, Page};
 
 /// 一次點擊：畫布座標與實體尺寸。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,8 +21,10 @@ pub struct Touch {
 pub struct SpatialModel {
     /// 手指的絕對精度 σa（毫米）：σ 不隨鍵變小一路縮到 0（FFitts）。
     pub finger_sigma_mm: f64,
-    /// 每個軸的 σ 裡跟鍵大小成比例的部分：`size_ratio × 該軸的鍵長`（VelociTap 全鍵共用比例）。
-    pub size_ratio: f64,
+    /// 橫軸與縱軸的 σ 裡跟鍵大小成比例的部分：`比例 × 該軸的鍵長`（VelociTap 全鍵共用兩軸各一個比例）。
+    /// 兩部分照 FFitts 合起來：`σ = √(σa² + (比例 × 鍵長)²)`。
+    pub size_ratio_x: f64,
+    pub size_ratio_y: f64,
     /// 點擊判定按到的鍵（重疊時是最上層）的機率乘上它。
     pub top_boost: f64,
     /// 剪枝半徑（毫米）：離點擊更遠的鍵不算，按到的鍵除外。
@@ -34,15 +36,18 @@ pub struct SpatialModel {
 impl Default for SpatialModel {
     /// 初值（`docs/research/spatial-correction-swipe.md` §2.3）：
     /// - `finger_sigma_mm` 1.5：Bi、Li、Zhai 2013（FFitts law）圓形目標的 σa。
-    /// - `size_ratio` 0.14：Fowler 2015 的 σx 1.97 mm 是以鍵中心為平均、鍵寬 6.16 mm；這裡在鍵內距離是 0，
-    ///   等於瞄準點在鍵內均勻分布，扣掉均勻分布的變異 w²/12 剩 √(1.97² − 6.16²/12) ≈ 0.85 mm，約鍵寬的 0.14。
+    /// - `size_ratio_x` 0.21、`size_ratio_y` 0.12：Fowler 2015 量到的 σx 1.97 mm、σy 1.88 mm（鍵寬 6.16 mm、
+    ///   高 9.42 mm）照 FFitts 拆成 σa² 加上跟鍵大小有關的部分：√(1.97² − 1.5²) ≈ 1.28 mm 是鍵寬的 0.21，
+    ///   √(1.88² − 1.5²) ≈ 1.13 mm 是鍵高的 0.12。Fowler 的 σ 量的是到鍵中心的距離，這裡套在到觸控範圍的距離
+    ///   （鍵內是 0），分布因此比 Fowler 的寬；當初值用，容錯的票再調。
     /// - `radius_mm` 7.99：Fowler 2015 的剪枝半徑。
     /// - `limit` 5：Fowler 的剪枝半徑內通常只有 3–6 個鍵（研究筆記〈推論〉）。
     /// - `top_boost` 2：沒有來源，重疊而一樣近的兩個鍵上層得 2/3。
     fn default() -> Self {
         Self {
             finger_sigma_mm: 1.5,
-            size_ratio: 0.14,
+            size_ratio_x: 0.21,
+            size_ratio_y: 0.12,
             top_boost: 2.0,
             radius_mm: 7.99,
             limit: 5,
@@ -60,7 +65,7 @@ impl SpatialModel {
         let mut letters: Vec<(char, f64)> = Vec::new();
         for index in page.top_down() {
             let key = &page.keys[index];
-            let Action::Letter(letter) = key.tap_action(state) else {
+            let Some(letter) = letter_of(key, state) else {
                 continue;
             };
             let (dx, dy) = key.offset(touch.x, touch.y);
@@ -69,11 +74,12 @@ impl SpatialModel {
             if !is_hit && dx.hypot(dy) > self.radius_mm {
                 continue;
             }
-            let sigma = |size: f64| {
+            let sigma = |ratio: f64, size: f64| {
                 let size_mm = size * touch.mm_per_unit;
-                self.finger_sigma_mm.hypot(self.size_ratio * size_mm)
+                self.finger_sigma_mm.hypot(ratio * size_mm)
             };
-            let (sx, sy) = (sigma(key.frame.w), sigma(key.frame.h));
+            let sx = sigma(self.size_ratio_x, key.frame.w);
+            let sy = sigma(self.size_ratio_y, key.frame.h);
             let mut log = -(dx * dx / (2.0 * sx * sx) + dy * dy / (2.0 * sy * sy));
             if is_hit {
                 log += self.top_boost.ln();
@@ -88,10 +94,7 @@ impl SpatialModel {
         // 點中的鍵的字母一定最高（容錯進核心之前核心只用最高的，打字要同點擊判定）：大小不一的鍵之間，
         // 大鍵的 σ 寬，可能贏過比較近的小鍵；這時把點中的字母提到和最高的一樣、排第一，留著「兩個一樣可能」
         // 給容錯。
-        let hit_letter = hit.and_then(|index| match page.keys[index].tap_action(state) {
-            Action::Letter(letter) => Some(letter),
-            _ => None,
-        });
+        let hit_letter = hit.and_then(|index| letter_of(&page.keys[index], state));
         if let Some(at) = hit_letter.and_then(|c| letters.iter().position(|&(d, _)| d == c))
             && at > 0
         {
@@ -112,6 +115,14 @@ impl SpatialModel {
             .map(|(c, w)| (c, (w / sum) as f32))
             .filter(|&(_, p)| p > 0.0)
             .collect()
+    }
+}
+
+/// `state` 下點一下 `key` 會送的字母；不送字母的鍵是 `None`。
+fn letter_of(key: &Key, state: KeyState) -> Option<char> {
+    match key.tap_action(state) {
+        Action::Letter(letter) => Some(letter),
+        _ => None,
     }
 }
 

@@ -268,6 +268,11 @@ fn a_letter_tap_with_a_touch_point_sends_letter_probabilities() {
     assert_eq!(output, Output::Weighted(vec![('a', 1.0)]));
     assert_eq!(output.kind(), "weighted");
     assert_eq!(output.character(), Some('a'));
+    // 點擊位置按到的不是這個鍵（空白鍵上）：照按下的鍵送字母，不算機率。
+    assert_eq!(
+        keyboard.tap(0, false, false, touch(35.0)).unwrap(),
+        Output::Letter('a')
+    );
     // 不是字母鍵：照舊。
     assert_eq!(
         keyboard.tap(3, false, false, touch(35.0)).unwrap(),

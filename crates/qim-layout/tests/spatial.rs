@@ -185,6 +185,8 @@ proptest! {
         let (x, y) = centre(&page.keys[i]);
         let w = weights(&page, x, y, MM);
         prop_assert_eq!(w[0].0, letter(i), "{:?}", w);
+        // 嚴格大於：是 Gaussian 自己勝出，不是被「點中的鍵提到最高」拉成平手。
+        prop_assert!(w.len() == 1 || w[0].1 > w[1].1, "{:?}", w);
     }
 
     /// 只有兩個鍵時，點從 A 的中心往 B 的中心移，A 的機率不升、B 的不降。
@@ -279,6 +281,8 @@ proptest! {
         let Action::Letter(expected) = page.keys[hit].tap else { unreachable!() };
         let w = weights(&page, x, y, MM);
         prop_assert_eq!(w[0].0, expected, "{:?}", w);
+        // 一樣大的鍵上不靠「提到最高」：Gaussian 加上加成本身就讓點中的鍵勝出。
+        prop_assert!(w.len() == 1 || w[0].1 > w[1].1, "{:?}", w);
     }
 }
 

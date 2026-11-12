@@ -487,7 +487,7 @@ impl WebSession {
             .keyboard
             .tap(index, self.session.composing(), quick_repeat, Some(touch))
             .map_err(js_error)?;
-        Ok(self.send(output))
+        self.send(output)
     }
 
     /// 長按 `layout` 目前頁第 `index` 個鍵、選了長按清單第 `choice` 個（0 是預設）。
@@ -502,7 +502,7 @@ impl WebSession {
             .keyboard
             .long_press(index, choice)
             .map_err(js_error)?;
-        Ok(self.send(output))
+        self.send(output)
     }
 }
 
@@ -520,15 +520,15 @@ impl WebSession {
 
     /// 觸控鍵盤的輸入交給核心：`Output` 轉成 `Key`，文字經 `Session::text`。結果帶著輸入的種類與
     /// 字元，核心沒吃下時網頁照它做。
-    fn send(&mut self, output: Output) -> WebSnapshot {
+    fn send(&mut self, output: Output) -> Result<WebSnapshot, JsError> {
         let snapshot = match &output {
             Output::Text(text) => self.session.text(&self.engine, &mut self.user, text),
             Output::Letter(c) => self.handle(Key::Letter(*c)),
-            // `qim-layout` 給的一定收得下（字母、不重複、正數）；萬一不行就退回機率最高的字母。
-            Output::Weighted(weights) => match Weights::new(weights.clone()) {
-                Ok(weights) => self.handle(Key::Weighted(weights)),
-                Err(_) => self.handle(Key::Letter(weights[0].0)),
-            },
+            // `qim-layout` 給的一定收得下（字母、不重複、正數）；收不下是 bug，照例外丟給網頁。
+            Output::Weighted(weights) => {
+                let weights = Weights::new(weights.clone()).map_err(js_error)?;
+                self.handle(Key::Weighted(weights))
+            }
             Output::Punct(c) => self.handle(Key::Punct(*c)),
             Output::Space => self.handle(Key::Space),
             Output::Backspace => self.handle(Key::Backspace),
@@ -539,7 +539,7 @@ impl WebSession {
         let mut snapshot = WebSnapshot::from(snapshot);
         snapshot.action = Some(output.kind().into());
         snapshot.character = output.character().map(String::from);
-        snapshot
+        Ok(snapshot)
     }
 }
 
@@ -752,7 +752,7 @@ impl From<Inspection> for WebInspection {
             PrecedingChar::Char(c) => ("char", Some(String::from(c))),
             PrecedingChar::Unigram => ("unigram", None),
         };
-        let touch = i.touch.as_ref().map_or(&[][..], Weights::entries);
+        let touch = i.touch_weights.as_ref().map_or(&[][..], Weights::entries);
         Self {
             touch_letters: touch.iter().map(|&(c, _)| String::from(c)).collect(),
             touch_probabilities: touch.iter().map(|&(_, p)| p).collect(),

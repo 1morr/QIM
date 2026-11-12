@@ -475,7 +475,7 @@ pub struct Session {
     waiting_rerank: Option<(u64, Vec<usize>)>,
     /// 最近一個鍵是觸控的 [`Key::Weighted`] 時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
     /// 其他鍵與 [`Session::text`] 清掉。容錯的票再決定要不要逐碼記。
-    touch: Option<Weights>,
+    touch_weights: Option<Weights>,
 }
 
 impl Session {
@@ -720,11 +720,11 @@ impl Session {
         let key = match key {
             Key::Weighted(weights) => {
                 let top = weights.top();
-                self.touch = Some(weights);
+                self.touch_weights = Some(weights);
                 Key::Letter(top)
             }
             key => {
-                self.touch = None;
+                self.touch_weights = None;
                 key
             }
         };
@@ -1200,7 +1200,7 @@ impl Session {
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         self.apply_pending_options(engine, user);
         self.end_association();
-        self.touch = None;
+        self.touch_weights = None;
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
