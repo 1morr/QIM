@@ -51,7 +51,9 @@ impl Ime {
     }
 
     fn press(&mut self, key: Key) -> qim_core::Snapshot {
-        let snapshot = self.session.handle(&self.engine, &mut self.user, key);
+        let snapshot = self
+            .session
+            .handle(&self.engine, &mut self.user, key.clone());
         if let Some(commit) = &snapshot.commit {
             self.text.push_str(commit);
         }

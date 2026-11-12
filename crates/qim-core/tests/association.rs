@@ -198,12 +198,12 @@ fn escape_and_backspace_only_close_the_association() {
     for key in [Key::Escape, Key::Backspace] {
         let mut typing = Typing::new();
         typing.commit("an");
-        let closed = typing.key(key);
+        let closed = typing.key(key.clone());
         assert!(closed.handled, "{key:?}");
         assert!(closed.commit.is_none(), "{key:?}");
         assert!(closed.candidates.is_empty(), "{key:?}");
         // 第二下照常交還宿主。
-        assert!(!typing.key(key).handled, "{key:?}");
+        assert!(!typing.key(key.clone()).handled, "{key:?}");
     }
 }
 

@@ -2,6 +2,7 @@
 //! 各平台殼共用，綁定只轉型別（plan §1.2、§2.6，M2 票 03）。
 
 use crate::model::{Action, Key, KeyState, Layout, LayoutVariant, Page, Shift, When};
+use crate::spatial::{SpatialModel, Touch};
 use crate::validate::Warning;
 
 /// 一份佈局在殼上的狀態。切頁與 Shift 在 [`Keyboard::tap`]、[`Keyboard::long_press`] 裡做完，
@@ -17,10 +18,13 @@ pub struct Keyboard {
 
 /// 觸控鍵盤點按後送出、殼交給核心的東西。只改鍵盤狀態的動作（切頁、⇧、換鍵盤）已在 [`Keyboard`] 做完，
 /// 剩下 `Modifier`：核心組字中吃下、沒有組字時交還宿主但不結束數字（brief §4.7）。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Output {
     /// 字母鍵，同實體鍵盤按那個字母。
     Letter(char),
+    /// 有點擊位置的字母鍵：各字母的機率（[`SpatialModel::letter_weights`]），由高到低、和為 1；
+    /// 綁定轉成核心的 `Key::Weighted`。
+    Weighted(Vec<(char, f32)>),
     /// ASCII 標點鍵，同實體鍵盤按那個鍵：全形、半形與組字中的處理由核心決定。
     Punct(char),
     /// 直接輸入的文字，不經組字（核心的 `Session::text`）。
@@ -39,6 +43,7 @@ impl Output {
     pub fn kind(&self) -> &'static str {
         match self {
             Output::Letter(_) => "letter",
+            Output::Weighted(_) => "weighted",
             Output::Punct(_) => "punct",
             Output::Text(_) => "text",
             Output::Space => "space",
@@ -49,10 +54,11 @@ impl Output {
         }
     }
 
-    /// 字母與標點鍵的字元；核心沒吃下時宿主照打它。
+    /// 字母與標點鍵的字元（有機率的字母鍵是機率最高的）；核心沒吃下時宿主照打它。
     pub fn character(&self) -> Option<char> {
         match self {
             Output::Letter(c) | Output::Punct(c) => Some(*c),
+            Output::Weighted(weights) => weights.first().map(|&(c, _)| c),
             _ => None,
         }
     }
@@ -132,18 +138,31 @@ impl Keyboard {
 
     /// 點一下目前頁第 `index` 個鍵：做它的 [`Key::tap_action`]（組字中照 `composing`，Shift 開著時
     /// 字母鍵輸入大寫字母）。`quick_repeat` 是同一個鍵剛點過（殼量時間），快速點兩下 Shift 鎖定。
+    /// `touch` 是點擊位置（`index` 是它的 [`Page::hit`]）：有給而動作是字母時，送出各字母的機率
+    /// （[`Output::Weighted`]，空間模型用 [`SpatialModel::default`]）。
     pub fn tap(
         &mut self,
         index: usize,
         composing: bool,
         quick_repeat: bool,
+        touch: Option<Touch>,
     ) -> Result<Output, KeyboardError> {
-        let action = self.key(index)?.tap_action(self.key_state(composing));
+        let state = self.key_state(composing);
+        let action = self.key(index)?.tap_action(state);
+        let weights = match (&action, touch) {
+            (Action::Letter(_), Some(touch)) => {
+                Some(SpatialModel::default().letter_weights(self.page(), touch, state))
+            }
+            _ => None,
+        };
         self.shift = match action {
             Action::Shift => self.shift.after_shift_tap(quick_repeat),
             _ => self.shift.after_other_key(),
         };
-        Ok(self.perform(action))
+        Ok(match weights {
+            Some(weights) if !weights.is_empty() => Output::Weighted(weights),
+            _ => self.perform(action),
+        })
     }
 
     /// 長按目前頁第 `index` 個鍵、選了長按清單第 `choice` 個（0 是預設）。

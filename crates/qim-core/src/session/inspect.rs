@@ -5,7 +5,7 @@
 
 use super::{Session, ShownCandidate};
 use crate::lattice::{Preceding, SpanKind};
-use crate::{CLAUSE_START, Engine, Segment, UserModel};
+use crate::{CLAUSE_START, Engine, Segment, UserModel, Weights};
 
 /// [`Session::inspect`] 的結果。
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +20,8 @@ pub struct Inspection {
     pub segments: Vec<Segment>,
     /// 全部候選（不分頁），依目前的順序。
     pub candidates: Vec<InspectedCandidate>,
+    /// 最近一個鍵是觸控的 [`crate::Key::Weighted`] 時，它的各字母機率（M4 票 06）；其他鍵是 `None`。
+    pub touch: Option<Weights>,
 }
 
 /// 核心記著的前文是什麼。
@@ -140,6 +142,7 @@ impl Session {
             preceding_word: before.word,
             segments: self.composition(engine).segments,
             candidates,
+            touch: self.touch.clone(),
         }
     }
 }

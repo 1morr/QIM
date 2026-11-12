@@ -1,7 +1,7 @@
 //! `Keyboard`：殼的觸控鍵盤狀態（佈局版本、目前頁、觸控 Shift）與點按的結果，各平台共用（M2 票 03）。
 //! 點一下或長按後，切頁與 Shift 已在這裡做完，殼只把 `Output` 交給核心。
 
-use qim_layout::{Device, Keyboard, Layout, Orientation, Output, Shift, When};
+use qim_layout::{Device, Keyboard, Layout, Orientation, Output, Shift, Touch, When};
 
 const PORTRAIT: When = When {
     device: Device::Phone,
@@ -77,7 +77,7 @@ fn index(keyboard: &Keyboard, id: &str) -> usize {
 
 fn tap(keyboard: &mut Keyboard, id: &str, composing: bool) -> Output {
     let index = index(keyboard, id);
-    keyboard.tap(index, composing, false).unwrap()
+    keyboard.tap(index, composing, false, None).unwrap()
 }
 
 #[test]
@@ -145,8 +145,8 @@ fn shift_turns_on_once_types_one_capital_and_a_quick_second_tap_locks() {
     assert_eq!(keyboard.shift(), Shift::Off);
 
     let shift = index(&keyboard, "shift");
-    keyboard.tap(shift, false, false).unwrap();
-    keyboard.tap(shift, false, true).unwrap();
+    keyboard.tap(shift, false, false, None).unwrap();
+    keyboard.tap(shift, false, true, None).unwrap();
     assert_eq!(keyboard.shift(), Shift::Locked);
     assert_eq!(tap(&mut keyboard, "a", false), Output::Text("A".into()));
     assert_eq!(tap(&mut keyboard, "symbols", false), Output::Modifier);
@@ -187,7 +187,10 @@ fn a_long_press_does_the_chosen_entry_and_releases_a_one_shot_shift() {
 fn a_key_or_choice_that_is_not_there_is_an_error_and_changes_nothing() {
     let mut keyboard = keyboard();
     tap(&mut keyboard, "shift", false);
-    let error = keyboard.tap(99, false, false).unwrap_err().to_string();
+    let error = keyboard
+        .tap(99, false, false, None)
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("99"), "{error}");
     let a = index(&keyboard, "a");
     let error = keyboard.long_press(a, 2).unwrap_err().to_string();
@@ -215,8 +218,8 @@ fn a_replacement_keyboard_takes_over_the_shift_and_page_of_the_old_one() {
     tap(&mut old, "symbols", false);
     let mut locked = keyboard();
     let shift = index(&locked, "shift");
-    locked.tap(shift, false, false).unwrap();
-    locked.tap(shift, false, true).unwrap();
+    locked.tap(shift, false, false, None).unwrap();
+    locked.tap(shift, false, true, None).unwrap();
     tap(&mut locked, "symbols", false);
 
     let mut next = keyboard();
@@ -247,4 +250,33 @@ fn an_output_names_its_kind_and_the_character_a_host_would_type() {
     assert_eq!(Output::ToggleAscii.kind(), "toggleAscii");
     assert_eq!(Output::Modifier.kind(), "modifier");
     assert_eq!(Output::Modifier.character(), None);
+}
+
+/// 觸控點一下字母鍵時給了點擊位置，送出各字母的機率（`Output::Weighted`，M4 票 06）；其他鍵與 Shift
+/// 開著的字母鍵照舊。
+#[test]
+fn a_letter_tap_with_a_touch_point_sends_letter_probabilities() {
+    let touch = |x: f64| {
+        Some(Touch {
+            x,
+            y: 5.0,
+            mm_per_unit: 0.6,
+        })
+    };
+    let (mut keyboard, _) = Keyboard::new(layout(), PORTRAIT);
+    let output = keyboard.tap(0, false, false, touch(5.0)).unwrap();
+    assert_eq!(output, Output::Weighted(vec![('a', 1.0)]));
+    assert_eq!(output.kind(), "weighted");
+    assert_eq!(output.character(), Some('a'));
+    // 不是字母鍵：照舊。
+    assert_eq!(
+        keyboard.tap(3, false, false, touch(35.0)).unwrap(),
+        Output::Space
+    );
+    // Shift 開著時字母鍵輸入大寫字母的文字，不算機率。
+    keyboard.tap(1, false, false, touch(15.0)).unwrap();
+    assert_eq!(
+        keyboard.tap(0, false, false, touch(5.0)).unwrap(),
+        Output::Text("A".into())
+    );
 }
