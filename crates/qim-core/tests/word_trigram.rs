@@ -4,9 +4,10 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CLAUSE_START, CharModel, CodeEntry, CodeTable, Engine, Key, LanguageModel, LanguageModelPack,
-    Manifest, NgramRow, Pack, PackError, PackKind, Packs, Ranking, Scheme, SchemePack, Session,
-    Snapshot, UserModel, WordTrigram, WordTrigramPack,
+    CLAUSE_START, CharModel, CodeEntry, CodeTable, ConversionTable, Engine, Key, LanguageModel,
+    LanguageModelPack, Manifest, NgramRow, Options, Pack, PackError, PackKind, Packs, Ranking,
+    Scheme, SchemePack, Session, Simplifier, SimplifierPack, Snapshot, UserModel, WordTrigram,
+    WordTrigramPack,
 };
 
 const START: &str = "\u{2}";
@@ -34,11 +35,13 @@ fn scheme_pack(word_trigram: Option<&str>) -> SchemePack {
     let code_table = CodeTable::from_entries([
         ("a".to_string(), vec![entry('甲'), entry('乙'), entry('丁')]),
         ("b".to_string(), vec![entry('天')]),
+        ("c".to_string(), vec![entry('後')]),
     ]);
     SchemePack { scheme, code_table }
 }
 
-/// `a` 是「甲」「乙」「丁」，`b` 是「天」；字級 bigram 裡「天乙」是常見的接續。
+/// `a` 是「甲」「乙」「丁」，`b` 是「天」，`c` 是「後」（简「后」）；字級 bigram 裡「天乙」是常見的
+/// 接續，「後」沒有接續。
 fn bigram() -> LanguageModelPack {
     let model = |start: f64, continuation: f64| CharModel {
         start: start.ln(),
@@ -53,6 +56,7 @@ fn bigram() -> LanguageModelPack {
                 ('乙', model(0.1, 0.5)),
                 ('天', model(0.4, 0.4)),
                 ('丁', model(0.05, 0.05)),
+                ('後', model(0.1, 0.1)),
                 (CLAUSE_START, model(1e-6, 1e-6)),
             ],
             model(1e-6, 1e-6),
@@ -169,6 +173,44 @@ fn at_the_start_the_word_bigram_follows_the_segment_before_the_composition() {
     assert_eq!(top(&hooked, Some("天"), "a"), "甲");
     // 不知道前文時沒有前一段，照字級 bigram。
     assert_eq!(top(&hooked, None, "a"), top(&plain, None, "a"));
+}
+
+/// 簡體模式下殼給的前文是簡體字，詞表是繁體：前一段是轉回繁體的字（M4 票 04），和繁體模式下
+/// 對應的繁體前文首選相同。
+#[test]
+fn in_simplified_mode_the_word_bigram_follows_the_context_turned_back_into_traditional() {
+    // 「後」之後「丁」；字級 bigram 退到 unigram 時偏好「乙」，不知道前文時偏好「甲」。
+    let model = WordTrigram::new(
+        vocabulary(&["後", "丁"]),
+        vec![NgramRow {
+            context: 0,
+            backoff: 0.0,
+            next: vec![(1, 0.95f64.ln())],
+        }],
+        vec![],
+    );
+    let simplifier = SimplifierPack {
+        id: "opencc-hk2s".into(),
+        simplifier: Simplifier::new(
+            vec![],
+            ConversionTable::new([]),
+            vec![vec![ConversionTable::new([(
+                "後".to_string(),
+                "后".to_string(),
+            )])]],
+        ),
+    };
+    let engine = with_model(model).with_simplifier(simplifier);
+    assert_eq!(top(&engine, Some("後"), "a"), "丁");
+    let mut user = UserModel::default();
+    let mut session = Session::default();
+    session.set_options(Options {
+        simplified: true,
+        ..Options::default()
+    });
+    session.set_context("后");
+    let shown = session.handle(&engine, &mut user, Key::Letter('a'));
+    assert_eq!(shown.candidates[0].text, "丁");
 }
 
 #[test]
