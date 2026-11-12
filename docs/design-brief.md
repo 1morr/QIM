@@ -390,6 +390,8 @@ QIM（暫名）。
 - Google 條款禁止逆向其服務與機器學習模型以取得商業機密，除非法律允許。[Google Terms](https://policies.google.com/terms)，2026-10-31 查。
 - Apple 的 macOS 授權限制反編譯與逆向，例外是法律禁止此限制或開源元件條款允許；核對的是 Sequoia 版摘錄，未核對最新版。[macOS Sequoia SLA](https://www.apple.com/legal/sla/docs/macOSSequoia.pdf)，2026-10-31 查。
 - GitHub Releases 的 asset 下載不能從瀏覽器的 `fetch` 讀：`github.com/<owner>/<repo>/releases/download/…` 回 302 轉到 `release-assets.githubusercontent.com`，兩邊的回應都沒有 `Access-Control-Allow-Origin`；原生程式不受 CORS 限制。網頁 prototype 因此經 Vite 開發伺服器轉發（plan §4.7）。2026-11-11 用 `curl -H "Origin: http://localhost:5173"` 對公開 repo 的 release asset 實測。
+- 使用者詞的遺忘、上限與合併（`docs/research/learning-forgetting-sync.md`，2026-11-12 查，由原始碼推得、沒有實跑）：AOSP LatinIME 主字典沒有的詞第一次上屏只建 count 0 的空殼、第二次才可見，最長 48 字元、沒有最短；機率用計數、不隨時間改，GC 時移除 300 天沒用的條目；unigram 上限 1 萬、到 1.2 倍才清，先刪最後使用最舊的、同則次數小的。librime 的時鐘是上屏次數，`c` 取負是刪除；同步資料夾合併時 `c` 取絕對值大者、`d` 與 `t` 取大，刪除和另一台同值的正數不收斂，墓碑不回收，沒有條目上限。AnySoftKeyboard 用累計分數（打 +2、選 +3，預設 9 才升格，最短 2 字元）。SwiftKey、Gboard 的合併與刪除傳播查不到；沒有產品公開用時間窗口當出現門檻。
+- 空間模型、容錯與滑動（`docs/research/spatial-correction-swipe.md`，2026-11-12 查）：AOSP 的 `ProximityInfo` 假設矩形、一字一鍵、共用尺度，搬不到畫布佈局；VelociTap 讓各鍵 σ 跟鍵大小成比例，FFitts 說明 σ 有手指精度的下限；Fowler 2015 以鍵中心為平均的 2D Gaussian 合成點擊當基準，並把「原樣正確卻被改錯」單獨量。Rime、libime、青簡的容錯與滑行都只給拼音或英文，沒查到任何形碼的容錯或滑行做法；Apple 倉頡的萬用鍵是 `Z`。flick 與滑行並存時青簡用方向扇形（上滑超過 18 dp 且在扇形內才是 flick）。英文詞頻來源以 aosp-dictionaries 的 experimental 詞典（CC BY 4.0，有逐詞頻率與 bigram、含 z 開頭的詞）最合用。
 
 ### 12.5 模型階梯的結果（自測）
 

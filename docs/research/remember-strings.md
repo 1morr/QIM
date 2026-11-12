@@ -1,5 +1,7 @@
 # 自動記住 email、網址：成熟做法
 
+> 2026-11-12 更正：§1 把 `forgetting_curve_utils.cpp` 的等級表當成 LatinIME 現行的衰減，實際路徑是計數加 GC 時移除 300 天沒用的條目，見 `learning-forgetting-sync.md` §2.2。
+
 查證日期 2026-11-11。範圍：打過一次的 email 或網址，之後打開頭幾個字母就出現在候選裡，選了整串上屏。涵蓋 AOSP LatinIME（Gboard 的開源前身）、Gboard、iOS／macOS 內建鍵盤、Microsoft SwiftKey、百度／搜狗／微信輸入法、Rime（librime）、fcitx5。只採官方說明頁、開發者文件、原始碼；找不到官方說明的寫「沒找到官方說明」，社群回報另標。
 
 先講結論：**沒有任何一家公開說明「email／URL 要打幾次、打幾個字母才出現」**。能查到的硬規則只有 LatinIME 的原始碼，其他產品多半只有一句功能描述。
