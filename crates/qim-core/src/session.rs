@@ -590,10 +590,12 @@ impl Session {
         self.options
     }
 
-    /// 依目前的選項重列候選、回到第一頁，組字不變；殼換了選項後呼叫（librime 換選項後也
-    /// 重算組字）。不是按鍵，`handled` 恆為真。
+    /// 依目前的選項重列候選、回到第一頁，組字不變；殼換了選項或資料包後呼叫（librime 換選項後也
+    /// 重算組字）。整串與開頭各段的字詞照 `engine`、`user` 重查（不用 lattice 留著的，M4 票 18b）。
+    /// 不是按鍵，`handled` 恆為真。
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot {
         if self.composing_chinese() {
+            self.lattice.forget_spans();
             self.refresh_candidates(engine, user);
         } else if self.association.is_some() {
             if self.options.association {

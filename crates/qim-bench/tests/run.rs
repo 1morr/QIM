@@ -61,6 +61,7 @@ fn scheme_bytes(
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        // 基準另量含萬用鍵的輸入，方案沒有萬用鍵時整個基準失敗；題目都不含 `z`，打分不受影響。
         wildcard: Some('z'),
         radicals: BTreeMap::new(),
         packs: Packs {
@@ -1349,7 +1350,7 @@ fn check_blocks_the_native_latency_groups_over_their_limit() {
 fn check_blocks_the_wildcard_inputs_over_their_limit() {
     let repo = repo_with_long_input();
     run(repo.path(), Mode::UpdateBaseline).unwrap();
-    // 假計時器：交給它的輸入有開頭是萬用鍵的（含萬用鍵的那批）時每鍵 `wildcard_ms`，否則 0.05 ms。
+    // 假計時器：交給它的輸入開頭都是萬用鍵（含萬用鍵的那批）時每鍵 `wildcard_ms`，否則 0.05 ms。
     let native_with = |wildcard_ms: f64| {
         move |engine: &Engine, user: &UserModel, inputs: &[String]| {
             let wildcard = inputs.iter().all(|input| input.starts_with('z'));

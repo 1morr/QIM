@@ -1,6 +1,6 @@
 //! 每鍵延遲（plan §5.2）：逐鍵打基準的每個輸入碼，量每次按鍵到 `Snapshot` 回來的時間，
 //! 原生與 WebAssembly 各量一次，報 p50 / p95；空白的學習資料與學過的（[`UserData`]）各一組，
-//! 基準的輸入與含萬用鍵的輸入（[`Inputs`]）各量一次。原生的 p95 由 `--check` 擋（[`p95_limits_ms`]），
+//! 基準的輸入與含萬用鍵的輸入（[`InputBatch`]）各量一次。原生的 p95 由 `--check` 擋（[`p95_limits_ms`]），
 //! WebAssembly 只報；baseline 不記。
 //!
 //! 每個輸入都從空的組字打起；載入資料包不算在內，另報一次載入的時間（[`Timing::load_ms`]）。
@@ -35,23 +35,23 @@ impl UserData {
 
 /// 計時的哪一批輸入。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Inputs {
+pub enum InputBatch {
     /// 固定題與各語料集合的每一題（[`crate::latency_inputs`]）。
     Bench,
     /// 同一批，每個輸入的第一碼換成萬用鍵（[`wildcard_inputs`]，M4 票 18b）。
     Wildcard,
 }
 
-impl Inputs {
+impl InputBatch {
     pub fn label(self) -> &'static str {
         match self {
-            Inputs::Bench => "基準的輸入",
-            Inputs::Wildcard => "含萬用鍵的輸入",
+            InputBatch::Bench => "基準的輸入",
+            InputBatch::Wildcard => "含萬用鍵的輸入",
         }
     }
 }
 
-/// 原生 p95 的上限，毫秒，順序同 [`Timing::groups`]（全部、第 20 碼起、選開頭一段）；兩批輸入（[`Inputs`]）
+/// 原生 p95 的上限，毫秒，順序同 [`Timing::groups`]（全部、第 20 碼起、選開頭一段）；兩批輸入（[`InputBatch`]）
 /// 同一組上限。
 /// 數字與改上限的條件在 `.scratch/m4/spec.md`〈每鍵延遲上限〉：比 M3 收尾時留約 7–13 倍的餘裕，
 /// 擋倍數級的變慢，不擋機器負載的雜訊。
@@ -120,10 +120,10 @@ pub struct Timers<'a> {
 pub struct Latency {
     /// CPU、作業系統與架構，報告註明在哪台機器量的。
     pub machine: String,
-    /// 基準的輸入（[`Inputs::Bench`]）。
+    /// 基準的輸入（[`InputBatch::Bench`]）。
     pub blank: Runs,
     pub learned: Runs,
-    /// 含萬用鍵的輸入（[`Inputs::Wildcard`]）。
+    /// 含萬用鍵的輸入（[`InputBatch::Wildcard`]）。
     pub wildcard_blank: Runs,
     pub wildcard_learned: Runs,
 }
@@ -137,12 +137,16 @@ pub struct Runs {
 
 impl Latency {
     /// 基準的輸入的空白、學過，接著含萬用鍵的輸入的空白、學過。
-    pub fn runs(&self) -> [(Inputs, UserData, &Runs); 4] {
+    pub fn runs(&self) -> [(InputBatch, UserData, &Runs); 4] {
         [
-            (Inputs::Bench, UserData::Blank, &self.blank),
-            (Inputs::Bench, UserData::Learned, &self.learned),
-            (Inputs::Wildcard, UserData::Blank, &self.wildcard_blank),
-            (Inputs::Wildcard, UserData::Learned, &self.wildcard_learned),
+            (InputBatch::Bench, UserData::Blank, &self.blank),
+            (InputBatch::Bench, UserData::Learned, &self.learned),
+            (InputBatch::Wildcard, UserData::Blank, &self.wildcard_blank),
+            (
+                InputBatch::Wildcard,
+                UserData::Learned,
+                &self.wildcard_learned,
+            ),
         ]
     }
 

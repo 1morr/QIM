@@ -22,7 +22,8 @@ pub(crate) struct Lattice {
     /// `spans[len]` 是輸入碼開頭 `len` 碼的 [`Engine::span`]，候選列用到時才算（[`Lattice::spans`]）；
     /// 逐鍵打字時開頭各段不變，留著下一鍵重用（M4 票 18b：萬用鍵在開頭時每段都要展開它，每鍵重算是
     /// 含萬用鍵的輸入每鍵延遲的大半）。退格時連同那一欄刪掉。和 `columns` 一樣，假設同一個 lattice
-    /// 用的學習資料不變：學習資料變了的呼叫端從頭建 lattice。
+    /// 用的引擎與學習資料不變：撤銷學習從頭建 lattice，`Session::refresh` 丟掉這份重算；組字途中殼另改了
+    /// 學習資料（匯入、加詞）又沒呼叫它時，開頭各段和 `columns` 一樣照舊（票 18b 的 Comments）。
     spans: Vec<Option<Vec<Spanned>>>,
 }
 
@@ -280,6 +281,12 @@ impl Lattice {
         }
     }
 
+    /// 丟掉算過的開頭各段（[`Lattice::spans`]），下次列候選時照當時的引擎與學習資料重算；殼換了資料包或
+    /// 選項後重列候選（[`crate::Session::refresh`]）時用。
+    pub fn forget_spans(&mut self) {
+        self.spans.clear();
+    }
+
     /// 輸入碼開頭 `len` 碼的 [`Engine::span`]（接在 [`Lattice::before`] 後面）；第一次用到時算，之後重用。
     fn spans(&mut self, engine: &Engine, user: &UserModel, len: usize) -> &[Spanned] {
         if self.spans.len() <= len {
@@ -287,6 +294,13 @@ impl Lattice {
         }
         let (input, before) = (&self.input, &self.before);
         self.spans[len].get_or_insert_with(|| engine.span(user, before, &input[..len]))
+    }
+
+    /// 已經算過的開頭 `len` 碼的 span（[`Lattice::spans`]）。
+    fn cached_spans(&self, len: usize) -> &[Spanned] {
+        self.spans[len]
+            .as_deref()
+            .expect("列候選前先算好開頭各段的 span")
     }
 
     /// 蓋滿整串的前 `limit` 條路徑的文字、各段的字詞與分數，依分數由高到低（最多 beam 條）；
@@ -390,12 +404,8 @@ pub(crate) fn candidates(
     let input = lattice.input();
     let lookup_code = &input[..lookup_len];
     let before = &lattice.before;
-    let cached = |len: usize| -> &[Spanned] {
-        lattice.spans[len]
-            .as_deref()
-            .expect("上面算過開頭各段的 span")
-    };
-    let mut full: Vec<(f64, bool, CandidateSpan)> = cached(lookup_len)
+    let mut full: Vec<(f64, bool, CandidateSpan)> = lattice
+        .cached_spans(lookup_len)
         .iter()
         .map(|s| {
             let late = listing.demotes(s);
@@ -432,7 +442,7 @@ pub(crate) fn candidates(
         .into_iter()
         .map(|text| CandidateSpan::single(text.to_string(), input));
     let prefixes = prefix_lens.iter().flat_map(|&(len, covered)| {
-        let spans = cached(len);
+        let spans = lattice.cached_spans(len);
         // 同一組裡仍依分數：先列不排後的，再列排後的（同穩定排序）。
         let (early, late): (Vec<&Spanned>, Vec<&Spanned>) =
             spans.iter().partition(|s| !listing.demotes(s));

@@ -30,7 +30,7 @@ pub use items::{
 };
 pub use keys::{TouchSurface, physical_key, top_char};
 pub use latency::{
-    Inputs, LONG_INPUT_KEYS, Latency, NativeTimer, Runs, Summary, Timers, Timing, UserData,
+    InputBatch, LONG_INPUT_KEYS, Latency, NativeTimer, Runs, Summary, Timers, Timing, UserData,
     WASM_BINDINGS, WasmTimer, lefts_to_first_segment, native_timing, native_timing_with,
     node_wasm_timer, parse_timing, percentile, wildcard_inputs,
 };

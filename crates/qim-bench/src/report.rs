@@ -278,7 +278,7 @@ fn length_groups<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {
     out
 }
 
-/// 每鍵延遲：空白與學過的學習資料下，原生與 WebAssembly 各三組（全部、第 20 碼起、選開頭一段），
+/// 每鍵延遲：兩批輸入（基準的、含萬用鍵的）各在空白與學過的學習資料下，原生與 WebAssembly 各三組（全部、第 20 碼起、選開頭一段），
 /// 微秒：用毫秒看不出前後差別。原生的列附 p95 上限（[`p95_limits_ms`]），超過的註明。
 fn latency(latency: &Latency) -> String {
     let mut out = format!(
@@ -290,7 +290,7 @@ fn latency(latency: &Latency) -> String {
          （給前文）之後（WebAssembly 先 loadUserDict）。\
          「含萬用鍵的輸入」是同一批輸入、每個輸入的第一碼換成萬用鍵（`qim_bench::wildcard_inputs`），上限相同。\
          WebAssembly 用 {WASM_BINDINGS}（`cargo xtask bench` 以 release 編）。\n\n\
-         | 輸入碼 | 學習資料 | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 | p95 上限 |\n\
+         | 批次 | 學習資料 | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 | p95 上限 |\n\
          | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |\n",
         latency.machine
     );
