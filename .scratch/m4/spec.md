@@ -167,6 +167,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [03](issues/03-rerank-cache.md) | 02 | 同一串輸入碼的重排結果留快取，退格回來不再等停鍵 |
 | [04](issues/04-simplified-context.md) | — | 簡體模式下同步層 n-gram 的前文轉回繁體 |
 | [05](issues/05-latency-gate.md) | — | `bench --check` 擋每鍵 p95（〈每鍵延遲上限〉）；學過的學習資料另量一組 |
+| [05b](issues/05b-latency-test-fake-timer.md) | — | 修復票（協調者插入）：qim-bench 的 check 測試改用假計時器，不再因機器負載而紅 |
 | [06](issues/06-weighted-touch.md) | 01 | `Key::Weighted`；`qim-layout` 依點擊與按鍵形狀算機率；核心先取最高的，行為不變 |
 | [07](issues/07-physical-geometry.md) | 06 | 網頁傳 `KeyboardEvent.code`，`qim-layout` 依實體鍵位轉成 `Weighted` |
 | [08](issues/08-typo-bench.md) | 07 | 「含打錯碼」「觸控模擬」集合、改錯比例、不容錯的基線；〈容錯採用門檻〉經使用者確認寫進本檔 |
