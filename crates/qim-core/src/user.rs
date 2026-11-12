@@ -456,7 +456,7 @@ impl UserModel {
         }
     }
 
-    /// 這個動作不算夾在中間（只收起聯想的退格、修飾鍵，它們不學東西）：前一個動作的紀錄放回去，下一個
+    /// 這個動作不算夾在中間（不送字元的修飾鍵，它不學東西）：前一個動作的紀錄放回去，下一個
     /// 鍵還能撤銷它。
     pub(crate) fn keep_undo(&mut self, undo: Undo) {
         debug_assert!(self.undo.is_empty(), "不算夾在中間的鍵學到了東西");

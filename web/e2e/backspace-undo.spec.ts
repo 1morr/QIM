@@ -1,8 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // 上屏後緊接著退格撤銷這次的學習（M4 票 15，plan §2.4〈退格撤銷〉）：上屏後第一個交還宿主的鍵是退格時，
-// 退格照常刪字，這次上屏學到的都撤銷；只收起聯想的退格不算夾在中間，其他鍵夾在中間就不撤銷。英文直通
-// 打完一串後緊接著退格，撤銷那個英文使用者詞。排位規則由 debug 面板讀回。
+// 退格照常刪字，這次上屏學到的都撤銷；有聯想時也一樣（退格刪字、聯想收起，M4 票 18c），其他鍵（含 Esc
+// 收起聯想）夾在中間就不撤銷。英文直通打完一串後緊接著退格，撤銷那個英文使用者詞。排位規則由 debug 面板
+// 讀回。
 
 function ui(page: Page) {
 	const debug = page.locator("#debug");
@@ -104,7 +105,7 @@ test.describe("緊接著的退格", () => {
 		await expect(items.first()).toHaveText(`1${top}`);
 	});
 
-	test("聯想開著：第一下退格只收起聯想，第二下刪字並撤銷（存檔回到上屏前）", async ({
+	test("聯想開著：退格刪字、聯想收起，並撤銷（存檔回到上屏前）", async ({
 		page,
 	}, testInfo) => {
 		const { text, items } = ui(page);
@@ -120,14 +121,53 @@ test.describe("緊接著的退格", () => {
 		expect(await saved()).not.toBe(before);
 
 		await page.keyboard.press("Backspace");
-		await expect(items).toHaveCount(0);
-		await expect(text).toHaveValue("日日");
-		expect(await saved(), "只收起聯想，還沒撤銷").not.toBe(before);
-		await page.keyboard.press("Backspace");
 		await expect(text).toHaveValue("日");
+		await expect(items).toHaveCount(0);
 		await expect.poll(saved).toBe(before);
 		await page.screenshot({
 			path: testInfo.outputPath("association-undone.png"),
+		});
+
+		// 第二下只刪字，不撤銷更早的上屏。
+		await page.keyboard.press("Backspace");
+		await expect(text).toHaveValue("");
+		expect(await saved()).toBe(before);
+	});
+
+	test("聯想開著：Esc 只收起聯想、學習留著，之後的退格只刪字（面板讀回排位規則 2）", async ({
+		page,
+	}, testInfo) => {
+		const { text, items } = ui(page);
+		const saved = () =>
+			page.evaluate(() => localStorage.getItem("qim.userdict"));
+		const [top, second] = await topTwo(page);
+		await chooseSecond(page, second);
+		await page.keyboard.press("Escape");
+		await chooseSecond(page, second);
+		await expect(text).toHaveValue(second + second);
+		await expect(items.first(), "上屏後有聯想").toBeVisible();
+		await expect.poll(saved).toBeTruthy();
+		const learned = await saved();
+
+		await page.keyboard.press("Escape");
+		await expect(items).toHaveCount(0);
+		await expect(text).toHaveValue(second + second);
+		expect(await saved(), "Esc 不撤銷").toBe(learned);
+		await page.screenshot({
+			path: testInfo.outputPath("association-escape-closed.png"),
+		});
+
+		await page.keyboard.press("Backspace");
+		await expect(text).toHaveValue(second);
+		expect(await saved(), "Esc 夾在中間，退格不撤銷").toBe(learned);
+
+		// 選兩次的照樣成首選，面板讀回原因。
+		await page.keyboard.type("a");
+		await expect(items.first()).toHaveText(`1${second}`);
+		await expect(row(page, second)).toContainText("排位規則 2");
+		expect(top).not.toBe(second);
+		await page.screenshot({
+			path: testInfo.outputPath("association-escape-kept.png"),
 		});
 	});
 

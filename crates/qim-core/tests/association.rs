@@ -195,17 +195,27 @@ fn space_does_not_choose_an_association_and_passes_to_the_host() {
 }
 
 #[test]
-fn escape_and_backspace_only_close_the_association() {
-    for key in [Key::Escape, Key::Backspace] {
-        let mut typing = Typing::new();
-        typing.commit("an");
-        let closed = typing.key(key.clone());
-        assert!(closed.handled, "{key:?}");
-        assert!(closed.commit.is_none(), "{key:?}");
-        assert!(closed.candidates.is_empty(), "{key:?}");
-        // 第二下照常交還宿主。
-        assert!(!typing.key(key.clone()).handled, "{key:?}");
-    }
+fn escape_only_closes_the_association() {
+    let mut typing = Typing::new();
+    typing.commit("an");
+    let closed = typing.key(Key::Escape);
+    assert!(closed.handled);
+    assert!(closed.commit.is_none());
+    assert!(closed.candidates.is_empty());
+    // 第二下照常交還宿主。
+    assert!(!typing.key(Key::Escape).handled);
+}
+
+/// 有聯想時退格交還宿主刪字、聯想同時收起（plan §2.1）。
+#[test]
+fn backspace_closes_the_association_and_passes_to_the_host() {
+    let mut typing = Typing::new();
+    typing.commit("an");
+    let deleted = typing.key(Key::Backspace);
+    assert!(!deleted.handled, "宿主刪字");
+    assert!(deleted.commit.is_none());
+    assert!(deleted.candidates.is_empty(), "聯想收起");
+    assert!(!typing.key(Key::Backspace).handled);
 }
 
 #[test]
