@@ -9,13 +9,15 @@
 //!
 //! 合計修正 2、按鍵 11、字數 4（KSPC 2.75）、跳動 1，答錯第 2、3 行。
 //!
-//! WebAssembly 的每鍵延遲一律用 [`slow_wasm`]：每鍵都遠超預算，它只報，`--check` 與 baseline 照樣不受影響。
+//! 每鍵延遲一律用假計時器，數字固定、不受機器負載影響：原生用 [`fast_native`]（在上限內），
+//! 測延遲閘門的測試另給慢的 [`fixed_native`]；WebAssembly 用 [`slow_wasm`]：每鍵都遠超預算，它只報，
+//! `--check` 與 baseline 照樣不受影響。
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timing};
+use qim_bench::{Mode, Outcome, PERSONAL_SOURCE_HEADER, Personal, Timers, Timing, WasmTimer};
 use qim_core::{
     CharModel, CodeEntry, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, EnglishWords, Key,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, NgramRow, Pack, Packs, Ranking, Scheme,
@@ -127,12 +129,30 @@ fn repo() -> TempDir {
 }
 
 fn run(root: &Path, mode: Mode) -> Result<Outcome, String> {
-    qim_bench::run(root, mode, None, &slow_wasm)
+    qim_bench::run(root, mode, None, with_wasm(&slow_wasm))
+}
+
+/// 原生用 [`fast_native`]、WebAssembly 用 `wasm`。
+fn with_wasm(wasm: WasmTimer) -> Timers {
+    Timers {
+        native: &fast_native,
+        wasm,
+    }
+}
+
+/// 假的原生計時器：每鍵 0.05 ms、選開頭一段 0.5 ms，都在每鍵延遲上限內。
+fn fast_native(engine: &Engine, user: &UserModel, inputs: &[String]) -> Timing {
+    fixed_native(0.05, 0.5)(engine, user, inputs)
+}
+
+/// 假的原生計時器：每鍵 `key_ms`、選開頭一段 `select_ms` 毫秒（[`fake_timing`]）。
+fn fixed_native(key_ms: f64, select_ms: f64) -> impl Fn(&Engine, &UserModel, &[String]) -> Timing {
+    move |engine, user, inputs| fake_timing(engine, user, inputs, |_| key_ms, select_ms)
 }
 
 /// 假的 WebAssembly 計時器：每個輸入的第 i 鍵（從 1 起）花 100 × i 毫秒（有學習資料時 200 × i），
-/// 遠超每鍵 50 ms 的預算。選開頭一段花 1000 毫秒，量哪些輸入照原生的規則
-/// （[`qim_bench::lefts_to_first_segment`]），用同一份資料包與匯入的學習資料算，同 `web/bench/latency.ts`。
+/// 遠超每鍵 50 ms 的預算。選開頭一段花 1000 毫秒。用基準交給它的資料包與匯入的學習資料打，
+/// 同 `web/bench/latency.ts`。
 fn slow_wasm(
     packs: &[PathBuf],
     user_dict: Option<&str>,
@@ -140,18 +160,31 @@ fn slow_wasm(
 ) -> Result<Timing, String> {
     let engine = engine_from(packs);
     let per_key = if user_dict.is_some() { 200.0 } else { 100.0 };
-    let mut user = user_dict.map_or_else(UserModel::default, |text| {
+    let user = user_dict.map_or_else(UserModel::default, |text| {
         UserModel::import(text, None).unwrap().user
     });
     Ok(Timing {
+        load_ms: Some(12.5),
+        ..fake_timing(&engine, &user, inputs, |i| per_key * i as f64, 1000.0)
+    })
+}
+
+/// 不量時間的計時結果：在 `engine` 與學習資料 `user` 下逐鍵打每個輸入，第 i 鍵（從 1 起）記
+/// `key_ms(i)` 毫秒；量哪些輸入的選開頭一段照原生的規則（[`qim_bench::lefts_to_first_segment`]），
+/// 各記 `select_ms` 毫秒。
+fn fake_timing(
+    engine: &Engine,
+    user: &UserModel,
+    inputs: &[String],
+    key_ms: impl Fn(usize) -> f64,
+    select_ms: f64,
+) -> Timing {
+    let mut user = user.clone();
+    Timing {
         runtime: "假".into(),
         per_key_ms: inputs
             .iter()
-            .map(|input| {
-                (1..=input.chars().count())
-                    .map(|i| per_key * i as f64)
-                    .collect()
-            })
+            .map(|input| (1..=input.chars().count()).map(&key_ms).collect())
             .collect(),
         select_ms: inputs
             .iter()
@@ -159,13 +192,13 @@ fn slow_wasm(
                 let mut session = Session::default();
                 let mut last = Snapshot::default();
                 for c in input.chars() {
-                    last = session.handle(&engine, &mut user, Key::for_input(c));
+                    last = session.handle(engine, &mut user, Key::for_input(c));
                 }
-                qim_bench::lefts_to_first_segment(&last).map(|_| 1000.0)
+                qim_bench::lefts_to_first_segment(&last).map(|_| select_ms)
             })
             .collect(),
-        load_ms: Some(12.5),
-    })
+        load_ms: None,
+    }
 }
 
 /// 基準交給計時器的資料包（依檔頭魔數分辨，同 `web/bench/latency.ts`）建出的 `Engine`。
@@ -1141,29 +1174,37 @@ fn latency_reports_native_and_wasm_percentiles_for_blank_and_learned_user_data()
     // 假計時器的 26 個值排序後是 100 ms ×（1、1、1、1、1、2、2、3、4、…、21），p50 第 13 個是 8、p95 第 25 個是 20；
     // 學過的學習資料下每鍵加倍。第 20 碼起：只有 long 的第 20、21 鍵，p50 第 1 個、p95 第 2 個。
     // 選開頭一段：只有 long 打完有兩段以上，一次；學過的學習資料下 long 整句已造詞、只有一段，不量。
+    // 原生是 [`fast_native`]：每鍵 50 µs、選開頭一段 500 µs，報告附 p95 上限。
     assert_eq!(rows.len(), 12, "{report}");
-    let native = if cfg!(debug_assertions) {
-        "原生（debug）"
-    } else {
-        "原生（release）"
-    };
     for (rows, user, selects, limits) in [
-        (&rows[..6], "空白", "1 | 1", ["≤ 1000", "≤ 1000", "≤ 5000"]),
-        (&rows[6..], "學過", "0 | 0", ["≤ 3000", "≤ 3000", "≤ 10000"]),
+        (
+            &rows[..6],
+            "空白",
+            "| 1 | 1 | 500.00 | 500.00",
+            ["1000", "1000", "5000"],
+        ),
+        (
+            &rows[6..],
+            "學過",
+            "| 0 | 0 | — | —",
+            ["3000", "3000", "10000"],
+        ),
     ] {
-        for (row, (group, counts)) in rows[..3].iter().zip([
-            ("全部", "5 | 26"),
-            ("第 20 碼起", "1 | 2"),
-            ("選開頭一段", selects),
-        ]) {
-            assert!(
-                row.starts_with(&format!("| {user} | {native} | {group} | {counts} | ")),
-                "{report}"
-            );
-        }
-        for (row, limit) in rows[..3].iter().zip(limits) {
-            assert!(row.ends_with(&format!(" | {limit} |")), "{report}");
-        }
+        let expected = [
+            format!(
+                "| {user} | 原生（假） | 全部 | 5 | 26 | 50.00 | 50.00 | ≤ {} |",
+                limits[0]
+            ),
+            format!(
+                "| {user} | 原生（假） | 第 20 碼起 | 1 | 2 | 50.00 | 50.00 | ≤ {} |",
+                limits[1]
+            ),
+            format!(
+                "| {user} | 原生（假） | 選開頭一段 {selects} | ≤ {} |",
+                limits[2]
+            ),
+        ];
+        assert_eq!(rows[..3], expected, "{report}");
     }
     assert_eq!(
         rows[3],
@@ -1193,10 +1234,12 @@ fn the_learned_run_gives_wasm_the_user_model_that_learned_every_public_set() {
         repo.path(),
         Mode::Report,
         None,
-        &|packs: &[PathBuf], user_dict: Option<&str>, inputs: &[String]| {
-            dicts.borrow_mut().push(user_dict.map(String::from));
-            slow_wasm(packs, user_dict, inputs)
-        },
+        with_wasm(
+            &|packs: &[PathBuf], user_dict: Option<&str>, inputs: &[String]| {
+                dicts.borrow_mut().push(user_dict.map(String::from));
+                slow_wasm(packs, user_dict, inputs)
+            },
+        ),
     )
     .unwrap();
     let dicts = dicts.into_inner();
@@ -1220,7 +1263,7 @@ fn check_blocks_native_latency_only_and_update_baseline_ignores_latency() {
         !written.contains("ms") && !written.contains("latency"),
         "{written}"
     );
-    // WebAssembly 每鍵都遠超上限，原生的小資料包在上限內：只報 WebAssembly，不擋。
+    // WebAssembly 每鍵都遠超上限，原生在上限內：只報 WebAssembly，不擋。
     let outcome = run(repo.path(), Mode::Check).unwrap();
     assert!(
         outcome
@@ -1236,6 +1279,68 @@ fn check_blocks_native_latency_only_and_update_baseline_ignores_latency() {
     assert_eq!(outcome.violations, Vec::<String>::new());
 }
 
+/// 原生超過上限的那幾格由 `--check` 擋、報告註明；在上限內的不擋，只印結果時也不擋。
+#[test]
+fn check_blocks_the_native_latency_groups_over_their_limit() {
+    let repo = repo_with_long_input();
+    run(repo.path(), Mode::UpdateBaseline).unwrap();
+    // 每鍵 2 ms：空白的「全部」「第 20 碼起」超過上限，學過的與選開頭一段（0.5 ms）都在內。
+    let slow_native = fixed_native(2.0, 0.5);
+    let timers = Timers {
+        native: &slow_native,
+        wasm: &slow_wasm,
+    };
+    let outcome = qim_bench::run(repo.path(), Mode::Check, None, timers).unwrap();
+    let violations = &outcome.violations;
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    for (v, group) in violations.iter().zip(["全部", "第 20 碼起"]) {
+        assert!(
+            v.contains("每鍵延遲") && v.contains("空白") && v.contains(&format!("{group} 的 p95")),
+            "{v}"
+        );
+    }
+    assert_eq!(
+        outcome.report().matches("，超過 |").count(),
+        2,
+        "{}",
+        outcome.report()
+    );
+    let report = qim_bench::run(repo.path(), Mode::Report, None, timers).unwrap();
+    assert_eq!(report.violations, Vec::<String>::new());
+}
+
+/// CLI 用的真實原生計時（`native_timing_with`）：只驗量了哪些鍵、哪些輸入量選開頭一段與環境欄，
+/// 不驗時間，所以不受機器負載影響。量選開頭一段的輸入和 [`slow_wasm`] 不同時 `run` 是錯誤，
+/// 所以這裡也驗了原生在學過的學習資料下照同一條規則選。
+#[test]
+fn the_real_native_timer_times_every_key_and_the_same_selects_as_wasm() {
+    let repo = repo_with_long_input();
+    let timers = Timers {
+        native: &qim_bench::native_timing_with,
+        wasm: &slow_wasm,
+    };
+    let outcome = qim_bench::run(repo.path(), Mode::Report, None, timers).unwrap();
+    let native = if cfg!(debug_assertions) {
+        "原生（debug）"
+    } else {
+        "原生（release）"
+    };
+    let report = outcome.report();
+    for (user, selects) in [("空白", "1 | 1"), ("學過", "0 | 0")] {
+        for (group, counts) in [
+            ("全部", "5 | 26"),
+            ("第 20 碼起", "1 | 2"),
+            ("選開頭一段", selects),
+        ] {
+            let row = format!("| {user} | {native} | {group} | {counts} | ");
+            assert!(
+                report.lines().any(|line| line.starts_with(&row)),
+                "{row}\n{report}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_wasm_timer_that_misses_keys_is_an_error() {
     let repo = repo();
@@ -1243,14 +1348,14 @@ fn a_wasm_timer_that_misses_keys_is_an_error() {
         repo.path(),
         Mode::Report,
         None,
-        &|_: &[PathBuf], _: Option<&str>, _: &[String]| {
+        with_wasm(&|_: &[PathBuf], _: Option<&str>, _: &[String]| {
             Ok(Timing {
                 runtime: "假".into(),
                 per_key_ms: vec![vec![1.0]],
                 select_ms: vec![None],
                 load_ms: None,
             })
-        },
+        }),
     )
     .unwrap_err();
     assert!(error.contains("WebAssembly"), "{error}");
@@ -1263,12 +1368,14 @@ fn a_wasm_timer_that_selects_on_other_inputs_than_native_is_an_error() {
         repo.path(),
         Mode::Report,
         None,
-        &|packs: &[PathBuf], user_dict: Option<&str>, inputs: &[String]| {
-            let mut timing = slow_wasm(packs, user_dict, inputs)?;
-            assert_eq!(timing.select_ms.iter().flatten().count(), 1);
-            timing.select_ms = vec![Some(1.0); inputs.len()];
-            Ok(timing)
-        },
+        with_wasm(
+            &|packs: &[PathBuf], user_dict: Option<&str>, inputs: &[String]| {
+                let mut timing = slow_wasm(packs, user_dict, inputs)?;
+                assert_eq!(timing.select_ms.iter().flatten().count(), 1);
+                timing.select_ms = vec![Some(1.0); inputs.len()];
+                Ok(timing)
+            },
+        ),
     )
     .unwrap_err();
     assert!(error.contains("選開頭一段"), "{error}");
@@ -1342,8 +1449,13 @@ fn another_lexicon_pack_replaces_the_one_the_scheme_names() {
         "{paths:?}"
     );
 
-    let outcome =
-        qim_bench::run(repo.path(), Mode::Report, Some("other-lexicon"), &slow_wasm).unwrap();
+    let outcome = qim_bench::run(
+        repo.path(),
+        Mode::Report,
+        Some("other-lexicon"),
+        with_wasm(&slow_wasm),
+    )
+    .unwrap();
     assert!(
         outcome.report().contains("other-lexicon.pack"),
         "{}",
@@ -1359,7 +1471,7 @@ fn another_lexicon_cannot_update_the_baseline_and_must_exist() {
         repo.path(),
         Mode::UpdateBaseline,
         Some("other-lexicon"),
-        &slow_wasm,
+        with_wasm(&slow_wasm),
     )
     .unwrap_err();
     assert!(err.contains("--update-baseline"), "{err}");
