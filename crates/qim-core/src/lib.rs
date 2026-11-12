@@ -4,6 +4,7 @@
 
 mod association;
 mod code_table;
+mod date;
 mod emoji;
 mod engine;
 mod english;
@@ -24,6 +25,7 @@ mod word_list;
 mod word_trigram;
 
 pub use code_table::{CodeEntry, CodeTable};
+pub use date::{Date, ParseDateError};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
 pub use engine::Engine;
 pub use english::EnglishWords;
@@ -43,7 +45,9 @@ pub use session::{
     RERANK_PATHS, RerankRequest, ScoredPath, Segment, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
-pub use user::{ImportError, Phrase, UserModel, UserWordError};
+pub use user::{
+    ImportError, ImportWarning, Imported, InvalidDeviceId, Phrase, UserModel, UserWordError,
+};
 pub use word_list::{
     Shortcuts, SkipReason, SkippedLine, TriggerShortcut, UnusedShortcut, WordListError,
     WordListFormat, WordListReport,

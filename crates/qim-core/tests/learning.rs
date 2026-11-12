@@ -460,7 +460,9 @@ fn a_used_user_word_that_is_already_the_top_stays_the_top() {
     let mut ime = Ime::new(&data);
     let mut user = UserModel::import(
         "# qim-userdict v2\n#@/tick/quick\t20000\nquick\t日月\tab\t3\t1\t1\t1\tauto\t\n",
+        None,
     )
+    .map(|i| i.user)
     .unwrap();
     assert_eq!(ime.candidates_of(&mut user, "ab"), ["日月", "日"]);
 }
@@ -648,7 +650,7 @@ fn changing_a_later_segment_before_committing_also_learns_an_auto_phrase() {
 
     assert!(
         user.export()
-            .contains("quick\t日肉\tab\t1\t1\t1\t1\tauto\t\n"),
+            .contains("entry\tquick\t日肉\tab\t1\t1\t1\t1\t\tauto\t\n"),
         "{}",
         user.export()
     );

@@ -898,8 +898,8 @@ pub const BYTES: &[u8] = b"std::net";
     fn unrelated_edits_to_forbidden_column_are_not_flagged() {
         let edited = mutate(
             PLAN_MD,
-            "（時間由殼以上屏次數傳入）",
-            "（時間改由殼傳入上屏次數）",
+            "（時間由殼傳入：上屏次數與今天的日期，§2.4）",
+            "（時間改由殼傳入上屏次數與日期）",
         );
         let edited = mutate(
             &edited,

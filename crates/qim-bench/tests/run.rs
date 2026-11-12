@@ -140,8 +140,9 @@ fn slow_wasm(
 ) -> Result<Timing, String> {
     let engine = engine_from(packs);
     let per_key = if user_dict.is_some() { 200.0 } else { 100.0 };
-    let mut user =
-        user_dict.map_or_else(UserModel::default, |text| UserModel::import(text).unwrap());
+    let mut user = user_dict.map_or_else(UserModel::default, |text| {
+        UserModel::import(text, None).unwrap().user
+    });
     Ok(Timing {
         runtime: "假".into(),
         per_key_ms: inputs
@@ -1202,7 +1203,10 @@ fn the_learned_run_gives_wasm_the_user_model_that_learned_every_public_set() {
     assert_eq!(dicts.len(), 2, "{dicts:?}");
     assert_eq!(dicts[0], None);
     let dict = dicts[1].as_deref().unwrap();
-    assert_ne!(UserModel::import(dict).unwrap(), UserModel::default());
+    assert_ne!(
+        UserModel::import(dict, None).unwrap().user,
+        UserModel::default()
+    );
     // toy 第 2 行選了「曰」上屏，學習計數有它。
     assert!(dict.contains('曰'), "{dict}");
 }

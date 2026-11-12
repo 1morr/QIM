@@ -131,9 +131,9 @@ test("匯出、清空、匯入後常用語還在", async ({ page }) => {
 	await page.getByRole("button", { name: "匯出學習資料" }).click();
 	const file = await (await download).path();
 	const exported = await readFile(file, "utf8");
-	expect(exported.split("\n")[0]).toBe("# qim-userdict v2");
-	expect(exported).toContain(
-		"quick\t九龍彌敦道 1 號\\n3 樓 A 室\t\t0\t0\t0\t0\tphrase\tqim\n",
+	expect(exported.split("\n")[0]).toBe("# qim-userdict v3");
+	expect(exported).toMatch(
+		/\nentry\tquick\t九龍彌敦道 1 號\\n3 樓 A 室\t\t0\t0\t0\t0\t\d{4}-\d\d-\d\d\tphrase\tqim\n/,
 	);
 
 	await page.getByRole("button", { name: "清空學習資料" }).click();

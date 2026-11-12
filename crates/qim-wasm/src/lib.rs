@@ -1,9 +1,9 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, IndexEntry, Key, Manifest, ModelPack, Options, Pack, PackIndex,
-    RadicalHintPack, RadicalHints, Scheme, Session, ShiftKey, Shortcuts, Snapshot, UserModel,
-    WordListReport,
+    CangjieVersion, Date, Engine, Imported, IndexEntry, Key, Manifest, ModelPack, Options, Pack,
+    PackIndex, RadicalHintPack, RadicalHints, Scheme, Session, ShiftKey, Shortcuts, Snapshot,
+    UserModel, WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -11,6 +11,11 @@ use wasm_bindgen::prelude::*;
 /// 核心與 `qim-layout` 的錯誤轉成 JS 的例外，訊息照原樣。
 fn js_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
+}
+
+/// 匯入學習資料略過的列，每條是「第 N 行：原因」。
+fn warnings(imported: &Imported) -> Vec<String> {
+    imported.warnings.iter().map(ToString::to_string).collect()
 }
 
 /// 一份資料包：`manifest.json` 的內容與資料包檔的位元組（plan §4.6），網頁 fetch 或從檔案、
@@ -256,24 +261,44 @@ impl WebSession {
         self.session.text(&self.engine, &mut self.user, text).into()
     }
 
-    /// 使用者詞與學習計數匯出成 `# qim-userdict v2` 的 TSV（plan §2.4），網頁存 `localStorage`、
+    /// 今天的日期 `YYYY-MM-DD`（使用者當地的日曆日）：網頁在第一次學習前、之後每次使用者操作前給
+    /// （plan §2.4 殼的日期契約），學到的條目記成最後使用的日期；核心不讀系統時間（plan §1.3）。
+    #[wasm_bindgen(js_name = setToday)]
+    pub fn set_today(&mut self, today: &str) -> Result<(), JsError> {
+        self.user
+            .set_today(today.parse::<Date>().map_err(js_error)?);
+        Ok(())
+    }
+
+    /// 這台裝置的 id（網頁產生一次、存 `localStorage`），匯出時寫進檔頭（plan §2.4）。
+    #[wasm_bindgen(js_name = setDevice)]
+    pub fn set_device(&mut self, id: &str) -> Result<(), JsError> {
+        self.user.set_device(id).map_err(js_error)
+    }
+
+    /// 使用者詞與學習計數匯出成 `# qim-userdict v3` 的 TSV（plan §2.4），網頁存 `localStorage`、
     /// 下載成檔。
     #[wasm_bindgen(js_name = exportUserDict)]
     pub fn export_user_dict(&self) -> String {
         self.user.export()
     }
 
-    /// 檢查 `text` 是不是匯入得了的檔，不動目前的資料；網頁請使用者確認覆蓋之前先檢查。
+    /// 檢查 `text` 是不是匯入得了的檔，不動目前的資料；網頁請使用者確認覆蓋之前先檢查。回傳會略過的
+    /// 列（不認得的種類），每條是「第 N 行：原因」。
     #[wasm_bindgen(js_name = checkUserDict)]
-    pub fn check_user_dict(&self, text: &str) -> Result<(), JsError> {
-        UserModel::import(text).map(|_| ()).map_err(js_error)
+    pub fn check_user_dict(&self, text: &str) -> Result<Vec<String>, JsError> {
+        let imported = UserModel::import(text, self.user.today()).map_err(js_error)?;
+        Ok(warnings(&imported))
     }
 
-    /// 讀匯出的檔，取代目前的使用者詞與學習計數；不合格式時整份不收、原本的不動。
+    /// 讀匯出的檔，取代目前的使用者詞與學習計數；不合格式時整份不收、原本的不動。今天與這台裝置的
+    /// id 留著（檔可能是別台匯出的）。回傳略過的列，同 [`WebSession::check_user_dict`]。
     #[wasm_bindgen(js_name = importUserDict)]
-    pub fn import_user_dict(&mut self, text: &str) -> Result<(), JsError> {
-        self.user = UserModel::import(text).map_err(js_error)?;
-        Ok(())
+    pub fn import_user_dict(&mut self, text: &str) -> Result<Vec<String>, JsError> {
+        let imported = UserModel::import(text, self.user.today()).map_err(js_error)?;
+        let warnings = warnings(&imported);
+        self.user.replace_learning(imported.user);
+        Ok(warnings)
     }
 
     /// 先看匯入詞表 `text` 會加幾個詞、略過哪些列（在個人模型的複本上匯入），不動目前的資料；
@@ -309,10 +334,10 @@ impl WebSession {
         Ok(report.into())
     }
 
-    /// 清掉全部使用者詞與學習計數。
+    /// 清掉全部使用者詞與學習計數；今天與這台裝置的 id 留著。
     #[wasm_bindgen(js_name = clearUserDict)]
     pub fn clear_user_dict(&mut self) {
-        self.user = UserModel::default();
+        self.user.replace_learning(UserModel::default());
     }
 
     /// 簡體模式（M1 票 16）：候選、組字與上屏轉成簡體，學習仍記繁體。組字中切換也立刻

@@ -246,7 +246,7 @@ fn learning_a_word_across_a_separator_records_its_code_without_it() {
         .lines()
         .filter(|l| !l.starts_with('#'))
         .filter_map(|l| {
-            let mut columns = l.split('\t').skip(1);
+            let mut columns = l.split('\t').skip(2);
             Some((columns.next()?, columns.next()?))
         })
         .collect();
@@ -380,10 +380,10 @@ fn choosing_segments_split_by_a_separator_adds_an_auto_phrase_without_it() {
     let exported = ime.user.export();
     let auto: Vec<&str> = exported
         .lines()
-        .filter(|l| l.split('\t').nth(7) == Some("auto"))
+        .filter(|l| l.split('\t').nth(9) == Some("auto"))
         .collect();
     assert_eq!(auto.len(), 1, "{exported}");
-    assert_eq!(auto[0].split('\t').nth(2), Some("mir"));
+    assert_eq!(auto[0].split('\t').nth(3), Some("mir"));
 }
 
 #[test]

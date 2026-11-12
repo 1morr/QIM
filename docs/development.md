@@ -250,7 +250,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
-網頁把學習資料（`# qim-userdict v2`，plan §2.4；仍讀得進 v1）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
+網頁把學習資料（`# qim-userdict v3`，plan §2.4；仍讀得進 v1、v2）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。匯出檔頭的裝置 id 在 `qim.device`（第一次載入時產生）；今天的日期取瀏覽器的當地時間，Playwright 用 `page.clock` 換日。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
 
 線上更新（plan §4.7）：網頁向開發伺服器的 `/pack-updates/<檔名>` 要更新索引與資料包，`web/vite.config.ts` 轉給更新來源，預設 `https://github.com/1morr/QIM/releases/download/packs/`（瀏覽器直接讀不了 GitHub 的 release，沒有 CORS 標頭）；環境變數 `QIM_PACK_UPDATE_URL`（結尾要有 `/`）換成別的來源，例如在本機試：
 

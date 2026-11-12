@@ -33,6 +33,7 @@
 | 線上更新 | `update`（網頁 `updatePacks`） | 資料包的來源（內建、匯入、線上更新） | `PackOrigin`（`builtin`、`imported`、`downloaded`） |
 | 粵典詞庫 / 粵典的詞頭 | `quick-lexicon-words-hk`（`WORDS_HK_LEXICON_ID`）/ `headwords`（`words_hk.rs`） | 預設詞庫 | 方案 `[packs] lexicon` 指名的那份（`quick-lexicon`） |
 | 停鍵層模型（資料包） | `ModelPack`（種類 `model`，id `zh-hant-neural-rerank`） | 神經重排 | `qim_neural::Reranker` |
+| 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
 
 ## 1. 架構總覽
 
@@ -92,7 +93,7 @@ flowchart LR
 
 | crate | 可以依賴 | 不可以 |
 | --- | --- | --- |
-| `qim-core` | `serde`、`postcard`、`serde_json`、`sha2`、`semver`（後三個給資料包 manifest，§4.6）；之後要加的依賴先改本表 | 任何 workspace crate（含綁定與平台 crate）；`std::fs`、`std::net`、`std::thread`、`std::time::SystemTime`（時間由殼以上屏次數傳入） |
+| `qim-core` | `serde`、`postcard`、`serde_json`、`sha2`、`semver`（後三個給資料包 manifest，§4.6）；之後要加的依賴先改本表 | 任何 workspace crate（含綁定與平台 crate）；`std::fs`、`std::net`、`std::thread`、`std::time::SystemTime`（時間由殼傳入：上屏次數與今天的日期，§2.4） |
 | `qim-layout` | `serde`、`serde_json`、`jsonschema` | `qim-core`；同上的 I/O |
 | `qim-neural` | `candle-core`、`candle-nn`（停鍵層的神經重排，M3 票 11 採用；模型由殼以位元組傳入，執行緒由殼開） | 任何 workspace crate；同上的 I/O |
 | `qim-wasm` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `wasm-bindgen` | 被 `qim-core` 或 `qim-layout` 依賴 |
@@ -317,14 +318,17 @@ P_段內 = 1（單字）
 - 分隔記號（§2.1）不進學習資料：每段、整串、自動造詞的碼都去掉它，排位規則比對的碼也去掉它（同 Rime 使用者詞典的碼由音節組成，brief §12.2）。所以 `mi'r` 選兩次「歹口」，記的是 `mir` → 歹口，不分隔打 `mir` 也成首選；分隔過的組字照舊要分兩次以上選定才自動造詞（M1 票 28）。
 - `Options.incognito` 為真時不寫任何學習資料、不用前文。學習總開關 `Options.learning`（brief §4.5、§7，預設開，M3 票 12）關掉時也不寫任何學習資料（計數、個人 bigram、自動造詞），但已學的照用、前文照用；手動加詞與常用語是使用者明確的操作，照收（同無痕）。
 - 選了聯想（§2.1，M3 票 13）只記個人 bigram「剛上屏的最後一段 → 這個聯想」（`UserModel::learn_association`，tick 同上），聯想沒有輸入碼，不記學習計數；它也成了下一次組字前面的字詞（§2.3）。無痕、學習關掉時不記。
-- 匯出格式（對外，M1 票 14 定稿 v1；M3 升 v2，M3 票 23 定稿：下面四種列與跳脫就是 v2，之後加列的種類或改欄位要升 v3，brief §5.3）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
-  - 第一行 `# qim-userdict v2`；匯入也收 `# qim-userdict v1`（M3 spec〈共同規則〉）。接著個人 bigram 的 tick 一行 `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫），每個方案一行 `#@/tick/<方案>\t<tick>`；其餘 `#` 開頭的行與空行是註解，匯出時寫一行欄名註解，有個人 bigram 時在它們前面另一行。
-  - 每個（方案, 輸入碼, 詞）一列、9 欄，依方案、輸入碼、詞排序：`方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語，v2 起）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。
-  - 個人 bigram（v2 起，M3 票 12）：每組一列、5 欄，接在上面的列之後，依前一個字詞、這一段排序：`（空的方案欄）  前一個字詞  這一段  衰減值  最後 tick`。方案欄空的就是各方案共用，和其他列分得開（其他列的方案不能空）；前一個字詞與這一段照詞欄跳脫，不能是空的，衰減值是正的有限數。沒有 `#@/tick` 行時 tick 取最大的最後 tick（同方案的 tick）。v1 沒有這種列，方案欄空的照舊整份不收。
-  - 記住的字串（v2 起，M3 票 15）：每條一列、5 欄，接在個人 bigram 之後，依字串排序：`（空的方案欄）  （空的前一個字詞欄）  字串  衰減值  最後 tick`。和個人 bigram 同形，前一個字詞欄空的就是記住的字串（個人 bigram 的前一個字詞不能是空的）；字串照詞欄跳脫、要是 email（同打字時記的規則），衰減值是正的有限數。它用個人 bigram 的 tick（`#@/tick`，各方案共用的時間），每記一次 tick 加一。
-  - v2 的詞欄跳脫（M3 票 14，常用語含換行與 Tab）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，反斜線後是其他字或在結尾時整份不收；照 PostgreSQL `COPY` 的文字格式與 Linear TSV。v1 的詞欄照字面讀。常用語那列的輸入碼是空的、計數都是 0，觸發詞學到的計數另是一列 `learned`（碼是觸發詞）；其他列的輸入碼不能是空的。
-  - 參考：librime userdb 文字檔（第一行註解、`#@/key<Tab>value` 的 metadata 含 `/tick`、每列記衰減值 `d` 與最後 tick `t`）；libime 使用者詞庫分手動詞與 `[Auto]` 段，這裡收成「來源」欄。和兩者不同：第一行帶格式版本（兩者都沒有）；統計用固定欄，不用 librime 的 `c= d= t=`，因為要多記整串上屏的次數與 tick（規則 2），升版本時本來就要改 parser；多個方案放同一檔；刪除記號（librime 負的 `c`、libime `[Delete]`）等 M4 同步定合併規則時一起加（§7.5）。查證在 `docs/research/userdict-text-formats.md`。
-  - 匯入取代整個個人模型（殼存檔、換機都是整份），有一列不合格式就整份不收、錯誤帶行號：取代時收一半等於丟資料。兩者都是合併、壞列略過；合併規則跟同步一起在 M4 定。
+- 今天的日期（M4 票 12，殼的日期契約）：核心不讀系統時間（§1.3），殼用 `UserModel::set_today` 給使用者當地的日曆日（`qim_core::Date`，`YYYY-MM-DD`）。殼必須在第一次學習前給（含匯入存檔之前，v1、v2 的列取匯入那天），之後每次使用者操作前再給一次，過了午夜才不會記成前一天；網頁在 `window` 捕獲 `keydown`、`pointerdown` 時給。學到或改到的每個條目（學習計數、使用者詞、個人 bigram、記住的字串）記最後使用的日期，同一組（方案, 輸入碼, 詞）的計數與使用者詞是同一個日期；手動加詞、常用語記加進來（或改觸發詞）的那天。殼沒給過日期時學到的條目沒有日期（`None`，匯出時日期欄留空），不寫假日期：之後的一年時限（M4 票 13）跳過沒有日期的條目，免得殼漏給時資料被當成很久沒用而清掉。
+- 匯出格式（對外，M1 票 14 定稿 v1；M3 票 23 定稿 v2；M4 票 12 起是 v3 草稿，M4 收尾票定稿前 M4 的票可以往裡加種類與欄位，brief §5.3、M4 spec〈共同規則〉）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
+  - 第一行 `# qim-userdict v3`；匯入也收 v1、v2（見下面〈v1、v2〉）。接著 metadata 行，照 librime userdb 文字檔的 `#@/key<Tab>value`：裝置 id `#@/device\t<id>`（殼給過才寫，`UserModel::set_device`：英數、`-`、`_`，1–64 字；網頁第一次載入時用 `crypto.randomUUID()` 產生、存 `localStorage` 的 `qim.device`，照 librime 每次安裝一個 `installation_id`；跨裝置合併時分辨各台，M4 票 17）、個人 bigram 的 tick `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫）、每個方案一行 `#@/tick/<方案>\t<tick>`。其餘 `#` 開頭的行與空行是註解；匯出時每種列前寫一行欄名註解（`entry` 那行一定寫，其他種類有列時才寫）。
+  - 每列第一欄是種類；不認得的種類（之後的版本加的）略過，匯入回警告帶行號（`Imported::warnings`），其他列照收；已知種類照舊嚴格，一列不合格式就整份不收、錯誤帶行號。種類欄空的也不收。每列都有最後使用的日期欄 `last_used`：`YYYY-MM-DD` 的真實日期，或空的（不知道，見上面的日期契約）。日期只到日、不帶時區與時刻：一年時限只要日，也少洩漏打字的時刻；LatinIME 每個條目存最後使用的時間戳（300 天沒用的條目在 GC 時移除，淘汰也先刪最舊的，`docs/research/learning-forgetting-sync.md` §2.2–§2.3），librime 沒有日曆時間只有 tick。
+  - `entry`：每個（方案, 輸入碼, 詞）一列、11 欄，依方案、輸入碼、詞排序：`entry  方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  最後使用的日期  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。常用語那列的輸入碼是空的、計數都是 0，觸發詞學到的計數另是一列 `learned`（碼是觸發詞）；其他列的輸入碼不能是空的。
+  - `bigram`：個人 bigram（M3 票 12）每組一列、6 欄，接在 `entry` 之後，依前一個字詞、這一段排序：`bigram  前一個字詞  這一段  衰減值  最後 tick  最後使用的日期`。前一個字詞與這一段照詞欄跳脫，不能是空的，衰減值是正的有限數。沒有 `#@/tick` 行時 tick 取最大的最後 tick（同方案的 tick）。
+  - `string`：記住的字串（M3 票 15）每條一列、5 欄，接在 `bigram` 之後，依字串排序：`string  字串  衰減值  最後 tick  最後使用的日期`。字串照詞欄跳脫、要是 email（同打字時記的規則），衰減值是正的有限數。它用個人 bigram 的 tick（`#@/tick`，各方案共用的時間），每記一次 tick 加一。
+  - 詞欄跳脫（v2 起，M3 票 14，常用語含換行與 Tab）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，反斜線後是其他字或在結尾時整份不收；照 PostgreSQL `COPY` 的文字格式與 Linear TSV。
+  - v1、v2（M3 spec〈共同規則〉，一直要收）：沒有種類欄、日期與裝置 id，每列的最後使用日期取匯入那天（殼還沒給日期時沒有日期）：v1、v2 的資料是使用者正在搬過來的，取匯入那天給它們一年，不會一升級就被時限清掉；不知道日期就留空，同上面的契約。v2 的列依空的欄分種類：一般列 9 欄 `方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`；方案欄空的是個人 bigram（`（空）  前一個字詞  這一段  衰減值  最後 tick`），方案欄與前一個字詞欄都空的是記住的字串（`（空）  （空）  字串  衰減值  最後 tick`）；`#@/tick` 是共用的 tick。v1 只有一般列、沒有 `phrase`，詞欄照字面讀不跳脫，`#@/tick` 行是註解。
+  - 參考：librime userdb 文字檔（第一行註解、`#@/key<Tab>value` 的 metadata 含 `/tick` 與裝置的 `/user_id`、每列記衰減值 `d` 與最後 tick `t`）；libime 使用者詞庫分手動詞與 `[Auto]` 段，這裡收成「來源」欄。和兩者不同：第一行帶格式版本（兩者都沒有）；統計用固定欄，不用 librime 的 `c= d= t=`，因為要多記整串上屏的次數與 tick（規則 2），升版本時本來就要改 parser；多個方案放同一檔；每列有明確的種類欄，未知種類略過（librime 靠 parser 略過壞列與未知的 `key=value` 相容，`docs/research/userdict-text-formats.md` §1.8），已知種類仍嚴格；刪除記號（librime 負的 `c`、libime `[Delete]`）與各台分開的次數等 M4 票 17 定合併規則時加成新的種類或欄位。查證在 `docs/research/userdict-text-formats.md`。
+- 匯入取代整個個人模型（殼存檔、換機都是整份），已知種類有一列不合格式就整份不收、錯誤帶行號：取代時收一半等於丟資料（librime、libime 兩者都是合併、壞列略過）。`UserModel::import(text, today)` 把檔讀成一份新的個人模型，殼取代時留著自己的今天與裝置 id（檔可能是別台匯出的）。改成合併在 M4 票 17。
 
 ### 2.5 輸入方案（brief §6）
 
