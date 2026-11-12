@@ -98,10 +98,13 @@
 				</form>
 				<div>
 					<button id="export-user-dict" type="button">匯出學習資料</button>
-					<label>匯入學習資料（取代目前的） <input id="import-user-dict" type="file" accept=".tsv,.txt,text/tab-separated-values,text/plain" aria-describedby="import-note" /></label>
-					<button id="clear-user-dict" type="button">清空學習資料</button>
+					<label>匯入學習資料（合併進目前的） <input id="import-user-dict" type="file" accept=".tsv,.txt,text/tab-separated-values,text/plain" aria-describedby="import-note" /></label>
+					<label>從備份還原（取代目前的） <input id="restore-user-dict" type="file" accept=".tsv,.txt,text/tab-separated-values,text/plain" aria-describedby="restore-note" /></label>
+					<button id="clear-user-dict" type="button" aria-describedby="clear-note">清空學習資料</button>
 				</div>
-				<p id="import-note" class="note">匯入會用檔案的內容覆蓋目前全部的學習資料，不是合併；要保留目前的，先匯出。</p>
+				<p id="import-note" class="note">匯入會把檔案合併進目前的學習資料：兩邊的次數相加，對方刪掉的這裡也刪。要同步兩個瀏覽器或裝置，各自匯出、再匯入對方的檔。</p>
+				<p id="restore-note" class="note">從備份還原會換成備份的內容，並留一個清空記號：同步到別台後，別台原本的學習資料也換成這份備份。</p>
+				<p id="clear-note" class="note">清空會同步到別台：別台匯入這台的檔時，它在收到清空之前學的也一起清掉，包括這台清空後、同步前才學的。想留的先匯出。</p>
 				<fieldset id="confirm-import" aria-label="確認匯入" hidden>
 					<p id="confirm-import-text"></p>
 					<button id="confirm-import-ok" type="button">確定匯入</button>

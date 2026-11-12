@@ -82,7 +82,7 @@ test("v2 匯入的 email 在中文打開頭 3 碼就有，面板標英文使用�
 	page,
 }, testInfo) => {
 	const { text, items, list } = await ready(page);
-	await page.getByLabel("匯入學習資料（取代目前的）").setInputFiles({
+	await page.getByLabel("匯入學習資料（合併進目前的）").setInputFiles({
 		name: "v2.tsv",
 		mimeType: "text/plain",
 		buffer: Buffer.from(V2_WITH_EMAIL),

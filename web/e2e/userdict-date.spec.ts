@@ -44,8 +44,8 @@ test("打 email 打到午夜後直接失焦（沒有按鍵或點擊），學到�
 	// 切到別的視窗：焦點離開輸入框，前面沒有 keydown、pointerdown。
 	await text.evaluate((element) => element.blur());
 	await expect
-		// kind word count decayed last_tick last_used（第 6 欄）
-		.poll(async () => (await storedRow(page, "english", EMAIL))?.[5])
+		// kind word counts deleted deleted_on version decayed last_tick last_used（第 9 欄）
+		.poll(async () => (await storedRow(page, "english", EMAIL))?.[8])
 		.toBe("2026-11-13");
 });
 
@@ -64,16 +64,16 @@ test.describe("觸控", () => {
 		};
 		await commit();
 		await expect(text).toHaveValue("門口");
-		// kind scheme word code commits … last_used（第 9 欄）
+		// kind scheme word code counts … last_used（第 12 欄）；counts 是「編號:用過:整串上屏:不算的:日期」
 		const first = await storedRow(page, "entry", "anr");
-		expect(first?.slice(2, 5)).toEqual(["門口", "anr", "1"]);
-		expect(first?.[8]).toBe("2026-11-12");
+		expect(first?.slice(2, 5)).toEqual(["門口", "anr", "0:1:1:0:2026-11-12"]);
+		expect(first?.[11]).toBe("2026-11-12");
 
 		await page.clock.setFixedTime(new Date(2026, 10, 14, 8, 0));
 		await commit();
 		await expect(text).toHaveValue("門口門口");
 		const second = await storedRow(page, "entry", "anr");
-		expect(second?.[4]).toBe("2");
-		expect(second?.[8]).toBe("2026-11-14");
+		expect(second?.[4]).toBe("0:2:2:0:2026-11-14");
+		expect(second?.[11]).toBe("2026-11-14");
 	});
 });

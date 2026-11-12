@@ -1,13 +1,18 @@
 //! 個人模型（plan §2.4）：使用者詞與學習計數。
 
-use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use crate::english_user::{self, ENGLISH_COMPLETION_AFTER, EnglishUserWord, EnglishUserWords};
+use crate::english_user::{self, EnglishUserWords};
 use crate::{Date, Engine, Segment};
 
+mod format;
+pub(crate) mod sync;
 mod undo;
+pub use format::{ImportError, ImportWarning, Imported};
+pub use sync::Merged;
+pub(crate) use sync::{Tally, Versioned};
 pub(crate) use undo::{Undo, UndoOwner};
 
 /// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
@@ -83,10 +88,25 @@ pub struct UserModel {
     today: Option<Date>,
     /// 這台裝置的 id（[`UserModel::set_device`]），匯出時寫進檔頭；跨裝置合併時分辨各台（M4 票 17）。
     device: Option<String>,
+    /// 最近一次清空的清空記號（[`UserModel::clear`]）；沒清空過是 `None`（第 0 代）。跨裝置合併時代數大的
+    /// 那邊整份算數（使用者 2026-11-13 決定，ADR 0007）。
+    cleared: Option<Cleared>,
     /// 條目上限（[`UserModel::set_limits`]）；不進匯出檔。
     limits: Limits,
     /// 最近一個動作學到的東西的撤銷紀錄（退格撤銷，[`UserModel::take_undo`]）；不進匯出檔，比較時不看。
     undo: Undo,
+}
+
+/// 清空記號（[`UserModel::clear`]）：清空學習資料時留下，跨裝置合併時把清空傳到別台。一台的學習資料永遠只屬於
+/// 一代：收到較新的代數就先清掉自己的，所以不必每列記代數。
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Cleared {
+    /// 代數：清空時取這台看過最大的加一。合併時代數大的那邊整份算數、代數小的整份不收。
+    pub(crate) generation: u64,
+    /// 清空的日期；殼沒給日期時是 `None`。只給人看與合併時挑一個記號，不決定誰算數。
+    pub(crate) on: Option<Date>,
+    /// 清空的裝置 id；殼沒給時是空字串。
+    pub(crate) device: String,
 }
 
 /// 比較學習資料與殼給的設定；撤銷紀錄不是學習資料（匯出檔也沒有它），不比。
@@ -98,6 +118,7 @@ impl PartialEq for UserModel {
             english,
             today,
             device,
+            cleared,
             limits,
             undo: _,
         } = self;
@@ -106,6 +127,7 @@ impl PartialEq for UserModel {
             && *english == other.english
             && *today == other.today
             && *device == other.device
+            && *cleared == other.cleared
             && *limits == other.limits
     }
 }
@@ -118,6 +140,10 @@ struct Bigrams {
     tick: u64,
     /// 前一個字詞 → 這一段 → 衰減值。
     entries: BTreeMap<String, BTreeMap<String, Decayed>>,
+    /// 前一個字詞 → 這一段 → 各台的次數與墓碑（[`Tally`]）；只放還在的組。
+    tallies: BTreeMap<String, BTreeMap<String, Tally>>,
+    /// 刪掉的組（墓碑表）：[`Bigrams::digest`] → 各台的次數與墓碑，不存原文。
+    graveyard: BTreeMap<String, Tally>,
 }
 
 /// 一個衰減值與它最後更新的 tick（librime `formula_d`）。
@@ -127,6 +153,8 @@ pub(crate) struct Decayed {
     last_tick: u64,
     /// 最後使用的日期；殼沒給日期時是 `None`。
     pub(crate) last_used: Option<Date>,
+    /// 寫入時那個條目的合計次數（[`Tally::uses`]）：跨裝置合併時版本大的留下（[`sync`]）。
+    pub(crate) version: u64,
 }
 
 impl Decayed {
@@ -140,11 +168,36 @@ impl Decayed {
         self.value * decay(tick - self.last_tick)
     }
 
-    /// 在 `tick`、`today` 又上屏（或打）一次：衰減到現在再加一（librime `formula_d`）。
-    pub(crate) fn bump(&mut self, tick: u64, today: Option<Date>) {
+    /// 在 `tick`、`today` 又上屏（或打）一次：衰減到現在再加一（librime `formula_d`）；`version` 是這次學到後
+    /// 條目的合計次數。
+    pub(crate) fn bump(&mut self, tick: u64, today: Option<Date>, version: u64) {
         self.value = 1.0 + self.at(tick);
         self.last_tick = tick;
         self.last_used = today;
+        self.version = version;
+    }
+
+    /// tick 往後挪 `by`（合併時對齊兩邊的 tick，[`align`]）：距現在的上屏次數不變。
+    pub(crate) fn shifted(self, by: u64) -> Self {
+        Self {
+            last_tick: self.last_tick + by,
+            ..self
+        }
+    }
+}
+
+impl Versioned for Decayed {
+    fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// 同版本是同一次寫入：留 tick 較舊的（對齊後距現在較久，[`align`]），它來自寫入後又上屏過較多次的那台，
+    /// 衰減得比較準；兩台互相同步一輪就收斂。
+    fn order(&self, other: &Self) -> std::cmp::Ordering {
+        let key = |d: &Self| (d.version, Reverse(d.last_tick), d.last_used);
+        key(self)
+            .cmp(&key(other))
+            .then(self.value.total_cmp(&other.value))
     }
 }
 
@@ -187,6 +240,10 @@ pub(crate) struct SchemeModel {
     entries: BTreeMap<String, BTreeMap<String, Count>>,
     /// 輸入碼 → 詞 → 使用者詞。計數另記在 `entries`，手動加了還沒用過的詞沒有計數。
     words: BTreeMap<String, BTreeMap<String, UserWord>>,
+    /// 輸入碼 → 詞 → 各台的次數與墓碑（[`Tally`]）。有計數或使用者詞的列一定有；只放還在的列。
+    tallies: BTreeMap<String, BTreeMap<String, Tally>>,
+    /// 刪掉的列（墓碑表）：[`SchemeModel::digest`] → 各台的次數與墓碑，不存原文。再用到同一列時移回 `tallies`。
+    graveyard: BTreeMap<String, Tally>,
 }
 
 /// 一個使用者詞（plan §2.4）：像詞庫的詞一樣進 lattice。
@@ -198,6 +255,30 @@ struct UserWord {
     /// 最後使用的日期：加進來（或改觸發詞）的那天，之後同碼同字學到時跟著計數更新
     /// （[`SchemeModel::stamp`]），所以有計數時和計數的一樣。殼沒給日期時是 `None`。
     last_used: Option<Date>,
+    /// 加進來（或改觸發詞、自動造詞）時這列的合計次數（[`Tally::uses`]），跨裝置合併用（[`sync`]）。
+    version: u64,
+}
+
+impl WordSource {
+    /// 合併時同版本的先後（固定的順序就好）。
+    fn rank(self) -> u8 {
+        match self {
+            Self::AutoPhrase => 0,
+            Self::Manual => 1,
+            Self::Phrase => 2,
+        }
+    }
+}
+
+impl Versioned for UserWord {
+    fn version(&self) -> u64 {
+        self.version
+    }
+
+    fn order(&self, other: &Self) -> std::cmp::Ordering {
+        let key = |w: &Self| (w.version, w.last_used, w.source.rank(), w.trigger.clone());
+        key(self).cmp(&key(other))
+    }
 }
 
 /// 使用者詞怎麼來的。
@@ -223,43 +304,53 @@ const SOURCE_NAMES: [(Option<WordSource>, &str); 4] = [
     (Some(WordSource::Phrase), "phrase"),
 ];
 
-/// 一個（輸入碼, 候選文字）的計數；方案由所在的 [`SchemeModel`] 決定。兩種上屏分開記（plan §2.4）：
-/// - 整串上屏：整串輸入碼就是這個碼、上屏的就是這個候選；給排位規則 2 用。
+/// 一個（輸入碼, 候選文字）在這台學到的值；方案由所在的 [`SchemeModel`] 決定。兩種上屏分開記（plan §2.4）：
+/// - 整串上屏：整串輸入碼就是這個碼、上屏的就是這個候選；次數各台分開記在這列的 [`Tally`]，給排位規則 2 用。
 /// - 句中各段的上屏也算進衰減值，給 `personal` 用。
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 struct Count {
-    /// 整串上屏的次數，不衰減，排位規則 2 的門檻用；只在句中出現過時是 0。
-    commits: u64,
-    /// 最後一次整串上屏的 tick；`commits` 是 0 時沒有意義。
-    last_commit_tick: u64,
     /// 衰減值：整串上屏與句中各段的上屏每次加一，舊的隨上屏次數指數衰減（librime
     /// `formula_d`）；記的是 `last_tick` 當時的值。
     decayed: f64,
     /// 最後一次（整串或句中）上屏時的 tick。
     last_tick: u64,
+    /// 最後一次整串上屏的 tick；沒有整串上屏過是 `None`。排位規則 2 的期限與「最近」用。
+    last_commit_tick: Option<u64>,
     /// 最後使用的日期：最後一次（整串或句中）上屏時殼給的今天；殼沒給時是 `None`。一年沒用的條目停用（[`SchemeUser`]）。
     last_used: Option<Date>,
-    /// 最後一次整串上屏的日期；`commits` 是 0 或殼沒給日期時是 `None`。距今超過一年時整串上屏的次數
-    /// 當作 0（[`Count::commits_on`]）：規則 2、3 只看一年內的整串上屏，句中用過的不延長它。
-    last_commit_date: Option<Date>,
+    /// 最後一次學到時這列的合計次數（[`Tally::uses`]），跨裝置合併用（[`sync`]）。
+    version: u64,
 }
 
 impl Count {
-    /// 沒有計數：手動加了還沒用過的詞匯出時計數都寫 0，匯入時不建計數。日期不算。
-    fn is_empty(&self) -> bool {
-        self.commits == 0
-            && self.last_commit_tick == 0
-            && self.decayed == 0.0
-            && self.last_tick == 0
+    /// tick 往後挪 `by`（合併時對齊兩邊的 tick，[`align`]）。
+    fn shifted(self, by: u64) -> Self {
+        Self {
+            last_tick: self.last_tick + by,
+            last_commit_tick: self.last_commit_tick.map(|t| t + by),
+            ..self
+        }
+    }
+}
+
+impl Versioned for Count {
+    fn version(&self) -> u64 {
+        self.version
     }
 
-    /// `today` 時算數的整串上屏次數：最後一次整串上屏距今超過一年時是 0（下一次從 1 重算，plan §2.4）。
-    fn commits_on(&self, today: Option<Date>) -> u64 {
-        if expired(self.last_commit_date, today) {
-            0
-        } else {
-            self.commits
-        }
+    /// 同版本留 tick 較舊的，同 [`Decayed`]。
+    fn order(&self, other: &Self) -> std::cmp::Ordering {
+        let key = |c: &Self| {
+            (
+                c.version,
+                Reverse(c.last_tick),
+                Reverse(c.last_commit_tick),
+                c.last_used,
+            )
+        };
+        key(self)
+            .cmp(&key(other))
+            .then(self.decayed.total_cmp(&other.decayed))
     }
 }
 
@@ -307,6 +398,8 @@ impl UserModel {
             tick: 0,
             entries: BTreeMap::new(),
             words: BTreeMap::new(),
+            tallies: BTreeMap::new(),
+            graveyard: BTreeMap::new(),
         };
         SchemeUser {
             model: self.schemes.get(scheme).unwrap_or(&EMPTY),
@@ -322,20 +415,28 @@ impl UserModel {
             return;
         }
         let today = self.today;
+        let device = self.own_device();
         let (model, scheme_undo) = self.learning_scheme(scheme);
-        model.learn(segments, today, scheme_undo);
+        model.learn(segments, today, &device, scheme_undo);
         self.bigrams
-            .learn(previous, segments, today, &mut self.undo);
+            .learn(previous, segments, today, &device, &mut self.undo);
         self.enforce_limits();
+    }
+
+    /// 這台在各台次數（[`Tally`]）裡的格子：殼給的裝置 id，沒給時是空字串（不知道哪台）。
+    fn own_device(&self) -> String {
+        self.device.clone().unwrap_or_default()
     }
 
     /// 選了一個聯想（plan §2.4）：只記個人 bigram「`previous` → `text`」。聯想沒有輸入碼，
     /// 不記學習計數。
     pub(crate) fn learn_association(&mut self, previous: &str, text: &str) {
+        let device = self.own_device();
         self.bigrams.learn(
             Some(previous),
             &[Segment::new(String::new(), text.to_string())],
             self.today,
+            &device,
             &mut self.undo,
         );
         self.enforce_limits();
@@ -412,7 +513,8 @@ impl UserModel {
     pub(crate) fn learn_english(&mut self, text: &str) {
         self.undo
             .save_english(&self.english, &english_user::key(text));
-        self.english.learn(text, self.today);
+        let device = self.own_device();
+        self.english.learn(text, self.today, &device);
         self.enforce_limits();
     }
 
@@ -422,10 +524,11 @@ impl UserModel {
         self.english.list()
     }
 
-    /// 忘掉英文使用者詞 `text`（不分大小寫），匯出檔裡不再有它；沒學過時回傳 `false`。
+    /// 忘掉英文使用者詞 `text`（不分大小寫）：匯出檔裡只剩它的墓碑（各台的次數與刪除時的合計，跨裝置合併時
+    /// 把刪除傳到別台，ADR 0007）；沒學過時回傳 `false`。
     pub fn forget_english_user_word(&mut self, text: &str) -> bool {
         self.discard_undo();
-        self.english.forget(text)
+        self.english.forget(text, self.today)
     }
 
     /// 撤銷學習（plan §2.4，M4 票 16）：清掉方案 `scheme` 裡（`code`, `text`）學到的，經
@@ -434,8 +537,9 @@ impl UserModel {
     /// 現在接的前一個字詞，沒有時不清），其他前一個字詞後面學到的不動，免得清一個常用字抹掉它在所有前文
     /// 後面的學習。自動造詞刪掉時，落在它裡面前後相接的組（「乙丁」的「乙 → 丁」，造詞那次學到的段間接續）
     /// 一起清，否則同樣的字會以句子候選回到前面。手動加的詞與常用語只清計數、詞留著。句子候選的各段是各自
-    /// 的學習，不清（同 librime 刪候選只刪那個詞條）。沒有墓碑：再選就重新學，不做永久屏蔽；同步怎麼傳到
-    /// 別台由票 17 定。撤銷紀錄跟著丟掉（使用者明確的操作）。有清到東西時回傳 `true`。
+    /// 的學習，不清（同 librime 刪候選只刪那個詞條）。清掉的各留一個墓碑（M4 票 17，ADR 0007）：同步時把
+    /// 刪除傳到別台；再選就重新學、復活，不做永久屏蔽。撤銷紀錄跟著丟掉（使用者明確的操作）。有清到東西時
+    /// 回傳 `true`。
     pub(crate) fn forget(
         &mut self,
         scheme: &str,
@@ -444,27 +548,30 @@ impl UserModel {
         previous: Option<&str>,
     ) -> bool {
         self.discard_undo();
+        let (today, device) = (self.today, self.own_device());
         let mut changed = false;
         let mut auto_phrase = false;
         if let Some(model) = self.schemes.get_mut(scheme) {
-            changed |= model.count(code, text).is_some();
             auto_phrase = model
                 .word(code, text)
                 .is_some_and(|w| w.source == WordSource::AutoPhrase);
-            if auto_phrase {
-                model.remove_row(code, text);
-                changed = true;
-            } else {
-                model.forget(code, text);
-            }
+            changed |= model.forget_counts(code, text, today, &device);
         }
-        self.bigrams.retain(|before, next, _| {
-            let keep = !(Some(before) == previous && next == text
-                || auto_phrase && text.contains(&format!("{before}{next}")));
-            changed |= !keep;
-            keep
-        });
-        changed
+        let doomed: Vec<(String, String)> = self
+            .bigrams
+            .entries
+            .iter()
+            .flat_map(|(before, next)| next.keys().map(move |n| (before, n)))
+            .filter(|(before, next)| {
+                Some(before.as_str()) == previous && next.as_str() == text
+                    || auto_phrase && text.contains(&format!("{before}{next}"))
+            })
+            .map(|(before, next)| (before.clone(), next.clone()))
+            .collect();
+        for (before, next) in &doomed {
+            self.bigrams.delete(before, next, today);
+        }
+        changed || !doomed.is_empty()
     }
 
     /// 輸入碼 `input` 剛好是打過 [`crate::ENGLISH_SHOWN_AFTER`] 次的英文使用者詞時是它的寫法（排位規則 4，
@@ -523,7 +630,7 @@ impl UserModel {
             let (today, tick) = (self.today, self.english.tick);
             order.extend(self.english.words.iter().map(|(key, word)| {
                 let eviction = Eviction {
-                    threshold: if word.passed(today) {
+                    threshold: if self.english.passed(key, today) {
                         Threshold::Passed
                     } else {
                         Threshold::Below
@@ -544,7 +651,7 @@ impl UserModel {
                     }
                     Victim::English(key) => {
                         self.undo.save_english(&self.english, &key);
-                        self.english.words.remove(&key);
+                        self.english.remove(&key);
                     }
                 }
             }
@@ -582,7 +689,7 @@ impl UserModel {
             for (previous, text) in &doomed {
                 self.undo.save_bigram(&self.bigrams, previous, text);
             }
-            self.bigrams.retain(|previous, text, _| {
+            self.bigrams.retain(|previous, text| {
                 !doomed.contains(&(previous.to_string(), text.to_string()))
             });
         }
@@ -596,7 +703,7 @@ impl UserModel {
     /// 這台裝置的 id：由殼產生一次、存起來（網頁用 `crypto.randomUUID()`，照 librime 每次安裝一個
     /// `installation_id`），匯出時寫進檔頭。只能用英數、`-`、`_`，1–64 字。
     pub fn set_device(&mut self, id: &str) -> Result<(), InvalidDeviceId> {
-        if !is_device_id(id) {
+        if !format::is_device_id(id) {
             return Err(InvalidDeviceId(id.to_string()));
         }
         self.device = Some(id.to_string());
@@ -612,6 +719,48 @@ impl UserModel {
     /// 這台裝置的 id 留著，不換成檔裡的（檔可能是別台匯出的，換過來各台分開的次數會記錯格）。
     /// 條目上限也留著自己的。很久以前的備份照收：一年沒用的條目停用、不刪。
     pub fn replace_learning(&mut self, learned: UserModel) {
+        self.replace_data(learned);
+    }
+
+    /// 清空全部學習資料（範圍同網頁的「清空學習資料」：學習計數、使用者詞含手動加詞與常用語、個人 bigram、
+    /// 英文使用者詞、墓碑），留清空記號（[`Cleared`]），跨裝置合併時把清空傳到別台：代數小的（清空前的）快照
+    /// 整份不收，別台合併這台的檔時清掉它清空前學的（使用者 2026-11-13 決定，ADR 0007）。今天、裝置 id 與上限
+    /// 留著。撤銷紀錄跟著丟掉。
+    pub fn clear(&mut self) {
+        let cleared = Cleared {
+            generation: self.generation() + 1,
+            on: self.today,
+            device: self.own_device(),
+        };
+        self.replace_data(UserModel {
+            cleared: Some(cleared),
+            ..UserModel::default()
+        });
+    }
+
+    /// 從備份還原（協調者 2026-11-13 決定，和合併的匯入分開）：留一個新的清空記號（代數取這台與備份較大的加一），
+    /// 再把備份 `backup`（[`UserModel::import`] 讀出來的）的學習資料當成清空之後學到的收進來。是這台的新事件：
+    /// 清空前做的備份也還原得回來，別台的舊資料（代數較小）同步後不回來，合併的三條律照樣成立。今天、裝置 id
+    /// 與上限留著；撤銷紀錄丟掉。
+    pub fn restore(&mut self, backup: UserModel) {
+        let cleared = Cleared {
+            generation: self.generation().max(backup.generation()) + 1,
+            on: self.today,
+            device: self.own_device(),
+        };
+        self.replace_data(UserModel {
+            cleared: Some(cleared),
+            ..backup
+        });
+    }
+
+    /// 清空記號的代數；沒清空過是 0。
+    fn generation(&self) -> u64 {
+        self.cleared.as_ref().map_or(0, |c| c.generation)
+    }
+
+    /// 拿 `learned` 的學習資料（含清空記號）取代自己的，今天、裝置 id 與上限留著。
+    fn replace_data(&mut self, learned: UserModel) {
         let today = self.today;
         let device = self.device.take();
         let limits = self.limits;
@@ -628,8 +777,9 @@ impl UserModel {
     /// 上屏次數由同一次上屏的 [`UserModel::learn`] 記。
     pub(crate) fn add_auto_phrase(&mut self, scheme: &str, code: &str, text: &str) {
         let today = self.today;
+        let device = self.own_device();
         let (model, scheme_undo) = self.learning_scheme(scheme);
-        model.add_auto_phrase(code, text, today, scheme_undo);
+        model.add_auto_phrase(code, text, today, &device, scheme_undo);
         self.enforce_limits();
     }
 
@@ -670,16 +820,9 @@ impl UserModel {
         trigger: Option<&str>,
     ) {
         self.discard_undo();
-        let today = self.today;
+        let (today, device) = (self.today, self.own_device());
         let model = self.for_scheme_mut(&engine.scheme().id);
-        model.words_at(code).insert(
-            text.to_string(),
-            UserWord {
-                source: WordSource::Manual,
-                trigger: trigger.map(String::from),
-                last_used: today,
-            },
-        );
+        model.put_word(code, text, WordSource::Manual, trigger, today, &device);
         model.stamp(code, text, today);
     }
 
@@ -694,20 +837,20 @@ impl UserModel {
     ) -> Result<(), UserWordError> {
         check_user_word(engine, text, trigger, |c| c == '\n' || c == '\t')?;
         self.discard_undo();
-        let today = self.today;
+        let (today, device) = (self.today, self.own_device());
         let model = self.for_scheme_mut(&engine.scheme().id);
-        let old = model.words_at(PHRASE_CODE).insert(
-            text.to_string(),
-            UserWord {
-                source: WordSource::Phrase,
-                trigger: trigger.map(String::from),
-                last_used: today,
-            },
+        let old = model.put_word(
+            PHRASE_CODE,
+            text,
+            WordSource::Phrase,
+            trigger,
+            today,
+            &device,
         );
         if let Some(old) = old.and_then(|w| w.trigger)
             && Some(old.as_str()) != trigger
         {
-            model.forget(&old, text);
+            model.forget_counts(&old, text, today, &device);
         }
         Ok(())
     }
@@ -726,26 +869,22 @@ impl UserModel {
             .collect()
     }
 
-    /// 刪掉文字是 `text` 的常用語，連同它的觸發詞學到的計數，匯出檔裡不再有它；沒有這條時回傳
-    /// `false`。觸發詞剛好是這段文字自己的碼時，平常打字學到的同一組計數也一起刪：兩者是同一個鍵、
+    /// 刪掉文字是 `text` 的常用語，連同它的觸發詞學到的計數，匯出檔裡只剩墓碑（同步時把刪除傳到別台，
+    /// ADR 0007）；沒有這條時回傳 `false`。觸發詞剛好是這段文字自己的碼時，平常打字學到的同一組計數也一起刪：兩者是同一個鍵、
     /// 分不出來，寧可少一筆學習，也不留使用者刪掉的字。
     pub fn remove_phrase(&mut self, engine: &Engine, text: &str) -> bool {
         self.discard_undo();
+        let (today, device) = (self.today, self.own_device());
         // 沒學過的方案不建出空的方案（`for_scheme_mut` 會建）。
         let Some(model) = self.schemes.get_mut(&engine.scheme().id) else {
             return false;
         };
-        let Some(phrases) = model.words.get_mut(PHRASE_CODE) else {
+        let Some(word) = model.word(PHRASE_CODE, text).cloned() else {
             return false;
         };
-        let Some(word) = phrases.remove(text) else {
-            return false;
-        };
-        if phrases.is_empty() {
-            model.words.remove(PHRASE_CODE);
-        }
+        model.delete_row(PHRASE_CODE, text, today);
         if let Some(trigger) = word.trigger {
-            model.forget(&trigger, text);
+            model.forget_counts(&trigger, text, today, &device);
         }
         true
     }
@@ -791,12 +930,53 @@ fn check_user_word(
 }
 
 impl Bigrams {
-    /// 只留 `keep` 為真的組；前一個字詞後面都刪光時連它一起刪。
-    fn retain(&mut self, mut keep: impl FnMut(&str, &str, &Decayed) -> bool) {
+    /// 只留 `keep` 為真的組，連同各台的次數一起刪（上限淘汰，不留墓碑）；前一個字詞後面都刪光時連它一起刪。
+    fn retain(&mut self, mut keep: impl FnMut(&str, &str) -> bool) {
         self.entries.retain(|previous, next| {
-            next.retain(|text, decayed| keep(previous, text, decayed));
+            next.retain(|text, _| keep(previous, text));
             !next.is_empty()
         });
+        self.tallies.retain(|previous, next| {
+            next.retain(|text, _| keep(previous, text));
+            !next.is_empty()
+        });
+    }
+
+    /// 在 `today` 刪掉一組（撤銷學習）：留墓碑、移進墓碑表，衰減值丟掉。
+    fn delete(&mut self, previous: &str, text: &str, today: Option<Date>) {
+        if let Some(mut tally) = remove_in(&mut self.tallies, previous, text) {
+            tally.delete(today);
+            self.graveyard
+                .insert(Bigrams::digest(previous, text), tally);
+        }
+        remove_in(&mut self.entries, previous, text);
+    }
+
+    /// 一組在墓碑表裡的鍵（[`sync::digest`]）。
+    pub(super) fn digest(previous: &str, text: &str) -> String {
+        sync::digest(&["bigram", previous, text])
+    }
+
+    /// （`previous`, `text`）各台的次數與墓碑。
+    pub(super) fn tally(&self, previous: &str, text: &str) -> Option<&Tally> {
+        self.tallies.get(previous)?.get(text)
+    }
+
+    /// （`previous`, `text`）各台的次數：沒有時從墓碑表移回（刪過又用到），都沒有就建一個空的。
+    fn tally_mut(&mut self, previous: &str, text: &str) -> &mut Tally {
+        if self.tally(previous, text).is_none() {
+            let buried = sync::exhume(&mut self.graveyard, || Bigrams::digest(previous, text));
+            put_in(
+                &mut self.tallies,
+                previous,
+                text,
+                Some(buried.unwrap_or_default()),
+            );
+        }
+        self.tallies
+            .get_mut(previous)
+            .and_then(|n| n.get_mut(text))
+            .expect("剛放進去")
     }
 
     /// 一次上屏的個人 bigram：`previous` → 第一段、相鄰兩段各記一次；有兩段以上時 `previous` →
@@ -807,6 +987,7 @@ impl Bigrams {
         previous: Option<&str>,
         segments: &[Segment],
         today: Option<Date>,
+        device: &str,
         undo: &mut Undo,
     ) {
         undo.save_bigram_tick(self);
@@ -832,13 +1013,14 @@ impl Bigrams {
             }
             let (previous, text) = pair;
             undo.save_bigram(self, previous, text);
+            let version = self.tally_mut(previous, text).touch(device);
             let decayed = self
                 .entries
                 .entry(previous.to_string())
                 .or_default()
                 .entry(text.to_string())
                 .or_default();
-            decayed.bump(tick, today);
+            decayed.bump(tick, today, version);
         }
     }
 }
@@ -900,25 +1082,77 @@ impl SchemeModel {
         }
     }
 
-    /// 刪掉一整列：學習計數與使用者詞。
+    /// 刪掉一整列（上限淘汰）：學習計數、使用者詞與各台的次數，不留墓碑。淘汰是這台自己的空間管理，不是
+    /// 使用者刪的：別台還有這列時合併回來照樣有（ADR 0007）。
     fn remove_row(&mut self, code: &str, text: &str) {
-        self.forget(code, text);
-        if let Some(words) = self.words.get_mut(code) {
-            words.remove(text);
-            if words.is_empty() {
-                self.words.remove(code);
-            }
-        }
+        remove_in(&mut self.entries, code, text);
+        remove_in(&mut self.words, code, text);
+        remove_in(&mut self.tallies, code, text);
     }
 
-    /// 刪掉（`code`, `text`）學到的計數。
-    fn forget(&mut self, code: &str, text: &str) {
-        if let Some(texts) = self.entries.get_mut(code) {
-            texts.remove(text);
-            if texts.is_empty() {
-                self.entries.remove(code);
-            }
+    /// 在 `today` 刪掉一整列（使用者刪的）：留墓碑（[`Tally::delete`]），學習計數與使用者詞丟掉。這列沒有
+    /// 任何東西時不動。
+    fn delete_row(&mut self, code: &str, text: &str, today: Option<Date>) {
+        // 手動加詞與常用語一直有效（不受一年時限）：墓碑不記日期、不回收，否則回收後才回來的舊快照會讓
+        // 刪掉的詞帶著原文復活（墓碑的保留期靠的是條目也過了一年而停用，ADR 0007）。
+        let never_expires = self
+            .word(code, text)
+            .is_some_and(|w| w.source != WordSource::AutoPhrase);
+        if let Some(mut tally) = remove_in(&mut self.tallies, code, text) {
+            tally.delete(today.filter(|_| !never_expires));
+            self.graveyard
+                .insert(SchemeModel::digest(code, text), tally);
         }
+        remove_in(&mut self.entries, code, text);
+        remove_in(&mut self.words, code, text);
+    }
+
+    /// 一列在墓碑表裡的鍵（[`sync::digest`]）；方案是墓碑表所在的方案。
+    pub(super) fn digest(code: &str, text: &str) -> String {
+        sync::digest(&["entry", code, text])
+    }
+
+    /// 撤銷（`code`, `text`）學到的（[`UserModel::forget`]、常用語換掉或刪掉觸發詞）：有計數或是自動造詞時整列
+    /// 刪掉、留墓碑；手動加詞與常用語只清計數、詞留著：刪掉後由這台再加回一次（`device` 自己那格加一，版本
+    /// 在墓碑之後）。有清到東西時回傳 `true`。
+    fn forget_counts(&mut self, code: &str, text: &str, today: Option<Date>, device: &str) -> bool {
+        let word = self.word(code, text).cloned();
+        let auto_phrase = word
+            .as_ref()
+            .is_some_and(|w| w.source == WordSource::AutoPhrase);
+        if self.count(code, text).is_none() && !auto_phrase {
+            return false;
+        }
+        self.delete_row(code, text, today);
+        if let Some(word) = word.filter(|_| !auto_phrase) {
+            let version = self.tally_mut(code, text).touch(device);
+            self.words_at(code)
+                .insert(text.to_string(), UserWord { version, ..word });
+        }
+        true
+    }
+
+    /// 把（`code`, `text`）寫成來源 `source`、觸發詞 `trigger` 的使用者詞（手動加詞、常用語）：明確加入算
+    /// 這台用了一次（`device` 自己那格加一，刪過的也因此復活）。回傳原本的使用者詞。
+    fn put_word(
+        &mut self,
+        code: &str,
+        text: &str,
+        source: WordSource,
+        trigger: Option<&str>,
+        today: Option<Date>,
+        device: &str,
+    ) -> Option<UserWord> {
+        let version = self.tally_mut(code, text).touch(device);
+        self.words_at(code).insert(
+            text.to_string(),
+            UserWord {
+                source,
+                trigger: trigger.map(String::from),
+                last_used: today,
+                version,
+            },
+        )
     }
 
     /// 碼 `code` 的使用者詞，沒有就建一個空的。
@@ -926,9 +1160,38 @@ impl SchemeModel {
         self.words.entry(code.to_string()).or_default()
     }
 
+    /// （`code`, `text`）各台的次數：沒有時從墓碑表移回（刪過又用到），都沒有就建一個空的。
+    fn tally_mut(&mut self, code: &str, text: &str) -> &mut Tally {
+        if self.tally(code, text).is_none() {
+            let buried = sync::exhume(&mut self.graveyard, || SchemeModel::digest(code, text));
+            put_in(
+                &mut self.tallies,
+                code,
+                text,
+                Some(buried.unwrap_or_default()),
+            );
+        }
+        self.tallies
+            .get_mut(code)
+            .and_then(|t| t.get_mut(text))
+            .expect("剛放進去")
+    }
+
+    /// （`code`, `text`）各台的次數與墓碑。
+    fn tally(&self, code: &str, text: &str) -> Option<&Tally> {
+        self.tallies.get(code)?.get(text)
+    }
+
     /// 一次上屏：整串輸入碼和每一段的衰減值各記一次，（碼, 字詞）相同的只記一次；整串另記一次
-    /// 整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串，只看碼與字詞，不是空的。
-    fn learn(&mut self, segments: &[Segment], today: Option<Date>, undo: &mut undo::SchemeUndo) {
+    /// 整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串，只看碼與字詞，不是空的。次數記在
+    /// `device` 自己那格。
+    fn learn(
+        &mut self,
+        segments: &[Segment],
+        today: Option<Date>,
+        device: &str,
+        undo: &mut undo::SchemeUndo,
+    ) {
         self.tick += 1;
         let tick = self.tick;
         let whole = Segment::new(
@@ -946,6 +1209,12 @@ impl SchemeModel {
         }
         for (i, segment) in keys.into_iter().enumerate() {
             undo.save(self, &segment.code, &segment.text);
+            let tally = self.tally_mut(&segment.code, &segment.text);
+            // `keys` 的第一個是整串；這台距上一次整串上屏超過一年時從 1 重算。
+            if i == 0 {
+                tally.commit(device, today);
+            }
+            let version = tally.touch(device);
             let count = self
                 .entries
                 .entry(segment.code.clone())
@@ -954,18 +1223,16 @@ impl SchemeModel {
                 .or_default();
             count.decayed = 1.0 + count.decayed * decay(tick - count.last_tick);
             count.last_tick = tick;
-            // `keys` 的第一個是整串；距上一次整串上屏超過一年時從 1 重算。
+            count.version = version;
             if i == 0 {
-                count.commits = count.commits_on(today) + 1;
-                count.last_commit_tick = tick;
-                count.last_commit_date = today;
+                count.last_commit_tick = Some(tick);
             }
             self.stamp(&segment.code, &segment.text, today);
         }
     }
 
     /// （`code`, `text`）這天用過或改過：它的計數與使用者詞都記成最後使用的日期 `today`，兩者是匯出檔
-    /// 的同一列、只有一個日期。
+    /// 的同一列。
     fn stamp(&mut self, code: &str, text: &str, today: Option<Date>) {
         if let Some(count) = self.entries.get_mut(code).and_then(|t| t.get_mut(text)) {
             count.last_used = today;
@@ -975,21 +1242,30 @@ impl SchemeModel {
         }
     }
 
-    /// [`UserModel::add_auto_phrase`]。
+    /// [`UserModel::add_auto_phrase`]：版本是同一次上屏學到後的合計次數（[`SchemeModel::learn`] 先記）；沒先記
+    /// 時（這列不在世）算這台用了一次。
     fn add_auto_phrase(
         &mut self,
         code: &str,
         text: &str,
         today: Option<Date>,
+        device: &str,
         undo: &mut undo::SchemeUndo,
     ) {
         undo.save(self, code, text);
+        let tally = self.tally_mut(code, text);
+        let version = if tally.alive() && tally.uses() > 0 {
+            tally.uses()
+        } else {
+            tally.touch(device)
+        };
         self.words_at(code)
             .entry(text.to_string())
             .or_insert(UserWord {
                 source: WordSource::AutoPhrase,
                 trigger: None,
                 last_used: today,
+                version,
             });
         self.stamp(code, text, today);
     }
@@ -1031,7 +1307,10 @@ impl<'a> SchemeUser<'a> {
             .flatten()
             .filter(|(_, word)| word.trigger.as_deref() == Some(input))
             .map(|(text, _)| {
-                let tick = self.count(input, text).map_or(0, |c| c.last_commit_tick);
+                let tick = self
+                    .count(input, text)
+                    .and_then(|c| c.last_commit_tick)
+                    .unwrap_or(0);
                 (tick, text.as_str())
             })
             .collect();
@@ -1072,11 +1351,12 @@ impl<'a> SchemeUser<'a> {
         self.model.words.keys().map(String::len).max().unwrap_or(0)
     }
 
-    /// （碼, 字詞）算數的整串上屏次數（一年內，[`Count::commits_on`]）；排位規則 2 的「剛好 1 次的不靠
-    /// 分數成首選」用。
+    /// （碼, 字詞）算數的整串上屏次數（各台相加、各台只算一年內的，[`Tally::commits_on`]）；排位規則 2 的
+    /// 「剛好 1 次的不靠分數成首選」用。停用的列是 0。
     pub(crate) fn whole_commits(&self, code: &str, text: &str) -> u64 {
         self.count(code, text)
-            .map_or(0, |count| count.commits_on(self.today))
+            .and(self.model.tally(code, text))
+            .map_or(0, |tally| tally.commits_on(self.today))
     }
 
     /// 排位規則 3（plan §2.4）：（`code`, `text`）是使用者詞且一年內整串上屏過時，回傳最後一次整串
@@ -1085,8 +1365,8 @@ impl<'a> SchemeUser<'a> {
         if !self.is_word(code, text) {
             return None;
         }
-        let count = self.count(code, text)?;
-        (count.commits_on(self.today) >= 1).then_some(count.last_commit_tick)
+        let tick = self.count(code, text)?.last_commit_tick?;
+        (self.whole_commits(code, text) >= 1).then_some(tick)
     }
 
     /// 這組（碼, 字詞）學過沒有（沒停用的）。
@@ -1094,14 +1374,13 @@ impl<'a> SchemeUser<'a> {
         self.count(code, text).is_some()
     }
 
-    /// 排位規則 2（plan §2.4）：一年內整串上屏 ≥ 2 次（[`Count::commits_on`]），且距最後一次整串
-    /// 上屏不超過 [`RECENT_COMMITS`] 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的
+    /// 排位規則 2（plan §2.4）：一年內整串上屏 ≥ 2 次（各台相加，[`SchemeUser::whole_commits`]），且距最後
+    /// 一次整串上屏不超過 [`RECENT_COMMITS`] 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的
     /// 上屏不算。
     pub(crate) fn last_tick_if_chosen_twice(&self, code: &str, text: &str) -> Option<u64> {
-        let count = self.count(code, text)?;
-        (count.commits_on(self.today) >= 2
-            && self.model.tick - count.last_commit_tick <= RECENT_COMMITS)
-            .then_some(count.last_commit_tick)
+        let tick = self.count(code, text)?.last_commit_tick?;
+        (self.whole_commits(code, text) >= 2 && self.model.tick - tick <= RECENT_COMMITS)
+            .then_some(tick)
     }
 
     /// 個人機率（plan §2.3）：衰減值衰減到現在，除以它的上限；沒學過或停用時是 0。
@@ -1111,681 +1390,6 @@ impl<'a> SchemeUser<'a> {
         })
     }
 }
-
-/// 匯出檔的第一行（plan §2.4）；格式改了要升版本（brief §5.3）。v3 每列開頭是種類、帶最後使用的
-/// 日期，檔頭可有裝置 id；M4 收尾前還沒定稿，M4 的票可以往裡加種類與欄位（M4 spec〈共同規則〉）。
-const HEADER: &str = "# qim-userdict v3";
-/// M3 定稿的第一行：沒有種類欄，列的種類由空的欄分辨；詞欄有跳脫、可以有常用語，沒有日期。
-const HEADER_V2: &str = "# qim-userdict v2";
-/// M1 定稿的第一行：詞欄照字面讀、沒有常用語與個人 bigram。v1、v2 匯入一直要收（M4 spec〈共同規則〉）。
-const HEADER_V1: &str = "# qim-userdict v1";
-
-/// 匯入的檔是哪一版，由第一行決定。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Version {
-    V1,
-    V2,
-    V3,
-}
-/// 方案 tick 的 metadata 行開頭，後接方案 id、Tab、tick；照 librime userdb 文字檔的
-/// `#@/tick`（`docs/research/userdict-text-formats.md`）。
-const TICK_KEY: &str = "#@/tick/";
-/// 個人 bigram 的 tick 的 metadata 行開頭，後接 Tab、tick；個人 bigram 各方案共用，所以不帶方案。
-const SHARED_TICK_KEY: &str = "#@/tick\t";
-/// 英文使用者詞自己的 tick 的 metadata 行開頭（v3 起，M4 票 14），後接 Tab、tick。
-const ENGLISH_TICK_KEY: &str = "#@/english_tick\t";
-/// 裝置 id 的 metadata 行開頭（v3 起），後接 Tab、id；照 librime userdb 文字檔的 `#@/user_id`。
-const DEVICE_KEY: &str = "#@/device\t";
-/// v3 的種類：（方案, 輸入碼, 詞）的學習計數與使用者詞。
-const ENTRY: &str = "entry";
-/// v3 的種類：個人 bigram。
-const BIGRAM: &str = "bigram";
-/// v3 的種類：英文使用者詞（M4 票 14）。
-const ENGLISH: &str = "english";
-/// 欄名註解行；匯入時和其他 `#` 開頭的行一樣略過。
-const COLUMNS: &str = "# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger";
-/// 個人 bigram 的欄名註解行，有個人 bigram 時寫在它們前面。
-const BIGRAM_COLUMNS: &str = "# kind\tprevious\tword\tdecayed\tlast_tick\tlast_used";
-/// 英文使用者詞的欄名註解行，有英文使用者詞時寫在它們前面。
-const ENGLISH_COLUMNS: &str = "# kind\tword\tcount\tdecayed\tlast_tick\tlast_used";
-/// 日期欄讀不出來時的原因。
-const BAD_DATE: &str = "最後使用的日期要是 YYYY-MM-DD 的真實日期，不知道時留空";
-
-/// v1、v2 的列分不出種類時的分法，與 v3 的種類欄對應；欄位是去掉種類欄（或空的欄）之後的。
-enum Kind<'a> {
-    Entry(&'a str),
-    Bigram(&'a str),
-    /// v3 的英文使用者詞。
-    English(&'a str),
-    /// v2 方案欄、前一個字詞欄都空的列（記住的字串）：匯入成已過門檻的英文使用者詞。
-    V2String(&'a str),
-}
-
-impl UserModel {
-    /// 匯出成 `# qim-userdict v3` 的 TSV（plan §2.4），給殼存檔、換機或備份。每列開頭是種類：
-    /// 每個（方案, 輸入碼, 詞）一列 `entry`，依方案、輸入碼、詞的順序；接著個人 bigram 一列一組
-    /// `bigram`，依前一個字詞、這一段的順序；再來英文使用者詞 `english`，依小寫的順序。每列都有最後使用的日期欄，
-    /// 殼沒給過日期時學到的留空（不寫假日期）。
-    /// 詞欄與前一個字詞經 [`escape`]。
-    pub fn export(&self) -> String {
-        let mut out = format!("{HEADER}\n");
-        if let Some(device) = &self.device {
-            out.push_str(&format!("{DEVICE_KEY}{device}\n"));
-        }
-        if self.bigrams.tick > 0 {
-            out.push_str(&format!("{SHARED_TICK_KEY}{}\n", self.bigrams.tick));
-        }
-        if self.english.tick > 0 {
-            out.push_str(&format!("{ENGLISH_TICK_KEY}{}\n", self.english.tick));
-        }
-        for (scheme, model) in &self.schemes {
-            out.push_str(&format!("{TICK_KEY}{scheme}\t{}\n", model.tick));
-        }
-        out.push_str(COLUMNS);
-        out.push('\n');
-        for (scheme, model) in &self.schemes {
-            let mut keys: Vec<(&str, &str)> = Vec::new();
-            for (code, texts) in &model.entries {
-                keys.extend(texts.keys().map(|t| (code.as_str(), t.as_str())));
-            }
-            for (code, words) in &model.words {
-                keys.extend(words.keys().map(|t| (code.as_str(), t.as_str())));
-            }
-            keys.sort_unstable();
-            keys.dedup();
-            for (code, text) in keys {
-                let count = model.entries.get(code).and_then(|t| t.get(text));
-                let word = model.words.get(code).and_then(|w| w.get(text));
-                // 有計數時兩者的日期一樣（`SchemeModel::stamp`）；手動加了還沒用過的詞只有詞的日期。
-                let last_used = count
-                    .map(|c| c.last_used)
-                    .or(word.map(|w| w.last_used))
-                    .expect("每組鍵不是有計數就是使用者詞");
-                let last_used = DateField(last_used);
-                let count = count.copied().unwrap_or_default();
-                let last_commit_date = DateField(count.last_commit_date);
-                let source = word.map(|w| w.source);
-                let (_, source) = SOURCE_NAMES
-                    .into_iter()
-                    .find(|&(s, _)| s == source)
-                    .expect("每種來源都有名字");
-                let trigger = word.and_then(|w| w.trigger.as_deref()).unwrap_or("");
-                let text = escape(text);
-                out.push_str(&format!(
-                    "{ENTRY}\t{scheme}\t{text}\t{code}\t{}\t{}\t{}\t{}\t{last_used}\t{last_commit_date}\t{source}\t{trigger}\n",
-                    count.commits, count.last_commit_tick, count.decayed, count.last_tick,
-                ));
-            }
-        }
-        if !self.bigrams.entries.is_empty() {
-            out.push_str(BIGRAM_COLUMNS);
-            out.push('\n');
-        }
-        for (previous, next) in &self.bigrams.entries {
-            for (text, decayed) in next {
-                out.push_str(&format!(
-                    "{BIGRAM}\t{}\t{}\t{}\t{}\t{}\n",
-                    escape(previous),
-                    escape(text),
-                    decayed.value,
-                    decayed.last_tick,
-                    DateField(decayed.last_used),
-                ));
-            }
-        }
-        if !self.english.words.is_empty() {
-            out.push_str(ENGLISH_COLUMNS);
-            out.push('\n');
-        }
-        for word in self.english.words.values() {
-            out.push_str(&format!(
-                "{ENGLISH}\t{}\t{}\t{}\t{}\t{}\n",
-                word.text,
-                word.count,
-                word.decayed.value,
-                word.decayed.last_tick,
-                DateField(word.decayed.last_used),
-            ));
-        }
-        out
-    }
-
-    /// 讀 [`UserModel::export`] 的檔（v3，也收 v1、v2）成一份新的個人模型，今天是 `today`（殼還沒給
-    /// 時是 `None`）。v1、v2 沒有日期，每列的最後使用日期取 `today`（匯入那天）；v3 的日期欄空的是
-    /// 不知道。裝置 id 是檔裡的（沒有時是 `None`）；殼拿它取代自己的學習資料用
-    /// [`UserModel::replace_learning`]，今天與裝置 id 留著自己的。
-    ///
-    /// 第一行不是三者之一、或已知種類的列有一列不合格式時整份不收，錯誤帶行號；v3 不認得的種類
-    /// （之後的版本加的）略過，回警告帶行號，其他列照收。
-    pub fn import(text: &str, today: Option<Date>) -> Result<Imported, ImportError> {
-        let mut lines = text
-            .lines()
-            .map(|l| l.strip_suffix('\r').unwrap_or(l))
-            .zip(1..);
-        let version = match lines.next().map(|(l, _)| l) {
-            Some(HEADER) => Version::V3,
-            Some(HEADER_V2) => Version::V2,
-            Some(HEADER_V1) => Version::V1,
-            _ => {
-                return Err(ImportError::at(
-                    1,
-                    format!("第一行要是「{HEADER}」「{HEADER_V2}」或「{HEADER_V1}」"),
-                ));
-            }
-        };
-        let mut user = UserModel {
-            today,
-            ..UserModel::default()
-        };
-        let mut warnings = Vec::new();
-        let mut ticks: BTreeMap<&str, u64> = BTreeMap::new();
-        let mut shared_tick: Option<u64> = None;
-        let mut english_tick: Option<u64> = None;
-        let mut seen: BTreeSet<(&str, &str, Cow<str>)> = BTreeSet::new();
-        for (line, number) in lines {
-            let error = |reason: &str| ImportError::at(number, reason.to_string());
-            // v1、v2 沒有裝置 id，這行照其他 `#` 開頭的行是註解。
-            if let Some(id) = line.strip_prefix(DEVICE_KEY)
-                && version == Version::V3
-            {
-                if user.device.is_some() {
-                    return Err(error("裝置 id 重複"));
-                }
-                if !is_device_id(id) {
-                    return Err(error("裝置 id 只能用英數、-、_，1–64 字"));
-                }
-                user.device = Some(id.to_string());
-                continue;
-            }
-            // v1 沒有共用的 tick，這行照其他 `#` 開頭的行是註解。
-            if let Some(tick) = line.strip_prefix(SHARED_TICK_KEY)
-                && version >= Version::V2
-            {
-                let tick = tick.parse().map_err(|_| error("tick 不是整數"))?;
-                // 讀到這裡時，個人 bigram 的 tick 是前面各列最大的最後 tick。
-                if user.bigrams.tick > tick {
-                    return Err(error("tick 比前面個人 bigram 列的最後 tick 小"));
-                }
-                shared_tick = Some(tick);
-                continue;
-            }
-            if let Some(tick) = line.strip_prefix(ENGLISH_TICK_KEY)
-                && version == Version::V3
-            {
-                let tick = tick.parse().map_err(|_| error("tick 不是整數"))?;
-                // 讀到這裡時，英文使用者詞的 tick 是前面各列最大的最後 tick。
-                if user.english.tick > tick {
-                    return Err(error("tick 比前面英文使用者詞列的最後 tick 小"));
-                }
-                english_tick = Some(tick);
-                continue;
-            }
-            if let Some(tick) = line.strip_prefix(TICK_KEY) {
-                let (scheme, tick) = tick
-                    .split_once('\t')
-                    .ok_or_else(|| error("tick 行少了 Tab"))?;
-                let tick = tick.parse().map_err(|_| error("tick 不是整數"))?;
-                // 讀到這裡時，方案的 tick 是前面各列最大的最後 tick。
-                if user.schemes.get(scheme).is_some_and(|m| m.tick > tick) {
-                    return Err(error("tick 比前面這個方案的列的最後 tick 小"));
-                }
-                ticks.insert(scheme, tick);
-                continue;
-            }
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let kind = if version == Version::V3 {
-                let (kind, fields) = line.split_once('\t').unwrap_or((line, ""));
-                match kind {
-                    ENTRY => Kind::Entry(fields),
-                    BIGRAM => Kind::Bigram(fields),
-                    ENGLISH => Kind::English(fields),
-                    "" => return Err(error("種類欄不能是空的")),
-                    other => {
-                        warnings.push(ImportWarning {
-                            line: number,
-                            reason: format!("不認得的種類「{other}」，略過這列"),
-                        });
-                        continue;
-                    }
-                }
-            } else if let Some(shared) = line.strip_prefix('\t') {
-                // 方案欄是空的：個人 bigram 或記住的字串（v2 起）；前一個字詞欄也是空的是記住的字串。
-                if version == Version::V1 {
-                    return Err(error("方案不能是空的（v1 沒有個人 bigram 與記住的字串）"));
-                }
-                match shared.strip_prefix('\t') {
-                    Some(string) => Kind::V2String(string),
-                    None => Kind::Bigram(shared),
-                }
-            } else {
-                Kind::Entry(line)
-            };
-            match kind {
-                Kind::English(fields) => {
-                    let word = parse_english(fields).map_err(error)?;
-                    insert_english(&mut user, word, english_tick).map_err(error)?;
-                }
-                Kind::V2String(fields) => {
-                    let word = parse_string(fields, today).map_err(error)?;
-                    insert_english(&mut user, word, shared_tick).map_err(error)?;
-                }
-                Kind::Bigram(fields) => {
-                    let (previous, text, decayed) =
-                        parse_bigram(fields, version, today).map_err(error)?;
-                    if shared_tick.is_some_and(|t| decayed.last_tick > t) {
-                        return Err(error("最後 tick 比個人 bigram 的 tick 大"));
-                    }
-                    let next = user
-                        .bigrams
-                        .entries
-                        .entry(previous.into_owned())
-                        .or_default();
-                    if next.insert(text.into_owned(), decayed).is_some() {
-                        return Err(error("同前一個字詞、同一段的個人 bigram 重複"));
-                    }
-                    user.bigrams.tick = user.bigrams.tick.max(decayed.last_tick);
-                }
-                Kind::Entry(fields) => {
-                    let row = Row::parse(fields, version, today).map_err(error)?;
-                    let tick = ticks.get(row.scheme).copied();
-                    if tick.is_some_and(|t| row.count.last_tick.max(row.count.last_commit_tick) > t)
-                    {
-                        return Err(error("最後 tick 比方案的 tick 大"));
-                    }
-                    if !seen.insert((row.scheme, row.code, row.text.clone())) {
-                        return Err(error("同方案、同輸入碼、同詞的列重複"));
-                    }
-                    let model = user.for_scheme_mut(row.scheme);
-                    // 手動加了還沒用過的詞沒有計數，匯出時寫 0；這裡也不建計數。
-                    if !row.count.is_empty() {
-                        model
-                            .entries
-                            .entry(row.code.to_string())
-                            .or_default()
-                            .insert(row.text.to_string(), row.count);
-                    }
-                    if let Some(word) = row.word {
-                        model.words_at(row.code).insert(row.text.to_string(), word);
-                    }
-                    // 沒有 tick 行時，方案的 tick 取最大的最後 tick（兩種最後 tick 都算，否則算期限時相減會小於 0）。
-                    model.tick = model
-                        .tick
-                        .max(row.count.last_tick)
-                        .max(row.count.last_commit_tick);
-                }
-            }
-        }
-        // 只剩 tick 行、沒有資料列的方案（資料列都刪光了）也要還原。
-        for (scheme, &tick) in &ticks {
-            user.for_scheme_mut(scheme).tick = tick;
-        }
-        // 沒有 tick 行時，個人 bigram 的 tick 取最大的最後 tick（同方案）。
-        if let Some(tick) = shared_tick {
-            user.bigrams.tick = tick;
-        }
-        // v2 的記住的字串用共用的 tick；換成英文使用者詞自己的 tick 時接著用它，衰減的先後不變。
-        if let Some(tick) = english_tick
-            .or(shared_tick.filter(|_| version == Version::V2 && !user.english.words.is_empty()))
-        {
-            user.english.tick = tick;
-        }
-        Ok(Imported { user, warnings })
-    }
-}
-
-/// [`UserModel::import`] 讀出來的：個人模型與略過的列。
-#[derive(Debug, Clone, PartialEq)]
-pub struct Imported {
-    pub user: UserModel,
-    /// 略過的列（v3 不認得的種類），依行號。
-    pub warnings: Vec<ImportWarning>,
-}
-
-/// [`UserModel::import`] 略過的一列：第幾行（從 1 起）、為什麼。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportWarning {
-    pub line: usize,
-    pub reason: String,
-}
-
-impl fmt::Display for ImportWarning {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "第 {} 行：{}", self.line, self.reason)
-    }
-}
-
-/// 裝置 id 只能用英數、`-`、`_`，1–64 字：放得進 TSV 的 metadata 行，UUID 也收得下。
-fn is_device_id(id: &str) -> bool {
-    (1..=64).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
-/// 日期欄（v3）：空的是不知道（殼沒給過日期時學到的）。
-fn parse_date(field: &str) -> Result<Option<Date>, &'static str> {
-    if field.is_empty() {
-        return Ok(None);
-    }
-    field.parse().map(Some).map_err(|_| BAD_DATE)
-}
-
-/// 匯出的日期欄：不知道時留空。
-struct DateField(Option<Date>);
-
-impl fmt::Display for DateField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(date) => date.fmt(f),
-            None => Ok(()),
-        }
-    }
-}
-
-/// 匯出檔的一列 `entry`。
-struct Row<'a> {
-    scheme: &'a str,
-    /// 已還原跳脫。
-    text: Cow<'a, str>,
-    code: &'a str,
-    count: Count,
-    word: Option<UserWord>,
-}
-
-impl<'a> Row<'a> {
-    /// `line` 是去掉種類欄之後的（v1、v2 沒有種類欄）。v1 的詞欄照字面讀，沒有常用語；v1、v2 沒有
-    /// 日期，最後使用的日期取 `today`。
-    fn parse(line: &'a str, version: Version, today: Option<Date>) -> Result<Self, &'static str> {
-        let v1 = version == Version::V1;
-        let fields: Vec<&str> = line.split('\t').collect();
-        let (fields, last_used, last_commit_date) = match (version, &fields[..]) {
-            (
-                Version::V3,
-                &[
-                    scheme,
-                    text,
-                    code,
-                    commits,
-                    last_commit_tick,
-                    decayed,
-                    last_tick,
-                    last_used,
-                    last_commit_date,
-                    source,
-                    trigger,
-                ],
-            ) => (
-                [
-                    scheme,
-                    text,
-                    code,
-                    commits,
-                    last_commit_tick,
-                    decayed,
-                    last_tick,
-                    source,
-                    trigger,
-                ],
-                parse_date(last_used)?,
-                Some(parse_date(last_commit_date)?),
-            ),
-            (Version::V3, _) => return Err("entry 要有 12 欄（含種類），以 Tab 分隔"),
-            // v1、v2 沒有日期：整串上屏過的，最後一次整串上屏的日期也取 `today`。
-            (_, &[a, b, c, d, e, f, g, h, i]) => ([a, b, c, d, e, f, g, h, i], today, None),
-            _ => return Err("要有 9 欄，以 Tab 分隔"),
-        };
-        let [
-            scheme,
-            text,
-            code,
-            commits,
-            last_commit_tick,
-            decayed,
-            last_tick,
-            source,
-            trigger,
-        ] = fields;
-        if scheme.is_empty() || text.is_empty() {
-            return Err("方案、詞不能是空的");
-        }
-        let text = if v1 {
-            Cow::Borrowed(text)
-        } else {
-            unescape(text)?
-        };
-        let integer = |s: &str| s.parse::<u64>().map_err(|_| "次數與 tick 要是非負整數");
-        let decayed: f64 = decayed.parse().map_err(|_| "衰減值要是數字")?;
-        if !decayed.is_finite() || decayed < 0.0 {
-            return Err("衰減值要是非負的有限數");
-        }
-        let commits = integer(commits)?;
-        let last_commit_date = match last_commit_date {
-            Some(Some(_)) if commits == 0 => {
-                return Err("沒有整串上屏過（commits 是 0）時最後整串上屏的日期要留空");
-            }
-            Some(date) => date,
-            None if commits == 0 => None,
-            None => today,
-        };
-        let count = Count {
-            commits,
-            last_commit_tick: integer(last_commit_tick)?,
-            decayed,
-            last_tick: integer(last_tick)?,
-            last_used,
-            last_commit_date,
-        };
-        let trigger = (!trigger.is_empty()).then(|| trigger.to_string());
-        let (source, _) = SOURCE_NAMES
-            .into_iter()
-            .filter(|&(s, _)| !(v1 && s == Some(WordSource::Phrase)))
-            .find(|&(_, name)| name == source)
-            .ok_or(if v1 {
-                "來源要是 manual、learned 或 auto"
-            } else {
-                "來源要是 manual、learned、auto 或 phrase"
-            })?;
-        let phrase = source == Some(WordSource::Phrase);
-        if phrase != (code == PHRASE_CODE) {
-            return Err("常用語（phrase）的輸入碼是空的，其他列不能是空的");
-        }
-        if phrase && !count.is_empty() {
-            return Err("常用語（phrase）沒有計數，觸發詞學到的另是一列 learned");
-        }
-        let word = match source {
-            None if trigger.is_some() => return Err("學到的（learned）不是使用者詞，沒有觸發詞"),
-            None if count.decayed == 0.0 => return Err("學到的（learned）要有衰減值"),
-            Some(WordSource::AutoPhrase) if trigger.is_some() => {
-                return Err("自動造詞沒有觸發詞");
-            }
-            None => None,
-            Some(source) => Some(UserWord {
-                source,
-                trigger,
-                last_used,
-            }),
-        };
-        Ok(Self {
-            scheme,
-            text,
-            code,
-            count,
-            word,
-        })
-    }
-}
-
-/// 個人 bigram 的一列去掉種類欄（v2 是空的方案欄）之後：前一個字詞、這一段、衰減值、最後 tick，
-/// v3 再接最後使用的日期（v2 取 `today`）。
-fn parse_bigram(
-    line: &str,
-    version: Version,
-    today: Option<Date>,
-) -> Result<(Cow<'_, str>, Cow<'_, str>, Decayed), &'static str> {
-    let fields: Vec<&str> = line.split('\t').collect();
-    let ([previous, text, value, last_tick], last_used) = match (version, &fields[..]) {
-        (Version::V3, &[previous, text, value, last_tick, last_used]) => {
-            ([previous, text, value, last_tick], parse_date(last_used)?)
-        }
-        (Version::V3, _) => return Err("bigram 要有 6 欄（含種類），以 Tab 分隔"),
-        (_, &[previous, text, value, last_tick]) => ([previous, text, value, last_tick], today),
-        _ => return Err("個人 bigram（方案欄空的）要有 5 欄，以 Tab 分隔"),
-    };
-    if previous.is_empty() || text.is_empty() {
-        return Err("個人 bigram 的前一個字詞、這一段不能是空的");
-    }
-    let value: f64 = value.parse().map_err(|_| "衰減值要是數字")?;
-    if !value.is_finite() || value <= 0.0 {
-        return Err("個人 bigram 的衰減值要是正的有限數");
-    }
-    let last_tick = last_tick.parse().map_err(|_| "tick 要是非負整數")?;
-    Ok((
-        unescape(previous)?,
-        unescape(text)?,
-        Decayed {
-            value,
-            last_tick,
-            last_used,
-        },
-    ))
-}
-
-/// 英文使用者詞的一列去掉種類欄之後（v3）：寫法、次數、衰減值、最後 tick、最後使用的日期。寫法要是
-/// 打字時會學的串（[`english_user::to_learn`]），不跳脫（串裡沒有反斜線、換行與 Tab）。
-fn parse_english(line: &str) -> Result<EnglishUserWord, &'static str> {
-    let &[text, count, value, last_tick, last_used] = &line.split('\t').collect::<Vec<_>>()[..]
-    else {
-        return Err("english 要有 6 欄（含種類），以 Tab 分隔");
-    };
-    let count: u64 = count.parse().map_err(|_| "次數要是正整數")?;
-    if count == 0 {
-        return Err("次數要是正整數");
-    }
-    english_word(text, count, value, last_tick, parse_date(last_used)?)
-}
-
-/// v2 的記住的字串（方案欄、前一個字詞欄空的列）去掉兩個空欄之後：字串、衰減值、最後 tick；最後使用
-/// 的日期取 `today`。匯入成已過門檻的英文使用者詞（次數 [`ENGLISH_COMPLETION_AFTER`]，前綴補完也給）。
-fn parse_string(line: &str, today: Option<Date>) -> Result<EnglishUserWord, &'static str> {
-    let &[text, value, last_tick] = &line.split('\t').collect::<Vec<_>>()[..] else {
-        return Err("記住的字串（方案欄、前一個字詞欄空的）要有 5 欄，以 Tab 分隔");
-    };
-    english_word(
-        &unescape(text)?,
-        ENGLISH_COMPLETION_AFTER,
-        value,
-        last_tick,
-        today,
-    )
-}
-
-/// 把匯入的一個英文使用者詞加進 `user`；最後 tick 比 tick 行（`tick`，沒有時不查）大、或不分大小寫
-/// 重複時是錯誤。
-fn insert_english(
-    user: &mut UserModel,
-    word: EnglishUserWord,
-    tick: Option<u64>,
-) -> Result<(), &'static str> {
-    if tick.is_some_and(|t| word.decayed.last_tick > t) {
-        return Err("最後 tick 比 tick 行的 tick 大");
-    }
-    if !user.english.insert(word) {
-        return Err("英文使用者詞重複（不分大小寫）");
-    }
-    Ok(())
-}
-
-/// 檢查並組成一個英文使用者詞。
-fn english_word(
-    text: &str,
-    count: u64,
-    value: &str,
-    last_tick: &str,
-    last_used: Option<Date>,
-) -> Result<EnglishUserWord, &'static str> {
-    if english_user::to_learn(text) != Some(text) {
-        return Err(
-            "英文使用者詞要是打字時會學的串（英文、數字與 . _ % + - @ '，夠長，頭尾不是 . 或 '）",
-        );
-    }
-    let value: f64 = value.parse().map_err(|_| "衰減值要是數字")?;
-    if !value.is_finite() || value <= 0.0 {
-        return Err("英文使用者詞的衰減值要是正的有限數");
-    }
-    let last_tick = last_tick.parse().map_err(|_| "tick 要是非負整數")?;
-    Ok(EnglishUserWord {
-        text: text.to_string(),
-        count,
-        decayed: Decayed {
-            value,
-            last_tick,
-            last_used,
-        },
-    })
-}
-
-/// 詞欄的跳脫（v2）：反斜線、換行、Tab 寫成 `\\`、`\n`、`\t`，照 PostgreSQL `COPY` 的文字格式與
-/// Linear TSV；常用語可以含換行與 Tab，TSV 放不下原字。
-fn escape(text: &str) -> Cow<'_, str> {
-    if !text.contains(['\\', '\n', '\t']) {
-        return Cow::Borrowed(text);
-    }
-    let mut out = String::with_capacity(text.len() + 2);
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
-        }
-    }
-    Cow::Owned(out)
-}
-
-/// [`escape`] 的反向；反斜線後不是 `\\`、`n`、`t` 時是錯的。
-fn unescape(field: &str) -> Result<Cow<'_, str>, &'static str> {
-    if !field.contains('\\') {
-        return Ok(Cow::Borrowed(field));
-    }
-    let mut out = String::with_capacity(field.len());
-    let mut chars = field.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        out.push(match chars.next() {
-            Some('\\') => '\\',
-            Some('n') => '\n',
-            Some('t') => '\t',
-            _ => return Err("詞欄的反斜線後面要是 \\、n 或 t"),
-        });
-    }
-    Ok(Cow::Owned(out))
-}
-
-/// [`UserModel::import`] 不收的檔：第幾行（從 1 起）、為什麼。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportError {
-    pub line: usize,
-    pub reason: String,
-}
-
-impl ImportError {
-    fn at(line: usize, reason: String) -> Self {
-        Self { line, reason }
-    }
-}
-
-impl fmt::Display for ImportError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "第 {} 行：{}", self.line, self.reason)
-    }
-}
-
-impl std::error::Error for ImportError {}
 
 /// [`UserModel::add_word`] 加不進去的原因。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1823,6 +1427,39 @@ impl fmt::Display for InvalidDeviceId {
 }
 
 impl std::error::Error for InvalidDeviceId {}
+
+/// 兩層的表裡放一個值，`None` 是刪掉（裡層刪光時連外層一起刪）。
+fn put_in<V>(
+    map: &mut BTreeMap<String, BTreeMap<String, V>>,
+    outer: &str,
+    inner: &str,
+    value: Option<V>,
+) {
+    match value {
+        Some(value) => {
+            map.entry(outer.to_string())
+                .or_default()
+                .insert(inner.to_string(), value);
+        }
+        None => {
+            remove_in(map, outer, inner);
+        }
+    }
+}
+
+/// 兩層的表裡刪掉一個值，裡層刪光時連外層一起刪；回傳刪掉的值。
+fn remove_in<V>(
+    map: &mut BTreeMap<String, BTreeMap<String, V>>,
+    outer: &str,
+    inner: &str,
+) -> Option<V> {
+    let next = map.get_mut(outer)?;
+    let removed = next.remove(inner);
+    if next.is_empty() {
+        map.remove(outer);
+    }
+    removed
+}
 
 /// `personal`（plan §2.3）：個人機率在一段原本的 ln 機率 `log_static` 上加的分，只加不減。個人機率
 /// 由這一段的學習計數 `unigram`（[`SchemeModel::personal_probability`]）與它接在前一個字詞後面的
