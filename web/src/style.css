@@ -450,3 +450,39 @@ body:has(#keyboard:not([hidden])) {
 	padding-left: 1.25rem;
 	font-size: 0.875rem;
 }
+
+/* debug 面板（debug-panel.ts）：小字、等寬的分數。候選多的碼有幾百列，面板最高半個畫面、在裡面上下左右捲，
+   不把鍵盤與設定推遠。 */
+#debug {
+	font-size: 0.875rem;
+	box-sizing: border-box;
+	max-height: 50vh;
+	overflow: auto;
+	padding: 0.5rem;
+	border: 1px dashed light-dark(#dadce0, #5f6368);
+}
+
+#debug[hidden] {
+	display: none;
+}
+
+#debug p {
+	margin: 0.25rem 0;
+}
+
+#debug table {
+	border-collapse: collapse;
+	margin: 0.25rem 0;
+}
+
+#debug th,
+#debug td {
+	padding: 0.125rem 0.5rem;
+	text-align: left;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+#debug code[data-selected="true"] {
+	text-decoration: underline;
+}

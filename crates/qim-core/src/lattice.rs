@@ -60,9 +60,9 @@ pub(crate) struct CandidateSpan {
     /// `text`；選定與上屏時用（plan §2.4）。
     pub segments: Vec<Segment>,
     pub kind: SpanKind,
-    /// 由排位規則排定在第 2 位以後（規則 3、4、5，或首選被規則 1 佔走時的規則 2）：停鍵重排的
-    /// 路徑排在這些候選後面（plan §2.4，M3 票 11c）。
-    pub pinned_after_top: bool,
+    /// 排定它位置的排位規則（1–5，plan §2.4）；沒有是 `None`。第 2 位起由規則排定的候選，停鍵重排的
+    /// 路徑排在它們後面（M3 票 11c）；debug 面板也顯示它。
+    pub rule: Option<u8>,
 }
 
 /// 候選從哪裡來。英文、emoji 與記住的字串不在 lattice 裡、只給剩下的整串輸入碼，選了原樣上屏、不學。
@@ -93,7 +93,7 @@ impl CandidateSpan {
             text,
             len: code.len(),
             kind: SpanKind::Word,
-            pinned_after_top: false,
+            rule: None,
         }
     }
 }
@@ -155,6 +155,11 @@ impl Lattice {
 
     pub fn input(&self) -> &str {
         &self.input
+    }
+
+    /// 組字前面是什麼（開頭的字接它）。
+    pub fn before(&self) -> &Preceding {
+        &self.before
     }
 
     /// 多打一個字母：只算新的一欄，前面的欄不動。分隔記號（[`SEPARATOR`]）的一欄照抄前一欄：
@@ -292,7 +297,7 @@ impl Lattice {
             len: end,
             segments: self.path(end, k),
             kind: SpanKind::Word,
-            pinned_after_top: false,
+            rule: None,
         })
     }
 
@@ -366,7 +371,7 @@ pub(crate) fn candidates(
                     len: n,
                     segments: lattice.path(n, k),
                     kind: SpanKind::Word,
-                    pinned_after_top: false,
+                    rule: None,
                 };
                 (node.score, false, span)
             }),
@@ -549,9 +554,9 @@ impl Ranked<'_> {
             .max()
             .map(|(_, i)| i)
     }
-    /// 把 `free` 的第 `from` 個排定在第 `position` 位或更前面：本來就在那裡就釘在原位，
+    /// 由規則 `rule` 把 `free` 的第 `from` 個排定在第 `position` 位或更前面：本來就在那裡就釘在原位，
     /// 否則移到不超過 `position` 的空位裡最後面的一個；那些位置都排定了，就移到最前面的空位。
-    fn pin_at_most(&mut self, from: usize, position: usize) {
+    fn pin_at_most(&mut self, from: usize, position: usize, rule: u8) {
         let current = self.position_of_free(from);
         let total = self.free.len() + self.pinned.len();
         let open = |p: &usize| !self.pinned.contains_key(p);
@@ -564,12 +569,12 @@ impl Ranked<'_> {
                 .or_else(|| (position + 1..total).find(open))
                 .expect("free 不是空的，總有空位")
         };
-        let candidate = self.free.remove(from);
-        self.pinned.insert(target, candidate);
+        self.pin(from, target, rule);
     }
 
-    /// 把 `free` 的第 `from` 個排定在第 `position` 位；那裡已排定時移到它後面最前的空位，不往前移。
-    fn pin_at_or_after(&mut self, from: usize, position: usize) {
+    /// 由規則 `rule` 把 `free` 的第 `from` 個排定在第 `position` 位；那裡已排定時移到它後面最前的空位，
+    /// 不往前移。
+    fn pin_at_or_after(&mut self, from: usize, position: usize, rule: u8) {
         let current = self.position_of_free(from);
         // 它現在的位置是空位，所以 `position` 起找得到、不會超過它；排得比 `position` 前時留在原位。
         let target = if current < position {
@@ -579,7 +584,15 @@ impl Ranked<'_> {
                 .find(|p| !self.pinned.contains_key(p))
                 .expect("它自己的位置是空位")
         };
-        let candidate = self.free.remove(from);
+        self.pin(from, target, rule);
+    }
+
+    /// 把 `free` 的第 `from` 個釘在第 `target` 位，記下排定它的規則。
+    fn pin(&mut self, from: usize, target: usize, rule: u8) {
+        let candidate = CandidateSpan {
+            rule: Some(rule),
+            ..self.free.remove(from)
+        };
         self.pinned.insert(target, candidate);
     }
 
@@ -591,18 +604,16 @@ impl Ranked<'_> {
             .expect("位置數不限")
     }
 
-    /// 排好的候選列；排定在第 2 位以後的標成 [`CandidateSpan::pinned_after_top`]。
+    /// 排好的候選列。
     fn into_list(self) -> Vec<CandidateSpan> {
         let total = self.free.len() + self.pinned.len();
         let mut pinned = self.pinned;
         let mut free = self.free.into_iter();
         (0..total)
-            .map(|p| match pinned.remove(&p) {
-                Some(span) => CandidateSpan {
-                    pinned_after_top: p > 0,
-                    ..span
-                },
-                None => free.next().expect("位置數等於候選數"),
+            .map(|p| {
+                pinned
+                    .remove(&p)
+                    .unwrap_or_else(|| free.next().expect("位置數等於候選數"))
             })
             .collect()
     }
@@ -613,7 +624,7 @@ fn triggered_first(ranked: &mut Ranked) {
     let first = ranked.user.triggered(ranked.lookup_code).into_iter().next();
     let at = first.and_then(|text| ranked.free_full().find(|(_, c)| c.text == text));
     if let Some((i, _)) = at {
-        ranked.pin_at_most(i, 0);
+        ranked.pin_at_most(i, 0, 1);
     }
 }
 
@@ -621,7 +632,7 @@ fn triggered_first(ranked: &mut Ranked) {
 /// 候選時，整串上屏剛好 1 次的不靠學到的分數成首選（[`once_chosen_keeps_the_unlearned_top`]）。
 fn chosen_twice_first(ranked: &mut Ranked) {
     if let Some(i) = ranked.most_recent(SchemeModel::last_tick_if_chosen_twice) {
-        ranked.pin_at_most(i, 0);
+        ranked.pin_at_most(i, 0, 2);
     } else {
         once_chosen_keeps_the_unlearned_top(ranked);
     }
@@ -678,21 +689,21 @@ fn once_chosen_keeps_the_unlearned_top(ranked: &mut Ranked) {
         .free_full()
         .find(|(_, c)| c.text == unlearned_top.text);
     if let Some((i, _)) = at {
-        ranked.pin_at_most(i, 0);
+        ranked.pin_at_most(i, 0, 2);
     }
 }
 
 /// 規則 3：碼是整串、上屏過的使用者詞（含自動造詞）至少排第 2 位；多個取最近上屏的。
 fn used_word_second(ranked: &mut Ranked) {
     if let Some(i) = ranked.most_recent(SchemeModel::last_tick_if_used_word) {
-        ranked.pin_at_most(i, 1);
+        ranked.pin_at_most(i, 1, 3);
     }
 }
 
 /// 規則 4：英文候選排第 2 位（brief §4.3）；第 2 位已由前面的規則排定時排在它後面最前的空位。
 fn english_second(ranked: &mut Ranked) {
     if let Some(i) = ranked.free.iter().position(|c| c.kind == SpanKind::English) {
-        ranked.pin_at_or_after(i, 1);
+        ranked.pin_at_or_after(i, 1, 4);
     }
 }
 
@@ -703,6 +714,6 @@ fn remembered_after_english(ranked: &mut Ranked) {
         .iter()
         .position(|c| c.kind == SpanKind::Remembered)
     {
-        ranked.pin_at_or_after(i, 1);
+        ranked.pin_at_or_after(i, 1, 5);
     }
 }

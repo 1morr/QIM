@@ -21,6 +21,7 @@
 			<div class="toolbar">
 				<button id="touch-toggle" type="button" aria-pressed="false">觸控鍵盤</button>
 				<button id="dark-toggle" type="button" aria-pressed="false">深色</button>
+				<button id="debug-toggle" type="button" aria-pressed="false" aria-controls="debug">debug</button>
 				<label><input type="checkbox" id="number-row" /> 數字列</label>
 				<label>字根提示
 					<select id="hint-version">
@@ -29,6 +30,7 @@
 					</select>
 				</label>
 			</div>
+			<section id="debug" aria-label="debug 面板" hidden></section>
 			<div id="keyboard" data-testid="keyboard" hidden></div>
 			<section id="settings" aria-label="設定">
 				<div id="settings-options" class="settings-options"></div>

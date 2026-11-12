@@ -44,6 +44,8 @@ export interface RerankJob {
 export interface Ranked {
 	order: Uint32Array;
 	ms: number;
+	/** 神經模型給各路徑的 `路徑分 + λ·神經分`，和要求的路徑同順序（debug 面板）；假實作沒有。 */
+	totals?: Float64Array;
 }
 
 /** 一個模型：收要求、回名次；沒有模型時回 `undefined`。 */
@@ -89,6 +91,8 @@ export interface RerankSchedulerOptions {
 	models: Readonly<Record<Exclude<RerankMode, "off">, Rank>>;
 	/** 名次變了：畫核心回的 `Snapshot`（之後由這裡釋放）。 */
 	show: (snapshot: Snapshot) => void;
+	/** 要求交給模型時（debug 面板顯示要求）。 */
+	onRequest?: (generation: bigint, job: RerankJob) => void;
 	/** 每次結果回來之後（給畫面記錄與 e2e 讀）。 */
 	onResult?: (outcome: Outcome, ranked: Ranked | undefined) => void;
 	/** 結果回來後再等多久才套用：e2e 模擬慢的模型（網址的 `rerank-delay`），平常是 0。 */
@@ -157,6 +161,7 @@ export function rerankScheduler(
 		}
 		rerankedAt = asked;
 		busy = true;
+		options.onRequest?.(asked, job);
 		let reported = false;
 		const delay = options.extraDelayMs ?? 0;
 		options.models[mode](job)

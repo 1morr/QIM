@@ -228,6 +228,10 @@ _Avoid_: 熱區（那是按鍵的觸控範圍）
 慢的模型在停鍵後給 lattice 的前 9 條整句路徑排名次，排出的路徑放到第 2 位（候選列沒有就插入；排位規則排在第 2 位起的在它前面），不改首選、不寫回分數。
 _Avoid_: rerank（程式碼識別符除外）
 
+**debug 面板**：
+網頁上可開關、預設關的面板，顯示核心為什麼這樣排：前文的狀態、切段、每個候選的來源、路徑分與學習加分、排位規則、重排的要求與結果（plan §3.1）。資料由 `Session::inspect` 給（程式碼裡叫 `Inspection`），不進 `Snapshot`，平台殼沒有。
+_Avoid_: 除錯視窗、開發者面板
+
 **停鍵層模型**：
 停鍵層做重排的字級神經模型（Gboard 級 1.4M CIFG-LSTM），給 lattice 的前幾條路徑打神經分，照 `路徑分 + λ·神經分` 排名次（plan §2.7）。推論在 `qim-neural`（`Reranker`）；它的資料包叫模型資料包（`ModelPack`，manifest 的種類 `model`），不交給 `Engine`。
 _Avoid_: 神經網路、AI 模型；「語言模型」指同步層的 n-gram（字級 bigram、詞級 trigram），不指它

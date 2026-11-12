@@ -241,3 +241,32 @@ test("套用名次時丟錯（例如 show）：不出 unhandled rejection，記�
 		process.off("unhandledRejection", onUnhandled);
 	}
 });
+
+test("交給模型時回報要求的 generation 與內容（debug 面板）；沒送出的不回報", async () => {
+	const model = heldModel();
+	const session = new FakeSession();
+	const requests: [bigint, string][] = [];
+	const request = rerankScheduler(session as unknown as Session, {
+		mode: () => "neural",
+		models: {
+			neural: model.rank,
+			identity: model.rank,
+			"raise-last": model.rank,
+		},
+		show: () => {},
+		onRequest: (generation, job) => requests.push([generation, job.context]),
+	});
+	request(session.generation);
+	mock.timers.tick(STOP_MS);
+	// 模型還在算時又停鍵：先不送，也不回報。
+	session.generation = 2n;
+	request(session.generation);
+	mock.timers.tick(STOP_MS);
+	assert.deepEqual(requests, [[1n, "g1"]]);
+	model.answer(0);
+	await settle();
+	assert.deepEqual(requests, [
+		[1n, "g1"],
+		[2n, "g2"],
+	]);
+});

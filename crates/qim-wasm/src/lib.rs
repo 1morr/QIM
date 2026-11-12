@@ -1,9 +1,9 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（plan §1.3）。
 
 use qim_core::{
-    CangjieVersion, Engine, IndexEntry, Key, Manifest, ModelPack, Options, Pack, PackIndex,
-    RadicalHintPack, RadicalHints, Scheme, Session, ShiftKey, Shortcuts, Snapshot, UserModel,
-    WordListReport,
+    CandidateKind, CangjieVersion, ContextState, Engine, IndexEntry, Inspection, Key, Manifest,
+    ModelPack, Options, Pack, PackIndex, PrecedingChar, RadicalHintPack, RadicalHints, Scheme,
+    SegmentSource, Session, ShiftKey, Shortcuts, Snapshot, UserModel, WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, Target, When};
 use wasm_bindgen::prelude::*;
@@ -424,6 +424,11 @@ impl WebSession {
             .map(Into::into)
     }
 
+    /// debug 面板（plan §3.1，M4 票 01）：核心為什麼這樣排（`Session::inspect`）。網頁只在面板開著時呼叫。
+    pub fn inspect(&self) -> WebInspection {
+        self.session.inspect(&self.engine, &self.user).into()
+    }
+
     /// 選全部候選的第 `index` 個（目前頁第 i 個是 `page × 9 + i`），例如點候選列。
     pub fn select(&mut self, index: usize) -> WebSnapshot {
         self.session
@@ -588,14 +593,14 @@ impl WebReranker {
         .map_err(js_error)
     }
 
-    /// 重排要求（[`WebRerankRequest`]）的前文、路徑與路徑分 → 路徑的序號，好的在前；交給
-    /// [`WebSession::apply_rerank`]。`paths` 與 `scores` 長度不同時丟錯。
+    /// 重排要求（[`WebRerankRequest`]）的前文、路徑與路徑分 → 路徑的序號（好的在前，交給
+    /// [`WebSession::apply_rerank`]）與各路徑的總分（debug 面板）。`paths` 與 `scores` 長度不同時丟錯。
     pub fn rank(
         &self,
         context: &str,
         paths: Vec<String>,
         scores: Vec<f64>,
-    ) -> Result<Vec<usize>, JsError> {
+    ) -> Result<WebRanking, JsError> {
         if paths.len() != scores.len() {
             return Err(JsError::new(&format!(
                 "路徑 {} 條、路徑分 {} 個",
@@ -604,7 +609,151 @@ impl WebReranker {
             )));
         }
         let paths: Vec<(&str, f64)> = paths.iter().map(String::as_str).zip(scores).collect();
-        self.0.rank(context, &paths).map_err(js_error)
+        let ranking = self.0.rank_scored(context, &paths).map_err(js_error)?;
+        Ok(WebRanking {
+            order: ranking.order,
+            totals: ranking.totals,
+        })
+    }
+}
+
+/// 停鍵層模型的結果（`qim_neural::Ranking`）。JS 端叫 `Ranking`。
+#[wasm_bindgen(js_name = Ranking, getter_with_clone)]
+pub struct WebRanking {
+    /// 路徑的序號，好的在前。
+    #[wasm_bindgen(readonly)]
+    pub order: Vec<usize>,
+    /// 各路徑的 `路徑分 + λ·神經分`，和要求的路徑同順序。
+    #[wasm_bindgen(readonly)]
+    pub totals: Vec<f64>,
+}
+
+/// debug 面板的資料（`qim_core::Inspection`）。JS 端叫 `Inspection`。
+#[wasm_bindgen(js_name = Inspection, getter_with_clone)]
+pub struct WebInspection {
+    /// 核心記著的前文：`known`、`unknown`（不知道前文）、`incognito`（無痕不讀）。
+    #[wasm_bindgen(readonly, js_name = contextState)]
+    pub context_state: String,
+    /// `contextState` 是 `known` 時的前文，其餘是空字串。
+    #[wasm_bindgen(readonly)]
+    pub context: String,
+    /// 開頭的字接的前一字：`clauseStart`（句首）、`char`（`precedingChar`）或 `unigram`。
+    #[wasm_bindgen(readonly, js_name = precedingKind)]
+    pub preceding_kind: String,
+    #[wasm_bindgen(readonly, js_name = precedingChar)]
+    pub preceding_char: Option<String>,
+    /// 開頭的一段接的前一個字詞（個人 bigram）。
+    #[wasm_bindgen(readonly, js_name = precedingWord)]
+    pub preceding_word: Option<String>,
+    /// 組字的各分段。
+    #[wasm_bindgen(readonly)]
+    pub segments: Vec<WebSegment>,
+    /// 全部候選，依目前的順序。
+    #[wasm_bindgen(readonly)]
+    pub candidates: Vec<WebInspectedCandidate>,
+}
+
+/// debug 面板的一個候選（`qim_core::InspectedCandidate`）。JS 端叫 `InspectedCandidate`。
+#[wasm_bindgen(js_name = InspectedCandidate, getter_with_clone)]
+#[derive(Clone)]
+pub struct WebInspectedCandidate {
+    #[wasm_bindgen(readonly)]
+    pub text: String,
+    /// `word`、`english`、`emoji`、`remembered`、`association`。
+    #[wasm_bindgen(readonly)]
+    pub kind: String,
+    #[wasm_bindgen(readonly)]
+    pub segments: Vec<WebInspectedSegment>,
+    /// 路徑分；不在 lattice 裡的候選沒有。
+    #[wasm_bindgen(readonly)]
+    pub score: Option<f64>,
+    /// 路徑分裡學到的加分。
+    #[wasm_bindgen(readonly)]
+    pub learning: Option<f64>,
+    /// 排定它位置的排位規則（1–5）。
+    #[wasm_bindgen(readonly)]
+    pub rule: Option<u8>,
+    /// 停鍵重排放到這裡的：重排要求的第幾條路徑。
+    #[wasm_bindgen(readonly, js_name = rerankPath)]
+    pub rerank_path: Option<usize>,
+    /// 停鍵重排插入的（候選列原本沒有）；從後面移上來的是 `false`。
+    #[wasm_bindgen(readonly, js_name = rerankInserted)]
+    pub rerank_inserted: bool,
+}
+
+/// debug 面板的候選的一段（`qim_core::InspectedSegment`）。JS 端叫 `InspectedSegment`。
+#[wasm_bindgen(js_name = InspectedSegment, getter_with_clone)]
+#[derive(Clone)]
+pub struct WebInspectedSegment {
+    #[wasm_bindgen(readonly)]
+    pub code: String,
+    #[wasm_bindgen(readonly)]
+    pub text: String,
+    /// `codeTable`、`lexicon`、`userWord`。
+    #[wasm_bindgen(readonly)]
+    pub source: String,
+    #[wasm_bindgen(readonly)]
+    pub learned: bool,
+    #[wasm_bindgen(readonly, js_name = personalBigram)]
+    pub personal_bigram: bool,
+}
+
+impl From<Inspection> for WebInspection {
+    fn from(i: Inspection) -> Self {
+        let (context_state, context) = match i.context {
+            ContextState::Known(text) => ("known", text),
+            ContextState::Unknown => ("unknown", String::new()),
+            ContextState::Incognito => ("incognito", String::new()),
+        };
+        let (preceding_kind, preceding_char) = match i.preceding_char {
+            PrecedingChar::ClauseStart => ("clauseStart", None),
+            PrecedingChar::Char(c) => ("char", Some(String::from(c))),
+            PrecedingChar::Unigram => ("unigram", None),
+        };
+        Self {
+            context_state: context_state.into(),
+            context,
+            preceding_kind: preceding_kind.into(),
+            preceding_char,
+            preceding_word: i.preceding_word,
+            segments: i.segments.into_iter().map(WebSegment::from).collect(),
+            candidates: i
+                .candidates
+                .into_iter()
+                .map(|c| WebInspectedCandidate {
+                    text: c.text,
+                    kind: match c.kind {
+                        CandidateKind::Word => "word",
+                        CandidateKind::English => "english",
+                        CandidateKind::Emoji => "emoji",
+                        CandidateKind::Remembered => "remembered",
+                        CandidateKind::Association => "association",
+                    }
+                    .into(),
+                    segments: c
+                        .segments
+                        .into_iter()
+                        .map(|s| WebInspectedSegment {
+                            code: s.code,
+                            text: s.text,
+                            source: match s.source {
+                                SegmentSource::CodeTable => "codeTable",
+                                SegmentSource::Lexicon => "lexicon",
+                                SegmentSource::UserWord => "userWord",
+                            }
+                            .into(),
+                            learned: s.learned,
+                            personal_bigram: s.personal_bigram,
+                        })
+                        .collect(),
+                    score: c.score,
+                    learning: c.learning,
+                    rule: c.rule,
+                    rerank_path: c.rerank.map(|r| r.path),
+                    rerank_inserted: c.rerank.is_some_and(|r| r.inserted),
+                })
+                .collect(),
+        }
     }
 }
 
@@ -619,13 +768,7 @@ impl From<Snapshot> for WebSnapshot {
                 .composition
                 .segments
                 .into_iter()
-                .map(|segment| WebSegment {
-                    code: segment.code,
-                    radicals: segment.radicals,
-                    text: segment.text,
-                    selected: segment.selected,
-                    raw: segment.raw,
-                })
+                .map(WebSegment::from)
                 .collect(),
             candidates_original: s.candidates.iter().map(|c| c.original.clone()).collect(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
@@ -669,6 +812,18 @@ pub struct WebSegment {
     /// 臨時英文（組字中單按留碼的 Shift）：`text` 是原樣的英文，顯示它而不是字根。
     #[wasm_bindgen(readonly)]
     pub raw: bool,
+}
+
+impl From<qim_core::Segment> for WebSegment {
+    fn from(segment: qim_core::Segment) -> Self {
+        Self {
+            code: segment.code,
+            radicals: segment.radicals,
+            text: segment.text,
+            selected: segment.selected,
+            raw: segment.raw,
+        }
+    }
 }
 
 /// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根（plan §2.5）。JS 端叫 `RadicalHints`。

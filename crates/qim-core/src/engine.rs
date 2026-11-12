@@ -5,11 +5,12 @@ use crate::lattice::{self, Lattice, Listing, Preceding};
 use crate::lexicon::WordsByText;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
+use crate::session::SegmentSource;
 use crate::user::{SchemeModel, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
-    SchemePack, Simplifier, SimplifierPack, UserModel, Word, WordTrigram, WordTrigramPack,
+    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Word, WordTrigram, WordTrigramPack,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -64,6 +65,22 @@ pub(crate) struct Edge {
     simplified: bool,
     /// 在詞級 trigram 詞表的編號；沒掛上或不在詞表是 `None`。
     word: Option<u32>,
+    /// 碼表的字、詞庫的詞或使用者詞（debug 面板，[`Engine::inspect_path`]）。
+    source: SegmentSource,
+}
+
+/// 一條路徑的一段的分數與來源（[`Engine::inspect_path`]）。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ScoredSegment {
+    pub source: SegmentSource,
+    /// 這一段接在前一段後面的分數（[`Engine::edge_score`]），含學習加分。
+    pub score: f64,
+    /// 其中 `personal` 的部分（plan §2.3）：學到的加分。
+    pub learning: f64,
+    /// 有這一段的學習計數。
+    pub learned: bool,
+    /// 有它接在前一個字詞後面的個人 bigram。
+    pub personal_bigram: bool,
 }
 
 /// [`Engine::span`] 的一項：剛好是一段輸入碼的一個字或詞。
@@ -315,6 +332,7 @@ impl Engine {
             inner: -self.scheme.ranking.segment_penalty,
             rest: 0.0,
             simplified: entry.simplified,
+            source: SegmentSource::CodeTable,
         }
     }
 
@@ -335,6 +353,7 @@ impl Engine {
             inner: rest + ranking.word_bonus - ranking.segment_penalty,
             rest,
             simplified: false,
+            source: SegmentSource::Lexicon,
         }
     }
 
@@ -355,6 +374,7 @@ impl Engine {
             inner: rest - self.scheme.ranking.segment_penalty,
             rest,
             simplified: false,
+            source: SegmentSource::UserWord,
         }
     }
 
@@ -398,16 +418,94 @@ impl Engine {
         edge: &Edge,
         bigram: f64,
     ) -> f64 {
+        let (unlearned, learning) = self.edge_score_parts(prev, before, edge, bigram);
+        unlearned + learning
+    }
+
+    /// [`Engine::edge_score`] 分成沒學習時的分數與 `personal`（學到的加分）兩部分。
+    #[inline]
+    fn edge_score_parts(
+        &self,
+        prev: Option<char>,
+        before: WordHistory,
+        edge: &Edge,
+        bigram: f64,
+    ) -> (f64, f64) {
         let first = self.language_model.log_prob(prev, edge.first);
         let Some(model) = &self.word_trigram else {
-            return first + edge.inner + personal_bonus(first + edge.rest, edge.personal, bigram);
+            let learning = personal_bonus(first + edge.rest, edge.personal, bigram);
+            return (first + edge.inner, learning);
         };
         let [u, v] = before;
         let static_log_prob = model.score(u, v, edge.word, first + edge.rest);
         // `inner` 是詞內機率加 β、γ：減掉詞內機率剩 β、γ。
-        static_log_prob
-            + (edge.inner - edge.rest)
-            + personal_bonus(static_log_prob, edge.personal, bigram)
+        (
+            static_log_prob + (edge.inner - edge.rest),
+            personal_bonus(static_log_prob, edge.personal, bigram),
+        )
+    }
+
+    /// 接在 `before` 後面的一串分段（候選的各段，碼與原文）每段的分數與來源，同 lattice 逐段接前一段
+    /// 打分（[`crate::lattice::Lattice::push`]），所以總和就是那條路徑的路徑分（debug 面板，
+    /// [`crate::Session::inspect`]）。有一段不是碼表、詞庫或使用者詞裡這個碼的字詞（擴展區的字、
+    /// 觸發詞）時是 `None`：它不在 lattice 裡，沒有路徑分。
+    pub(crate) fn inspect_path(
+        &self,
+        user: &UserModel,
+        before: &Preceding,
+        segments: &[Segment],
+    ) -> Option<Vec<ScoredSegment>> {
+        let scheme_user = user.for_scheme(&self.scheme.id);
+        // 每段前面的一段：組字前面的那一段，接著各段。
+        let history: Vec<Option<u32>> = std::iter::once(before.segment())
+            .chain(segments.iter().map(|s| Some(s.text.clone())))
+            .map(|segment| segment.and_then(|s| self.word_id(&s)))
+            .collect();
+        segments
+            .iter()
+            .enumerate()
+            .map(|(i, segment)| {
+                let (prev, previous_word) = match i.checked_sub(1).map(|p| &segments[p]) {
+                    Some(p) => (p.text.chars().next_back(), Some(p.text.as_str())),
+                    None => (before.character, before.word.as_deref()),
+                };
+                let words = [i.checked_sub(1).and_then(|p| history[p]), history[i]];
+                let bigram = previous_word
+                    .and_then(|w| user.bigrams_after(w))
+                    .map_or(0.0, |f| f.probability(&segment.text));
+                let code = segment.code.trim_end_matches(SEPARATOR);
+                self.exact(scheme_user, code, 0, usize::MAX)
+                    .into_iter()
+                    .filter(|e| e.text == segment.text)
+                    .map(|e| {
+                        let (unlearned, learning) = self.edge_score_parts(prev, words, &e, bigram);
+                        ScoredSegment {
+                            source: e.source,
+                            score: unlearned + learning,
+                            learning,
+                            learned: e.personal > 0.0,
+                            personal_bigram: bigram > 0.0,
+                        }
+                    })
+                    .max_by(|a, b| a.score.total_cmp(&b.score))
+            })
+            .collect()
+    }
+
+    /// 碼 `code` 的字詞 `text` 從哪裡來（不在 lattice 裡的候選，[`Engine::inspect_path`] 是 `None` 時）：
+    /// 碼表的字（含擴展區）、詞庫的詞，其餘是使用者詞（觸發詞）。
+    pub(crate) fn source_of(&self, code: &str, text: &str) -> SegmentSource {
+        let code = without_separators(code);
+        let mut chars = text.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) if self.char_entries(&code).iter().any(|e| e.text == c) => {
+                SegmentSource::CodeTable
+            }
+            _ if self.lexicon.lookup(&code).iter().any(|w| w.text == text) => {
+                SegmentSource::Lexicon
+            }
+            _ => SegmentSource::UserWord,
+        }
     }
 
     /// 組字接在前文 `before` 後面時，開頭的字要接的前一字（plan §2.3）。bigram 只在句內訓練
