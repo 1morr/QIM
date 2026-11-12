@@ -424,20 +424,22 @@ fn the_english_candidate_keeps_second_and_the_reranked_path_goes_after_it() {
     assert_eq!(texts(&reranked)[..3], [shown[0].as_str(), "abba", &path]);
 }
 
-/// 規則 5 的記住的字串排在英文後面，重排的整句再排在它們後面。
+/// 規則 5 的英文使用者詞前綴補完（打過 3 次）排在英文後面，重排的整句再排在它們後面。
 #[test]
-fn remembered_strings_keep_their_places_and_the_reranked_path_goes_after_them() {
+fn english_completions_keep_their_places_and_the_reranked_path_goes_after_them() {
     let mut ime = Ime::new();
     ime.press(Key::ToggleAscii(ShiftKey::Right));
-    for c in "abba@example.com".chars() {
-        let key = if c.is_ascii_alphabetic() {
-            Key::Letter(c)
-        } else {
-            Key::Punct(c)
-        };
-        ime.press(key);
+    for _ in 0..3 {
+        for c in "abba@example.com".chars() {
+            let key = if c.is_ascii_alphabetic() {
+                Key::Letter(c)
+            } else {
+                Key::Punct(c)
+            };
+            ime.press(key);
+        }
+        ime.press(Key::Space);
     }
-    ime.press(Key::Space);
     ime.press(Key::ToggleAscii(ShiftKey::Right));
 
     let shown = texts(&ime.type_code("abba"));

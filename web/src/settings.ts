@@ -100,12 +100,12 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setEmojiCandidates(on),
 	},
 	{
-		// 記下用英文打過的 email，打它開頭的字母時排在候選第 2 位起（M3 票 15）。
+		// 學打過的英文串：打過 2 次的中文打完整串時排第 2，打過 3 次的打開頭 3 碼也給（M4 票 14）。
 		kind: "checkbox",
-		id: "remembered-strings",
-		label: "記住 email",
+		id: "english-user-words",
+		label: "英文使用者詞",
 		checked: true,
-		apply: (session, on) => session.setRememberedStrings(on),
+		apply: (session, on) => session.setEnglishUserWords(on),
 	},
 	{
 		// 上屏之後候選列給接下來可能要打的字詞（M3 票 13），數字鍵或點選選。

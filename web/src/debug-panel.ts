@@ -15,7 +15,7 @@ export type CandidateKind =
 	| "word"
 	| "english"
 	| "emoji"
-	| "remembered"
+	| "englishUserWord"
 	| "association";
 
 /** 候選的一段（綁定的 `InspectedSegment` 讀成一般物件）。 */
@@ -135,7 +135,7 @@ const SOURCE_LABELS: Record<SegmentSource, string> = {
 const KIND_LABELS: Record<Exclude<CandidateKind, "word">, string> = {
 	english: "英文",
 	emoji: "emoji",
-	remembered: "記住的字串",
+	englishUserWord: "英文使用者詞",
 	association: "聯想",
 };
 

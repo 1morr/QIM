@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::association::{self, ASSOCIATION_TAIL};
+use crate::english_user::TypedRun;
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
-use crate::remembered::TypedRun;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::{Engine, UserModel, punctuation};
 
@@ -97,10 +97,11 @@ pub struct Options {
     /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
     /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
     pub simplified_after_traditional: bool,
-    /// 記住的字串（plan §2.4，M3 票 15）：記下經核心送出去的 email，之後在中文組字打它開頭的字母
-    /// （長過一個字的最長碼）時排在候選第 2 位起（排位規則 5）。關掉時不記也不給；無痕、學習關掉時
-    /// 不記、已記的照給。預設開（brief §7）。
-    pub remembered_strings: bool,
+    /// 英文使用者詞（plan §2.4，M4 票 14）：學經核心送出去的英文串（4 字元起），英文詞典沒有、打過 2 次
+    /// 的在中文組字打完整串時排第 2（排位規則 4），打過 3 次又是最常用的 20 條之一時打它開頭的字母
+    /// （長過一個字的最長碼）也給（排位規則 5）。關掉時不學也不給；無痕、學習關掉時不學、已學的照給。
+    /// 預設開（brief §7）。
+    pub english_user_words: bool,
     /// 聯想（brief §7，M3 票 13）：上屏組字或選了聯想之後、還沒打下一個字時，候選列給接下來可能要
     /// 打的字詞（[`Session::select`] 或數字鍵選）。預設開（brief §7）。
     pub association: bool,
@@ -157,14 +158,14 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選、簡體字排後與記住的字串影響候選，
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選、簡體字排後與英文使用者詞影響候選，
     /// 無痕、學習、Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified
             && self.english_candidates == other.english_candidates
             && self.emoji_candidates == other.emoji_candidates
             && self.simplified_after_traditional == other.simplified_after_traditional
-            && self.remembered_strings == other.remembered_strings
+            && self.english_user_words == other.english_user_words
     }
 }
 
@@ -179,7 +180,7 @@ impl Default for Options {
             emoji_candidates: true,
             shift_switch: ShiftSwitch::Rime,
             simplified_after_traditional: true,
-            remembered_strings: true,
+            english_user_words: true,
             association: true,
         }
     }
@@ -453,8 +454,8 @@ pub struct Session {
     /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
-    /// 正在打的一串字（記住的字串，plan §2.1）：送出去的字的結尾連續的 email 字元。遇到其他字元、
-    /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，是 email 就記住
+    /// 正在打的一串字（英文使用者詞，plan §2.1）：送出去的字的結尾連續的串字元。遇到其他字元、
+    /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，學成英文使用者詞
     /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
     typed: TypedRun,
     /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
@@ -507,7 +508,7 @@ impl Session {
 
     /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
     /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
-    /// 離開欄位也是打完了一串字：正在打的是 email 就記進 `user`（記住的字串，plan §2.4）。
+    /// 離開欄位也是打完了一串字：正在打的串學成英文使用者詞（plan §2.4）。
     pub fn clear_context(&mut self, user: &mut UserModel) {
         self.end_typed(user);
         self.forget_context();
@@ -520,21 +521,21 @@ impl Session {
         self.end_association();
     }
 
-    /// 正在打的一串字打完了：是整串看得到的 email 又記得住（[`Session::remembers_strings`]）時記進 `user`。
+    /// 正在打的一串字打完了：整串看得到又學得了（[`Session::learns_english`]）時學成英文使用者詞。
     fn end_typed(&mut self, user: &mut UserModel) {
         let done = self.typed.finish();
-        self.remember(user, done);
+        self.learn_english(user, done);
     }
 
-    fn remember(&self, user: &mut UserModel, done: Option<String>) {
-        if let Some(text) = done.filter(|_| self.remembers_strings()) {
-            user.remember_string(&text);
+    fn learn_english(&self, user: &mut UserModel, done: Option<String>) {
+        if let Some(text) = done.filter(|_| self.learns_english()) {
+            user.learn_english(&text);
         }
     }
 
-    /// 現在打的字記不記得住：在學習（不在無痕、學習沒關）、記住的字串開著。
-    fn remembers_strings(&self) -> bool {
-        self.writes_learning() && self.options.remembered_strings
+    /// 現在打的串學不學：在學習（不在無痕、學習沒關）、英文使用者詞開著。
+    fn learns_english(&self) -> bool {
+        self.writes_learning() && self.options.english_user_words
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -718,7 +719,7 @@ impl Session {
     /// 交還宿主的鍵宿主照打：可見字元與空白接在前文後面（librime 的 commit history 記這些
     /// `thru` 的鍵）。其他鍵改了游標前的字或移走游標，前文就作廢了，等殼再給；librime
     /// 只在退格與 Enter 清掉，不學它：方向鍵也把游標移走。不送字元的修飾鍵沒改輸入框，不動它。
-    /// 正在打的一串字（記住的字串）：退格刪它的最後一個字元；Enter 讓它打完；其他作廢前文的鍵（Tab、
+    /// 正在打的一串字（英文使用者詞）：退格刪它的最後一個字元；Enter 讓它打完；其他作廢前文的鍵（Tab、
     /// 方向鍵…）也讓它打完，之後游標可能移走，接著打的到下一個分隔的字元才重新算。
     fn passed_to_host(&mut self, user: &mut UserModel, key: Key) {
         match key {
@@ -739,14 +740,14 @@ impl Session {
     }
 
     /// 核心送出去的字（上屏的、交還宿主打的字元）：記下游標前是不是數字；不在無痕中時接在前文後面，
-    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始，也接在正在打的一串字後面（遇到 email
+    /// 只留最後 [`CONTEXT_LIMIT`] 字，不知道前文時就從它開始，也接在正在打的一串字後面（遇到串
     /// 裡不會有的字元時那串打完，[`Session::end_typed`]）。
     fn sent(&mut self, user: &mut UserModel, text: &str) {
         self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
-        let recording = self.remembers_strings();
+        let recording = self.learns_english();
         for c in text.chars() {
             let done = self.typed.push(c, recording);
-            self.remember(user, done);
+            self.learn_english(user, done);
         }
         if self.options.incognito {
             return;
@@ -1294,7 +1295,7 @@ impl Session {
         Listing {
             english_candidates: whole_input && options.english_candidates,
             emoji_candidates: whole_input && options.emoji_candidates,
-            remembered_strings: whole_input && options.remembered_strings,
+            english_user_words: whole_input && options.english_user_words,
             simplified_last: options.simplified_after_traditional && !options.simplified,
         }
     }
@@ -1344,7 +1345,7 @@ impl Session {
         let Some(choice) = self.candidates.get(index).map(|c| c.span.clone()) else {
             return self.snapshot(engine, true, None);
         };
-        // 英文候選、emoji 與記住的字串蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
+        // 英文候選、emoji 與英文使用者詞蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
         // 上屏字詞、其餘上屏它，整次不學也不造詞（plan §2.4）。
         if choice.kind.is_literal() {
             let mut commit = self.selected_commit(engine);
