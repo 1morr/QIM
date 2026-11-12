@@ -153,13 +153,18 @@ impl EnglishUserWord {
     }
 }
 
+/// 英文使用者詞的鍵：不分大小寫，所以是小寫。
+pub(crate) fn key(text: &str) -> String {
+    text.to_ascii_lowercase()
+}
+
 impl EnglishUserWords {
     /// 學一次 `text`（[`to_learn`] 過的）：次數、衰減值加一，tick 加一。
     pub(crate) fn learn(&mut self, text: &str, today: Option<Date>) {
         self.tick += 1;
         let word = self
             .words
-            .entry(text.to_ascii_lowercase())
+            .entry(key(text))
             .or_insert_with(|| EnglishUserWord {
                 text: String::new(),
                 count: 0,
@@ -220,7 +225,7 @@ impl EnglishUserWords {
 
     /// 加進匯入的一個詞，tick 至少到它的最後 tick；不分大小寫已有時不加、回傳 `false`。
     pub(crate) fn insert(&mut self, word: EnglishUserWord) -> bool {
-        let key = word.text.to_ascii_lowercase();
+        let key = key(&word.text);
         if self.words.contains_key(&key) {
             return false;
         }
@@ -231,7 +236,7 @@ impl EnglishUserWords {
 
     /// 忘掉 `text`（不分大小寫）；沒學過時回傳 `false`。
     pub(crate) fn forget(&mut self, text: &str) -> bool {
-        self.words.remove(&text.to_ascii_lowercase()).is_some()
+        self.words.remove(&key(text)).is_some()
     }
 }
 
