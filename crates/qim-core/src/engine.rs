@@ -6,11 +6,13 @@ use crate::lexicon::WordsByText;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::session::SegmentSource;
+use crate::tolerance::{self, Tolerance};
 use crate::user::{SchemeUser, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
-    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Word, WordTrigram, WordTrigramPack,
+    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Weights, Word, WordTrigram,
+    WordTrigramPack,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -43,6 +45,8 @@ pub struct Engine {
     /// 詞級 trigram（[`Engine::with_word_trigram`]）：有掛上時 lattice 的靜態機率改用它，沒有統計的
     /// 地方退回字級 bigram；`None` 只用字級 bigram（plan §2.3）。
     word_trigram: Option<WordTrigram>,
+    /// 容錯（[`Engine::with_tolerance`]）；預設全關。
+    tolerance: Tolerance,
 }
 
 /// 一段前面的兩段在詞級 trigram 詞表的編號：`[前前一段, 前一段]`，沒有或不在詞表是 `None`。
@@ -160,6 +164,7 @@ impl Engine {
             english: EnglishWords::default(),
             emoji: EmojiTable::default(),
             word_trigram: None,
+            tolerance: Tolerance::default(),
         })
     }
 
@@ -168,6 +173,14 @@ impl Engine {
     #[must_use]
     pub fn with_word_trigram(mut self, pack: WordTrigramPack) -> Self {
         self.word_trigram = Some(pack.model);
+        self
+    }
+
+    /// 開容錯（brief §4.8）：詞庫詞與使用者詞的邊可以改輸入碼的一處再查，帶 `tolerance` 的懲罰進
+    /// lattice，單字的邊不修。M4 票 09 只給基準與實驗用，殼不接；開關與預設由票 10 定。
+    #[must_use]
+    pub fn with_tolerance(mut self, tolerance: Tolerance) -> Self {
+        self.tolerance = tolerance;
         self
     }
 
@@ -779,7 +792,15 @@ impl Engine {
     /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個與學過的，
     /// 加上詞庫的詞與使用者詞。擴展區的字不進 lattice（plan §2.3）。邊不從分隔記號開始；
     /// 往回找的上限算的是字母數，分隔記號不算。
-    pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
+    ///
+    /// 開了容錯時，每個起點另加改一處才查得到的詞（[`Engine::corrected_edges`]）；`weights` 是 `input`
+    /// 每一碼的按鍵機率（沒有的是 `None`，可以比 `input` 短）。
+    pub(crate) fn edges_ending(
+        &self,
+        user: &UserModel,
+        input: &str,
+        weights: &[Option<Weights>],
+    ) -> Vec<Edge> {
         let user = user.for_scheme(&self.scheme.id);
         let longest = self
             .longest_word_code
@@ -796,21 +817,101 @@ impl Engine {
         starts.reverse();
         starts
             .into_iter()
-            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
+            .flat_map(|start| {
+                let exact = self.exact(user, &input[start..], start, self.beam());
+                let corrected = self.corrected_edges(user, input, weights, start, &exact);
+                exact.into_iter().chain(corrected)
+            })
             .collect()
+    }
+
+    /// 開了容錯時，輸入碼 `input[start..]` 改一處（[`tolerance::corrected_codes`]）才查得到的詞庫詞與
+    /// 使用者詞的邊，帶修正的懲罰；`exact` 已經有的字詞不再給，同一個字詞取懲罰最小的。單字的邊不修
+    /// （brief §4.8），不到兩碼、有分隔記號或萬用鍵的段也不修。`weights` 同 [`Engine::edges_ending`]。
+    fn corrected_edges(
+        &self,
+        user: SchemeUser<'_>,
+        input: &str,
+        weights: &[Option<Weights>],
+        start: usize,
+        exact: &[Edge],
+    ) -> Vec<Edge> {
+        let typed = &input[start..];
+        if self.tolerance.is_off()
+            || typed.len() < 2
+            || typed.contains(SEPARATOR)
+            || self.scheme.has_wildcard(typed)
+        {
+            return Vec::new();
+        }
+        let weights: Vec<Option<Weights>> = (start..input.len())
+            .map(|i| weights.get(i).cloned().flatten())
+            .collect();
+        let codes = tolerance::corrected_codes(
+            typed,
+            &weights,
+            &self.scheme.alphabet,
+            &self.tolerance,
+            |prefix| self.lexicon.has_code_prefix(prefix) || user.has_word_code_prefix(prefix),
+        );
+        let mut edges: Vec<Edge> = Vec::new();
+        for (code, penalty) in codes {
+            let words = self
+                .lexicon
+                .lookup(&code)
+                .iter()
+                .map(|w| self.word_edge(user, &code, start, w));
+            let user_words = user
+                .words(&code)
+                .map(|text| self.user_word_edge(user, &code, start, text));
+            for mut edge in words.chain(user_words) {
+                // 依懲罰由小到大走，先到的就是這個字詞懲罰最小的改法。
+                if edge.text.chars().count() < 2
+                    || exact.iter().chain(&edges).any(|e| e.text == edge.text)
+                {
+                    continue;
+                }
+                edge.inner -= penalty;
+                edges.push(edge);
+            }
+        }
+        edges
     }
 
     /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面的分數，依分數由高到低
     /// （同分照碼表、詞庫的順序）；`input` 中間的分隔記號見 [`Engine::exact`]。
     pub(crate) fn span(&self, user: &UserModel, before: &Preceding, input: &str) -> Vec<Spanned> {
+        let scheme_user = user.for_scheme(&self.scheme.id);
+        let edges = self.exact(scheme_user, input, 0, usize::MAX);
+        self.spanned(user, before, edges)
+    }
+
+    /// 開了容錯時，輸入碼 `input` 改一處才查得到的詞（[`Engine::corrected_edges`]）與分數，依分數由高到低；
+    /// `weights` 同 [`Engine::edges_ending`]。候選列只給蓋滿整串的用（`lattice::candidates`）。
+    pub(crate) fn corrected_span(
+        &self,
+        user: &UserModel,
+        before: &Preceding,
+        input: &str,
+        weights: &[Option<Weights>],
+    ) -> Vec<Spanned> {
+        if self.tolerance.is_off() {
+            return Vec::new();
+        }
+        let scheme_user = user.for_scheme(&self.scheme.id);
+        let exact = self.exact(scheme_user, input, 0, usize::MAX);
+        let edges = self.corrected_edges(scheme_user, input, weights, 0, &exact);
+        self.spanned(user, before, edges)
+    }
+
+    /// 組字開頭的邊 `edges` 接在 `before` 後面的分數，依分數由高到低（穩定排序）。
+    fn spanned(&self, user: &UserModel, before: &Preceding, edges: Vec<Edge>) -> Vec<Spanned> {
         let following = before.word.as_deref().and_then(|w| user.bigrams_after(w));
         let history: WordHistory = [
             None,
             before.segment().and_then(|segment| self.word_id(&segment)),
         ];
-        let scheme_user = user.for_scheme(&self.scheme.id);
-        let mut edges: Vec<Spanned> = self
-            .exact(scheme_user, input, 0, usize::MAX)
+        let mut spanned: Vec<Spanned> = edges
             .into_iter()
             .map(|e| Spanned {
                 score: self.edge_score(
@@ -823,8 +924,8 @@ impl Engine {
                 text: e.text,
             })
             .collect();
-        edges.sort_by(|a, b| b.score.total_cmp(&a.score));
-        edges
+        spanned.sort_by(|a, b| b.score.total_cmp(&a.score));
+        spanned
     }
 
     /// 碼 `code` 的擴展區的字，依碼表的順序。

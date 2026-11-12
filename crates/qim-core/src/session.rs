@@ -1031,7 +1031,8 @@ impl Session {
                 }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
-            self.lattice.push(engine, user, c);
+            self.lattice
+                .push_weighted(engine, user, c, self.key_weights.clone());
             self.refresh_candidates(engine, user);
             return self.snapshot(engine, true, None);
         }
@@ -1449,7 +1450,7 @@ impl Session {
             top = lattice::candidates(
                 engine,
                 user,
-                &Lattice::from_input(engine, user, before, &rest),
+                &Lattice::from_keys(engine, user, before, &rest, self.weights_of_tail(&rest)),
                 self.listing(false),
             )
             .into_iter()
@@ -1636,10 +1637,22 @@ impl Session {
         self.snapshot(engine, true, None)
     }
 
-    /// 剩下的輸入碼換成 `input`，lattice 從頭建。
+    /// 剩下的輸入碼換成 `input`，lattice 從頭建。`input` 是現在的輸入碼的結尾（選了開頭一段、整串重建）
+    /// 時，那幾碼的按鍵機率照留（容錯的鄰鍵替換用）；其他（放回選定的分段）沒有按鍵機率。
     fn recompose(&mut self, engine: &Engine, user: &UserModel, input: &str) {
         let before = self.before_unselected(engine);
-        self.lattice = Lattice::from_input(engine, user, before, input);
+        let weights = self.weights_of_tail(input).to_vec();
+        self.lattice = Lattice::from_keys(engine, user, before, input, &weights);
+    }
+
+    /// 剩下的輸入碼 `tail` 是現在的輸入碼的結尾時，它那幾碼的按鍵機率；否則是空的。
+    fn weights_of_tail(&self, tail: &str) -> &[Option<Weights>] {
+        let input = self.lattice.input();
+        if input.ends_with(tail) {
+            &self.lattice.weights()[input.len() - tail.len()..]
+        } else {
+            &[]
+        }
     }
 
     /// 沒選定的輸入碼前面是什麼（plan §2.3）：最後選定的分段（它的最後一字與它）；沒有選定的

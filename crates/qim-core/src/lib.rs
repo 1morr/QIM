@@ -20,6 +20,7 @@ mod radical_hint;
 mod scheme;
 mod session;
 mod simplifier;
+mod tolerance;
 mod user;
 mod weights;
 mod word_list;
@@ -51,6 +52,7 @@ pub use session::{
     SegmentSource, Session, ShiftKey, ShiftSwitch, Snapshot,
 };
 pub use simplifier::{ConversionTable, Simplifier};
+pub use tolerance::Tolerance;
 pub use user::{
     ImportError, ImportWarning, Imported, InvalidDeviceId, Limits, Phrase, UserModel, UserWordError,
 };
