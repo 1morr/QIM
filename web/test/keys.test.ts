@@ -4,7 +4,7 @@ import {
 	type KeyEvent,
 	LoneShift,
 	type PhysicalKeyEvent,
-	physicalLetter,
+	physicalCode,
 	shiftSwitch,
 	toKey,
 } from "../src/keys.ts";
@@ -232,50 +232,69 @@ function physical(
 	code: string,
 	key: string,
 	modifiers: Partial<PhysicalKeyEvent> = {},
+	locked: string[] = [],
 ): PhysicalKeyEvent {
-	return { ...press(key), code, shiftKey: false, ...modifiers };
+	return {
+		...press(key),
+		code,
+		shiftKey: false,
+		getModifierState: (name: string) => locked.includes(name),
+		...modifiers,
+	};
 }
 
 test("中文模式的字母鍵照實體鍵位送 code（M4 票 07）", () => {
-	assert.equal(physicalLetter(physical("KeyF", "f"), false), "KeyF");
-	assert.equal(physicalLetter(physical("KeyQ", "q"), false), "KeyQ");
+	assert.equal(physicalCode(physical("KeyF", "f"), false), "KeyF");
+	assert.equal(physicalCode(physical("KeyQ", "q"), false), "KeyQ");
 });
 
 test("key 不同但 code 相同時結果相同：換 Dvorak 照實體鍵位", () => {
 	// Dvorak 的實體 F 鍵打 u、實體 Q 鍵打 '。
-	assert.equal(physicalLetter(physical("KeyF", "u"), false), "KeyF");
-	assert.equal(physicalLetter(physical("KeyQ", "'"), false), "KeyQ");
+	assert.equal(physicalCode(physical("KeyF", "u"), false), "KeyF");
+	assert.equal(physicalCode(physical("KeyQ", "'"), false), "KeyQ");
 });
 
 test("英文（直通與臨時英文）的字母照配列打，不送 code", () => {
-	assert.equal(physicalLetter(physical("KeyF", "f"), true), null);
-	assert.equal(physicalLetter(physical("KeyF", "u"), true), null);
+	assert.equal(physicalCode(physical("KeyF", "f"), true), null);
+	assert.equal(physicalCode(physical("KeyF", "u"), true), null);
 });
 
 test("大寫字母、組合鍵與別的輸入法的事件不送 code", () => {
 	assert.equal(
-		physicalLetter(physical("KeyF", "F", { shiftKey: true }), false),
+		physicalCode(physical("KeyF", "F", { shiftKey: true }), false),
 		null,
 	);
-	// CapsLock 開著：沒按 Shift 也是大寫。
-	assert.equal(physicalLetter(physical("KeyF", "F"), false), null);
+	// CapsLock 開著：沒按 Shift 也是大寫；Dvorak 的實體 Q 鍵打的 ' 看不出大小寫，照修飾鍵的狀態判斷。
+	assert.equal(
+		physicalCode(physical("KeyF", "F", {}, ["CapsLock"]), false),
+		null,
+	);
+	assert.equal(
+		physicalCode(physical("KeyQ", "'", {}, ["CapsLock"]), false),
+		null,
+	);
+	// Linux 的 AltGr 加字母（打 € 這類字元）不帶 altKey。
+	assert.equal(
+		physicalCode(physical("KeyE", "€", {}, ["AltGraph"]), false),
+		null,
+	);
 	for (const modifier of ["ctrlKey", "metaKey", "altKey"] as const) {
 		assert.equal(
-			physicalLetter(physical("KeyF", "f", { [modifier]: true }), false),
+			physicalCode(physical("KeyF", "f", { [modifier]: true }), false),
 			null,
 			modifier,
 		);
 	}
 	assert.equal(
-		physicalLetter(physical("KeyF", "f", { isComposing: true }), false),
+		physicalCode(physical("KeyF", "f", { isComposing: true }), false),
 		null,
 	);
 });
 
 test("非字母鍵不送 code，即使配列讓它打出字母", () => {
 	// Dvorak 的實體分號鍵打 s。
-	assert.equal(physicalLetter(physical("Semicolon", "s"), false), null);
-	assert.equal(physicalLetter(physical("Digit1", "1"), false), null);
-	assert.equal(physicalLetter(physical("Space", " "), false), null);
-	assert.equal(physicalLetter(physical("", "f"), false), null);
+	assert.equal(physicalCode(physical("Semicolon", "s"), false), null);
+	assert.equal(physicalCode(physical("Digit1", "1"), false), null);
+	assert.equal(physicalCode(physical("Space", " "), false), null);
+	assert.equal(physicalCode(physical("", "f"), false), null);
 });

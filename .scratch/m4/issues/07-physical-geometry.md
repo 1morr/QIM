@@ -1,6 +1,6 @@
 # 07: 實體鍵盤的鄰鍵幾何
 
-Status: ready-for-agent
+Status: done
 Blocked by: 06
 讀: plan §2.1、§2.6；spec〈細節〉〈空間模型〉；brief §4.8；`docs/research/ranking-techniques.md` §5.2；spec〈共同規則〉
 
@@ -14,6 +14,19 @@ Blocked by: 06
 
 ## 驗收
 
-- [ ] `qim-layout` 測試：`KeyF` 的鄰鍵含 D、G、R、T、C、V；`key` 值不同但 `code` 相同時結果相同。
-- [ ] 現有實體鍵盤的 e2e 照綠；Playwright 按一個字母，debug 面板讀到它與鄰鍵的機率。
-- [ ] plan §2.1 寫明實體鍵盤的 `Weighted`；`cargo xtask check` 綠燈。
+- [x] `qim-layout` 測試：`KeyF` 的鄰鍵含 D、G、R、T、C、V；`key` 值不同但 `code` 相同時結果相同。
+- [x] 現有實體鍵盤的 e2e 照綠；Playwright 按一個字母，debug 面板讀到它與鄰鍵的機率。
+- [x] plan §2.1 寫明實體鍵盤的 `Weighted`；`cargo xtask check` 綠燈。
+
+## Comments
+
+2026-11-12 實作（`9bed74c` 起）：
+
+- 介面：`qim_layout::PhysicalModel::letter_weights(code)`（`crates/qim-layout/src/physical.rs`）只收 `KeyboardEvent.code`，不是 `KeyA`–`KeyZ` 時回 `None`；綁定加 `Session.pressCode(code)`，網頁 `physicalCode(event, ascii)`（`web/src/keys.ts`）決定哪些鍵送它：中文模式、沒帶 Shift、Ctrl、Meta、Alt、AltGr、CapsLock、別的輸入法沒在組字、`code` 是字母鍵。其餘照 `toKey`，英文直通與臨時英文照配列打 `key`（`shown.ascii` 每次重畫取 `Snapshot.ascii`）。`code` 的寫法照 W3C UI Events KeyboardEvent code Values，沒有另訂格式。
+- 幾何：字母區三排，每排第一個鍵左緣在 1.5、1.75、2.25 鍵距（ANSI、ISO 相同），只列字母鍵；按下的鍵固定 0.9，剩下的依鍵中心距離的 Gaussian（σ 0.5 鍵距）分給 1.5 鍵距內的鄰鍵，參數都沒有來源，容錯的票調。F 的結果：f 0.9、d／g 0.023、r 0.020、c／v 0.014、t 0.007。不拿觸控的 `Page` 算（plan §2.6 寫了理由）。spec〈共同規則〉「鄰鍵從 `qim-layout` 的按鍵幾何算、不寫死 QWERTY」：實體鍵盤的幾何就是 `code` 的位置，`ROWS` 是那份幾何本身、在 `qim-layout`，不是佈局的鍵；觸控與自訂佈局照舊從 `Page` 算。
+- 驗收「`key` 不同但 `code` 相同時結果相同」：`qim-layout` 的介面只收 `code`，`key` 進不來，所以 Rust 端沒有能紅的測試；能紅的那一半在 `web/test/keys.test.ts`（Dvorak 的實體 F 鍵 `key` 是 u）與 e2e `physical-weighted.spec.ts` 的合成事件（改成照 `key` 會打出「山」而紅）。
+- 名詞：「觸控機率」現在也含實體鍵盤，名詞表改成**按鍵機率**、新增**鄰鍵先驗**；`Inspection::touch_weights` → `key_weights`、綁定的 `touchLetters`／`touchProbabilities` → `weightLetters`／`weightProbabilities`、面板 `debug-touch` → `debug-weights`、文字「按鍵機率：」。
+- 對非美式配列的影響（**要使用者決定**，見下）：票上定了速成碼照 `code`，所以 Dvorak、AZERTY 這類配列在中文模式下，字母照實體鍵位，非字母鍵照 `key`。後果：(1) Dvorak 的 `,` `.` `;` `'` 在實體 W、E、Z、Q 鍵上，現在送字母，中文模式打不出這幾個標點；實體分號鍵（Dvorak 打 s）照 `toKey` 仍送 s，一個字母兩個鍵；(2) 核心沒吃下、交還瀏覽器的字母（沒有組字時）瀏覽器照 `key` 插入，核心記的前文是 `code` 的字母。美式、英式這類字母位置相同的配列不受影響。選項：標點鍵也照 `code`（中文模式整個當美式鍵盤），或字母照 `key`、只有機率照 `code`（違反本票驗收）。記在 progress〈偏差與決定〉。
+- `bench --check`：各集合答錯、修正數與 baseline 相同、沒有翻盤，固定題 84/84；每鍵延遲原生空白 p95 74.8 µs／第 20 碼起 81.5 µs／選開頭一段 1.32 ms，學過 186.8 µs／393.6 µs／2.05 ms，都在上限內。核心只改名、lattice 沒動，不必跑 `model-ladder`。
+- 驗證：`cargo xtask check` 綠（e2e 241 passed、2 skipped）。截圖 `.scratch/m4/evidence/07-physical-weights.png`（面板「按鍵機率：f 90.0% d 2.3% g 2.3% r 2.0% c 1.4% v 1.4% t 0.7%」）。亂按一輪：一次性 Playwright 腳本按 600 鍵 × 3 個種子（字母、Shift 加字母、單按 Shift、數字、標點、方向鍵、Tab、Ctrl+A、CapsLock、Dvorak 的合成事件），173 次讀回面板，第一名都是按下的字母、和為 1，沒有頁面錯誤。第一輪紅過一次是腳本的問題：沒有組字時 Tab 照瀏覽器預設把焦點移走，之後的鍵沒進輸入框；改成每鍵前放回焦點。
+- code-review 處理了：CapsLock 改用 `getModifierState`（Dvorak 上 `key` 看不出大小寫）、排除 AltGr、`physicalLetter` 改名 `physicalCode`（回的是 `code`）、拿掉和半徑重複的 `limit`、`ROWS` 改存字母不再從字串位元組拆、plan 裡沒查證的「macOS 輸入法把字母鍵固定成美式鍵盤」刪掉。沒處理：兩個 e2e 讀面板機率的 helper 重複（`touch-weighted` 與 `physical-weighted` 各 10 行，等第三個用到再抽）；`total > 0` 不成立的分支照現在的幾何到不了，留著防除以 0。

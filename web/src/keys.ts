@@ -118,18 +118,17 @@ export function toKey(
 	return { kind: "other" };
 }
 
-/** `physicalLetter` 讀的 `KeyboardEvent` 欄位。 */
+/** `physicalCode` 讀的 `KeyboardEvent` 欄位。 */
 export type PhysicalKeyEvent = KeyEvent &
-	Pick<KeyboardEvent, "code" | "shiftKey">;
+	Pick<KeyboardEvent, "code" | "shiftKey" | "getModifierState">;
 
 /**
  * 實體鍵盤的字母鍵照實體鍵位送機率（`Key::Weighted`，M4 票 07）時回 `KeyboardEvent.code`，交給綁定的
  * `Session.pressCode`；其他照 `toKey`，回 `null`。速成碼照實體鍵位：`code` 是 `KeyA`–`KeyZ` 就送，
- * 不看 `key`，換 Dvorak 等配列時打的碼不變（macOS 的輸入法也把字母鍵固定成美式鍵盤）。
- * 英文（`ascii`：英文直通與臨時英文）打的是英文，照配列（`key`）；大寫字母（Shift、CapsLock）、
- * 組合鍵與別的輸入法的事件也照舊。
+ * 不看 `key`，換 Dvorak 等配列時打的碼不變。英文（`ascii`：英文直通與臨時英文）打的是英文，照配列
+ * （`key`）；大寫（Shift、CapsLock）、組合鍵（含 AltGr）與別的輸入法的事件也照舊。
  */
-export function physicalLetter(
+export function physicalCode(
 	event: PhysicalKeyEvent,
 	ascii: boolean,
 ): string | null {
@@ -140,7 +139,8 @@ export function physicalLetter(
 		event.metaKey ||
 		event.altKey ||
 		event.shiftKey ||
-		/^[A-Z]$/.test(event.key) ||
+		event.getModifierState("CapsLock") ||
+		event.getModifierState("AltGraph") ||
 		!/^Key[A-Z]$/.test(event.code)
 	) {
 		return null;

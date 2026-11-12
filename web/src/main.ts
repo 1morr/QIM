@@ -8,7 +8,7 @@ import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
-import { LoneShift, physicalLetter, toKey } from "./keys.ts";
+import { LoneShift, physicalCode, toKey } from "./keys.ts";
 import {
 	checkModelPack,
 	NeuralReranker,
@@ -376,7 +376,7 @@ async function start(): Promise<void> {
 			syncContext();
 		}
 		// 中文模式的字母鍵照實體鍵位送按下的字母與鄰鍵的機率（M4 票 07）。
-		const code = physicalLetter(event, shown.ascii);
+		const code = physicalCode(event, shown.ascii);
 		const snapshot = code
 			? session.pressCode(code)
 			: session.press(key.kind, key.value);

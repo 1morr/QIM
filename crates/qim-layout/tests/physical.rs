@@ -72,7 +72,8 @@ fn every_letter_key_is_highest_and_sums_to_one() {
         assert_eq!(w[0].0.to_string(), pressed, "{code}");
         assert!(w[1..].iter().all(|&(_, p)| p < w[0].1), "{code}: {w:?}");
         assert!(w.windows(2).all(|pair| pair[0].1 >= pair[1].1), "{code}");
-        assert!(w.len() <= model.limit, "{code}");
+        // 錯位的排上每個鍵最多 6 個鄰鍵（同排左右、上下排各二）。
+        assert!(w.len() <= 7, "{code}");
         let sum: f32 = w.iter().map(|&(_, p)| p).sum();
         assert!((sum - 1.0).abs() < 1e-5, "{code}: {sum}");
         assert!(

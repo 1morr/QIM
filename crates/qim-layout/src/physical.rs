@@ -6,27 +6,11 @@
 //! W3C UI Events KeyboardEvent code Values），不照 `key`：換 Dvorak 等配列結果不變。各排錯位，所以
 //! 上下排與斜角都算鄰鍵（libime 只取同排左右，`docs/research/ranking-techniques.md` §5.2）。
 
-/// 實體鍵盤字母區的幾何：每排第一個鍵左緣的位置（鍵距為單位，1 鍵距約 19.05 mm）與該排的字母鍵，
-/// 由左到右、排距 1 鍵距。ANSI 與 ISO 鍵盤的字母區一樣：前面是 Tab 1.5、CapsLock 1.75、左 Shift 2.25
-/// （ISO 是 1.25 加 IntlBackslash 1）。只列字母鍵：數字、分號、逗號這類鍵不送字母，不算鄰鍵。
-const ROWS: [(f64, &[&str]); 3] = [
-    (
-        1.5,
-        &[
-            "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI", "KeyO", "KeyP",
-        ],
-    ),
-    (
-        1.75,
-        &[
-            "KeyA", "KeyS", "KeyD", "KeyF", "KeyG", "KeyH", "KeyJ", "KeyK", "KeyL",
-        ],
-    ),
-    (
-        2.25,
-        &["KeyZ", "KeyX", "KeyC", "KeyV", "KeyB", "KeyN", "KeyM"],
-    ),
-];
+/// 實體鍵盤字母區的幾何：每排第一個鍵左緣的位置（鍵距為單位，1 鍵距約 19.05 mm）與該排各鍵的 `code`
+/// 字母（`KeyQ` 的 `q`…），由左到右、排距 1 鍵距。ANSI 與 ISO 鍵盤的字母區一樣：前面是 Tab 1.5、
+/// CapsLock 1.75、左 Shift 2.25（ISO 是 1.25 加 IntlBackslash 1）。只列字母鍵：數字、分號、逗號這類鍵
+/// 不送字母，不算鄰鍵。
+const ROWS: [(f64, &str); 3] = [(1.5, "qwertyuiop"), (1.75, "asdfghjkl"), (2.25, "zxcvbnm")];
 
 /// 鄰鍵先驗的參數。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,32 +21,30 @@ pub struct PhysicalModel {
     pub sigma_keys: f64,
     /// 鍵中心在這個距離內（鍵距）的才算鄰鍵。
     pub radius_keys: f64,
-    /// 最多回幾個字母。
-    pub limit: usize,
 }
 
 impl Default for PhysicalModel {
     /// 初值都**沒有來源**，容錯的票在基準的 dev 切分上調：
     /// - `hit_probability` 0.9：按下的鍵是首選，打錯的先驗佔一成。
     /// - `sigma_keys` 0.5：F 的鄰鍵 D、G（1 鍵距）各約 0.023，R（1.03）0.020，C、V（1.12）0.014，T（1.25）0.007。
-    /// - `radius_keys` 1.5：中間的鍵有 6 個鄰鍵（同排左右，上下排各二）都在 1.25 內，下一圈從 1.6 起。
-    /// - `limit` 7：按下的鍵加 6 個鄰鍵。
+    /// - `radius_keys` 1.5：中間的鍵有 6 個鄰鍵（同排左右，上下排各二）都在 1.25 內，下一圈從 1.6 起；
+    ///   所以最多回 7 個字母。
     fn default() -> Self {
         Self {
             hit_probability: 0.9,
             sigma_keys: 0.5,
             radius_keys: 1.5,
-            limit: 7,
         }
     }
 }
 
 impl PhysicalModel {
     /// 按下實體鍵 `code` 時各字母的機率，由高到低（按下的鍵在第一；一樣遠的鄰鍵照排序由上而下、由左而右），
-    /// 最多 [`PhysicalModel::limit`] 個，和為 1。`code` 不是字母鍵（`KeyA`–`KeyZ`）時是 `None`。
+    /// 和為 1。`code` 不是字母鍵（`KeyA`–`KeyZ`）時是 `None`。
     pub fn letter_weights(&self, code: &str) -> Option<Vec<(char, f32)>> {
+        let pressed = code_letter(code)?;
         let keys = keys();
-        let &(pressed, x, y) = keys.iter().find(|&&(c, _, _)| c == code)?;
+        let &(_, x, y) = keys.iter().find(|&&(c, _, _)| c == pressed)?;
         let mut neighbours: Vec<(char, f64)> = keys
             .iter()
             .filter(|&&(c, _, _)| c != pressed)
@@ -70,20 +52,19 @@ impl PhysicalModel {
                 let distance = (kx - x).hypot(ky - y);
                 (distance <= self.radius_keys).then(|| {
                     let weight = (-distance * distance / (2.0 * self.sigma_keys.powi(2))).exp();
-                    (letter(c), weight)
+                    (c, weight)
                 })
             })
             .collect();
         // 穩定排序：一樣遠時留著 `ROWS` 的順序。
         neighbours.sort_by(|a, b| b.1.total_cmp(&a.1));
-        neighbours.truncate(self.limit.saturating_sub(1));
         let total: f64 = neighbours.iter().map(|&(_, w)| w).sum();
         let hit = if total > 0.0 {
             self.hit_probability
         } else {
             1.0
         };
-        let mut weights = vec![(letter(pressed), hit as f32)];
+        let mut weights = vec![(pressed, hit as f32)];
         weights.extend(
             neighbours
                 .into_iter()
@@ -94,21 +75,24 @@ impl PhysicalModel {
     }
 }
 
-/// 字母鍵與鍵中心的座標（鍵距）。
-fn keys() -> Vec<(&'static str, f64, f64)> {
+/// 字母鍵（`code` 的字母）與鍵中心的座標（鍵距）。
+fn keys() -> Vec<(char, f64, f64)> {
     ROWS.iter()
         .zip(0u32..)
-        .flat_map(|(&(offset, codes), row)| {
-            codes
-                .iter()
+        .flat_map(|(&(offset, letters), row)| {
+            letters
+                .chars()
                 .zip(0u32..)
-                .map(move |(&code, i)| (code, offset + f64::from(i) + 0.5, f64::from(row)))
+                .map(move |(c, i)| (c, offset + f64::from(i) + 0.5, f64::from(row)))
         })
         .collect()
 }
 
-/// `KeyF` → `f`：`ROWS` 只列 `Key` 加一個大寫字母的鍵。
-fn letter(code: &str) -> char {
-    let c = code.as_bytes()[3];
-    char::from(c.to_ascii_lowercase())
+/// `KeyF` → `f`；不是 `Key` 加一個大寫英文字母時是 `None`。
+fn code_letter(code: &str) -> Option<char> {
+    let mut rest = code.strip_prefix("Key")?.chars();
+    match (rest.next(), rest.next()) {
+        (Some(c), None) if c.is_ascii_uppercase() => Some(c.to_ascii_lowercase()),
+        _ => None,
+    }
 }
