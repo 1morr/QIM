@@ -27,6 +27,7 @@ pub mod scheme;
 pub mod simplified;
 pub mod sources;
 pub mod transcode;
+pub mod typo;
 pub mod unihan;
 pub mod verify;
 pub mod wiki;

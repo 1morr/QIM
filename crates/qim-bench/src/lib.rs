@@ -8,6 +8,7 @@
 
 mod baseline;
 mod items;
+mod keys;
 mod latency;
 mod report;
 mod score;
@@ -24,7 +25,10 @@ use qim_core::{
 use sha2::{Digest, Sha256};
 
 pub use baseline::{Baseline, Flips, SetBaseline, parse as parse_baseline};
-pub use items::{Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal};
+pub use items::{
+    Item, Unit, parse_context, parse_corpus, parse_fixed, parse_personal, parse_touch, parse_typo,
+};
+pub use keys::{TouchSurface, physical_key, top_char};
 pub use latency::{
     LONG_INPUT_KEYS, Latency, NativeTimer, Runs, Summary, Timers, Timing, UserData, WASM_BINDINGS,
     WasmTimer, lefts_to_first_segment, native_timing, native_timing_with, node_wasm_timer,
@@ -34,7 +38,9 @@ pub use latency::{
 pub use score::learned_model;
 /// 打一個集合，指標同基準；模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
 pub use score::score as score_set;
-pub use score::{Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult};
+pub use score::{
+    Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult, TypoStats,
+};
 
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const QUICK_PACK: &str = "build/packs/quick/quick.pack";
@@ -55,6 +61,26 @@ pub const CONTEXT_DIRS: [&str; 2] = ["bench/corpus/context", "bench/colloquial/c
 /// 「有前文」的一批題 `<名>` 打兩次，集合名是 `<名>` 接這些字尾：給前文、不給前文。
 /// 學習模式只打給前文的。
 pub const CONTEXT_SUFFIXES: [&str; 2] = ["·前文", "·前文·不給"];
+/// 「含打錯碼」的題目目錄（M4 票 08，plan §5.2），每個 `<名>.tsv` 是一批題，集合名是 `<名>` 接
+/// [`TYPO_SUFFIX`]。只有口語（維基的長句每句都有好幾處錯，量不出容錯的差別）。
+pub const TYPO_DIRS: [&str; 1] = ["bench/colloquial/typo"];
+pub const TYPO_SUFFIX: &str = "·打錯";
+/// 「觸控模擬」的題目目錄（M4 票 08），集合名是 `<名>` 接 [`TOUCH_SUFFIX`]；點擊經 [`TOUCH_LAYOUT`] 的空間模型
+/// 轉成按鍵機率。
+pub const TOUCH_DIRS: [&str; 1] = ["bench/colloquial/touch"];
+pub const TOUCH_SUFFIX: &str = "·觸控";
+/// 觸控模擬的佈局檔，由 `cargo xtask data` 寫（`qim_databuild::typo::TOUCH_LAYOUT`，`shared_paths` 比對）。
+pub const TOUCH_LAYOUT: &str = "build/layouts/gboard-quick.json";
+/// 觸控模擬的畫布一單位幾毫米：同產生點擊時（`qim_databuild::typo::TOUCH_MM_PER_UNIT`，`shared_paths` 比對）。
+pub const TOUCH_MM_PER_UNIT: f64 = 25.4 / 160.0;
+/// dev 模式的「含打錯碼」題：集合 `name` 的 dev 切分；`cargo xtask data` 寫的，不進 git，沒有就不打。
+pub fn dev_typo_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev-typo.tsv")
+}
+/// dev 模式的「觸控模擬」題，同 [`dev_typo_items`]。
+pub fn dev_touch_items(name: &str) -> String {
+    format!("build/corpus/{name}/dev-touch.tsv")
+}
 /// dev 模式的題目：[`CORPUS_DIRS`] 每個集合 `name` 的 dev 切分，相對 repo 根目錄；
 /// `cargo xtask data` 寫的，不進 git。
 pub fn dev_items(name: &str) -> String {
@@ -116,7 +142,8 @@ pub struct Outcome {
     pub packs: Vec<LoadedPack>,
     pub fixed: SetResult,
     /// 各語料集合，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序；接著「有前文」的各批題，
-    /// 依 [`CONTEXT_DIRS`] 的順序，每批給前文、不給前文各一個集合（[`CONTEXT_SUFFIXES`]）。
+    /// 依 [`CONTEXT_DIRS`] 的順序，每批給前文、不給前文各一個集合（[`CONTEXT_SUFFIXES`]）；最後是打錯碼的各批題
+    /// （[`load_typo_sets`]）。
     pub sets: Vec<SetResult>,
     pub personal: Personal,
     /// 跑之前的 baseline，報告裡對照用；沒有檔案時是 `None`。
@@ -239,6 +266,10 @@ pub fn run(
     let context_sets = load_context_sets(root)?;
     for (name, items) in &context_sets {
         sets.extend(score_with_and_without_context(&engine, name, items));
+    }
+    // 打錯碼的題（M4 票 08）不量延遲、不進學過的學習資料：輸入碼和一般的題同一批句子。
+    for (name, items) in load_typo_sets(root)? {
+        sets.push(score::score(&engine, &name, &items, false));
     }
     let personal =
         load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
@@ -383,6 +414,26 @@ pub fn run_dev(
         let items = parse_context(&text).map_err(|e| format!("{rel}：{e}"))?;
         sets.extend(score_with_and_without_context(&engine, name, &items));
     }
+    let mut typo = TypoReader::new(root);
+    for (name, _) in &corpora {
+        for (kind, rel) in [
+            (TypoKind::Typo, dev_typo_items(name)),
+            (TypoKind::Touch, dev_touch_items(name)),
+        ] {
+            let text = match fs::read_to_string(root.join(&rel)) {
+                Ok(text) => text,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(format!("讀不到 {rel}：{e}")),
+            };
+            let items = typo.parse(kind, &text, &rel)?;
+            sets.push(score::score(
+                &engine,
+                &format!("{name}{}", kind.suffix()),
+                &items,
+                false,
+            ));
+        }
+    }
     Ok(DevOutcome {
         packs,
         ranking: engine.scheme().ranking,
@@ -471,6 +522,75 @@ pub fn load_personal(root: &Path) -> Result<Personal<Vec<Item>>, String> {
 /// 各語料集合的名稱與題目，依 [`CORPUS_DIRS`] 的順序，同一目錄內依名稱排序。
 pub fn load_corpora(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
     load_sets(root, &CORPUS_DIRS, parse_corpus)
+}
+
+/// 「含打錯碼」與「觸控模擬」的各批題（集合名已接上 [`TYPO_SUFFIX`]、[`TOUCH_SUFFIX`]），依 [`TYPO_DIRS`]、
+/// [`TOUCH_DIRS`] 的順序；有觸控的題才讀 [`TOUCH_LAYOUT`]。
+pub fn load_typo_sets(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
+    let mut reader = TypoReader::new(root);
+    let mut sets = Vec::new();
+    for (kind, dirs) in [(TypoKind::Typo, TYPO_DIRS), (TypoKind::Touch, TOUCH_DIRS)] {
+        for dir in dirs {
+            for (name, path) in corpus_files(&root.join(dir))? {
+                let items = reader.parse(kind, &read(&path)?, &path.display().to_string())?;
+                sets.push((format!("{name}{}", kind.suffix()), items));
+            }
+        }
+    }
+    Ok(sets)
+}
+
+/// 打錯碼的兩種題。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TypoKind {
+    Typo,
+    Touch,
+}
+
+impl TypoKind {
+    fn suffix(self) -> &'static str {
+        match self {
+            TypoKind::Typo => TYPO_SUFFIX,
+            TypoKind::Touch => TOUCH_SUFFIX,
+        }
+    }
+}
+
+/// 讀打錯碼的題；觸控的題要 [`TOUCH_LAYOUT`]，第一次讀到觸控的題才載入、之後共用。
+struct TypoReader<'a> {
+    root: &'a Path,
+    surface: Option<TouchSurface>,
+}
+
+impl<'a> TypoReader<'a> {
+    fn new(root: &'a Path) -> Self {
+        Self {
+            root,
+            surface: None,
+        }
+    }
+
+    /// `what` 是錯誤訊息裡指出的檔案。
+    fn parse(&mut self, kind: TypoKind, text: &str, what: &str) -> Result<Vec<Item>, String> {
+        let items = match kind {
+            TypoKind::Typo => parse_typo(text),
+            TypoKind::Touch => {
+                let surface = match &mut self.surface {
+                    Some(surface) => surface,
+                    empty => empty.insert(load_touch_surface(self.root)?),
+                };
+                parse_touch(text, surface)
+            }
+        };
+        items.map_err(|e| format!("{what}：{e}"))
+    }
+}
+
+/// 讀 [`TOUCH_LAYOUT`]。
+fn load_touch_surface(root: &Path) -> Result<TouchSurface, String> {
+    let json = fs::read_to_string(root.join(TOUCH_LAYOUT))
+        .map_err(|e| format!("讀不到 {TOUCH_LAYOUT}：{e}；先跑 `cargo xtask data`"))?;
+    TouchSurface::from_json(&json, TOUCH_MM_PER_UNIT).map_err(|e| format!("{TOUCH_LAYOUT}：{e}"))
 }
 
 /// 「有前文」的各批題的名稱與題目，依 [`CONTEXT_DIRS`] 的順序，同一目錄內依名稱排序。

@@ -1664,3 +1664,220 @@ fn learning_mode_reports_personal_as_numbers_only() {
         );
     }
 }
+
+/// 「含打錯碼」的 toy（M4 票 08）：
+/// - 第 1 行 `a`（沒打錯）：同一般的題，答對；原樣讀法也對，改錯的分母。
+/// - 第 2 行打成 `b`：首選「月」答錯；模擬時「月」「🌙」都接不上又沒有下一頁，Esc（修正 1）照碼重打 `a`、空白，
+///   共 4 鍵。
+/// - 第 3 行 `ab` 打成 `ba`（兩碼對調、跨字）：`ba` 的候選都接不上，Esc（修正 1）照碼重打 `ab`，首選「明」
+///   接不上、選第 2 個「日月」（修正 1）。
+/// - 第 4 行碼全漏了：打不出組字，照碼重打 `a`（修正 1）、空白。
+const TOY_TYPO: &str = "a\ta\t日\nb\ta\t日\nb a\ta b\t日月\n\ta\t日\n";
+
+#[test]
+fn typo_sets_type_the_typed_keys_first_and_retype_the_code_when_stuck() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/typo/toy.tsv",
+        TOY_TYPO.as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let set = outcome
+        .sets
+        .iter()
+        .find(|s| s.name == "toy·打錯")
+        .expect("集合名是語料名接 ·打錯");
+    let per_item: Vec<(bool, usize, usize, bool)> = set
+        .items
+        .iter()
+        .map(|i| (i.correct, i.correction_count, i.keys, i.finished))
+        .collect();
+    assert_eq!(
+        per_item,
+        [
+            (true, 0, 2, true),
+            (false, 1, 4, true),
+            (false, 2, 6, true),
+            (false, 1, 2, true)
+        ]
+    );
+    let stats = set.typo_stats().expect("打錯碼的集合有統計");
+    assert_eq!(
+        (
+            stats.clean,
+            stats.clean_correct,
+            stats.mistyped,
+            stats.mistyped_correct
+        ),
+        (1, 1, 3, 0)
+    );
+    // 容錯進核心前，原樣讀法就是實際的讀法：沒打錯而原樣正確的 1 題，改錯 0。
+    assert_eq!((stats.literal_correct, stats.false_corrections), (1, 0));
+    assert_eq!(stats.false_correction_rate(), 0.0);
+    // 一般的集合沒有打錯碼的統計。
+    assert!(outcome.sets[0].typo_stats().is_none());
+    let report = outcome.report();
+    assert!(report.contains("原樣正確卻被改錯"), "{report}");
+    assert!(
+        report.contains("| toy·打錯 | 4 | 1 | 1 | 3 | 0 | 0/1 |"),
+        "{report}"
+    );
+}
+
+#[test]
+fn typo_sets_need_a_baseline_under_check() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/typo/toy.tsv",
+        TOY_TYPO.as_bytes(),
+    );
+    write(repo.path(), "bench/baseline.json", TOY_BASELINE);
+    let violations = check(&repo);
+    assert!(
+        violations.iter().any(|v| v.contains("toy·打錯")),
+        "{violations:?}"
+    );
+}
+
+/// 兩個並排的字母鍵 a、b（各 50 × 50），觸控模擬經空間模型把點擊轉成按鍵機率。
+const TWO_KEY_LAYOUT: &str = r#"{
+  "format": "qim-layout/1",
+  "variants": [{
+    "when": { "device": "phone", "orientation": "portrait" },
+    "canvas": { "width": 100, "height": 50 },
+    "pages": [{ "id": "letters", "keys": [
+      { "id": "a", "frame": { "x": 0, "y": 0, "w": 50, "h": 50 }, "tap": { "letter": "a" } },
+      { "id": "b", "frame": { "x": 50, "y": 0, "w": 50, "h": 50 }, "tap": { "letter": "b" } }
+    ]}]
+  }]
+}"#;
+
+#[test]
+fn touch_sets_turn_taps_into_letters_through_the_layout() {
+    let repo = repo();
+    write(
+        repo.path(),
+        qim_bench::TOUCH_LAYOUT,
+        TWO_KEY_LAYOUT.as_bytes(),
+    );
+    // 第 1 行點中 a；第 2 行要打 a 卻點到 b（打錯）。
+    write(
+        repo.path(),
+        "bench/colloquial/touch/toy.tsv",
+        "10.0,25.0\ta\t日\n60.0,25.0\ta\t日\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let set = outcome.sets.iter().find(|s| s.name == "toy·觸控").unwrap();
+    let stats = set.typo_stats().unwrap();
+    assert_eq!(
+        (stats.clean, stats.clean_correct, stats.mistyped),
+        (1, 1, 1)
+    );
+    assert_eq!(set.wrong_lines().into_iter().collect::<Vec<_>>(), [2]);
+}
+
+#[test]
+fn touch_sets_without_the_layout_point_at_cargo_xtask_data() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/touch/toy.tsv",
+        "10.0,25.0\ta\t日\n".as_bytes(),
+    );
+    let error = run(repo.path(), Mode::Report).unwrap_err();
+    assert!(error.contains(qim_bench::TOUCH_LAYOUT), "{error}");
+    assert!(error.contains("cargo xtask data"), "{error}");
+}
+
+/// dev 模式有打錯碼的調參題就打（M4 票 08），集合名同 test、接在最後，報告附打錯碼的表；沒有就不打。
+#[test]
+fn dev_mode_scores_typo_and_touch_items_when_present() {
+    let repo = repo_with_dev();
+    let without = dev(&repo, &[]).unwrap();
+    assert!(without.sets.iter().all(|s| s.typo_stats().is_none()));
+    write(
+        repo.path(),
+        "build/corpus/toy/dev-typo.tsv",
+        "b a\ta b\t日月\n".as_bytes(),
+    );
+    write(
+        repo.path(),
+        qim_bench::TOUCH_LAYOUT,
+        TWO_KEY_LAYOUT.as_bytes(),
+    );
+    write(
+        repo.path(),
+        "build/corpus/toy/dev-touch.tsv",
+        "10.0,25.0 60.0,25.0\ta b\t日月\n".as_bytes(),
+    );
+    let outcome = dev(&repo, &[]).unwrap();
+    let names: Vec<&str> = outcome.sets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names[names.len() - 2..], ["toy·打錯", "toy·觸控"]);
+    let typo = outcome.sets[names.len() - 2].typo_stats().unwrap();
+    assert_eq!((typo.clean, typo.mistyped), (0, 1));
+    // 兩個點擊都點中：沒打錯，和 dev 題一樣在方案檔的參數下答錯（`明` 排在 `日月` 前）。
+    let touch = outcome.sets[names.len() - 1].typo_stats().unwrap();
+    assert_eq!((touch.clean, touch.clean_correct), (1, 0));
+    assert!(outcome.report().contains("原樣正確卻被改錯"));
+}
+
+/// 沒打錯的打錯碼題（實際按的鍵等於碼）照一般的題模擬：修正次數、按鍵數、打不打得出都一樣。
+/// `a b 日目`：「目」不在碼表，選「日」（修正 1）後 `b` 卡住、只剩一個字，打不出；不能因為它在打錯碼的集合
+/// 就多按一次 Esc 照碼重打。
+#[test]
+fn clean_typo_items_simulate_like_ordinary_items() {
+    let repo = repo();
+    let corpus = "a\t日\na\t曰\na b\t日月\nc b\t十月\na b\t日目\n";
+    write(repo.path(), "bench/corpus/toy.tsv", corpus.as_bytes());
+    let typo: String = corpus
+        .lines()
+        .map(|line| {
+            let (codes, _) = line.split_once('\t').unwrap();
+            format!("{codes}\t{line}\n")
+        })
+        .collect();
+    write(
+        repo.path(),
+        "bench/colloquial/typo/toy.tsv",
+        typo.as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let summary = |name: &str| -> Vec<(bool, usize, usize, bool)> {
+        let set = outcome.sets.iter().find(|s| s.name == name).unwrap();
+        set.items
+            .iter()
+            .map(|i| (i.correct, i.correction_count, i.keys, i.finished))
+            .collect()
+    };
+    assert_eq!(summary("toy·打錯"), summary("toy"));
+    let stats = outcome
+        .sets
+        .iter()
+        .find(|s| s.name == "toy·打錯")
+        .unwrap()
+        .typo_stats()
+        .unwrap();
+    assert_eq!(stats.mistyped, 0);
+}
+
+/// 打錯的第一輪不翻頁：要打 `a`（日）卻打成 `c`，`c` 的候選有兩頁，第一頁接不上就 Esc 照碼重打（修正 1），
+/// 不先翻到第二頁（使用者看得到組字打錯了）。
+#[test]
+fn a_mistyped_composition_is_cleared_without_turning_pages() {
+    let repo = repo();
+    write(
+        repo.path(),
+        "bench/colloquial/typo/toy.tsv",
+        "c\ta\t日\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let set = outcome.sets.iter().find(|s| s.name == "toy·打錯").unwrap();
+    let item = &set.items[0];
+    // c、Esc、a、空白。
+    assert_eq!(
+        (item.correction_count, item.keys, item.finished),
+        (1, 4, true)
+    );
+}

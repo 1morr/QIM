@@ -4,13 +4,23 @@
 //! 學習模式 [`learning`] 例外）；有前文的題先給前文（`Session::set_context`）：
 //! - 逐鍵打完輸入碼不選字：最後的首選算正確率，途中的首選算跳動。
 //! - 模擬使用者選字打出整題：算修正次數與每字按鍵數（[`simulate`]）。
+//!
+//! 按鍵照殼的做法送（[`physical_key`]：實體鍵的按鍵機率）；「含打錯碼」與「觸控模擬」的題第一次打整題時按
+//! [`Item::typed`]，沒打錯的題另用「原樣讀法」打一次（[`literal_options`]），量「原樣正確卻被改錯」（M4 票 08）。
 
 use std::collections::BTreeSet;
 use std::fmt;
 
-use qim_core::{Candidate, Engine, Key, Session, Snapshot, UserModel};
+use qim_core::{Candidate, Engine, Key, Options, Session, Snapshot, UserModel};
 
 use crate::items::{Item, Unit};
+use crate::keys::{physical_key, top_char};
+
+/// 「原樣讀法」的選項：容錯關（M4 票 08）。「原樣正確卻被改錯」比的是同一題用它與用預設選項打的首選。
+/// 容錯的開關由票 10 加進 `Options`，在那之前核心沒有容錯，原樣讀法就是預設選項，改錯一定是 0。
+fn literal_options() -> Options {
+    Options::default()
+}
 
 /// 一題的結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +41,39 @@ pub struct ItemResult {
     pub jitter: usize,
     /// 模擬打得出整題；一個單位一個單位打、翻完所有頁都接不上時為假。
     pub finished: bool,
+    /// 「含打錯碼」與「觸控模擬」的題才有（M4 票 08）。
+    pub typed: Option<Typed>,
+}
+
+/// 打錯碼的一題的結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Typed {
+    /// 沒打錯：每一鍵機率最高的字母都等於原本的碼（觸控是每個點擊都點中要打的鍵）。
+    pub clean: bool,
+    /// 沒打錯的題用原樣讀法（[`literal_options`]）打的首選正確；打錯的題是 `None`。
+    pub literal_correct: Option<bool>,
+}
+
+/// 打錯碼的集合的統計（M4 票 08）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TypoStats {
+    /// 沒打錯的題與其中首選正確的。
+    pub clean: usize,
+    pub clean_correct: usize,
+    /// 打錯的題與其中首選正確的（容錯把它讀回來了）。
+    pub mistyped: usize,
+    pub mistyped_correct: usize,
+    /// 沒打錯、原樣讀法首選正確的題：「原樣正確卻被改錯」的分母。
+    pub literal_correct: usize,
+    /// 其中首選不正確的：原樣正確卻被改錯。
+    pub false_corrections: usize,
+}
+
+impl TypoStats {
+    /// 「原樣正確卻被改錯」的比例：沒打錯而原樣讀法首選正確的題裡，實際首選（容錯開）不正確的比例。
+    pub fn false_correction_rate(&self) -> f64 {
+        ratio(self.false_corrections as f64, self.literal_correct as f64)
+    }
 }
 
 /// 一個集合的結果。
@@ -133,6 +176,27 @@ impl SetResult {
         metrics(self.items.iter(), weighted)
     }
 
+    /// 打錯碼的集合的統計；不是打錯碼的集合時是 `None`。
+    pub fn typo_stats(&self) -> Option<TypoStats> {
+        let mut stats: Option<TypoStats> = None;
+        for item in &self.items {
+            let Some(typed) = item.typed else { continue };
+            let s = stats.get_or_insert_with(TypoStats::default);
+            if typed.clean {
+                s.clean += 1;
+                s.clean_correct += usize::from(item.correct);
+            } else {
+                s.mistyped += 1;
+                s.mistyped_correct += usize::from(item.correct);
+            }
+            if typed.literal_correct == Some(true) {
+                s.literal_correct += 1;
+                s.false_corrections += usize::from(!item.correct);
+            }
+        }
+        stats
+    }
+
     /// 依 [`LENGTH_GROUPS`] 分組；沒有題的組是 `None`。
     pub fn length_groups(&self) -> [Option<GroupStats>; 5] {
         let mut lower = 0;
@@ -184,9 +248,21 @@ pub fn score(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetR
         let expected = item.expected();
         let chars = expected.chars().count();
         let context = item.context.as_deref();
-        let (top, jitter) = type_through(engine, context, &item.units);
-        let typing = simulate(engine, None, context, &item.units);
+        let code_keys = code_keys(&item.units);
+        let keys = item.typed.as_deref().unwrap_or(&code_keys);
+        let (top, jitter) = type_through(engine, Options::default(), context, &item.units, keys);
+        let typing = simulate(engine, None, context, item);
         let correct = top == expected;
+        let typed = item.typed.as_ref().map(|typed| {
+            let clean = is_clean(&item.units, typed);
+            let literal_correct = clean.then(|| {
+                type_through(engine, literal_options(), context, &item.units, typed).0 == expected
+            });
+            Typed {
+                clean,
+                literal_correct,
+            }
+        });
         result.items.push(ItemResult {
             line: item.line,
             weight: item.weight,
@@ -197,6 +273,7 @@ pub fn score(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetR
             keys: typing.keys,
             jitter,
             finished: typing.finished,
+            typed,
         });
         if !correct {
             result.failures.push(Failure {
@@ -227,8 +304,8 @@ pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> L
     let (mut off, mut on) = (0, 0);
     for item in items {
         let context = item.context.as_deref();
-        off += simulate(engine, None, context, &item.units).correction_count;
-        on += simulate(engine, Some(&mut learned), context, &item.units).correction_count;
+        off += simulate(engine, None, context, item).correction_count;
+        on += simulate(engine, Some(&mut learned), context, item).correction_count;
     }
     LearningSet {
         name: name.to_string(),
@@ -243,12 +320,7 @@ pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> L
 pub fn learned_model<'a>(engine: &Engine, items: impl IntoIterator<Item = &'a Item>) -> UserModel {
     let mut learned = UserModel::default();
     for item in items {
-        simulate(
-            engine,
-            Some(&mut learned),
-            item.context.as_deref(),
-            &item.units,
-        );
+        simulate(engine, Some(&mut learned), item.context.as_deref(), item);
     }
     learned
 }
@@ -261,20 +333,44 @@ fn top_of(snapshot: &Snapshot) -> String {
         .unwrap_or_default()
 }
 
-/// 逐鍵打完輸入碼、不選字：回傳最後的首選與跳動次數。有 `context` 時先給前文。
+/// 每個單位的碼照實體鍵盤要按的鍵（[`physical_key`]）。
+fn code_keys(units: &[Unit]) -> Vec<Vec<Key>> {
+    units
+        .iter()
+        .map(|unit| unit.code.chars().map(physical_key).collect())
+        .collect()
+}
+
+/// 每一鍵機率最高的字母都等於原本的碼。
+fn is_clean(units: &[Unit], typed: &[Vec<Key>]) -> bool {
+    units.len() == typed.len()
+        && units
+            .iter()
+            .zip(typed)
+            .all(|(unit, keys)| keys.iter().map(top_char).eq(unit.code.chars().map(Some)))
+}
+
+/// 逐鍵按完 `keys`（每個單位一組）、不選字：回傳最後的首選與跳動次數。有 `context` 時先給前文。
 ///
 /// 跳動：每一鍵之前，首選開頭屬於已打完的單位的那幾個字（首選比它短就取整個首選），
 /// 被這一鍵改掉就算一次。
-fn type_through(engine: &Engine, context: Option<&str>, units: &[Unit]) -> (String, usize) {
+fn type_through(
+    engine: &Engine,
+    options: Options,
+    context: Option<&str>,
+    units: &[Unit],
+    keys: &[Vec<Key>],
+) -> (String, usize) {
     let mut session = Session::default();
+    session.set_options(options);
     if let Some(context) = context {
         session.set_context(context);
     }
     let mut user = UserModel::default();
     let (mut top, mut done_chars, mut jitter) = (String::new(), 0, 0);
-    for unit in units {
-        for c in unit.code.chars() {
-            let next = top_of(&session.handle(engine, &mut user, Key::for_input(c)));
+    for (unit, keys) in units.iter().zip(keys) {
+        for key in keys {
+            let next = top_of(&session.handle(engine, &mut user, key.clone()));
             let settled: String = top.chars().take(done_chars).collect();
             if !next.starts_with(&settled) {
                 jitter += 1;
@@ -294,7 +390,7 @@ struct Typing {
     finished: bool,
 }
 
-/// 修正次數的模擬（plan §5.2）：打完整題的輸入碼，接著反覆
+/// 修正次數的模擬（plan §5.2）：打完整題的輸入碼（有 [`Item::typed`] 時第一次按它，M4 票 08），接著反覆
 /// 1. 第一頁的首選接得上還沒打出的文字（已選定的分段之後）就按空白；
 /// 2. 否則選這頁接得上的最長候選（數字鍵）；
 /// 3. 這頁都接不上就翻頁。
@@ -303,6 +399,11 @@ struct Typing {
 /// 蓋滿時連同固定的分段一起上屏。上屏後組字清空、題目還沒打完，就把剩下的單位的碼再打一次。
 /// 翻完所有頁都接不上（卡住）時：還剩兩個以上單位就按 Esc 清掉（算一次修正），
 /// 之後一個單位一個單位打；只剩一個單位，或已經一個一個打了還卡住，就是打不出這題。
+///
+/// 打錯的題（[`is_clean`] 為假）之後重打一律照 `units` 的碼：使用者看到打錯了，重打想打的字。打錯的鍵組出的
+/// 組字這頁接不上時不翻頁，按 Esc 照碼重打剩下的字（算一次修正），照碼打還卡住才照上面一個一個打；打錯的鍵
+/// 打完、選完字後組字清空而題目還沒打完（漏掉的字，或那些鍵根本打不出組字）時，照碼重打剩下的字，也算一次
+/// 修正。沒打錯的題照一般的題模擬。
 ///
 /// 有 `context` 時每次從空的組字打起都先給前文：`context` 接著這題已上屏的字，同殼在上屏後
 /// 給游標前的文字。
@@ -313,8 +414,16 @@ fn simulate(
     engine: &Engine,
     learning: Option<&mut UserModel>,
     context: Option<&str>,
-    units: &[Unit],
+    item: &Item,
 ) -> Typing {
+    let units = item.units.as_slice();
+    let code_keys = code_keys(units);
+    // 第一次打整題時按的鍵；用過就換成照碼重打。沒打錯的題照樣按它（觸控的點擊帶著空間模型的機率），
+    // 但模擬同一般的題。
+    let mut first = item.typed.as_deref();
+    let mistyped = item.typed.as_ref().is_some_and(|t| !is_clean(units, t));
+    // 組字還是打錯的鍵組出來的（打錯的第一輪）：卡住或清空時照碼重打，算一次修正。
+    let mut in_typo_round = false;
     let mut session = Session::default();
     let mut blank = UserModel::default();
     let forget = learning.is_none();
@@ -357,10 +466,27 @@ fn simulate(
                 let typed: String = target.chars().take(done).collect();
                 session.set_context(&format!("{context}{typed}"));
             }
-            for c in units[next..end].iter().flat_map(|u| u.code.chars()) {
-                snapshot = press(&mut session, Key::for_input(c), &mut typing);
+            let keys = match first.take() {
+                Some(typed) => {
+                    in_typo_round = mistyped;
+                    typed
+                }
+                None => {
+                    // 打錯的鍵打完、組字清空了題目卻還沒打完（漏掉的字、打不出組字）：使用者發現打錯、
+                    // 照碼重打剩下的字，算一次修正。
+                    if std::mem::take(&mut in_typo_round) {
+                        typing.correction_count += 1;
+                    }
+                    &code_keys
+                }
+            };
+            for key in keys[next..end].iter().flatten() {
+                snapshot = press(&mut session, key.clone(), &mut typing);
             }
             if snapshot.composition.input.is_empty() {
+                if in_typo_round {
+                    continue;
+                }
                 return typing;
             }
             continue;
@@ -379,6 +505,10 @@ fn simulate(
             typing.correction_count += 1;
             let digit = u8::try_from(index + 1).expect("每頁最多 9 個候選");
             (Key::Digit(digit), Some(chosen(index)))
+        } else if std::mem::take(&mut in_typo_round) {
+            // 打錯的鍵組出的這頁接不上：使用者看得到組字打錯了，不翻頁，Esc 清掉照碼重打剩下的字（算一次修正）。
+            typing.correction_count += 1;
+            (Key::Escape, None)
         } else if snapshot.has_more {
             typing.correction_count += 1;
             (Key::PageDown, None)

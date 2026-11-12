@@ -13,6 +13,10 @@ by spaces) and a tab. The files of the same name under context/ keep up to
 1000 held-out test clauses that follow other text on the same line of the source,
 one per line: the text before the clause as written (up to 2 clauses and the
 punctuation between them), a tab, the Quick codes, a tab and the clause.
+The files of the same name under typo/ and touch/ repeat the clauses of the main
+file, each preceded by machine-generated simulated typing and a tab: the keys of a
+keyboard typist with synthetic typing errors (typo/) or simulated touch points on an
+on-screen keyboard (touch/).
 
 ## hkcancor.tsv
 
