@@ -24,7 +24,10 @@ test("打 3.5、12:30 讀回半形、不進組字，數字後的逗號是全形"
 	await expect(text).toHaveValue("3.");
 	await expect(composition).toHaveText("");
 	await page.screenshot({ path: testInfo.outputPath("digit-separator.png") });
-	await page.keyboard.type("5 12:30 1,");
+	// 冒號用 Shift 加鍵送（中文模式照實體鍵位與 Shift 換成美式字元，票 07）。
+	await page.keyboard.type("5 12");
+	await page.keyboard.press("Shift+Semicolon");
+	await page.keyboard.type("30 1,");
 	await expect(text).toHaveValue("3.5 12:30 1，");
 });
 

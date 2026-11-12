@@ -384,19 +384,42 @@ test("美式鍵盤沒有的鍵、具名的鍵、組合鍵與 AltGr 不換", () =
 	);
 });
 
-test("key 本來就是美式鍵盤這個鍵的字元時不換", () => {
-	// 美式鍵盤、AZERTY 的實體 E 鍵，與 Playwright 的 press("@")（`code` Digit2、沒帶 shiftKey）。
+test("key 已是美式鍵盤上那個字元時不換", () => {
+	// 美式鍵盤、AZERTY 的實體 E 鍵、美式的 Shift+2。
 	assert.equal(usCharacter(physical("KeyE", "e")), undefined);
 	assert.equal(
 		usCharacter(physical("KeyF", "F", { shiftKey: true })),
 		undefined,
 	);
-	assert.equal(usCharacter(physical("Digit2", "@")), undefined);
-	assert.equal(usCharacter(physical("Slash", "?")), undefined);
+	assert.equal(
+		usCharacter(physical("Digit2", "@", { shiftKey: true })),
+		undefined,
+	);
 	assert.equal(
 		usCharacter(physical("Quote", '"', { shiftKey: true })),
 		undefined,
 	);
+	// 沒按 Shift 卻是上排的字元：不是美式鍵盤這個狀態打的，照實體鍵位換。
+	assert.equal(usCharacter(physical("Digit2", "@")), "2");
 	// 同一個字元在美式鍵盤的別的鍵上（AZERTY 實體 1 鍵的 & 是美式 7 鍵的）照樣換。
 	assert.equal(usCharacter(physical("Digit1", "&")), "1");
+});
+
+test("字母的大小寫照 key：macOS 的 Shift 加 CapsLock 是大寫，照系統", () => {
+	assert.equal(
+		usCharacter(physical("KeyA", "A", { shiftKey: true }, ["CapsLock"])),
+		undefined,
+	);
+	// AZERTY 的實體 Q 鍵在 macOS 按 Shift 加 CapsLock 打 A：照美式是大寫 Q。
+	assert.equal(
+		usCharacter(physical("KeyQ", "A", { shiftKey: true }, ["CapsLock"])),
+		"Q",
+	);
+	assert.equal(usCharacter(physical("KeyQ", "a", { shiftKey: true })), "q");
+});
+
+test("dead key 不換，交給系統組字", () => {
+	// AZERTY 的實體 [ 鍵是 dead key ^。
+	assert.equal(usCharacter(physical("BracketLeft", "Dead")), undefined);
+	assert.equal(usCharacter(physical("Quote", "Dead")), undefined);
 });

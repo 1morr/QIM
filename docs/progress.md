@@ -35,12 +35,12 @@
 | 2026-11-12 | M4 06 | `Key::Weighted` 與 `qim-layout` 的空間模型（到形狀的距離加 2D Gaussian、點中的鍵一定最高）；網頁觸控送機率、面板顯示；bench 前後相同；見票 06 | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
 | 2026-11-12 | M4 05b | `qim_bench::run` 收 `Timers`，`run.rs` 改用數字固定的假原生計時器，load 61 下連跑三次都綠；補 `--check` 延遲接線與真實計時形狀的測試；見票 05b | 新 session 下 `/implement .scratch/m4/issues/05c-page-turn-e2e-race.md` |
 | 2026-11-12 | M4 05c | 翻頁 e2e 的競態是測試的問題（重排翻頁中回來照 plan 延到第一頁）：兩個翻頁測試關掉重排，補翻頁中途回來的 e2e；見票 05c | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
-| 2026-11-12 | M4 07 | 實體鍵盤送 `KeyboardEvent.code`，`qim-layout` 的鄰鍵先驗（錯位的排、鍵中心距離）轉成 `Weighted`；名詞改成按鍵機率；bench 前後相同；見票 07 | 新 session 下 `/implement .scratch/m4/issues/08-typo-bench.md` |
+| 2026-11-12 | M4 07 | 實體鍵盤送 `code`，`qim-layout` 的鄰鍵先驗轉成 `Weighted`；中文模式整個當美式鍵盤（使用者決定）；名詞改成按鍵機率；bench 前後相同；見票 07 | 新 session 下 `/implement .scratch/m4/issues/08-typo-bench.md` |
 
 ## 偏差與決定
 
 - 2026-11-12 M4 票 07：名詞「觸控機率」改成按鍵機率（含實體鍵盤），新增鄰鍵先驗；`touch_weights` → `key_weights`、面板 `debug-weights`；改名詞表、plan §0、§2.1、§3.1。
-- 2026-11-12 M4 票 07（使用者決定）：中文模式整個當美式鍵盤，字母與標點都照實體鍵位（`code`），英文直通與臨時英文照配列；改 brief §4.8、plan §2.1。
+- 2026-11-12 M4 票 07（使用者決定）：中文模式整個當美式鍵盤，字母與標點都照實體鍵位（`code`），英文直通照配列（臨時英文同樣照配列是票 07 的推論）；改 brief §4.8、plan §2.1。
 - 2026-11-12 M4 票 06（協調者要求）：空間模型保證點中的鍵的字母機率最高（不是就提到和最高的平手、排第一）；plan §2.1 的 `Weighted(Vec)` 改成 `Weights` 型別，§2.6 加〈空間模型〉。
 - 2026-11-12 M4 票 13（使用者決定）：一年沒用的條目停用、不刪（時鐘錯了改回來要恢復、舊備份照收），實體刪除只在到上限時淘汰；改 plan §2.4、brief §4.5、spec〈細節〉。
 - 2026-11-12 M4 票 13（協調者決定）：中文條目沒有出現門檻，上限淘汰「先刪沒到門檻的」由票 14 驗；v3 的 entry 加 `last_commit_date`（12 欄）；改 plan §2.4、brief §4.5。

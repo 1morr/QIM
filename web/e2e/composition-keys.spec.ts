@@ -90,8 +90,10 @@ test("組字中按標點，先上屏首選再接全形標點", async ({ page }, 
 	await expect(composition).toHaveText("");
 	await page.keyboard.type("a.");
 	await expect(text).toHaveValue("門口，日。");
-	// 沒有全形的符號照原樣接在後面。
-	await page.keyboard.type("a@");
+	// 沒有全形的符號照原樣接在後面。上排的符號用 Shift 加鍵送：中文模式照實體鍵位與 Shift 換成美式的字元
+	// （票 07），Playwright 的 type("@") 不帶 shiftKey。
+	await page.keyboard.type("a");
+	await page.keyboard.press("Shift+Digit2");
 	await expect(text).toHaveValue("門口，日。日@");
 	await expect(composition).toHaveText("");
 	await page.screenshot({ path: testInfo.outputPath("punct.png") });
@@ -109,9 +111,10 @@ test("沒有組字時：標點出全形，其他符號、大寫、Enter 照瀏�
 	page,
 }) => {
 	const { text, composition } = ui(page);
-	await page.keyboard.type(",?");
+	await page.keyboard.type(",");
+	await page.keyboard.press("Shift+Slash");
 	await expect(text).toHaveValue("，？");
-	await page.keyboard.type("@");
+	await page.keyboard.press("Shift+Digit2");
 	await page.keyboard.press("Shift+B");
 	await page.keyboard.press("Enter");
 	await page.keyboard.press("ArrowLeft");

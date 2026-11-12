@@ -134,13 +134,9 @@ export function physicalCode(
 ): string | null {
 	if (
 		ascii ||
-		event.isComposing ||
-		event.ctrlKey ||
-		event.metaKey ||
-		event.altKey ||
+		!plain(event) ||
 		event.shiftKey ||
 		event.getModifierState("CapsLock") ||
-		event.getModifierState("AltGraph") ||
 		!/^Key[A-Z]$/.test(event.code)
 	) {
 		return null;
@@ -176,58 +172,59 @@ const US_SYMBOLS: Record<string, [string, string]> = {
 	Slash: ["/", "?"],
 };
 
-/**
- * 中文模式整個當美式鍵盤（使用者 2026-11-12 決定，M4 票 07）：這個鍵在美式鍵盤上打的字元，換 Dvorak、
- * AZERTY 等配列時中文模式的手感跟美式一樣。照實體鍵位（`code`）與 Shift，CapsLock 只管字母（Shift 加
- * CapsLock 是小寫）。美式鍵盤沒有的鍵（ISO 的 `IntlBackslash`…）、具名的鍵、數字鍵台、組合鍵、AltGr 與
- * 別的輸入法組字中是 `undefined`，照 `key`；`key` 本來就是美式鍵盤上的那個字元時也是（不必換）。
- * 英文直通與臨時英文照配列，呼叫端不換。
- */
-export function usCharacter(event: PhysicalKeyEvent): string | undefined {
-	if (
+/** 沒有組合鍵（Ctrl、Meta、Alt、AltGr）、也不在別的輸入法組字中：鍵照它本身處理。 */
+function plain(event: PhysicalKeyEvent): boolean {
+	return !(
 		event.isComposing ||
 		event.ctrlKey ||
 		event.metaKey ||
 		event.altKey ||
 		event.getModifierState("AltGraph")
-	) {
+	);
+}
+
+/**
+ * 中文模式整個當美式鍵盤（使用者 2026-11-12 決定，M4 票 07）：這個鍵在美式鍵盤上打的字元，換 Dvorak、
+ * AZERTY 等配列時中文模式的手感跟美式一樣。照實體鍵位（`code`）與 Shift；字母的大小寫照 `key` 本身
+ * （`key` 不是字母時照 Shift 與 CapsLock，兩個一起按是小寫），系統怎麼處理 Shift 加 CapsLock 不必重算。
+ * 不必換（`key` 已是那個字元）、美式鍵盤沒有的鍵（ISO 的 `IntlBackslash`…）、具名的鍵、數字鍵台、
+ * dead key（`Dead`，交給系統組字）、組合鍵、AltGr 與別的輸入法組字中是 `undefined`，照 `key`。
+ * 英文直通與臨時英文照配列，呼叫端不換。
+ */
+export function usCharacter(event: PhysicalKeyEvent): string | undefined {
+	if (!plain(event) || event.key === "Dead") {
 		return undefined;
 	}
-	const letter = /^Key([A-Z])$/.exec(event.code)?.[1];
-	const us: [string, string] | undefined =
-		letter !== undefined
-			? [letter.toLowerCase(), letter]
-			: US_SYMBOLS[event.code];
-	if (us === undefined) {
-		return undefined;
+	const letter = /^Key([A-Z])$/.exec(event.code)?.[1].toLowerCase();
+	let character: string | undefined;
+	if (letter !== undefined) {
+		const upper = /^\p{L}$/u.test(event.key)
+			? event.key !== event.key.toLowerCase()
+			: event.shiftKey !== event.getModifierState("CapsLock");
+		character = upper ? letter.toUpperCase() : letter;
+	} else {
+		character = US_SYMBOLS[event.code]?.[event.shiftKey ? 1 : 0];
 	}
-	const shifted =
-		letter !== undefined
-			? event.shiftKey !== event.getModifierState("CapsLock")
-			: event.shiftKey;
-	const want = us[shifted ? 1 : 0];
-	// 已經是美式鍵盤上的字元，不必換：美式與字母位置相同的配列；Playwright 的 press("@") 送上排的字元卻
-	// 沒帶 shiftKey，也當成已經是美式。
-	if (event.key === want || (!event.shiftKey && event.key === us[1])) {
-		return undefined;
-	}
-	return want;
+	return character === event.key ? undefined : character;
 }
 
 /**
  * 給 `toKey` 的事件：中文模式（`ascii` 為假）把 `key` 換成美式鍵盤的字元（`usCharacter`），英文直通與
- * 臨時英文照原樣（照配列）。`us` 是換上的字元，沒換時是 `undefined`。
+ * 臨時英文照原樣（照配列）。`character` 是換上的字元，沒換時是 `undefined`。
  */
 export function usKeyEvent(
 	event: PhysicalKeyEvent,
 	ascii: boolean,
-): { event: KeyEvent; us: string | undefined } {
-	const us = ascii ? undefined : usCharacter(event);
-	if (us === undefined) {
-		return { event, us };
+): { event: KeyEvent; character: string | undefined } {
+	const character = ascii ? undefined : usCharacter(event);
+	if (character === undefined) {
+		return { event, character };
 	}
 	const { isComposing, ctrlKey, metaKey, altKey } = event;
-	return { event: { key: us, isComposing, ctrlKey, metaKey, altKey }, us };
+	return {
+		event: { key: character, isComposing, ctrlKey, metaKey, altKey },
+		character,
+	};
 }
 
 /** Shift 按下到放開多久以內算單按：librime `ascii_composer` 的 500 ms。 */

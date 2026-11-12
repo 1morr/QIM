@@ -385,9 +385,9 @@ async function start(): Promise<void> {
 		try {
 			if (!snapshot.handled) {
 				// 換成美式字元的鍵：瀏覽器會照配列插入 `key`，改由網頁插入核心收到的那個字元。
-				if (remapped.us !== undefined && remapped.us !== event.key) {
+				if (remapped.character !== undefined) {
 					event.preventDefault();
-					insert(text, remapped.us);
+					insert(text, remapped.character);
 				}
 				// 交還瀏覽器的鍵（空白、Enter、方向鍵…）收起了聯想：候選列跟著清掉。
 				render(snapshot);
