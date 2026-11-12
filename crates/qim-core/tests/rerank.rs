@@ -259,8 +259,8 @@ fn an_inserted_path_commits_and_learns_like_a_sentence() {
     let export = ime.user.export();
     let rows: Vec<Vec<&str>> = export
         .lines()
-        .filter(|l| l.starts_with("quick\t"))
-        .map(|l| l.split('\t').take(4).collect())
+        .filter(|l| l.starts_with("entry\tquick\t"))
+        .map(|l| l.split('\t').skip(1).take(4).collect())
         .collect();
     assert_eq!(
         rows,
@@ -337,7 +337,7 @@ fn an_inserted_path_after_a_selected_beginning_commits_with_it() {
         ime.user
             .export()
             .lines()
-            .any(|l| l.starts_with("quick\t月晶月\tbab\t1\t")),
+            .any(|l| l.starts_with("entry\tquick\t月晶月\tbab\t1\t")),
         "{}",
         ime.user.export()
     );

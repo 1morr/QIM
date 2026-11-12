@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Packs, Ranking,
-    SEPARATOR, Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Date, Engine, Key, Lexicon, LexiconPack, Options, PAGE_SIZE, Packs,
+    Ranking, SEPARATOR, Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// 測試方案的最長碼；碼表裡有更長的碼，那些不是字的碼。
@@ -399,7 +399,7 @@ proptest! {
                 .filter(|line| !is_row_of(line, other))
                 .map(|line| format!("{line}\n"))
                 .collect();
-            let without = UserModel::import(&without).unwrap();
+            let without = UserModel::import(&without, None).map(|i| i.user).unwrap();
             for input in &inputs {
                 prop_assert_eq!(
                     engines[i].candidates(&shared, input),
@@ -410,12 +410,14 @@ proptest! {
         }
     }
 
-    /// 匯出後匯入等價（plan §5.1）：學過的計數、個人 bigram、自動造詞、手動加的詞與觸發詞、常用語都還在。
+    /// 匯出後匯入等價（plan §5.1）：學過的計數、個人 bigram、自動造詞、手動加的詞與觸發詞、常用語都還在，
+    /// 每個條目最後使用的日期（打字中途換日）與裝置 id 也是。
     #[test]
     fn exporting_then_importing_gives_an_equal_user_model(
         table in random_table(),
         words in random_words(),
-        keys in prop::collection::vec((any::<bool>(), key(), prop::option::weighted(0.1, r"[一a\\\t，]{0,3}")), 0..100),
+        keys in prop::collection::vec((any::<bool>(), key(), prop::option::weighted(0.1, r"[一a\\\t，]{0,3}"), prop::option::weighted(0.1, 0..400u32)), 0..100),
+        device in prop::option::of("[0-9a-f-]{1,64}"),
         added in prop::collection::vec(("[一-十]{1,3}", prop::option::of("[abc]{1,3}")), 0..5),
         phrases in prop::collection::vec((r"[一a \\\n\t]{1,6}", prop::option::of("[abc]{1,3}"), any::<bool>()), 0..5),
         removed in prop::collection::vec(r"[一a \\\n\t]{1,6}", 0..5),
@@ -426,9 +428,16 @@ proptest! {
             engine_for("cangjie", &other_table, &other_words),
         ];
         let mut user = UserModel::default();
+        if let Some(device) = &device {
+            user.set_device(device).unwrap();
+        }
         let mut sessions = [Session::default(), Session::default()];
-        for (second, key, context) in keys {
+        for (second, key, context, day) in keys {
             let i = usize::from(second);
+            // 換日：2026 年的第幾天（同一天裡不換）。
+            if let Some(day) = day {
+                user.set_today(Date::from_ymd(2026, 1 + day / 31 % 12, 1 + day % 28).unwrap());
+            }
             // 前文給個人 bigram 的前一個字詞（含要跳脫的字）。
             if let Some(context) = context {
                 sessions[i].set_context(&context);
@@ -450,8 +459,8 @@ proptest! {
         }
 
         let exported = user.export();
-        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v2"));
-        let imported = UserModel::import(&exported);
-        prop_assert_eq!(imported, Ok(user));
+        prop_assert_eq!(exported.lines().next(), Some("# qim-userdict v3"));
+        let imported = UserModel::import(&exported, user.today());
+        prop_assert_eq!(imported.map(|i| (i.user, i.warnings)), Ok((user, vec![])));
     }
 }

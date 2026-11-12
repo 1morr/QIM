@@ -27,9 +27,11 @@
 | 2026-11-12 | M4 封存 M3 | 票 23：里程碑 code-review（修匯出 tick、補個人 bigram e2e 等）、乾淨 checkout 重驗 spec〈驗收〉、匯出 v2 定稿；M3 封存到 `docs/archive/M3.md`；見票 23 | 新 session 下 `/to-tickets docs/plan.md 拆 M4 的票` |
 | 2026-11-12 | M4 檢視 | 回顧 M3、畫架構與流程圖；子代理審查與研究（兩份筆記）；使用者同意 D1–D8，plan §7.5 重寫成兩期、§7.9、brief §4.5 已改 | 新 session 下 `/to-tickets docs/plan.md 拆 M4 的票` |
 | 2026-11-12 | M4 拆票 | plan §7.5 細化成 `.scratch/m4/spec.md`（每鍵延遲上限、§7.5 細節搬進 spec〈細節〉）；使用者同意切法，31 張票 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
+| 2026-11-12 | M4 12 | 殼給日期（`set_today`，沒給不寫假日期）、匯出 v3（種類欄、`last_used`、裝置 id）、v1/v2 照收；plan §2.4 改成 v3 草稿；見票 12 | 新 session 下 `/implement .scratch/m4/issues/13-learning-expiry.md` |
 
 ## 偏差與決定
 
+- 2026-11-12 M4 票 12（協調者要求）：殼沒給日期時條目沒有日期（`Option`，匯出留空），不寫 1970-01-01，票 13 的時限跳過它們；plan §2.4 加殼的日期契約。
 - 2026-11-12 M4（拆票，使用者決定）：每鍵延遲改成會擋，原生 p95 空白 ≤ 1 ms／選開頭一段 ≤ 5 ms、學過 ≤ 3／10 ms（spec〈每鍵延遲上限〉）；第二期的研究票也等期中檢查。
 - 2026-11-12 M4（檢視，使用者決定）：照子代理審查改 D1–D8：學習時限改一年日曆、退格撤銷、v3 各台計數相加、改刪字的 Snapshot、M4 分兩期；改 brief §4.5、plan §7.5、§7.9。
 - 2026-11-12 M4（檢視，使用者決定）：學習次數只算 1 萬次上屏內（推翻 brief §4.5 間隔多久都算）、條目設上限；英文使用者詞 4 字元起、2 次才出；改 brief §4.5、plan §7.5。

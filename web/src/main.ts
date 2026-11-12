@@ -22,6 +22,7 @@ import { fakeRank, rerankScheduler } from "./rerank.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
 import { mountRemembered, type Remembered } from "./remembered.ts";
+import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
 import { mountUserDict } from "./user-dict.ts";
 import init, {
@@ -135,6 +136,15 @@ async function start(): Promise<void> {
 	let phrases: Phrases | undefined;
 	/** 記住的 email 清單；同上比 `userDict` 晚掛上。 */
 	let remembered: Remembered | undefined;
+	// 殼的日期契約（plan §2.4）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
+	// 今天，過了午夜才不會記成前一天。按鍵、點擊、觸控都從 keydown 或 pointerdown 開始；失焦時核心
+	// 會記住正在打的 email，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
+	// 給（blur 不冒泡，但捕獲階段照樣經過 window），比任何處理器早。
+	const giveToday = (): void => session.setToday(localToday());
+	giveToday();
+	for (const type of ["keydown", "pointerdown", "blur"]) {
+		window.addEventListener(type, giveToday, { capture: true });
+	}
 	// 匯入、清空換掉整份使用者詞，常用語與記住的 email 的清單跟著重畫。
 	const userDict = mountUserDict(session, () => {
 		phrases?.refresh();
