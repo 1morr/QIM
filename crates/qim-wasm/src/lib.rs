@@ -487,6 +487,14 @@ impl WebSession {
             .into()
     }
 
+    /// 撤銷學習（`Session::forget`，M4 票 16）：清掉全部候選的第 `index` 個學到的，候選列跟著重排；網頁桌面
+    /// 的 Shift+Delete、Ctrl+Delete 清目前頁的第一個（翻頁前是首選）。沒有組字時 `handled` 為假。之後要存學習資料。
+    pub fn forget(&mut self, index: usize) -> WebSnapshot {
+        self.session
+            .forget(&self.engine, &mut self.user, index)
+            .into()
+    }
+
     /// 移到組字的第 `segment` 段，例如點組字裡的那一段；分段數是回到整串。
     #[wasm_bindgen(js_name = focusSegment)]
     pub fn focus_segment(&mut self, segment: usize) -> WebSnapshot {

@@ -96,6 +96,7 @@ QIM（暫名）。
 | Tab | 組字中在候選旁列出或收起字根提示；沒有組字時交還宿主 |
 | Shift（單按） | 切換中英文。組字中預設照 Rime：左 Shift 留著輸入碼當英文接下去（臨時英文），右 Shift 先上屏整個組字（同一直按空白）再切換；設定可改成左右都先上屏或左右都留碼（§7）。沒有組字時兩邊都只切換。英文狀態下按鍵直接交給宿主 |
 | ↓ / ↑ | 組字中打開或收起候選展開面板 |
+| Shift+Delete、Ctrl+Delete | 組字中撤銷首選（翻頁後是這頁第一個）的學習（§4.5）；沒有組字時交還宿主 |
 | `'` | 組字中在目前位置插入分隔記號（手動分隔）：這裡一定要斷字，詞只在它落在兩字的碼之間時跨過它，組字裡顯示成 `'`；已經以它結尾時不再加。沒有組字時照打 `'` |
 | 標點 | 組字中先上屏整個組字再接標點；沒有組字時直接上屏標點 |
 | 大寫字母（Shift＋字母） | 組字中先上屏整個組字再接那個字母；沒有組字時照打 |
@@ -135,6 +136,7 @@ QIM（暫名）。
 - 學過的字詞在更長的連打裡也加分，不只在輸入碼完全相同時生效；個人分只加不減（libime 做法，§12.4）。
 - 自動造詞：分段選字上屏後立即學成使用者詞，下次先排第 2，再選一次成首選。
 - 手動新增的使用者詞在打它的觸發詞時一定是首選。
+- 撤銷學習（M4 票 16）：學錯的候選能清掉它學到的，詞庫原有的詞回到原位、自動造詞不再出，再選可以重新學；不做永久屏蔽（CyIME 的永久屏蔽被使用者評為偏離預期，`docs/research/cyime.md` §4）。手動加的詞與常用語只清計數、詞留著。桌面是組字中 Shift+Delete 或 Ctrl+Delete，清首選、翻頁後清這頁第一個（librime 的預設高亮，§12.2）；成熟產品沒有共通的「刪第 N 個候選」按鍵（§12.4），所以釘在第 2 位的自動造詞桌面要等它成首選才清得到，觸控的手勢跟 M5 重做候選列一起定。範圍細節見 plan §2.4。
 - 學習可在設定關閉或重置。
 - 無痕模式：密碼欄與帶「不要個人化學習」旗標的欄位自動進入，也可從候選列按鈕手動切換。
 - 學習資料在主 App 列出，可搜尋、刪除、全清。
@@ -324,6 +326,7 @@ QIM（暫名）。
 - 速成與倉頡的分隔符不一樣：速成 quick5 用 `script_translator`、分隔符 `" ;'"`，speller 的 algebra 把每個字的倉頡碼取首尾兩碼當一個音節，詞表是 `use_preset_vocabulary` 的詞（由字的碼組成），所以同上一條，詞可以跨過落在字界上的分隔符；組字顯示把 `;`、`'` 換成「·」。倉頡 cangjie5 用 `table_translator`、分隔符 `" ;"`（沒有 `'`）：查碼時去掉結尾的分隔符，從每個起點對整串輸入做前綴查詢，分隔符只在一個碼查到之後才吃掉，所以詞不跨分隔符。rime-quick `5dcdb9e`：`quick5.schema.yaml:47,55-57,62-63`、`quick5.dict.yaml:7-10`；rime-cangjie `fcb3d7d`：`cangjie5.schema.yaml:50,58`；librime `9777cb2`：`src/rime/gear/table_translator.cc:258,521-527,637-650`，2026-11-05 查。
 - librime 不讀宿主的游標前後文（沒有這個 API）：組字從頭開始時，`contextual_suggestions` 開著的翻譯器把 commit history 的最後一筆當前文（`GetPrecedingText`：`start > 0` 取組字內前段，否則 `commit_history().latest_text()`）。commit history 最多 20 筆，記上屏的字與沒處理的可見 ASCII 鍵（`thru`），退格與 Enter 清空；沒找到換輸入框時清空的程式碼。數字後半形也只看它（`is_after_number`：最後一筆是 `thru` 或 `raw` 且以數字結尾）。librime `c95c0d2`：`src/rime/gear/script_translator.cc:325-329`、`src/rime/commit_history.cc:14-26`、`src/rime/gear/punctuator.cc:78-86`，2026-11-11 查。
 - 退格撤銷（librime `Memory`）：每次上屏 `OnCommit` 先 `StartSession`，使用者詞典的 `NewTransaction` 先 commit 上一筆還沒 commit 的交易、記下開始的時間（`time(NULL)`），再開新交易，這次上屏的 `UpdateEntry` 都寫在裡面。沒有 processor 吃下的鍵（`unhandled_key_notifier`）到 `OnUnhandledKey`：Shift 以外的修飾鍵都沒按時，BackSpace 且交易開始不到 3 秒就 `DiscardSession`（`RevertRecentTransaction`：資料庫 abort、清掉 pending、重讀 `/tick`，所以連 tick 一起回滾），其他鍵 `FinishSession`（commit）；按著 Ctrl、Alt 這類修飾鍵的鍵兩者都不做。被 processor 吃下的鍵（組字中的鍵、librime-predict 收起聯想的退格）不到這裡，所以打了字又刪光再按退格，仍會撤銷 3 秒內的上一次上屏。librime `bb56876`：`src/rime/gear/memory.cc:99-109,128-160`、`src/rime/dict/user_dictionary.cc:923-947`、`src/rime/engine.cc:185-194`，2026-11-12 查。QIM 的取捨見 plan §2.4〈退格撤銷〉。
+- 刪候選（撤銷學習）：editor 的預設綁定是 `Control+Delete` → `DeleteCandidate`，作用在目前高亮的候選（`Context::DeleteCurrentSelection`，高亮預設是第一個）；`Shift+Delete` 也生效，是 `KeyBindingProcessor` 的 `ShiftAsControl` 退路把 Shift 當 Ctrl，librime 沒有直接綁它。效果是 `Memory::OnDeleteEntry` 對使用者詞典 `UpdateEntry(entry, -1)`（`c` 取負，§12.2 上面「`c` 為負代表已刪除」），只對使用者詞典裡的詞有效，再次上屏就復活，不是永久屏蔽。鍵盤沒有「刪第 N 個」的路徑：`Context::DeleteCandidate(index)` 只經 C API 傳序號，`key_binder` 的 `select` 只選不刪。librime `bb56876`：`src/rime/gear/editor.cc`（約 198–214 行）、`src/rime/context.cc`、`src/rime/gear/memory.cc`，2026-11-12 查（M4 票 16）。
 - librime-octagram 外掛為 BSD-3-Clause，語法模型資料 rime-octagram-data 為 LGPL-3.0；繁體字級 / 詞級壓縮模型 10.3 MB / 41.4 MB（release 20260712）。[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)。
 
 ### 12.3 平台框架
@@ -360,6 +363,7 @@ QIM（暫名）。
 - macOS 27.0.1 與 iOS 27.0.1 的內建速成（黑箱實測）：都不做整串解碼，macOS 第 3 碼起整串改當英文、iOS 固定 2 碼一段且前段自動取首選；學習都是選一次就到第 1、只記最近一次，不學新詞；iOS 字序以粵語為主、繁簡混排，聯想看前文且離線時結果相同；macOS 組字中 Enter 上屏首選。[`docs/research/blackbox-baseline.md`](research/blackbox-baseline.md)，2026-11-04 測。
 - Gboard 17.2.2 的速成（Android 17 模擬器，黑箱實測）：整串解碼（`mir` 一台），選開頭一段後其餘重算；容錯只靠點擊位置，原樣讀法優先，漏碼與對調不救；選 10 次不前移、不學新詞；字序粵語為主、繁簡混排；打碼的候選微受游標前文影響；沒有英文候選；組字中 Enter 上屏首選；字根鍵長按出英文字母。英文鍵盤打 3 次 email 後有時學會（觸發不穩，兩輪學到、一輪沒有），不是 autofill，模擬器重開後消失。iPhone 版有沒有速成未確認。[`docs/research/blackbox-baseline.md`](research/blackbox-baseline.md)，2026-11-04 測。
 - fcitx 的表格輸入法：萬用鍵是每個碼表設定檔的一項（`UseMatchingKey` 開關、`MatchingKey` 指定哪個鍵），不是全域設定；QIM 照它放在方案檔（`wildcard`）。[fcitx wiki：How to make your own table-based input method](https://fcitx-im.org/wiki/How_to_make_your_own_table-based_input_method)（2026-11-12 查）。
+- 刪指定候選的按鍵（M4 票 16，2026-11-12 查）：沒有跨產品的官方慣例。fcitx5 的拼音與表格（含速成、倉頡）是唯一能指定位置的：`Ctrl+7`（設定項 `ForgetWord`）進入「選要刪的詞」模式，再按數字鍵或點選，從使用者詞典移除並刪掉歷史（fcitx5-chinese-addons `e8d930f`：`im/pinyin/pinyin.h`、`pinyin.cpp` 的 `handleForgetCandidate`，`im/table/engine.h`、`state.cpp` 的 `handleForgetWord`）；`Ctrl+7` 在瀏覽器是切到第 7 個分頁，網頁攔不住。微軟拼音、注音、速成、倉頡的官方快捷鍵頁沒有刪候選的鍵（support.microsoft.com 的〈Microsoft Simplified Chinese IME〉〈Microsoft Traditional Chinese IME〉兩頁，簡中頁只有 Esc 與數字選字）；macOS 內建中文的 `Shift-Delete` 是復原文字替換，不是刪候選（Apple 中文輸入法快捷鍵頁）；搜狗只查到二手線索（滑鼠點候選的選單有「移除此詞」）。Rime 見 §12.2。
 - 速成萬用鍵的語意（自測，`docs/research/wildcard.md`，2026-11-12）：每個 `z` 代一碼、任一位置，單獨一個代一碼字；比「單獨的 `z` 不算字」在一碼字的題多對約 4–6 點、沒有打不出，首碼、尾碼的題相同。整句忘一碼仍有原樣約七成的首選，單字首選 1–2%。
 - macOS 倉頡 / 速成可輸入英文字後從候選窗選，並有「Adjust word frequency」設定。[Apple 倉頡](https://support.apple.com/guide/chinese-input-method/cangjie-traditional-cimcjt11820/mac)、[Apple 設定](https://support.apple.com/guide/chinese-input-method/change-chinese-and-cantonese-settings-cim21aa5fa50/mac)。
 - DeepSeek API 相容 OpenAI 與 Anthropic 的介面格式，模型為 `deepseek-flash` 與 `deepseek-v4-pro`；思考模式預設開啟，可用 `thinking` 參數關閉；Responses API 為無狀態、不在伺服器保存對話。[DeepSeek API Docs](https://api-docs.deepseek.com)、[Responses API](https://api-docs.deepseek.com/api/create-response)，2026-10-30 查。

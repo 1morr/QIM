@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::association::{self, ASSOCIATION_TAIL};
 use crate::english_user::TypedRun;
-use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
+use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding, SpanKind};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Undo, UndoOwner};
 use crate::{Engine, UserModel, Weights, punctuation};
@@ -620,6 +620,65 @@ impl Session {
         };
         self.end_action(user, action, snapshot.commit.clone());
         self.finish(engine, user, snapshot)
+    }
+
+    /// 撤銷學習（plan §2.4，M4 票 16）：清掉全部候選（不只目前頁）的第 `index` 個學到的，候選列跟著
+    /// 重排，詞庫原有的詞回到不學習時的位置、自動造詞不再出；再選可以重新學。字詞清的是候選那一列的
+    /// 計數與自動造詞、接在任何字詞後面是它的個人 bigram（[`UserModel::forget`]）；英文候選、英文使用者詞
+    /// 與前綴補完清那個英文使用者詞；emoji 沒有學習。無痕、學習關掉時也清得掉：這是刪除，不是學習。
+    /// 桌面殼在組字中按 Shift+Delete 或 Ctrl+Delete 時清目前頁的第一個（librime 綁 Ctrl+Delete、Shift 當 Ctrl
+    /// 的退路，作用在高亮的、預設是首選，翻頁後是新頁的第一個，brief §12.2），觸控的手勢跟 M5 一起定。
+    ///
+    /// 沒有組字時不動作、`handled` 為假（鍵交還宿主）；臨時英文、序號超出範圍時不動作。
+    pub fn forget(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
+        self.apply_pending_options(engine, user);
+        let action = self.begin_action(user);
+        self.end_action(user, action, None);
+        if !self.composing() {
+            return self.snapshot(engine, false, None);
+        }
+        let span = self
+            .candidates
+            .get(index)
+            .filter(|_| self.composing_chinese())
+            .map(|c| c.span.clone());
+        let forgotten = span.is_some_and(|span| match span.kind {
+            SpanKind::Word => {
+                learned_segments(engine, user, &span.segments).is_some_and(|segments| {
+                    let code: String = segments.iter().map(|s| s.code.as_str()).collect();
+                    let previous = self.preceding_word(engine);
+                    user.forget(&engine.scheme().id, &code, &span.text, previous.as_deref())
+                })
+            }
+            SpanKind::English | SpanKind::EnglishUserWord | SpanKind::EnglishCompletion => {
+                user.forget_english_user_word(&span.text)
+            }
+            SpanKind::Emoji => false,
+        });
+        if forgotten {
+            // lattice 的邊帶著學到的分數，要從頭建。重算後的切法可能變了：目前分段那一段的碼（與位置）還在
+            // 才留著，否則回到整串，不悄悄換成另一段的候選。
+            let focused = self.focus.map(|i| self.segments()[i].code.clone());
+            let rest = self.lattice.input().to_string();
+            self.recompose(engine, user, &rest);
+            let segments = self.segments();
+            self.focus = self
+                .focus
+                .filter(|&i| segments.get(i).map(|s| &s.code) == focused.as_ref());
+            self.refresh_candidates(engine, user);
+        }
+        with_radicals(engine, self.snapshot(engine, true, None))
+    }
+
+    /// 候選列的候選接在哪個字詞後面（撤銷學習只清這一組個人 bigram，[`UserModel::forget`]）：沒有目前分段時
+    /// 同打分（[`Session::before_unselected`]）；目前分段是第 i 段時是前一段，第 0 段是這次組字開頭時前文給的
+    /// （同學習記的，[`Session::composition_word`]）。
+    fn preceding_word(&self, engine: &Engine) -> Option<String> {
+        match self.focus {
+            None => self.before_unselected(engine).word,
+            Some(0) => self.composition_word.clone(),
+            Some(i) => Some(self.segments()[i - 1].text.clone()),
+        }
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有

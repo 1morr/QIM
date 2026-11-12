@@ -428,6 +428,45 @@ impl UserModel {
         self.english.forget(text)
     }
 
+    /// 撤銷學習（plan §2.4，M4 票 16）：清掉方案 `scheme` 裡（`code`, `text`）學到的，經
+    /// [`crate::Session::forget`] 呼叫。刪學習資料從嚴（協調者 2026-11-12 決定）：清這一列的計數（整串上屏
+    /// 次數、衰減值）與這一列的自動造詞；個人 bigram 只清「`previous` → `text`」那一組（`previous` 是候選列
+    /// 現在接的前一個字詞，沒有時不清），其他前一個字詞後面學到的不動，免得清一個常用字抹掉它在所有前文
+    /// 後面的學習。自動造詞刪掉時，落在它裡面前後相接的組（「乙丁」的「乙 → 丁」，造詞那次學到的段間接續）
+    /// 一起清，否則同樣的字會以句子候選回到前面。手動加的詞與常用語只清計數、詞留著。句子候選的各段是各自
+    /// 的學習，不清（同 librime 刪候選只刪那個詞條）。沒有墓碑：再選就重新學，不做永久屏蔽；同步怎麼傳到
+    /// 別台由票 17 定。撤銷紀錄跟著丟掉（使用者明確的操作）。有清到東西時回傳 `true`。
+    pub(crate) fn forget(
+        &mut self,
+        scheme: &str,
+        code: &str,
+        text: &str,
+        previous: Option<&str>,
+    ) -> bool {
+        self.discard_undo();
+        let mut changed = false;
+        let mut auto_phrase = false;
+        if let Some(model) = self.schemes.get_mut(scheme) {
+            changed |= model.count(code, text).is_some();
+            auto_phrase = model
+                .word(code, text)
+                .is_some_and(|w| w.source == WordSource::AutoPhrase);
+            if auto_phrase {
+                model.remove_row(code, text);
+                changed = true;
+            } else {
+                model.forget(code, text);
+            }
+        }
+        self.bigrams.retain(|before, next, _| {
+            let keep = !(Some(before) == previous && next == text
+                || auto_phrase && text.contains(&format!("{before}{next}")));
+            changed |= !keep;
+            keep
+        });
+        changed
+    }
+
     /// 輸入碼 `input` 剛好是打過 [`crate::ENGLISH_SHOWN_AFTER`] 次的英文使用者詞時是它的寫法（排位規則 4，
     /// [`EnglishUserWords::typed_as`]）。
     pub(crate) fn english_typed_as(&self, input: &str, alphabet: &str) -> Option<&str> {
