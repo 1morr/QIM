@@ -8,7 +8,7 @@ import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
-import { LoneShift, toKey } from "./keys.ts";
+import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
 import { NeuralReranker } from "./neural-rerank.ts";
 import { mountPackSettings } from "./pack-settings.ts";
 import { checkModelPack, PackLibrary } from "./packs.ts";
@@ -25,6 +25,7 @@ import {
 import { storage } from "./storage.ts";
 import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
+import { undoWindow } from "./undo-window.ts";
 import { mountUserDict } from "./user-dict.ts";
 import init, {
 	contextLimit,
@@ -60,6 +61,8 @@ const shown = {
 	composing: false,
 	/** 臨時英文（組字中單按留碼的 Shift）：組字是英文，沒有候選、字根提示與展開面板。 */
 	inlineAscii: false,
+	/** 英文（`Snapshot.ascii`：英文直通或臨時英文）：實體字母鍵照配列打，不照實體鍵位送機率。 */
+	ascii: false,
 	/** 候選列目前頁，點候選時換算成全部候選的位置。 */
 	page: 0,
 };
@@ -162,10 +165,18 @@ async function start(): Promise<void> {
 		englishUserWords?.refresh();
 		focusText();
 	});
-	/** 核心可能學到東西之後存檔：上屏、英文直通打完一串字（核心學英文使用者詞）、失焦。 */
+	// 退格撤銷的時限（plan §2.4）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
+	const undoTimer = undoWindow(() => session.expireUndo());
+	// 點輸入框會移游標：之後的退格不在剛上屏的字旁邊，不撤銷。
+	text.addEventListener("pointerdown", () => session.expireUndo());
+	/**
+	 * 核心可能學到東西之後：存檔，退格撤銷的 3 秒從這裡重算。上屏、英文直通打完一串字（核心學英文使用者詞）、
+	 * 失焦（核心這時已讓撤銷紀錄失效，重算也無妨）。
+	 */
 	const saveLearning = (): void => {
 		userDict.save();
 		englishUserWords?.refresh();
+		undoTimer.restart();
 	};
 	/**
 	 * 核心沒吃下、交還瀏覽器的鍵之後：空白、標點、Enter、Tab 可能讓核心學到剛打完的英文串，要存檔；
@@ -190,6 +201,7 @@ async function start(): Promise<void> {
 	const render = (snapshot: Snapshot): void => {
 		shown.composing = composition.show(snapshot);
 		shown.inlineAscii = shown.composing && snapshot.ascii;
+		shown.ascii = snapshot.ascii;
 		shown.page = snapshot.page;
 		candidateBar.setMode(snapshot.ascii);
 		candidateBar.show(
@@ -355,7 +367,9 @@ async function start(): Promise<void> {
 			panel.setOpen(event.key === "ArrowDown");
 			return;
 		}
-		const key = toKey(event, shown.composing, shown.inlineAscii);
+		// 中文模式整個當美式鍵盤：字母與標點照實體鍵位（M4 票 07）；英文直通與臨時英文照配列。
+		const remapped = usKeyEvent(event, shown.ascii);
+		const key = toKey(remapped.event, shown.composing, shown.inlineAscii);
 		if (!key) {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
 			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作，但也收起
@@ -378,8 +392,18 @@ async function start(): Promise<void> {
 		if (!shown.composing) {
 			syncContext();
 		}
-		withSnapshot(session.press(key.kind, key.value), (snapshot) => {
+		// 中文模式的字母鍵照實體鍵位送按下的字母與鄰鍵的機率（M4 票 07）。
+		const code = physicalCode(event, shown.ascii);
+		const pressed = code
+			? session.pressCode(code)
+			: session.press(key.kind, key.value);
+		withSnapshot(pressed, (snapshot) => {
 			if (!snapshot.handled) {
+				// 換成美式字元的鍵：瀏覽器會照配列插入 `key`，改由網頁插入核心收到的那個字元。
+				if (remapped.character !== undefined) {
+					event.preventDefault();
+					insert(text, remapped.character);
+				}
 				// 交還瀏覽器的鍵（空白、Enter、方向鍵…）收起了聯想：候選列跟著清掉。
 				render(snapshot);
 				afterHostKey(key.kind);

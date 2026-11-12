@@ -118,6 +118,115 @@ export function toKey(
 	return { kind: "other" };
 }
 
+/** `physicalCode` 讀的 `KeyboardEvent` 欄位。 */
+export type PhysicalKeyEvent = KeyEvent &
+	Pick<KeyboardEvent, "code" | "shiftKey" | "getModifierState">;
+
+/**
+ * 實體鍵盤的字母鍵照實體鍵位送機率（`Key::Weighted`，M4 票 07）時回 `KeyboardEvent.code`，交給綁定的
+ * `Session.pressCode`；其他照 `toKey`，回 `null`。速成碼照實體鍵位：`code` 是 `KeyA`–`KeyZ` 就送，
+ * 不看 `key`，換 Dvorak 等配列時打的碼不變。英文（`ascii`：英文直通與臨時英文）打的是英文，照配列
+ * （`key`）；大寫（Shift、CapsLock）、組合鍵（含 AltGr）與別的輸入法的事件也照舊。
+ */
+export function physicalCode(
+	event: PhysicalKeyEvent,
+	ascii: boolean,
+): string | null {
+	if (
+		ascii ||
+		!plain(event) ||
+		event.shiftKey ||
+		event.getModifierState("CapsLock") ||
+		!/^Key[A-Z]$/.test(event.code)
+	) {
+		return null;
+	}
+	return event.code;
+}
+
+/**
+ * 美式鍵盤上各實體鍵（`KeyboardEvent.code`）打的字元：不按 Shift、按 Shift。字母鍵另算（`usCharacter`）。
+ * 照 W3C UI Events KeyboardEvent code Values 的美式配列。
+ */
+const US_SYMBOLS: Record<string, [string, string]> = {
+	Backquote: ["`", "~"],
+	Digit1: ["1", "!"],
+	Digit2: ["2", "@"],
+	Digit3: ["3", "#"],
+	Digit4: ["4", "$"],
+	Digit5: ["5", "%"],
+	Digit6: ["6", "^"],
+	Digit7: ["7", "&"],
+	Digit8: ["8", "*"],
+	Digit9: ["9", "("],
+	Digit0: ["0", ")"],
+	Minus: ["-", "_"],
+	Equal: ["=", "+"],
+	BracketLeft: ["[", "{"],
+	BracketRight: ["]", "}"],
+	Backslash: ["\\", "|"],
+	Semicolon: [";", ":"],
+	Quote: ["'", '"'],
+	Comma: [",", "<"],
+	Period: [".", ">"],
+	Slash: ["/", "?"],
+};
+
+/** 沒有組合鍵（Ctrl、Meta、Alt、AltGr）、也不在別的輸入法組字中：鍵照它本身處理。 */
+function plain(event: PhysicalKeyEvent): boolean {
+	return !(
+		event.isComposing ||
+		event.ctrlKey ||
+		event.metaKey ||
+		event.altKey ||
+		event.getModifierState("AltGraph")
+	);
+}
+
+/**
+ * 中文模式整個當美式鍵盤（使用者 2026-11-12 決定，M4 票 07）：這個鍵在美式鍵盤上打的字元，換 Dvorak、
+ * AZERTY 等配列時中文模式的手感跟美式一樣。照實體鍵位（`code`）與 Shift；字母的大小寫照 `key` 本身
+ * （`key` 不是字母時照 Shift 與 CapsLock，兩個一起按是小寫），系統怎麼處理 Shift 加 CapsLock 不必重算。
+ * 不必換（`key` 已是那個字元）、美式鍵盤沒有的鍵（ISO 的 `IntlBackslash`…）、具名的鍵、數字鍵台、
+ * dead key（`Dead`，交給系統組字）、組合鍵、AltGr 與別的輸入法組字中是 `undefined`，照 `key`。
+ * 英文直通與臨時英文照配列，呼叫端不換。
+ */
+export function usCharacter(event: PhysicalKeyEvent): string | undefined {
+	if (!plain(event) || event.key === "Dead") {
+		return undefined;
+	}
+	const letter = /^Key([A-Z])$/.exec(event.code)?.[1].toLowerCase();
+	let character: string | undefined;
+	if (letter !== undefined) {
+		const upper = /^\p{L}$/u.test(event.key)
+			? event.key !== event.key.toLowerCase()
+			: event.shiftKey !== event.getModifierState("CapsLock");
+		character = upper ? letter.toUpperCase() : letter;
+	} else {
+		character = US_SYMBOLS[event.code]?.[event.shiftKey ? 1 : 0];
+	}
+	return character === event.key ? undefined : character;
+}
+
+/**
+ * 給 `toKey` 的事件：中文模式（`ascii` 為假）把 `key` 換成美式鍵盤的字元（`usCharacter`），英文直通與
+ * 臨時英文照原樣（照配列）。`character` 是換上的字元，沒換時是 `undefined`。
+ */
+export function usKeyEvent(
+	event: PhysicalKeyEvent,
+	ascii: boolean,
+): { event: KeyEvent; character: string | undefined } {
+	const character = ascii ? undefined : usCharacter(event);
+	if (character === undefined) {
+		return { event, character };
+	}
+	const { isComposing, ctrlKey, metaKey, altKey } = event;
+	return {
+		event: { key: character, isComposing, ctrlKey, metaKey, altKey },
+		character,
+	};
+}
+
 /** Shift 按下到放開多久以內算單按：librime `ascii_composer` 的 500 ms。 */
 export const LONE_SHIFT_MS = 500;
 

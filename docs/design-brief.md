@@ -169,7 +169,7 @@ QIM（暫名）。
 - 預設相信使用者：原樣讀得通就照原樣排，修正過的讀法帶懲罰，通常只當備選。
 - 容錯可在設定關閉，預設開（§7）。
 - 速成每字只有兩碼，幾乎每個兩字母組合都是合法碼，打錯或漏碼多半變成另一個合法字（漏打 `anr` 的 `n` 就是「問」的 `ar`）。所以單字不容錯，只在詞與句層靠詞庫和上下文判斷「原樣讀不通、改一處就通」。
-- 按鍵位置：觸控用點擊位置算各鍵的機率（空間模型）；實體鍵盤用實體鍵盤的幾何算鄰鍵（含上下排與斜角），按實體鍵位、不按字母，換配列照樣適用。
+- 按鍵位置：觸控用點擊位置算各鍵的機率（空間模型）；實體鍵盤用實體鍵盤的幾何算鄰鍵（含上下排與斜角），按實體鍵位、不按字母，換配列照樣適用。中文模式整個當美式鍵盤：字母與標點都照實體鍵位（`KeyboardEvent.code`），換 Dvorak、AZERTY 等配列時中文模式的手感跟美式一樣；英文直通照配列（使用者 2026-11-12 決定，M4 票 07）。臨時英文也是英文，同樣照配列（使用者 2026-11-12 確認）。
 - 機制所有方案共用，允許哪些修正（鄰鍵替換、漏碼、多碼、兩碼對調）、懲罰與啟動條件由方案各自設定並用自己的基準調：倉頡長碼稀疏，單字層也可容錯；拼音、粵拼另有模糊音與簡拼。
 
 ## 5. 碼表與資料
@@ -323,6 +323,7 @@ QIM（暫名）。
 - 分隔符（`speller/delimiter`，luna_pinyin 是 `" '"`）：speller 收方案字母與分隔符的鍵，分隔符照樣推進輸入（`xi'an` 就是輸入）；音節切分把緊接的分隔符算進前一個音節，所以 `xi'an` 不會切成一個音節 `xian`，但詞可以跨過分隔符（`xi'an` 仍出「西安」），沒找到禁止詞跨過它的程式碼；含分隔符的候選不自動選定。組字顯示的是含分隔符的那段輸入。使用者詞典的碼由音節組成（每個音節接一個空白），不含使用者打的分隔符。librime `9777cb2`：`src/rime/gear/speller.cc:46-55,75,109,129`、`src/rime/algo/syllabifier.cc:58-62,115-118`、`src/rime/gear/script_translator.cc:417-439`、`src/rime/dict/user_dictionary.cc:790-799,963-981`；rime-luna-pinyin `56b934b` `luna_pinyin.schema.yaml:70`，2026-11-05 查。
 - 速成與倉頡的分隔符不一樣：速成 quick5 用 `script_translator`、分隔符 `" ;'"`，speller 的 algebra 把每個字的倉頡碼取首尾兩碼當一個音節，詞表是 `use_preset_vocabulary` 的詞（由字的碼組成），所以同上一條，詞可以跨過落在字界上的分隔符；組字顯示把 `;`、`'` 換成「·」。倉頡 cangjie5 用 `table_translator`、分隔符 `" ;"`（沒有 `'`）：查碼時去掉結尾的分隔符，從每個起點對整串輸入做前綴查詢，分隔符只在一個碼查到之後才吃掉，所以詞不跨分隔符。rime-quick `5dcdb9e`：`quick5.schema.yaml:47,55-57,62-63`、`quick5.dict.yaml:7-10`；rime-cangjie `fcb3d7d`：`cangjie5.schema.yaml:50,58`；librime `9777cb2`：`src/rime/gear/table_translator.cc:258,521-527,637-650`，2026-11-05 查。
 - librime 不讀宿主的游標前後文（沒有這個 API）：組字從頭開始時，`contextual_suggestions` 開著的翻譯器把 commit history 的最後一筆當前文（`GetPrecedingText`：`start > 0` 取組字內前段，否則 `commit_history().latest_text()`）。commit history 最多 20 筆，記上屏的字與沒處理的可見 ASCII 鍵（`thru`），退格與 Enter 清空；沒找到換輸入框時清空的程式碼。數字後半形也只看它（`is_after_number`：最後一筆是 `thru` 或 `raw` 且以數字結尾）。librime `c95c0d2`：`src/rime/gear/script_translator.cc:325-329`、`src/rime/commit_history.cc:14-26`、`src/rime/gear/punctuator.cc:78-86`，2026-11-11 查。
+- 退格撤銷（librime `Memory`）：每次上屏 `OnCommit` 先 `StartSession`，使用者詞典的 `NewTransaction` 先 commit 上一筆還沒 commit 的交易、記下開始的時間（`time(NULL)`），再開新交易，這次上屏的 `UpdateEntry` 都寫在裡面。沒有 processor 吃下的鍵（`unhandled_key_notifier`）到 `OnUnhandledKey`：Shift 以外的修飾鍵都沒按時，BackSpace 且交易開始不到 3 秒就 `DiscardSession`（`RevertRecentTransaction`：資料庫 abort、清掉 pending、重讀 `/tick`，所以連 tick 一起回滾），其他鍵 `FinishSession`（commit）；按著 Ctrl、Alt 這類修飾鍵的鍵兩者都不做。被 processor 吃下的鍵（組字中的鍵、librime-predict 收起聯想的退格）不到這裡，所以打了字又刪光再按退格，仍會撤銷 3 秒內的上一次上屏。librime `bb56876`：`src/rime/gear/memory.cc:99-109,128-160`、`src/rime/dict/user_dictionary.cc:923-947`、`src/rime/engine.cc:185-194`，2026-11-12 查。QIM 的取捨見 plan §2.4〈退格撤銷〉。
 - librime-octagram 外掛為 BSD-3-Clause，語法模型資料 rime-octagram-data 為 LGPL-3.0；繁體字級 / 詞級壓縮模型 10.3 MB / 41.4 MB（release 20260712）。[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)。
 
 ### 12.3 平台框架

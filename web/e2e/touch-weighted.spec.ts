@@ -26,7 +26,7 @@ test.afterEach(() => {
 
 /** 面板上最近一下點擊的各字母與機率，由高到低。 */
 async function touchProbabilities(page: Page) {
-	const items = page.getByTestId("debug-touch").locator("code");
+	const items = page.getByTestId("debug-weights").locator("code");
 	return items.evaluateAll((codes) =>
 		codes.map((code) => ({
 			letter: code.getAttribute("data-letter") ?? "",
@@ -76,7 +76,7 @@ test("點在鍵中心：那個字母的機率最高；接著點文字鍵，面�
 	expect(touch[0].probability).toBeGreaterThan(0.7);
 
 	await page.getByTestId("key-space").tap();
-	await expect(page.getByTestId("debug-touch")).toHaveText(
-		"觸控機率：（最近一個鍵不是觸控字母鍵）",
+	await expect(page.getByTestId("debug-weights")).toHaveText(
+		"按鍵機率：（最近一個鍵沒有送機率）",
 	);
 });

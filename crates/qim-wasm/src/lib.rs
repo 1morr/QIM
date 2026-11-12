@@ -6,7 +6,7 @@ use qim_core::{
     RadicalHints, Scheme, SegmentSource, Session, ShiftKey, Shortcuts, Snapshot, UserModel,
     Weights, WordListReport,
 };
-use qim_layout::{Action, Keyboard, Output, Target, Touch, When};
+use qim_layout::{Action, Keyboard, Output, PhysicalModel, Target, Touch, When};
 use wasm_bindgen::prelude::*;
 
 /// 核心與 `qim-layout` 的錯誤轉成 JS 的例外，訊息照原樣。
@@ -207,6 +207,12 @@ impl WebSession {
         self.session.clear_context(&mut self.user);
     }
 
+    /// 退格撤銷的時限到了（`Session::expire_undo`）：上屏後 3 秒（照 librime）網頁呼叫，之後的退格只刪字。
+    #[wasm_bindgen(js_name = expireUndo)]
+    pub fn expire_undo(&mut self) {
+        self.session.expire_undo(&mut self.user);
+    }
+
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief §4.5）。
     #[wasm_bindgen(js_name = addWord)]
     pub fn add_word(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {
@@ -402,6 +408,18 @@ impl WebSession {
         let shift_switch = value.parse().map_err(js_error)?;
         self.set_options(|options| options.shift_switch = shift_switch);
         Ok(())
+    }
+
+    /// 按實體鍵盤的字母鍵 `code`（`KeyboardEvent.code`，`KeyA`–`KeyZ`）：照實體鍵位算按下的字母與鄰鍵的
+    /// 機率（[`PhysicalModel`]）送 `Key::Weighted`（M4 票 07）。不是字母鍵時丟例外。
+    #[wasm_bindgen(js_name = pressCode)]
+    pub fn press_code(&mut self, code: &str) -> Result<WebSnapshot, JsError> {
+        let weights = PhysicalModel::default()
+            .letter_weights(code)
+            .ok_or_else(|| JsError::new(&format!("{code} 不是字母鍵")))?;
+        // `qim-layout` 給的一定收得下（字母、不重複、正數）；收不下是 bug，照例外丟給網頁。
+        let weights = Weights::new(weights).map_err(js_error)?;
+        Ok(self.handle(Key::Weighted(weights)).into())
     }
 
     /// 按一個鍵（實體鍵盤）：種類與值照 [`Key::parse`]，例如 `("letter", "a")`、`("digit", "1")`、
@@ -694,12 +712,13 @@ pub struct WebInspection {
     /// 全部候選，依目前的順序。
     #[wasm_bindgen(readonly)]
     pub candidates: Vec<WebInspectedCandidate>,
-    /// 最近一個鍵是觸控字母鍵時的各字母（M4 票 06），由機率高到低；其他鍵是空的。
-    #[wasm_bindgen(readonly, js_name = touchLetters)]
-    pub touch_letters: Vec<String>,
-    /// `touchLetters` 各字母的機率，和為 1。
-    #[wasm_bindgen(readonly, js_name = touchProbabilities)]
-    pub touch_probabilities: Vec<f32>,
+    /// 最近一個鍵送了按鍵機率（觸控或實體鍵盤的字母鍵，M4 票 06、07）時的各字母，由機率高到低；
+    /// 其他鍵是空的。
+    #[wasm_bindgen(readonly, js_name = weightLetters)]
+    pub weight_letters: Vec<String>,
+    /// `weightLetters` 各字母的機率，和為 1。
+    #[wasm_bindgen(readonly, js_name = weightProbabilities)]
+    pub weight_probabilities: Vec<f32>,
     /// 候選列的停鍵重排來自快取（M4 票 03）：沒等停鍵、沒跑模型。
     #[wasm_bindgen(readonly, js_name = rerankCached)]
     pub rerank_cached: bool,
@@ -765,10 +784,10 @@ impl From<Inspection> for WebInspection {
             PrecedingChar::Char(c) => ("char", Some(String::from(c))),
             PrecedingChar::Unigram => ("unigram", None),
         };
-        let touch = i.touch_weights.as_ref().map_or(&[][..], Weights::entries);
+        let weights = i.key_weights.as_ref().map_or(&[][..], Weights::entries);
         Self {
-            touch_letters: touch.iter().map(|&(c, _)| String::from(c)).collect(),
-            touch_probabilities: touch.iter().map(|&(_, p)| p).collect(),
+            weight_letters: weights.iter().map(|&(c, _)| String::from(c)).collect(),
+            weight_probabilities: weights.iter().map(|&(_, p)| p).collect(),
             rerank_cached: i.rerank_cached,
             context_state: context_state.into(),
             context,

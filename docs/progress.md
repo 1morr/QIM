@@ -6,7 +6,7 @@
 
 - session 紀錄一列、偏差一條，整行各不超過 200 字元；細節在票的 `## Comments`、brief、plan 或 ADR，這裡只放指向它們的一句話。
 - session 紀錄的「票」欄與偏差每條的開頭都標里程碑（`M0 01`、`2026-10-30 M0 票 01：…`），封存時靠它分。
-- 里程碑驗收時，把它的 session 紀錄與偏差整段移到 `docs/archive/<里程碑>.md`，里程碑表的備註換成那個檔的連結。同一個 commit 把下一個里程碑標成進行中，封存這個 session 的紀錄標下一個里程碑。本檔只留進行中的里程碑。
+- 里程碑驗收時，把它的 session 紀錄與偏差整段移到 `docs/archive/<里程碑>.md`，里程碑表的備註換成那個檔的連結。同一個 commit 把下一個里程碑標成進行中，封存這個 session 的紀錄標下一個里程碑，「下一步」寫 `/1morr:checkpoint <封存的里程碑>`（它結束時再寫下一個里程碑的開工指令）。本檔只留進行中的里程碑。
 - 里程碑的閱讀範圍、票序等細節寫在 `.scratch/<里程碑>/spec.md`，里程碑表的備註只寫一句狀態。spec 與票留在原處、不搬：它們是歷史快照，別處用路徑引用。
 - `cargo xtask check` 的 `docs` 步驟強制 plan §6 列的規則：`##` 段、session 紀錄一整張表、長度、里程碑標記、最後一列的下一步、`.scratch/` 的 spec。其餘靠收尾自查：細節不寫進本檔、何時封存、備註只寫一句、spec 與票不搬。
 
@@ -39,11 +39,16 @@
 | 2026-11-12 | M4 06b | 平手點都在鍵外（點擊判定照直線距離、Gaussian 各軸 σ 不同），照設計提到平手；測試格子補 Shift、刪除，種子進 repo 並加固定測試，產品沒改；見票 06b | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
 | 2026-11-12 | M4 14 | 英文使用者詞取代記住的字串：4 字元起都學、門檻 2／3 次、規則 4、5 改寫、v3 種類 `english`；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m4/issues/15-backspace-undo.md` |
 | 2026-11-12 | M4 02 | 換模型競態與模型載入搬進 `NeuralReranker`、`snapshot.free()` 收一處；IndexedDB 或 `localStorage` 打不開照樣能打字（只留記憶體、狀態列說明）；見票 02 | 新 session 下 `/implement .scratch/m4/issues/03-rerank-cache.md` |
+| 2026-11-12 | M4 07 | 實體鍵盤送 `code`，`qim-layout` 的鄰鍵先驗轉成 `Weighted`；中文模式整個當美式鍵盤（使用者決定）；名詞改成按鍵機率；bench 前後相同；見票 07 | 新 session 下 `/implement .scratch/m4/issues/08-typo-bench.md` |
+| 2026-11-12 | M4 15 | 退格撤銷：撤銷紀錄 `Undo` 以動作為單位，中英共用；照 librime 的 3 秒由殼計時（`expire_undo`）；Session 分開、無痕不撤銷；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m4/issues/16-forget-candidate.md` |
 | 2026-11-12 | M4 03 | 停鍵結果快取放核心：鍵是重排要求、上限 32；殼給 `set_reranker_id`，漏給只是沒快取；退格回算過的碼不等停鍵；見票 03 | 新 session 下 `/implement .scratch/m4/issues/16-forget-candidate.md` |
 
 ## 偏差與決定
 
 - 2026-11-12 M4 票 03（協調者要求）：快取放核心，殼經 `set_reranker_id` 給重排識別、漏給只是沒快取；`rerank_request` 改 `&mut`（記下給出的要求）；改 plan §0、§2.1、§2.7、§3.1。
+- 2026-11-12 M4 票 15（協調者決定）：退格撤銷照 librime 保留 3 秒時限，核心不讀時間、由殼計時（`Session::expire_undo`，網頁 `undo-window.ts`）；改 plan §2.4、brief §12.2。
+- 2026-11-12 M4 票 07：名詞「觸控機率」改成按鍵機率（含實體鍵盤），新增鄰鍵先驗；`touch_weights` → `key_weights`、面板 `debug-weights`；改名詞表、plan §0、§2.1、§3.1。
+- 2026-11-12 M4 票 07（使用者決定）：中文模式整個當美式鍵盤，字母與標點都照實體鍵位（`code`），英文直通照配列（臨時英文同樣照配列，使用者同日確認）；改 brief §4.8、plan §2.1。
 - 2026-11-12 M4 票 02（協調者決定）：票誤寫學習資料在 IndexedDB（實際在 `localStorage`）；本票改成兩種儲存打不開都照樣能打字、存不了的只留記憶體；改 plan §3.1、§4.6。
 - 2026-11-12 M4 票 14（協調者決定）：中文組字的前綴補完只取英文詞典沒有的英文使用者詞（過 3 次、最常用 20 條），詞典詞走規則 4 與第二期的英文建議列，免得 that、have 把 email 擠出去；改 plan §2.4 規則 5、brief §4.7。
 - 2026-11-12 M4 票 14：記住的字串併入英文使用者詞（plan §2.1、§2.4、brief、名詞表）；v3 草稿 `string` 換成 `english`、舊列略過；v2 的記住的字串匯入成次數 3；與中文的列共用條目上限。
