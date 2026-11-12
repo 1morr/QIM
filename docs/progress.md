@@ -18,7 +18,7 @@
 | M1 | `.scratch/m1/issues/` | brief §1.5、§4、§5、§9；plan §2–§5、§7.2；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 完成，[已封存](archive/M1.md) |
 | M2 | `.scratch/m2/issues/` | brief §9、§11、§12.3；plan §1.4、§3、§7.3；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 完成，[已封存](archive/M2.md) |
 | M3 | `.scratch/m3/issues/` | brief §1.5、§7、§8、§12.3；plan §2.3、§2.7、§7.4、§7.8；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 完成，[已封存](archive/M3.md) |
-| M4 | `.scratch/m4/issues/` | brief §4.7、§4.8、§7、§12.4；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、§7.5、§7.9；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 進行中，還沒拆票 |
+| M4 | `.scratch/m4/issues/` | brief §4.7、§4.8、§7、§12.4；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、§7.5、§7.9；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 進行中，已拆 31 張票（第一期 01–18、第二期 19–30、收尾 31） |
 
 ## Session 紀錄
 
@@ -26,9 +26,11 @@
 | --- | --- | --- | --- |
 | 2026-11-12 | M4 封存 M3 | 票 23：里程碑 code-review（修匯出 tick、補個人 bigram e2e 等）、乾淨 checkout 重驗 spec〈驗收〉、匯出 v2 定稿；M3 封存到 `docs/archive/M3.md`；見票 23 | 新 session 下 `/to-tickets docs/plan.md 拆 M4 的票` |
 | 2026-11-12 | M4 檢視 | 回顧 M3、畫架構與流程圖；子代理審查與研究（兩份筆記）；使用者同意 D1–D8，plan §7.5 重寫成兩期、§7.9、brief §4.5 已改 | 新 session 下 `/to-tickets docs/plan.md 拆 M4 的票` |
+| 2026-11-12 | M4 拆票 | plan §7.5 細化成 `.scratch/m4/spec.md`（每鍵延遲上限、§7.5 細節搬進 spec〈細節〉）；使用者同意切法，31 張票 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
 
 ## 偏差與決定
 
+- 2026-11-12 M4（拆票，使用者決定）：每鍵延遲改成會擋，原生 p95 空白 ≤ 1 ms／選開頭一段 ≤ 5 ms、學過 ≤ 3／10 ms（spec〈每鍵延遲上限〉）；第二期的研究票也等期中檢查。
 - 2026-11-12 M4（檢視，使用者決定）：照子代理審查改 D1–D8：學習時限改一年日曆、退格撤銷、v3 各台計數相加、改刪字的 Snapshot、M4 分兩期；改 brief §4.5、plan §7.5、§7.9。
 - 2026-11-12 M4（檢視，使用者決定）：學習次數只算 1 萬次上屏內（推翻 brief §4.5 間隔多久都算）、條目設上限；英文使用者詞 4 字元起、2 次才出；改 brief §4.5、plan §7.5。
 - 2026-11-12 M4（檢視，使用者決定）：記住的字串併入英文使用者詞（照 LatinIME 上屏都學），中文組字完整串排第 2、前綴補完限最常用 20 條；數字與卡號照學、改用出現門檻；plan §7.5。
