@@ -11,15 +11,15 @@ mod vocab;
 use std::fmt;
 
 pub use lstm::{Format, Model, to_gguf};
-pub use vocab::Vocab;
+pub(crate) use vocab::Vocab;
 
 /// 交給模型的前文最多幾個字（brief §8，模型階梯定的 50 字）：取最後這麼多字。
 pub const CONTEXT_CHARS: usize = 50;
 
 /// 句首與子句之間的記號：訓練語料在標點處切句，前文裡的標點、空白、符號也換成它。
-pub const SEP: u32 = 0;
+pub(crate) const SEP: u32 = 0;
 /// 字表外的字；前文裡連續的英文、數字也收成一個。
-pub const UNK: u32 = 1;
+pub(crate) const UNK: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
@@ -83,7 +83,7 @@ impl Reranker {
 
     /// 各條路徑的神經分（nat）：前文取最後 [`CONTEXT_CHARS`] 字，路徑各字 log 機率的和；字表外的字
     /// 另扣 [`Vocab::unknown_penalty`]。空字串的路徑是 0（沒有字）。
-    pub fn scores(&self, before: &str, paths: &[&str]) -> Result<Vec<f32>, Error> {
+    pub(crate) fn scores(&self, before: &str, paths: &[&str]) -> Result<Vec<f32>, Error> {
         let skip = before.chars().count().saturating_sub(CONTEXT_CHARS);
         let tail: String = before.chars().skip(skip).collect();
         let context = self.vocab.context(&tail);

@@ -197,3 +197,47 @@ test("模型丟錯：記成沒有結果，之後的停鍵照常要求", async ()
 	assert.deepEqual(outcomes, ["none", "none"]);
 	assert.equal(calls, 2);
 });
+
+test("套用名次時丟錯（例如 show）：不出 unhandled rejection，記成沒有結果一次，busy 歸位", async () => {
+	const model = heldModel();
+	const session = new FakeSession();
+	const outcomes: Outcome[] = [];
+	let broken = true;
+	const request = rerankScheduler(session as unknown as Session, {
+		mode: () => "neural",
+		models: {
+			neural: model.rank,
+			identity: model.rank,
+			"raise-last": model.rank,
+		},
+		show: () => {
+			if (broken) {
+				throw new Error("畫面壞了");
+			}
+		},
+		onResult: (outcome) => outcomes.push(outcome),
+	});
+	const unhandled: unknown[] = [];
+	const onUnhandled = (reason: unknown) => unhandled.push(reason);
+	process.on("unhandledRejection", onUnhandled);
+	const quiet = mock.method(console, "error", () => {});
+	try {
+		request(session.generation);
+		mock.timers.tick(STOP_MS);
+		model.answer(0);
+		await settle();
+		await settle();
+		assert.deepEqual(unhandled, []);
+		assert.deepEqual(outcomes, ["none"]);
+
+		// busy 歸位：之後的停鍵照常要求。
+		broken = false;
+		session.generation = 9n;
+		request(session.generation);
+		mock.timers.tick(STOP_MS);
+		assert.equal(model.jobs.length, 2);
+	} finally {
+		quiet.mock.restore();
+		process.off("unhandledRejection", onUnhandled);
+	}
+});

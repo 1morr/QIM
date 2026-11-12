@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0、M1、M2 完成（`.scratch/m0/spec.md`、`.scratch/m1/spec.md`、`.scratch/m2/spec.md`，封存 `docs/archive/M0.md`、`docs/archive/M1.md`、`docs/archive/M2.md`）；M3 進行中（`.scratch/m3/spec.md`，已拆票）；M4 起只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0–M3 完成（`.scratch/m0/spec.md`–`.scratch/m3/spec.md`，封存 `docs/archive/M0.md`–`docs/archive/M3.md`）；M4 進行中（還沒拆票）；還沒開工的里程碑只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
@@ -179,7 +179,7 @@ impl Session {
     pub fn composing(&self) -> bool;                                  // 有還沒上屏的輸入碼（臨時英文也算）
     pub fn refresh(&mut self, engine: &Engine, user: &UserModel) -> Snapshot; // 換選項後依新選項重列候選
     pub fn all_candidates(&self) -> Vec<Candidate>;                  // 不分頁，候選展開面板用
-    pub fn rerank_request(&self) -> Option<RerankRequest>;            // generation + 前文（最多 RERANK_CONTEXT 字）+ 前 RERANK_PATHS 條路徑
+    pub fn rerank_request(&self, engine: &Engine) -> Option<RerankRequest>; // generation + 前文（最多 RERANK_CONTEXT 字，簡體模式用 engine 的簡繁資料包轉回繁體）+ 前 RERANK_PATHS 條路徑
     pub fn apply_rerank(&mut self, engine: &Engine, generation: u64, order: &[usize]) -> Option<Snapshot>; // order 是路徑的序號
     pub fn paths(&self, limit: usize) -> Vec<ScoredPath>;            // lattice 蓋滿沒選定輸入碼的前 limit 條路徑：文字、分段、路徑分
 }
@@ -190,7 +190,7 @@ impl Session {
 - `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它（英文直通也是）；組字中和標點相同，先上屏整個組字再接它；臨時英文中和實體鍵盤的可見字元一樣接在英文後（M1 票 27b）。文字照原樣，不轉全形、不套數字後半形（M1 票 20、27b）；簡體模式下文字也轉簡體，原文留繁體（使用者決定，M1 票 23）。觸控的標點鍵也走這裡，照鍵上的字輸出（使用者決定，M1 票 27b）。
 - `ToggleAscii`（單按 Shift，brief §4.3）：沒有組字時切英文直通，`Snapshot.ascii` 跟著變；英文直通下每個鍵都 `handled` 為假，沒有組字。組字中照 `Options.shift_switch`：`commit_text` 先上屏整個組字再切；`inline_ascii` 進臨時英文，`ascii` 為真而組字還在，最後一段是 `Segment.raw` 的分段（Rime 的 `raw` 標記），各鍵的行為照目前發佈版 librime（≤ 1.17.0，空白接進英文，M1 票 25b），見 brief §4.3。預設 `Rime` 是左 Shift `inline_ascii`、右 Shift `commit_text`（M1 票 25，推翻票 23 的左右相同）。單按的判定（按下到放開 500 ms 內、中間沒有按下或放開別的鍵，librime 同值）與分辨左右在殼；網頁用 `KeyboardEvent.code`，觸控鍵盤的中英鍵（佈局動作 `toggleAscii`）當右 Shift；觸控的 ⇧ 是另一個動作 `shift`（§2.6），是大寫鍵，不送 `ToggleAscii`。臨時英文中 `-` / `=` 是字元，殼不轉成翻頁。
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
-- 詞級 trigram（M3 票 11b，§2.3、§4.3）：`Engine::with_word_trigram(WordTrigramPack)` 掛上，方案 `[packs]` 的 `word_trigram` 指名預設那份，`Engine::open` 照方案要不要核對（`WordTrigramMismatch`，同詞庫、語言模型只核對有沒有、不核對 id）。核心內建的打分、不經 `dyn` 介面：lattice 的邊與整串字詞的靜態機率改用它，前面兩段是部分路徑的最後兩段，組字開頭的前一段是選定的分段、前文剛上屏的那段，或前文的最後一字、句首（`Preceding::segment`）；β、γ、`personal` 照舊，聯想仍用字級 bigram。沒掛上時打分照字級 bigram。取代票 08 實驗用的 `Engine::with_segment_model`（`SegmentModel`、`SegmentQuery`，票 11b 刪掉；`scripts/experiments/model-ladder/` 的 `sync` 只在 `a6b4550` 以前建得起來）。
+- 詞級 trigram（M3 票 11b，§2.3、§4.3）：`Engine::with_word_trigram(WordTrigramPack)` 掛上，方案 `[packs]` 的 `word_trigram` 指名預設那份，`Engine::open` 照方案要不要核對（`WordTrigramMismatch`，同詞庫、語言模型只核對有沒有、不核對 id）。核心內建的打分、不經 `dyn` 介面：lattice 的邊與整串字詞的靜態機率改用它，前面兩段是部分路徑的最後兩段，組字開頭的前一段是選定的分段、前文剛上屏的那段，或前文的最後一字、句首（`Preceding::segment`）；β、γ、`personal` 照舊，聯想仍用字級 bigram。沒掛上時打分照字級 bigram。
 - emoji 候選：`Engine::with_emoji` 掛上 emoji 資料包（不由方案指名，各方案共用，§4.4）；`Options.emoji_candidates`（預設開，brief §7）開著時，整串的字詞後面接它的 emoji（§2.4）。組字中換這個選項同英文候選，殼呼叫 `refresh`（M3 票 16）。
 - 記住的字串（M3 票 15，名詞表）：`Options.remembered_strings`（預設開，brief §7）開著時，`Session` 記下經核心送出去的 email，之後中文組字打它開頭的字母時給候選（§2.4 規則 5）。組字中換這個選項同英文候選，殼呼叫 `refresh`。
   - 從哪裡記：只記使用者經 QIM 打的字，也就是核心送出去的字（同前文，下面〈上下文〉）：上屏的字（含臨時英文 Enter 上屏的英文、選了的英文候選與記住的字串、`text` 動作的 `@` `.`），以及英文直通交還宿主的可見字元。英文直通時鍵雖然交還宿主，殼仍先把每個鍵交給 `handle`（`handled` 為假才交還，§2.1 開頭），所以核心看得到英文直通打的字；看不到的是換成別的鍵盤或輸入法打的、貼上的、autofill 填的與輸入框原有的字，這些不記（殼給的前文不當來源：回信引用的別人地址不該被記）。成熟做法：LatinIME 與 SwiftKey 都學上屏的字、不讀欄位原有的文字，LatinIME 另載入裝置帳號的 email；QIM 不讀通訊錄與剪貼簿（要平台權限，百度輸入法也因此拿掉通訊錄詞庫）。查證見 `docs/research/remember-strings.md`。
@@ -210,9 +210,9 @@ impl Session {
 - 按鍵的入口（M2 票 03）：綁定收不了帶資料的列舉時（WebAssembly）用 `Key::parse` 收「種類 + 值」，種類是 `Key` 各種的 camelCase 名字（`letter`、`digit`、`toggleAscii`、`space`…），值是字元、`0`–`9` 或 `left` / `right`；網頁的按鍵都經綁定的同一個 `press`，加一種鍵只改核心與網頁的按鍵對照（`web/src/keys.ts`）。同 librime 能從字串讀按鍵（`KeyEvent` 的文字表示）。`qim-ffi` 也收「種類 + 值」（M2 票 07）：uniffi 沒有 `char` 型別，收不了 `Key::Letter(char)`，另寫一份鏡像列舉又讓加一種鍵多改一處。觸控鍵盤的組字狀態也問 `Session::composing`，綁定不另存。
 - `qim-ffi` 的物件（M2 票 08）：`Engine` 是獨立的 uniffi 物件，殼建一個，各輸入框的 `Session` 共用它，換輸入框不重載資料包。資料包的位元組先各自解開成 `SchemePack` 等物件，再交給 `Engine`；交出時是移交、不複製，所以每份只能給一個 `Engine`，殼也能逐份量記憶體。`UserModel` 暫時放在各 `Session` 裡，學習資料存檔由需要它的票拆出來共用。字根提示的 `RadicalHintPack` 目前只能解開、不交給 `Engine`（M2 票 09 在鍵盤擴充量記憶體用），查詢與顯示的介面由殼要顯示字根提示的票加。
 - 上下文（M3 票 04、05）：`Session::set_context(before: &str)` 收輸入框游標前的文字（前文），組字開頭的字接它（§2.3 的規則），開頭的一段也接它給的前一個字詞的個人 bigram（§2.3，M3 票 12），數字後半形看它的最後一字。殼在聚焦、移動游標、上屏之後給；組字中給的存起來，下一次從頭建組字時才用。`set_context("")` 是輸入框的開頭，接句首。
-  - `Session` 記一份前文（殼給的前文接上核心送出去的字，名詞表），最多 `CONTEXT_LIMIT`（200，brief §8 送雲端的上限）字：`set_context` 取代它，之後上屏的字、交還宿主的可見字元與空白（`Letter`、`Punct`、`Digit`、`Space`）接在後面；交還宿主的其他鍵（退格、Enter、方向鍵、`Other`…）改了游標前的字或移走游標，記的就作廢（不知道前文、用 unigram），等殼再給；`Modifier` 不動它。換欄位或失焦而沒有前文可給時，殼呼叫 `Session::clear_context(user)` 忘掉（上一個欄位上屏的字不會變成前文；正在打的 email 這時算打完，上面〈記住的字串〉）；有前文可給時 `set_context` 同樣整份取代，自己記的不留。數字後半形另記一個布林「游標前的字是半形數字」，和前文同時更新、但不記文字（M3 票 05）。
-  - 殼沒給前文時（宿主不提供、iOS 的 `documentContextBeforeInput` 是空的，brief §12.3）就用這個輸入框上屏過的字（M3 票 05 決定）。殼給了前文就整份取代，iOS 只給一兩句時不拿記著的較長歷史補長度：bigram 只看最後一字，補長度只對雲端與停鍵層的模型有用，由雲端重排票（M3 票 22）依階梯結論定。成熟做法：librime 根本不讀宿主文字，組字從頭開始時的前文就是自己的 commit history（`Translator::GetPrecedingText` 取 `commit_history().latest_text()`，最多 20 筆；退格、Enter 清掉；數字後半形也看它，`punctuator.cc` 的 `is_after_number`），fcitx5 的標點模組平時靠自己記的狀態、宿主有 SurroundingText 時在聚焦後用游標前一字校正。QIM 合起來：殼給的前文優先（每次給都取代），沒給時靠自己記的；和 librime 不同，方向鍵也作廢（游標已移走）。不採用 AOSP LatinIME 的做法（宿主回 null 就當沒有前文、不用自己的歷史）：bigram 只要最後一字，自己上屏的字就是游標前的字。來源：librime `c95c0d2` 的 [`script_translator.cc` L325–329](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/gear/script_translator.cc#L325-L329)、[`commit_history.cc` L14–26](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/commit_history.cc#L14-L26)、[`punctuator.cc` L78–86](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/gear/punctuator.cc#L78-L86)；fcitx5-chinese-addons `e8d930f` 的 [`punctuation.cpp` L217–247](https://github.com/fcitx/fcitx5-chinese-addons/blob/e8d930f402e359cfd76a101ee3e46815d1331d83/modules/punctuation/punctuation.cpp#L217-L247)；AOSP LatinIME `127336e` 的 [`RichInputConnection.java`](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/127336e9f29d69607eab55982324b210279ae8c5/java/src/com/android/inputmethod/latin/RichInputConnection.java)（`reloadTextCache`）。
-  - 無痕（brief §8：不讀上下文、不送雲端，硬限制）：打開時核心丟掉前文；無痕期間一個字都不記，上屏的字不接進前文，殼給的前文也不收，所以關掉無痕後第一次打字的前文不含無痕期間打的字（殼還沒給時是不知道前文）。數字後半形的布林不含文字，無痕時照記，無痕欄位一樣打得出「3.5」。網頁無痕時不給前文、失焦時呼叫 `clear_context`；網頁只有一個輸入框，關掉無痕後會照常讀輸入框游標前的文字（含畫面上無痕時打的字），等同換到一般欄位。選開頭一段或改選某一段後，剩下的輸入碼接選定分段的最後一字，同一個機制（M1 票 21 留下的現狀改掉）。
+  - `Session` 記一份前文（殼給的前文接上核心送出去的字，名詞表），最多 `CONTEXT_LIMIT`（200）字（原本對齊 brief §8 送雲端的上限；送模型的前文改成 50 字後沒改：bigram 只看最後一字，重排取最後 `RERANK_CONTEXT` 字）：`set_context` 取代它，之後上屏的字、交還宿主的可見字元與空白（`Letter`、`Punct`、`Digit`、`Space`）接在後面；交還宿主的其他鍵（退格、Enter、方向鍵、`Other`…）改了游標前的字或移走游標，記的就作廢（不知道前文、用 unigram），等殼再給；`Modifier` 不動它。換欄位或失焦而沒有前文可給時，殼呼叫 `Session::clear_context(user)` 忘掉（上一個欄位上屏的字不會變成前文；正在打的 email 這時算打完，上面〈記住的字串〉）；有前文可給時 `set_context` 同樣整份取代，自己記的不留。數字後半形另記一個布林「游標前的字是半形數字」，和前文同時更新、但不記文字（M3 票 05）。
+  - 殼沒給前文時（宿主不提供、iOS 的 `documentContextBeforeInput` 是空的，brief §12.3）就用這個輸入框上屏過的字（M3 票 05 決定）。殼給了前文就整份取代，iOS 只給一兩句時不拿記著的較長歷史補長度：bigram 只看最後一字，補長度只對停鍵層與雲端的模型有用；票 11、25 量過送 200 字不比 50 字好，雲端不做（票 22 wontfix），所以不補。成熟做法：librime 根本不讀宿主文字，組字從頭開始時的前文就是自己的 commit history（`Translator::GetPrecedingText` 取 `commit_history().latest_text()`，最多 20 筆；退格、Enter 清掉；數字後半形也看它，`punctuator.cc` 的 `is_after_number`），fcitx5 的標點模組平時靠自己記的狀態、宿主有 SurroundingText 時在聚焦後用游標前一字校正。QIM 合起來：殼給的前文優先（每次給都取代），沒給時靠自己記的；和 librime 不同，方向鍵也作廢（游標已移走）。不採用 AOSP LatinIME 的做法（宿主回 null 就當沒有前文、不用自己的歷史）：bigram 只要最後一字，自己上屏的字就是游標前的字。來源：librime `c95c0d2` 的 [`script_translator.cc` L325–329](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/gear/script_translator.cc#L325-L329)、[`commit_history.cc` L14–26](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/commit_history.cc#L14-L26)、[`punctuator.cc` L78–86](https://github.com/rime/librime/blob/c95c0d2390c827bf44e5eb8989704ba723ec0d0c/src/rime/gear/punctuator.cc#L78-L86)；fcitx5-chinese-addons `e8d930f` 的 [`punctuation.cpp` L217–247](https://github.com/fcitx/fcitx5-chinese-addons/blob/e8d930f402e359cfd76a101ee3e46815d1331d83/modules/punctuation/punctuation.cpp#L217-L247)；AOSP LatinIME `127336e` 的 [`RichInputConnection.java`](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/127336e9f29d69607eab55982324b210279ae8c5/java/src/com/android/inputmethod/latin/RichInputConnection.java)（`reloadTextCache`）。
+  - 無痕（brief §8：不讀上下文、不送雲端，硬限制）：打開時核心丟掉前文；無痕期間一個字都不記，上屏的字不接進前文，殼給的前文也不收，所以關掉無痕後第一次打字的前文不含無痕期間打的字（殼還沒給時是不知道前文）。數字後半形的布林不含文字，無痕時照記，無痕欄位一樣打得出「3.5」。網頁無痕時不給前文、失焦時呼叫 `clear_context`（無痕時連殼給的前文是不是數字結尾也不看，所以無痕時用滑鼠把游標移到中文後面，核心仍當是數字後，M3 票 23 記為代價）；網頁只有一個輸入框，關掉無痕後會照常讀輸入框游標前的文字（含畫面上無痕時打的字），等同換到一般欄位。選開頭一段或改選某一段後，剩下的輸入碼接選定分段的最後一字，同一個機制（M1 票 21 留下的現狀改掉）。
 - 組字中修改：`Left`、`Right` 或 `focus_segment` 移到某一分段，候選改列該段的碼的字詞（和不知道前文時單打那個碼相同，不接前文與前一段；只是沒有英文候選與 emoji：它們只給剩下的整串，§2.4）；選定後該段固定，其餘分段用同一把尺重算。參考 librime 的 caret 與 Mozc 的分段轉換。
   - `Composition.focus` 預設是分段數（像 librime 的 caret 在最後）：候選列剩下沒選定的整串；← 從最後一段往前，→ 走過最後一段回到整串；打字、退格回到整串。`select(index)` 的 `index` 是全部候選的位置（librime `select_candidate`）。
   - 改選第 i 段時，前面的分段照顯示的字固定、不重算（使用者確認）：重算的輸入碼從頭建 lattice，開頭的字接最後一個選定分段的最後一字（和選開頭一段時相同，M3 票 04），單獨重算前面只會丟掉跨段 bigram 選出、使用者看過的字。目前分段的候選照舊和不知道前文時單打那個碼相同，不接前一段。選的只蓋住第 i 段開頭時，那段剩下的碼和後面的分段一起重算；否則後面已選定的不動、沒選定的重算。都選定了就上屏。所以選定的分段永遠在開頭（M1 票 21）。
@@ -317,7 +317,7 @@ P_段內 = 1（單字）
 - 分隔記號（§2.1）不進學習資料：每段、整串、自動造詞的碼都去掉它，排位規則比對的碼也去掉它（同 Rime 使用者詞典的碼由音節組成，brief §12.2）。所以 `mi'r` 選兩次「歹口」，記的是 `mir` → 歹口，不分隔打 `mir` 也成首選；分隔過的組字照舊要分兩次以上選定才自動造詞（M1 票 28）。
 - `Options.incognito` 為真時不寫任何學習資料、不用前文。學習總開關 `Options.learning`（brief §4.5、§7，預設開，M3 票 12）關掉時也不寫任何學習資料（計數、個人 bigram、自動造詞），但已學的照用、前文照用；手動加詞與常用語是使用者明確的操作，照收（同無痕）。
 - 選了聯想（§2.1，M3 票 13）只記個人 bigram「剛上屏的最後一段 → 這個聯想」（`UserModel::learn_association`，tick 同上），聯想沒有輸入碼，不記學習計數；它也成了下一次組字前面的字詞（§2.3）。無痕、學習關掉時不記。
-- 匯出格式（對外，M1 票 14 定稿 v1；M3 升 v2，收尾票定稿；改了要升版本，brief §5.3）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
+- 匯出格式（對外，M1 票 14 定稿 v1；M3 升 v2，M3 票 23 定稿：下面四種列與跳脫就是 v2，之後加列的種類或改欄位要升 v3，brief §5.3）：純文字 UTF-8、Tab 分隔、`\n` 換行（匯入也收 `\r\n`）：
   - 第一行 `# qim-userdict v2`；匯入也收 `# qim-userdict v1`（M3 spec〈共同規則〉）。接著個人 bigram 的 tick 一行 `#@/tick\t<tick>`（各方案共用，所以不帶方案；tick 是 0 時不寫），每個方案一行 `#@/tick/<方案>\t<tick>`；其餘 `#` 開頭的行與空行是註解，匯出時寫一行欄名註解，有個人 bigram 時在它們前面另一行。
   - 每個（方案, 輸入碼, 詞）一列、9 欄，依方案、輸入碼、詞排序：`方案  詞  輸入碼  整串上屏次數  最後整串上屏 tick  衰減值  最後 tick  來源  觸發詞`。來源是 `learned`（只有學習計數）、`manual`、`auto`、`phrase`（常用語，v2 起）；觸發詞只有 `manual` 與 `phrase` 有，沒有時是空字串；手動加了還沒用過的詞計數都寫 0。衰減值用最短而能讀回同一個 f64 的十進位（Rust `Display`），`export` 後 `import` 等價。
   - 個人 bigram（v2 起，M3 票 12）：每組一列、5 欄，接在上面的列之後，依前一個字詞、這一段排序：`（空的方案欄）  前一個字詞  這一段  衰減值  最後 tick`。方案欄空的就是各方案共用，和其他列分得開（其他列的方案不能空）；前一個字詞與這一段照詞欄跳脫，不能是空的，衰減值是正的有限數。沒有 `#@/tick` 行時 tick 取最大的最後 tick（同方案的 tick）。v1 沒有這種列，方案欄空的照舊整份不收。
@@ -443,13 +443,13 @@ sentences = 3         # 候選列最多放幾條多段路徑
 | 停鍵 | 停鍵後在背景執行 | Gboard 級 1.4M 神經模型（`qim-neural`，M3 票 11d） | 最高第 2 位 |
 | 雲端 | 停鍵後，非同步 | 雲端 LLM，標示來源；M3 階梯沒過門檻，暫不做 | 最高第 2 位 |
 
-- 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法）。要求帶前文（最多 50 字）與 lattice 的前 9 條整句路徑，結果是路徑的名次，排出的路徑放第 2 位（規則 3、4、5 排在第 2 位起的在它前面），候選列沒有就插入（§2.1，M3 票 11c）；`Reranker::rank` 的輸入就是要求的前文與各路徑的文字、路徑分。
+- 停鍵層和雲端層都走 `rerank_request` / `apply_rerank`，只認目前的 `generation`，同一串輸入碼的舊結果留快取（青簡做法；網頁還沒做，退格回到同一串碼會再等停鍵、再跑一次，留給 M4，M3 票 23）。要求帶前文（最多 50 字）與 lattice 的前 9 條整句路徑，結果是路徑的名次，排出的路徑放第 2 位（規則 3、4、5 排在第 2 位起的在它前面），候選列沒有就插入（§2.1，M3 票 11c）；`Reranker::rank` 的輸入就是要求的前文與各路徑的文字、路徑分。
 - 重排結果只決定名次，不寫回分數：神經分數只在同一串按鍵內可比（青簡踩過，`docs/research/open-source-imes.md` §5）。
 - `cargo xtask bench` 只跑同步層，不跑停鍵層的重排：`bench --check` 的個人集 baseline 守不到重排把哪些詞翻好或翻壞。換掉或重訓停鍵層的模型時，要跑 `scripts/experiments/model-ladder/` 的 `neural --split test` 與 `compare`（README〈怎麼重跑〉），報口語、維基、個人集的前 2 名與翻盤數；個人集只列數字與題號、只報不擋（`.scratch/m3/spec.md`〈採用門檻〉，M3 票 25）。1.4M 在新基線上個人集前 2 名 85.76% → 85.23%（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。
 - `qim-core` 不能開執行緒（§1.3），所以推論不放在 `qim-core`，放 `qim-neural`（§1.3、§1.4）：收前文與 `rerank_request` 的路徑、回名次，不碰檔案也不開執行緒，殼在背景執行緒或 Web Worker 呼叫它。殼經 `ModelPack::open` 核對模型資料包（§4.6），把欄位交給 `Reranker::new(權重, 字表, 字表外的字數, λ)`，再呼叫 `Reranker::rank(前文, 路徑的文字與路徑分)` 拿到路徑序號（好的在前）；前文只取最後 50 字（`CONTEXT_CHARS`），標點、空白、符號連續的收成 `<sep>`，字表外的字母數字連續的收成 `<unk>`；路徑裡字表外的字當 `<unk>`、另扣 `ln(字表外的字數)`；前文只算一次、各路徑共用（前綴快取），路徑補齊成一樣長一批算、補的位置遮掉；空字串的路徑神經分是 0。這台 Mac 上重排一次（9 條 × 18 字、前文 50 字，2 條執行緒）p95 約 6 ms（M3 票 11d，`cargo run --release -p qim-neural --example latency`）；網頁在 Web Worker 裡單執行緒、開 SIMD128 是 p95 27 ms（M3 票 11e，§3.1）。
 - 簡體模式下殼給的前文是簡體字，模型的字表是繁體：`rerank_request` 把前文逐字轉回繁體（反查簡繁資料包的表，一對多取語言模型 unigram 最高的，`Simplifier::traditional_chars`），選定的分段本來就是繁體原文（M3 票 11e，使用者決定）。只看單字、不看詞，「头发」會轉成「頭發」；同步層 bigram 的前文還沒轉（簡體字沒有統計時退回 unigram）。
 - 模型的來源：`scripts/neural-rerank/train.py` 用 PyTorch 訓練（不是決定性的），`cargo xtask neural-import` 用 `reference.json` 核對 PyTorch 與 candle（f32 差 ≤ 0.0001 nat）後量化成 q8、寫進 `data/neural-rerank/`（進 git），`cargo xtask data` 只把它包成模型資料包（`docs/development.md`〈停鍵層的模型〉）。
-- 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 2·神經分`，λ 2 在 dev 定），在詞級 trigram 的新基線上口語 +5.5 點（票 11d；個人集 −0.53 點，模型階梯的個人集改成只報不擋後採用，票 25）；23M、Foundation Models、雲端 LLM 沒過門檻，不做（票 25 對新基線重量：23M 只因成本、flash 比 1.4M 只多 2.4 點）。
+- 各層的模型由 M3 模型階梯定（票 11，`docs/research/model-ladder.md`）：同步層用詞級 trigram 預算版（票 11b 在 iPhone 實量放寬版的峰值增量 +71 MB，超過 60 MB，不改用，§4.3）；停鍵層用 1.4M q8（重排前 9 條路徑，前文 50 字，`路徑分 + 2·神經分`，λ 2 在 dev 定），在詞級 trigram 的新基線上口語 +5.5 點（票 11d；個人集 −0.53 點，模型階梯的個人集改成只報不擋後採用，票 25）；23M、Foundation Models、雲端 LLM 沒過門檻，不做（票 25 對新基線重量：23M 卡在 iPhone 峰值 +75 MB、flash 比 1.4M 只多 2.4 點）。
 
 ## 3. 平台殼
 
@@ -471,7 +471,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
   - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；沒有模型時不重排、打字與候選照常。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
 - 使用者資料存 `localStorage`；提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
-- LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。網頁測試頁的 API key 只放開發機環境變數，由 Vite 開發伺服器轉發，不寫進瀏覽器儲存空間。
+- LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。
 
 ### 3.2 macOS（M6）
@@ -529,7 +529,7 @@ iOS（M7）、Android（M8）、Windows（M9）、Linux（M10）各在里程碑�
 - 詞級 trigram（M3 票 11b，`qim-databuild` 的 `word_trigram.rs`；做法與 dev / test 數字在 `scripts/experiments/model-ladder/` README〈同步層〉，票 08 量過）：
   - 段：用現行打分（預設詞庫的詞與詞頻、字級 bigram、方案的 β、γ）把四份 train 切分的每句切成段（文字已知的 Viterbi，前一字固定是句中的前一字），和解碼時的切法一致；每句前面接句首當一段。換了詞庫、bigram 或 β、γ 要重建，`cargo xtask data` 每次都重切。
   - 機率：interpolated KN，折扣照標準 KN：每份語料在自己的原始次數上算 `D_k = n1 ÷ (n1 + 2 n2)`，一種 n-gram 扣 `Σ D_k × w_k`（出現在語料 k 的才算，權重同字級 bigram）。trigram 退回詞級 bigram（剪枝、量化後的那份），詞級 bigram 退回現行打分。剪枝只留乘上權重後次數 ≥ 門檻的，重算 α 讓機率加總為 1，α 夾在 1 以下（罕用的前文分母近 0，α 會爆大，票 08）。機率 `u8` 量化同字級 bigram、α 存 `f32`；詞表照第一次出現的順序編號（常見的段在前，差值的 varint 小；照文字排序重編時預算版大 0.35 MB、加上字級 bigram 超過 8 MB），只留留下的表用到的段。
-  - 兩份都建、都進資料包清單：預算版 `zh-hant-word-trigram`（門檻 bigram 8、trigram 8，4.82 MB，加上字級 bigram 7.84 MB ≤ 8 MB，`--verify` 擋），方案指名的預設；放寬版 `zh-hant-word-trigram-large`（2、4，14.56 MB），設定頁可以切換。
+  - 兩份都建、都進資料包清單：預算版 `zh-hant-word-trigram`（門檻 bigram 8、trigram 8，4.82 MB（4.60 MiB），加上字級 bigram 7.84 MB ≤ 8 MB，`--verify` 擋），方案指名的預設；放寬版 `zh-hant-word-trigram-large`（2、4，14.56 MB（13.89 MiB）），設定頁可以切換。
   - iPhone 18 Pro Max（M3 票 11b，`docs/research/ios-feasibility.md`〈詞級 trigram 的記憶體〉）：核心加六份資料包載入後 79.4 MB，再載入放寬版 footprint 留下 +23.4 MB、峰值 +71.3 MB（到 150.7 MB，那個程序收到兩次記憶體警告），超過 M3 的 60 MB 上限，所以預設留預算版；預算版留下 +5.6 MB、峰值 +20.4 MB。峰值比留下的多 48 MB，推論是解開途中的暫存（檔案位元組、`qim-ffi` 複製進 Rust 的那份、差值格式的中間陣列，沒逐項量）；要改用放寬版得先把解開改成就地轉換、再在 iPhone 量一次。
   - 和預設詞庫綁在一起：詞表的「段」是用方案指名的預設詞庫（`quick-lexicon`）與當時的打分參數（字級 bigram、β、γ）切出來的。改預設詞庫、調 β、γ 或重訓字級 bigram 時，詞級 trigram 要一起重建（`cargo xtask data` 一起建，所以本機永遠對得上）；線上更新（§4.7）各資料包各自發版，更新詞庫或語言模型時詞級 trigram 也要同一批重建、一起發，不然切法對不上。對不上不會打錯：模型沒見過的段照退回式乘 α 或整個退回現行打分，只是首選的進步變小。設定區換成粵典詞庫時就是這樣：口語集首選 37.8% → 45.4%（+7.5 點），比預設詞庫的 +8.2 點小 0.6 點（M3 票 11b Comments）。manifest 要不要記訓練用的詞庫 id 與版本、讓殼或建置端擋掉對不上的組合，留給之後（同票）。
   - 建置：四份語料切段、數一次，兩種門檻各建一份，這台 Mac 多約 30 秒、峰值約 5 GB（`cargo xtask data` 約 75 秒）。
@@ -623,7 +623,7 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
 - 發新版要加 `version`：`cargo xtask pack-release --previous <上一版的 index.json>` 拿上一版索引比（`PackIndex::check_successor`），同 id 的 sha256 變了而版本沒變大、或版本變小時失敗，release 目錄不動。這補上 §4.6「`version` 靠人加」沒有的檢查；不給 `--previous` 時不比（第一次發佈），發佈步驟見 `docs/development.md`〈線上更新的 release〉。
 - 固定用 tag `packs` 的 release、換新版時換掉它的 asset（同 Neovim 在 GitHub 上的 `nightly` 滾動 tag），不用 `releases/latest`：App 也會在同一個 repo 發 release（brief §10 的 APK），`latest` 會指到 App 的那個。換 asset 時先傳資料包、最後傳 `index.json`；中間讀到舊索引的殼下載的檔核對不過、這次不換，下次再試。
 - 網頁（§3.1）：設定區「資料包」一段的「線上更新」開關（預設開，存 `localStorage` 的 `qim.packs.update`，關掉存 `off`）與「檢查更新」鍵。開著時每次開網頁在背景檢查一次（`web/src/pack-update.ts`），不擋載入與打字；失敗、斷網或來源不回應時照用現有的，狀態列說明（brief §8）。索引 15 秒、每份資料包 120 秒讀不完算失敗，「檢查更新」鍵才能再按。關掉就不送任何請求，「檢查更新」也停用。下載的新版經 `PackLibrary.install` 存 IndexedDB（同匯入那條路），來源欄寫「線上更新」；它取代同 id 的那份，但不改每種用哪份。下載期間那份被刪掉或換掉的不裝回來。
-- 網頁讀不了 GitHub 的 release：github.com 的轉址與 release-assets.githubusercontent.com 都不帶 `Access-Control-Allow-Origin`（2026-11-11 用 curl 帶 `Origin` 標頭實測）。所以網頁一律向自己的 `/pack-updates/<檔名>` 要，由 Vite 開發伺服器轉發（`web/vite.config.ts`，同雲端 API 的做法，§3.1），來源預設 `https://github.com/1morr/QIM/releases/download/packs/`，環境變數 `QIM_PACK_UPDATE_URL` 可換。`vite build` 出的靜態頁沒有轉發，也就沒有線上更新。平台殼（M6 起）沒有 CORS，直接讀 release。
+- 網頁讀不了 GitHub 的 release：github.com 的轉址與 release-assets.githubusercontent.com 都不帶 `Access-Control-Allow-Origin`（2026-11-11 用 curl 帶 `Origin` 標頭實測）。所以網頁一律向自己的 `/pack-updates/<檔名>` 要，由 Vite 開發伺服器轉發（`web/vite.config.ts`），來源預設 `https://github.com/1morr/QIM/releases/download/packs/`，環境變數 `QIM_PACK_UPDATE_URL` 可換。`vite build` 出的靜態頁沒有轉發，也就沒有線上更新。平台殼（M6 起）沒有 CORS，直接讀 release。
 - e2e 用 Playwright 起的本機靜態伺服器（`web/e2e/static-server.ts`）扮演 release，放 `web/e2e/fixtures/pack-release/`：`qim-databuild` 的 `tests/release.rs` 照 `cargo xtask pack-release` 的路（`release::write`）寫出，不手寫索引。
 - `pack-release` 收 `build/packs/` 的每一份，停鍵層的模型資料包 `zh-hant-neural-rerank`（M3 票 11d）也一起進索引；殼裝著它時照樣線上更新。
 - 還沒在 GitHub 建 release：票 21 時使用者不在、只授權推 `main`，M3 只驗本機流程；真的建 release 前先問使用者。
@@ -704,8 +704,8 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | M0 骨架 | 閘門、資料管線 v0、核心 tracer bullet：在網頁打出第一個字 | 完成 |
 | M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | 完成 |
 | M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | 完成 |
-| M3 智慧候選 | 模型階梯實驗；個人 bigram、聯想、上下文、LLM、雲端安全、記住常打字串、詞庫擴充 | 進行中 |
-| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、譯詞、句中英文混輸實驗、欄位類型、智慧標點、滑動輸入、手機編輯手勢、同步的合併規則 | 未開始 |
+| M3 智慧候選 | 模型階梯實驗（雲端 LLM 量過不做）；上下文、詞級 trigram、停鍵層神經重排、個人 bigram、聯想、記住常打字串、詞庫擴充、資料包 manifest 與線上更新 | 完成 |
+| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、譯詞、句中英文混輸實驗、欄位類型、智慧標點、滑動輸入、手機編輯手勢、同步的合併規則 | 進行中 |
 | M5 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 未開始 |
 | M6 macOS | 第一個平台殼，一次接上全部已完成的功能 | 未開始 |
 | M7 iOS | 鍵盤擴充與主 App；多端檔案傳輸評估 | 未開始 |
@@ -713,9 +713,9 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | M9 Windows | TSF | 未開始 |
 | M10 Linux | Fcitx5 或 IBus | 未開始 |
 
-M1、M2 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
+M1–M3 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md`、`.scratch/m2/issues/12-m2-close.md` 與 `.scratch/m3/issues/23-m3-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
 
-排法：功能大多在共用核心裡，先在網頁把它們做完並確認可用（M1、M3、M4、M5），平台殼開工時核心介面已穩定，每個平台一次接上全部功能（M6–M10），不必跟著核心反覆改。平台限制會影響核心設計的部分先量（M2），例如智慧候選要用多大的模型。網頁驗不到的部分（真實 App 內的行為、各平台讀上下文的差異、手機真實延遲）仍可能在平台里程碑修改。brief §1.5「之後」與「待評估」的每一項都落在 M3–M8 其中一個。
+排法：功能大多在共用核心裡，先在網頁把它們做完並確認可用（M1、M3、M4、M5），平台殼開工時核心介面已穩定，每個平台一次接上全部功能（M6–M10），不必跟著核心反覆改。平台限制會影響核心設計的部分先量（M2），例如智慧候選要用多大的模型。網頁驗不到的部分（真實 App 內的行為、各平台讀上下文的差異、手機真實延遲）仍可能在平台里程碑修改。brief §1.5「之後」與「待評估」的每一項都落在 M3–M8 其中一個；例外是雲端聯想與補全，跟著雲端重評（M3 票 22 的重評條件），沒有排進里程碑。
 
 ### 7.1 M0 骨架
 
@@ -731,7 +731,7 @@ M1、M2 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 
 ### 7.4 M3 智慧候選
 
-進行中（2026-11-11 拆票）：目標、範圍、共同規則、驗收與票序見 `.scratch/m3/spec.md`。
+已完成（2026-11-12）：目標、範圍、共同規則、驗收與票序見 `.scratch/m3/spec.md`，session 紀錄與偏差封存在 `docs/archive/M3.md`；模型階梯的結論在 `docs/research/model-ladder.md`，重驗的證據與留給之後里程碑的發現在 `.scratch/m3/issues/23-m3-close.md` 的 Comments。
 
 ### 7.5 M4 輸入增強
 
@@ -819,7 +819,7 @@ M6–M8 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 | 延遲超過預算（M2：iPhone 18 Pro Max 鍵盤擴充每鍵 p95 64 µs、選開頭一段 0.79 ms，brief §9；低階機沒量） | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢（M3 票 10、11：Foundation Models 口語前 2 名只 +1.3 點、停頓後第一個請求 14.6% 超過 2 s；雲端 flash +10.4 點但比 1.4M 只多 2.0 點，都不做；票 25 在新基線重量，flash 比基線 +7.9、比 1.4M +2.4，仍不做；brief §1.5 已寫回） | M3 範圍 | §7.8 的實驗 | 票 25 對新基線重量：flash 比 1.4M 只多 2.4 點（要 3.0），維持不做；重評條件見票 22 |
 | iOS 鍵盤擴充不能用 Foundation Models（M2 票 10：能用，不需完整取用；但停頓後第一個請求偶爾 6–15 s，brief §12.3） | M7 的端上 LLM | M2 | iOS 只用雲端 LLM（需完整取用權限） |
-| 瀏覽器呼叫雲端 LLM 被 CORS 擋 | M3 的網頁接入 | M3 開工時 | 用 Vite 開發伺服器轉發，只影響網頁測試頁 |
+| 瀏覽器呼叫雲端 LLM 被 CORS 擋 | 雲端重評後的網頁接入 | 重評時 | 用 Vite 開發伺服器轉發，只影響網頁測試頁；線上更新讀 GitHub release 遇到同一個問題，已這樣做（§4.7） |
 | 內嵌網頁編輯器在手機主 App 手感不佳 | M7、M8 | M7 開工時 | 只把手機上手感差的操作改原生；要全改原生時記偏差 |
 | iOS 鍵盤擴充收不到實體鍵事件（目前只有 2017 年的第三方說法，未查證） | M7 的實體鍵盤 | M7 開工時 | iOS 不做實體鍵盤模式，設定頁註明，寫回 brief §1.5 |
 | 網頁驗不到的平台差異（真實 App 行為、讀上下文、手機延遲） | M6–M10 | 各平台實打 | 修平台殼；要動核心時記偏差並重跑首選字基準 |

@@ -4,6 +4,8 @@
 - commit：開工 `936a7cf`；框架與第一次的數字是 `8f8fdcb`，code-review 後的修正（分組、結果檔的切分欄）在它的下一個 commit，數字重跑後相同。README 不寫含它自己的 commit（同 M2 票 08 的做法），之後重跑用 `git log -- scripts/experiments/model-ladder` 對。
 - 問題（`.scratch/m3/spec.md`〈模型階梯實驗〉）：同步、停鍵、雲端三層各用哪個模型。本票建三張實驗票（08 同步 n-gram、09 神經、10 LLM）共用的框架，量出基線（字級 bigram 加 `set_context`），定重排模型看幾條路徑（N）與路徑長度，提出採用門檻。
 
+停鍵層與雲端層的實驗另有 README，模型版本、提示、結果表在那裡：票 09 的 1.4M、23M 神經重排在 `../neural-rerank/README.md`，票 10 的 Foundation Models 與 DeepSeek 在 `../llm-rerank/README.md`。本檔只放框架、基線、同步層與票 25 的重量；各層結論在 `docs/research/model-ladder.md`。
+
 ## 內容
 
 | 路徑 | 內容 |

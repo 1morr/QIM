@@ -770,10 +770,9 @@ impl UserModel {
                 .max(row.count.last_tick)
                 .max(row.count.last_commit_tick);
         }
-        for (scheme, model) in &mut user.schemes {
-            if let Some(&tick) = ticks.get(scheme.as_str()) {
-                model.tick = tick;
-            }
+        // 只剩 tick 行、沒有資料列的方案（資料列都刪光了）也要還原。
+        for (scheme, &tick) in &ticks {
+            user.for_scheme_mut(scheme).tick = tick;
         }
         // 沒有 tick 行時，個人 bigram 的 tick 取最大的最後 tick（同方案）。
         if let Some(tick) = shared_tick {
