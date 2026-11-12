@@ -1,5 +1,6 @@
 //! 每鍵延遲（plan §5.2）：逐鍵打基準的每個輸入碼，量每次按鍵到 `Snapshot` 回來的時間，
-//! 原生與 WebAssembly 各量一次，報 p50 / p95。只報不擋：機器負載會飄，`--check` 不比、baseline 不記。
+//! 原生與 WebAssembly 各量一次，報 p50 / p95；空白的學習資料與學過的（[`UserData`]）各一組。
+//! 原生的 p95 由 `--check` 擋（[`p95_limits_ms`]），WebAssembly 只報；baseline 不記。
 //!
 //! 每個輸入都從空的組字打起；載入資料包不算在內，另報一次載入的時間（[`Timing::load_ms`]）。
 //! 打完有兩段以上的輸入另量「選開頭一段」那一鍵（[`lefts_to_first_segment`]）：選定後剩下的輸入碼
@@ -12,6 +13,34 @@ use std::process::{Command, Stdio};
 use std::time::Instant;
 
 use qim_core::{Engine, Key, Session, Snapshot, UserModel};
+
+/// 計時時的學習資料。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserData {
+    /// 空白的 `UserModel`，同基準的其他部分。
+    Blank,
+    /// 一個 `UserModel` 依序學完各語料集合與「有前文」的題（給前文）之後（M3 票 12 的量法）。
+    Learned,
+}
+
+impl UserData {
+    pub fn label(self) -> &'static str {
+        match self {
+            UserData::Blank => "空白",
+            UserData::Learned => "學過",
+        }
+    }
+}
+
+/// 原生 p95 的上限，毫秒，順序同 [`Timing::groups`]（全部、第 20 碼起、選開頭一段）。
+/// 數字與改上限的條件在 `.scratch/m4/spec.md`〈每鍵延遲上限〉：比 M3 收尾時留約 7–13 倍的餘裕，
+/// 擋倍數級的變慢，不擋機器負載的雜訊。
+pub fn p95_limits_ms(user: UserData) -> [f64; 3] {
+    match user {
+        UserData::Blank => [1.0, 1.0, 5.0],
+        UserData::Learned => [3.0, 3.0, 10.0],
+    }
+}
 
 /// 組字已有這麼多碼時的按鍵另成一組：連打變長時延遲會不會跟著長（票 12 的延遲預算要看它）。
 /// 只算每個輸入的第 20 鍵起：前 19 鍵的組字和短輸入一樣短，算進來會稀釋。
@@ -37,16 +66,57 @@ pub struct Timing {
     pub load_ms: Option<f64>,
 }
 
-/// 在 WebAssembly 上量時間的方式：給基準載入的每份資料包路徑（順序不拘，腳本依檔頭魔數分辨）與輸入碼，逐鍵打每個輸入。
+/// 在 WebAssembly 上量時間的方式：給基準載入的每份資料包路徑（順序不拘，腳本依檔頭魔數分辨）、
+/// 學習資料（`UserModel::export` 的文字，空白的學習資料是 `None`）與輸入碼，逐鍵打每個輸入。
 /// 實際用 [`node_wasm_timer`]；測試可以換成假的。
-pub type WasmTimer<'a> = &'a dyn Fn(&[PathBuf], &[String]) -> Result<Timing, String>;
+pub type WasmTimer<'a> = &'a dyn Fn(&[PathBuf], Option<&str>, &[String]) -> Result<Timing, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Latency {
     /// CPU、作業系統與架構，報告註明在哪台機器量的。
     pub machine: String,
+    pub blank: Runs,
+    pub learned: Runs,
+}
+
+/// 同一份學習資料下原生與 WebAssembly 各量一次。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Runs {
     pub native: Timing,
     pub wasm: Timing,
+}
+
+impl Latency {
+    /// 空白與學過兩組，依序。
+    pub fn runs(&self) -> [(UserData, &Runs); 2] {
+        [
+            (UserData::Blank, &self.blank),
+            (UserData::Learned, &self.learned),
+        ]
+    }
+
+    /// 原生的 p95 超過 [`p95_limits_ms`] 的每一格一條；WebAssembly 只報不擋。組裡沒有按鍵的不比。
+    pub fn violations(&self) -> Vec<String> {
+        let mut violations = Vec::new();
+        for (user, runs) in self.runs() {
+            for ((group, summary), limit) in
+                runs.native.groups().into_iter().zip(p95_limits_ms(user))
+            {
+                if let Some(s) = summary
+                    && s.p95 > limit
+                {
+                    violations.push(format!(
+                        "每鍵延遲超過上限：原生、學習資料{}、{group} 的 p95 {:.0} µs > {:.0} µs\
+                         （先在負載低時單獨重跑一次，仍超過才算，見 docs/development.md〈每鍵延遲〉）",
+                        user.label(),
+                        s.p95 * 1000.0,
+                        limit * 1000.0
+                    ));
+                }
+            }
+        }
+        violations
+    }
 }
 
 /// 一組輸入的統計，毫秒。
@@ -56,6 +126,13 @@ pub struct Summary {
     pub keys: usize,
     pub p50: f64,
     pub p95: f64,
+}
+
+impl Summary {
+    /// p95 超過上限 `limit_ms`（[`p95_limits_ms`] 的一格）。
+    pub fn over(&self, limit_ms: f64) -> bool {
+        self.p95 > limit_ms
+    }
 }
 
 impl Timing {
@@ -106,15 +183,34 @@ fn summary(timing: &Timing, skip: usize) -> Option<Summary> {
     })
 }
 
-/// 原生與 WebAssembly 各量一次 `inputs`：固定題與各語料集合的每一題（個人集不量，各機器才比得起來）。
+/// 空白與學過的學習資料（`learned`）下，原生與 WebAssembly 各量一次 `inputs`：固定題與各語料集合的
+/// 每一題（個人集不量，各機器才比得起來）。
 pub fn measure(
     engine: &Engine,
     packs: &[PathBuf],
     inputs: &[String],
+    learned: &UserModel,
     wasm: WasmTimer,
 ) -> Result<Latency, String> {
-    let native = native_timing(engine, inputs);
-    let wasm = wasm(packs, inputs)?;
+    Ok(Latency {
+        machine: machine(),
+        blank: measure_runs(engine, packs, inputs, None, wasm)?,
+        learned: measure_runs(engine, packs, inputs, Some(learned), wasm)?,
+    })
+}
+
+/// 同一份學習資料（`None` 是空白的；WebAssembly 匯入它的 `UserModel::export`）下各量一次，
+/// 核對兩邊量的是同一批輸入。
+fn measure_runs(
+    engine: &Engine,
+    packs: &[PathBuf],
+    inputs: &[String],
+    user: Option<&UserModel>,
+    wasm: WasmTimer,
+) -> Result<Runs, String> {
+    let native = native_timing_with(engine, user.unwrap_or(&UserModel::default()), inputs);
+    let user_dict = user.map(UserModel::export);
+    let wasm = wasm(packs, user_dict.as_deref(), inputs)?;
     let shape = |timing: &Timing| timing.per_key_ms.iter().map(Vec::len).collect::<Vec<_>>();
     let keys: Vec<usize> = inputs.iter().map(|input| input.chars().count()).collect();
     let selects = |timing: &Timing| {
@@ -140,11 +236,7 @@ pub fn measure(
             wasm.select_ms.iter().flatten().count()
         ));
     }
-    Ok(Latency {
-        machine: machine(),
-        native,
-        wasm,
-    })
+    Ok(Runs { native, wasm })
 }
 
 /// 排序後第 ⌈p/100 × n⌉ 個（nearest-rank）；沒有值時是 `None`。
@@ -155,15 +247,21 @@ pub fn percentile(values: &[f64], p: u32) -> Option<f64> {
     sorted.get(rank - 1).copied()
 }
 
-/// 原生量一次 `inputs`（[`measure`] 的原生那一半；模型階梯也用它量換了語言模型的引擎，M3 票 08）：
-/// 每個輸入用新的 `Session` 與空白的 `UserModel`，只計 `Session::handle`（選開頭一段是
-/// `Session::select`）那一次呼叫。
+/// 原生在空白的學習資料下量一次 `inputs`（模型階梯也用它量換了語言模型的引擎，M3 票 08），
+/// 見 [`native_timing_with`]。
 pub fn native_timing(engine: &Engine, inputs: &[String]) -> Timing {
+    native_timing_with(engine, &UserModel::default(), inputs)
+}
+
+/// 原生在學習資料 `user` 下量一次 `inputs`（[`measure`] 的原生那一半）：每個輸入用新的 `Session`，
+/// 只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。各輸入共用 `user` 的一份複本，
+/// 同 WebAssembly 一個 `Session` 打到底（打字與選開頭一段都不上屏，不學）。
+pub fn native_timing_with(engine: &Engine, user: &UserModel, inputs: &[String]) -> Timing {
+    let mut user = user.clone();
     let (per_key_ms, select_ms) = inputs
         .iter()
         .map(|input| {
             let mut session = Session::default();
-            let mut user = UserModel::default();
             let mut last = Snapshot::default();
             let keys = input
                 .chars()
@@ -201,19 +299,32 @@ pub fn native_timing(engine: &Engine, inputs: &[String]) -> Timing {
     }
 }
 
-/// 用 Node 跑 [`WASM_SCRIPT`]：資料包路徑當參數，輸入碼一行一個從 stdin 送進去；stdout 的格式見
-/// [`parse_timing`]。`root` 是 repo 根目錄。
+/// 用 Node 跑 [`WASM_SCRIPT`]：資料包路徑當參數，有學習資料時先寫到暫存檔、以 `--user-dict <檔>`
+/// 給它；輸入碼一行一個從 stdin 送進去；stdout 的格式見 [`parse_timing`]。`root` 是 repo 根目錄。
 pub fn node_wasm_timer(
     root: &Path,
-) -> impl Fn(&[PathBuf], &[String]) -> Result<Timing, String> + '_ {
-    move |packs, inputs| {
+) -> impl Fn(&[PathBuf], Option<&str>, &[String]) -> Result<Timing, String> + '_ {
+    move |packs, user_dict, inputs| {
         if !root.join(WASM_BINDINGS).exists() {
             return Err(format!(
                 "沒有 {WASM_BINDINGS}：用 `cargo xtask bench` 跑（會先編綁定），或先跑 `cargo xtask web`"
             ));
         }
-        let mut child = Command::new("node")
-            .arg(root.join(WASM_SCRIPT))
+        // 離開時刪掉。
+        let dict_file = user_dict
+            .map(|text| {
+                let mut file = tempfile::NamedTempFile::new()?;
+                file.write_all(text.as_bytes())?;
+                Ok(file)
+            })
+            .transpose()
+            .map_err(|e: std::io::Error| format!("寫不了學習資料的暫存檔：{e}"))?;
+        let mut command = Command::new("node");
+        command.arg(root.join(WASM_SCRIPT));
+        if let Some(file) = &dict_file {
+            command.arg("--user-dict").arg(file.path());
+        }
+        let mut child = command
             .args(packs)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

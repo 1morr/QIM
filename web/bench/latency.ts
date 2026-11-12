@@ -1,6 +1,7 @@
 // WebAssembly 的每鍵延遲（plan §5.2）：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈首選字基準〉。
 //
-// 用法：node bench/latency.ts <資料包路徑>…，stdin 一行一個輸入碼。每份資料包旁要有它的 manifest.json
+// 用法：node bench/latency.ts [--user-dict <學習資料>] <資料包路徑>…，stdin 一行一個輸入碼。給了學習資料
+// （`exportUserDict` 的文字檔）時，建好 Session 後先 `importUserDict`（不計入載入），各輸入共用它。每份資料包旁要有它的 manifest.json
 // （plan §4.6），種類照 manifest、順序不拘：速成方案一份必給，詞庫、語言模型、詞級 trigram、英文、emoji
 // 各至多一份。stdout 第一行是 runtime、` | ` 與 `new Session` 的毫秒數（載入：核對 manifest、解開、建
 // Engine），之後每個輸入一行、各鍵的毫秒數以空白分隔；打完有兩段以上時按 ← 到第一段（不計時）再選它的
@@ -12,8 +13,14 @@ import { dirname, join } from "node:path";
 import { initSync, Pack, Session } from "../src/wasm/qim_wasm.js";
 
 const USAGE =
-	"用法：node bench/latency.ts <資料包路徑>…（速成方案必給，詞庫、語言模型、詞級 trigram、英文、emoji 選給；旁邊要有 manifest.json），stdin 一行一個輸入碼";
-const paths = process.argv.slice(2);
+	"用法：node bench/latency.ts [--user-dict <學習資料>] <資料包路徑>…（速成方案必給，詞庫、語言模型、詞級 trigram、英文、emoji 選給；旁邊要有 manifest.json），stdin 一行一個輸入碼";
+const args = process.argv.slice(2);
+let userDict: string | undefined;
+if (args[0] === "--user-dict") {
+	userDict = args[1];
+	args.splice(0, 2);
+}
+const paths = args;
 if (paths.length === 0) {
 	console.error(USAGE);
 	process.exit(2);
@@ -34,6 +41,8 @@ const packs = paths.map(
 const loadStart = performance.now();
 const session = new Session(packs);
 const loadMs = performance.now() - loadStart;
+if (userDict !== undefined)
+	session.importUserDict(readFileSync(userDict, "utf8"));
 const inputs = readFileSync(0, "utf8")
 	.split("\n")
 	.filter((line) => line.length > 0);

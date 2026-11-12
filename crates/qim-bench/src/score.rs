@@ -239,6 +239,20 @@ pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> L
     }
 }
 
+/// 一個 `UserModel` 依序學完 `items`（每題照修正次數的模擬上屏，同 [`learning`] 的學習開）。
+pub fn learned_model<'a>(engine: &Engine, items: impl IntoIterator<Item = &'a Item>) -> UserModel {
+    let mut learned = UserModel::default();
+    for item in items {
+        simulate(
+            engine,
+            Some(&mut learned),
+            item.context.as_deref(),
+            &item.units,
+        );
+    }
+    learned
+}
+
 fn top_of(snapshot: &Snapshot) -> String {
     snapshot
         .candidates
