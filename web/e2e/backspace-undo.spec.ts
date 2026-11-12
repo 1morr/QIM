@@ -164,6 +164,38 @@ test.describe("緊接著的退格", () => {
 		await expect(items.first()).toHaveText(`1${second}`);
 	});
 
+	test("實體鍵位換字（AZERTY 的實體 A 鍵：key 是 q、code 是 KeyA）打出的上屏，緊接退格照樣撤銷", async ({
+		page,
+	}) => {
+		const { text, items, association } = ui(page);
+		await association.uncheck();
+		await text.focus();
+		const [top, second] = await topTwo(page);
+		/** 送一個 key 與 code 不同的按下事件（同 `physical-weighted.spec.ts`）。 */
+		const physicalA = () =>
+			text.evaluate((element) => {
+				element.dispatchEvent(
+					new KeyboardEvent("keydown", {
+						key: "q",
+						code: "KeyA",
+						bubbles: true,
+						cancelable: true,
+					}),
+				);
+			});
+		for (let i = 0; i < 2; i++) {
+			await physicalA();
+			await expect(items.nth(1)).toHaveText(`2${second}`);
+			await page.keyboard.press("2");
+		}
+		await expect(text).toHaveValue(second + second);
+
+		await page.keyboard.press("Backspace");
+		await expect(text).toHaveValue(second);
+		await physicalA();
+		await expect(items.first()).toHaveText(`1${top}`);
+	});
+
 	test("英文直通打完一串後緊接退格：那串不學，改過再打完的才學", async ({
 		page,
 	}, testInfo) => {
@@ -212,4 +244,40 @@ test.describe("時限（殼計時，照 librime 的 3 秒）", () => {
 			await expect(items.first()).toHaveText(`1${undone ? top : second}`);
 		});
 	}
+});
+
+test("localStorage 打不開（學習資料只在記憶體）：上屏後緊接退格照樣撤銷", async ({
+	page,
+}) => {
+	errors = [];
+	page.on("pageerror", (error) => errors.push(error));
+	await page.addInitScript(() => {
+		Object.defineProperty(window, "localStorage", {
+			configurable: true,
+			get() {
+				throw new DOMException("封鎖了網站資料", "SecurityError");
+			},
+		});
+	});
+	await page.goto("/");
+	const { text, items, association } = ui(page);
+	await expect(text).toHaveAttribute("data-ready", "true");
+	await association.uncheck();
+	await text.focus();
+	const [top, second] = await topTwo(page);
+
+	await chooseSecond(page, second);
+	await chooseSecond(page, second);
+	await expect(page.locator("#status")).toContainText("不會存");
+	await page.keyboard.press("Backspace");
+	await expect(text).toHaveValue(second);
+	await page.keyboard.type("a");
+	await expect(items.first()).toHaveText(`1${top}`);
+
+	// 對照：記憶體裡的學習照常，再選一次（回到兩次）它就成首選。
+	await page.keyboard.press("2");
+	await page.keyboard.press("Space");
+	await page.keyboard.type("a");
+	await expect(items.first()).toHaveText(`1${second}`);
+	expect(errors).toEqual([]);
 });
