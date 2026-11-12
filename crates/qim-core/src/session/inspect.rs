@@ -20,8 +20,8 @@ pub struct Inspection {
     pub segments: Vec<Segment>,
     /// 全部候選（不分頁），依目前的順序。
     pub candidates: Vec<InspectedCandidate>,
-    /// 最近一個鍵是觸控的 [`crate::Key::Weighted`] 時，它的各字母機率（M4 票 06）；其他鍵是 `None`。
-    pub touch_weights: Option<Weights>,
+    /// 最近一個鍵是 [`crate::Key::Weighted`]（觸控或實體鍵盤的字母鍵）時，它的各字母機率（M4 票 06、07）；其他鍵是 `None`。
+    pub key_weights: Option<Weights>,
 }
 
 /// 核心記著的前文是什麼。
@@ -144,7 +144,7 @@ impl Session {
             preceding_word: before.word,
             segments: self.composition(engine).segments,
             candidates,
-            touch_weights: self.touch_weights.clone(),
+            key_weights: self.key_weights.clone(),
         }
     }
 }

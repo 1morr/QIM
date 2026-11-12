@@ -39,9 +39,12 @@
 | 2026-11-12 | M4 06b | 平手點都在鍵外（點擊判定照直線距離、Gaussian 各軸 σ 不同），照設計提到平手；測試格子補 Shift、刪除，種子進 repo 並加固定測試，產品沒改；見票 06b | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
 | 2026-11-12 | M4 14 | 英文使用者詞取代記住的字串：4 字元起都學、門檻 2／3 次、規則 4、5 改寫、v3 種類 `english`；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m4/issues/15-backspace-undo.md` |
 | 2026-11-12 | M4 02 | 換模型競態與模型載入搬進 `NeuralReranker`、`snapshot.free()` 收一處；IndexedDB 或 `localStorage` 打不開照樣能打字（只留記憶體、狀態列說明）；見票 02 | 新 session 下 `/implement .scratch/m4/issues/03-rerank-cache.md` |
+| 2026-11-12 | M4 07 | 實體鍵盤送 `code`，`qim-layout` 的鄰鍵先驗轉成 `Weighted`；中文模式整個當美式鍵盤（使用者決定）；名詞改成按鍵機率；bench 前後相同；見票 07 | 新 session 下 `/implement .scratch/m4/issues/08-typo-bench.md` |
 
 ## 偏差與決定
 
+- 2026-11-12 M4 票 07：名詞「觸控機率」改成按鍵機率（含實體鍵盤），新增鄰鍵先驗；`touch_weights` → `key_weights`、面板 `debug-weights`；改名詞表、plan §0、§2.1、§3.1。
+- 2026-11-12 M4 票 07（使用者決定）：中文模式整個當美式鍵盤，字母與標點都照實體鍵位（`code`），英文直通照配列（臨時英文同樣照配列是票 07 的推論）；改 brief §4.8、plan §2.1。
 - 2026-11-12 M4 票 02（協調者決定）：票誤寫學習資料在 IndexedDB（實際在 `localStorage`）；本票改成兩種儲存打不開都照樣能打字、存不了的只留記憶體；改 plan §3.1、§4.6。
 - 2026-11-12 M4 票 14（協調者決定）：中文組字的前綴補完只取英文詞典沒有的英文使用者詞（過 3 次、最常用 20 條），詞典詞走規則 4 與第二期的英文建議列，免得 that、have 把 email 擠出去；改 plan §2.4 規則 5、brief §4.7。
 - 2026-11-12 M4 票 14：記住的字串併入英文使用者詞（plan §2.1、§2.4、brief、名詞表）；v3 草稿 `string` 換成 `english`、舊列略過；v2 的記住的字串匯入成次數 3；與中文的列共用條目上限。

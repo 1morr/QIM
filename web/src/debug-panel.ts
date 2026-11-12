@@ -50,8 +50,8 @@ interface Inspection {
 	precedingWord?: string;
 	segments: { code: string; text: string; selected: boolean }[];
 	candidates: InspectedCandidate[];
-	/** 最近一個鍵是觸控字母鍵時各字母的機率，由高到低（M4 票 06）；其他鍵是空的。 */
-	touch: { letter: string; probability: number }[];
+	/** 最近一個鍵送了按鍵機率（觸控或實體鍵盤的字母鍵，M4 票 06、07）時各字母的機率，由高到低；其他鍵是空的。 */
+	weights: { letter: string; probability: number }[];
 }
 
 /** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
@@ -100,9 +100,9 @@ function read(inspection: WasmInspection): Inspection {
 				rerankInserted: c.rerankInserted,
 			})),
 		),
-		touch: i.touchLetters.map((letter, k) => ({
+		weights: i.weightLetters.map((letter, k) => ({
 			letter,
-			probability: i.touchProbabilities[k],
+			probability: i.weightProbabilities[k],
 		})),
 	}));
 }
@@ -303,13 +303,13 @@ export function mountDebugPanel(
 		return line;
 	};
 
-	// 觸控的空間模型：最近一下點擊算出的各字母機率；容錯進核心之前核心只用第一個。
-	const touchLine = (inspection: Inspection): HTMLElement => {
-		const line = make("p", "觸控機率：", { "data-testid": "debug-touch" });
-		if (inspection.touch.length === 0) {
-			line.append("（最近一個鍵不是觸控字母鍵）");
+	// 按鍵機率：觸控的空間模型或實體鍵盤的鄰鍵先驗算出的各字母機率；容錯進核心之前核心只用第一個。
+	const weightsLine = (inspection: Inspection): HTMLElement => {
+		const line = make("p", "按鍵機率：", { "data-testid": "debug-weights" });
+		if (inspection.weights.length === 0) {
+			line.append("（最近一個鍵沒有送機率）");
 		}
-		for (const { letter, probability } of inspection.touch) {
+		for (const { letter, probability } of inspection.weights) {
 			line.append(
 				make("code", `${letter} ${(probability * 100).toFixed(1)}%`, {
 					"data-letter": letter,
@@ -441,7 +441,7 @@ export function mountDebugPanel(
 		root.replaceChildren(
 			contextLine(inspection),
 			segmentsLine(inspection),
-			touchLine(inspection),
+			weightsLine(inspection),
 			topLine(inspection),
 			candidateTable(inspection),
 			rerankSection(),
