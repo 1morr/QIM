@@ -118,6 +118,7 @@ fn load(root: &Path, name: &str) -> (Vec<Item>, Vec<Item>) {
             label: (i + 1).to_string(),
             weight: 1,
             context: None,
+            typed: None,
         })
         .collect();
     (sentences, singles)

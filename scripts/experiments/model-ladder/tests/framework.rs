@@ -54,6 +54,7 @@ fn item(line: usize, codes: &str, text: &str, context: Option<&str>) -> Item {
         label: line.to_string(),
         weight: 1,
         context: context.map(Into::into),
+        typed: None,
     }
 }
 

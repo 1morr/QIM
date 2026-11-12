@@ -168,6 +168,17 @@ pub struct CorpusSummary {
     pub context_sentences: usize,
     /// 「有前文」的基準檔，相對 repo 根目錄。
     pub context_bench: PathBuf,
+    /// 「含打錯碼」與「觸控模擬」的基準檔（M4 票 08）；沒有的語料是 `None`。
+    pub typo: Option<TypoSummary>,
+}
+
+/// 一個語料的「含打錯碼」與「觸控模擬」基準檔與統計。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypoSummary {
+    pub typo: PathBuf,
+    pub typo_stats: crate::typo::Stats,
+    pub touch: PathBuf,
+    pub touch_stats: crate::typo::Stats,
 }
 
 impl fmt::Display for CorpusSummary {
@@ -185,7 +196,22 @@ impl fmt::Display for CorpusSummary {
             self.context_sentences,
             self.context_bench.display(),
             c.dropped
-        )
+        )?;
+        if let Some(t) = &self.typo {
+            let percent = |rate: f64| rate * 100.0;
+            write!(
+                f,
+                "；含打錯碼 {} 題進 {}（每鍵出錯 {:.1}%、有錯的題 {:.1}%）、觸控模擬進 {}（每鍵點到別的字母 {:.1}%、有錯的題 {:.1}%）",
+                t.typo_stats.items,
+                t.typo.display(),
+                percent(t.typo_stats.key_error_rate()),
+                percent(t.typo_stats.item_error_rate()),
+                t.touch.display(),
+                percent(t.touch_stats.key_error_rate()),
+                percent(t.touch_stats.item_error_rate()),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -814,6 +840,8 @@ fn word_codes(code_table: &CodeTable, lexicon: &Lexicon) -> Check {
 pub struct CorpusDigests {
     pub bench: String,
     pub context_bench: String,
+    /// 「含打錯碼」與「觸控模擬」的基準題（只有口語，M4 票 08）。
+    pub typo: Option<[String; 2]>,
     pub train: String,
     pub dev: String,
     pub chars: String,
@@ -821,14 +849,16 @@ pub struct CorpusDigests {
 
 /// 一個語料的轉碼與決定性檢查；洩漏要看所有語料的 train，另由 [`leaks`] 檢查。
 /// `bench` 是基準檔的內容（一行「逐字速成碼<TAB>句子」），`context_bench` 是「有前文」的
-/// 基準檔（一行「前文<TAB>逐字速成碼<TAB>句子」），`train`、`dev` 一行一句；
+/// 基準檔（一行「前文<TAB>逐字速成碼<TAB>句子」），`typo` 是「含打錯碼」與「觸控模擬」的基準檔（一行
+/// 「實際按的鍵或點擊<TAB>逐字速成碼<TAB>句子」，M4 票 08），`train`、`dev` 一行一句；
 /// `first`、`second` 是兩次建置的 sha256。
-#[allow(clippy::too_many_arguments)] // 兩份基準、兩份切分與兩次 sha256，拆成結構只為了湊參數數
+#[allow(clippy::too_many_arguments)] // 三種基準、兩份切分與兩次 sha256，拆成結構只為了湊參數數
 pub fn corpus(
     name: &str,
     transcoder: &Transcoder,
     bench: &str,
     context_bench: &str,
+    typo: &[&str],
     train: impl BufRead,
     dev: impl BufRead,
     first: &CorpusDigests,
@@ -845,7 +875,12 @@ pub fn corpus(
                 .is_ok_and(|expected| expected.join(" ") == *codes)
     };
     let mut failures = bench.lines().filter(|l| !codes_match(l, 2)).count()
-        + context_bench.lines().filter(|l| !codes_match(l, 3)).count();
+        + context_bench.lines().filter(|l| !codes_match(l, 3)).count()
+        + typo
+            .iter()
+            .flat_map(|t| t.lines())
+            .filter(|l| !codes_match(l, 3))
+            .count();
     for line in train.lines().chain(dev.lines()) {
         if transcoder.transcode(&line?).is_err() {
             failures += 1;

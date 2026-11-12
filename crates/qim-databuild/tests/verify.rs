@@ -853,21 +853,37 @@ mod corpus {
         dev: &str,
         second: [&str; 5],
     ) -> Vec<CheckId> {
+        failed_with_typo(bench, context, &[], train, dev, second, None)
+    }
+
+    /// `typo` 是「含打錯碼」與「觸控模擬」的基準題；`second_typo` 是第二次建置它們的 sha256（`None` 是同第一次）。
+    fn failed_with_typo(
+        bench: &str,
+        context: &str,
+        typo: &[&str],
+        train: &str,
+        dev: &str,
+        second: [&str; 5],
+        second_typo: Option<[&str; 2]>,
+    ) -> Vec<CheckId> {
         let transcoder = Transcoder::new(&libcangjie::parse(TABLE).unwrap());
-        let digests = |[bench, context_bench, train, dev, chars]: [&str; 5]| CorpusDigests {
-            bench: bench.into(),
-            context_bench: context_bench.into(),
-            train: train.into(),
-            dev: dev.into(),
-            chars: chars.into(),
-        };
-        let first = digests(SAME);
-        let second = digests(second);
+        let digests =
+            |[bench, context_bench, train, dev, chars]: [&str; 5], typo: [&str; 2]| CorpusDigests {
+                bench: bench.into(),
+                context_bench: context_bench.into(),
+                typo: Some(typo.map(String::from)),
+                train: train.into(),
+                dev: dev.into(),
+                chars: chars.into(),
+            };
+        let first = digests(SAME, ["y", "z"]);
+        let second = digests(second, second_typo.unwrap_or(["y", "z"]));
         verify::corpus(
             "test",
             &transcoder,
             bench,
             context,
+            typo,
             train.as_bytes(),
             dev.as_bytes(),
             &first,
@@ -881,6 +897,36 @@ mod corpus {
     }
 
     const SAME: [&str; 5] = ["b", "x", "t", "d", "c"];
+
+    /// 打錯碼的題（M4 票 08）：第一欄是實際按的鍵、第二欄的碼要轉得出句子，兩次建置要一樣。
+    #[test]
+    fn typo_benches_must_transcode_and_be_deterministic() {
+        let typo = [
+            "ra a\tar a\t問日\n",
+            "1.0,2.0;3.5,4.0 5.0,6.0\tar a\t問日\n",
+        ];
+        assert_eq!(
+            failed_with_typo(BENCH, CONTEXT, &typo, TRAIN, DEV, SAME, None),
+            []
+        );
+        let wrong = ["ra a\tar mi\t問日\n"];
+        assert_eq!(
+            failed_with_typo(BENCH, CONTEXT, &wrong, TRAIN, DEV, SAME, None),
+            [CheckId::CorpusTranscodes]
+        );
+        assert_eq!(
+            failed_with_typo(
+                BENCH,
+                CONTEXT,
+                &typo,
+                TRAIN,
+                DEV,
+                SAME,
+                Some(["y", "other"])
+            ),
+            [CheckId::CorpusDeterministic]
+        );
+    }
 
     #[test]
     fn clean_corpus_passes_even_with_lines_in_another_order() {

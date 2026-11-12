@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use qim_databuild::corpora::{self, CORPORA, Group};
-use qim_databuild::personal;
+use qim_databuild::{personal, typo};
 
 /// 一邊寫的路徑與檔頭，每項是「項目、值」；兩邊的項目依同樣的順序排。
 type Shared = Vec<(String, String)>;
@@ -28,6 +28,25 @@ fn databuild(corpora: &[&str]) -> Shared {
             .enumerate()
             .map(|(i, group)| (format!("第 {i} 個有前文目錄"), group.context_dir().into())),
     );
+    shared.extend(
+        Group::ALL
+            .iter()
+            .filter_map(|group| group.typo_dir())
+            .enumerate()
+            .map(|(i, dir)| (format!("第 {i} 個打錯碼目錄"), dir.into())),
+    );
+    shared.extend(
+        Group::ALL
+            .iter()
+            .filter_map(|group| group.touch_dir())
+            .enumerate()
+            .map(|(i, dir)| (format!("第 {i} 個觸控模擬目錄"), dir.into())),
+    );
+    shared.push(("觸控模擬的佈局".into(), typo::TOUCH_LAYOUT.into()));
+    shared.push((
+        "觸控模擬的畫布尺寸".into(),
+        typo::TOUCH_MM_PER_UNIT.to_string(),
+    ));
     // 照 `/` 接，Windows 的 `\` 才不算不一致。
     let slashed = |path: std::path::PathBuf| {
         let parts: Vec<String> = path
@@ -62,6 +81,14 @@ fn databuild(corpora: &[&str]) -> Shared {
             format!("{name} 的 dev 口語長前文題"),
             slashed(corpora::dev_dialogue_items_path(root, name)),
         ));
+        shared.push((
+            format!("{name} 的 dev 打錯碼題"),
+            slashed(corpora::dev_typo_items_path(root, name)),
+        ));
+        shared.push((
+            format!("{name} 的 dev 觸控模擬題"),
+            slashed(corpora::dev_touch_items_path(root, name)),
+        ));
     }
     shared
 }
@@ -88,6 +115,23 @@ fn bench(corpora: &[&str]) -> Shared {
             .enumerate()
             .map(|(i, dir)| (format!("第 {i} 個有前文目錄"), (*dir).into())),
     );
+    shared.extend(
+        qim_bench::TYPO_DIRS
+            .iter()
+            .enumerate()
+            .map(|(i, dir)| (format!("第 {i} 個打錯碼目錄"), (*dir).into())),
+    );
+    shared.extend(
+        qim_bench::TOUCH_DIRS
+            .iter()
+            .enumerate()
+            .map(|(i, dir)| (format!("第 {i} 個觸控模擬目錄"), (*dir).into())),
+    );
+    shared.push(("觸控模擬的佈局".into(), qim_bench::TOUCH_LAYOUT.into()));
+    shared.push((
+        "觸控模擬的畫布尺寸".into(),
+        qim_bench::TOUCH_MM_PER_UNIT.to_string(),
+    ));
     for name in corpora {
         shared.push((format!("{name} 的 dev 題"), qim_bench::dev_items(name)));
         shared.push((
@@ -109,6 +153,14 @@ fn bench(corpora: &[&str]) -> Shared {
         shared.push((
             format!("{name} 的 dev 口語長前文題"),
             qim_bench::dev_dialogue_items(name),
+        ));
+        shared.push((
+            format!("{name} 的 dev 打錯碼題"),
+            qim_bench::dev_typo_items(name),
+        ));
+        shared.push((
+            format!("{name} 的 dev 觸控模擬題"),
+            qim_bench::dev_touch_items(name),
         ));
     }
     shared

@@ -20,12 +20,12 @@ use crate::hkcancor::WordCounts;
 use crate::sources::{self, Fetch, Hashed, SOURCES, sha256_hex};
 use crate::transcode::Transcoder;
 use crate::verify::{
-    self, CorpusDigests, CorpusSummary, LexiconSummary, Report, Skipped, UnihanSummary,
-    WordsHkSummary,
+    self, CorpusDigests, CorpusSummary, LexiconSummary, Report, Skipped, TypoSummary,
+    UnihanSummary, WordsHkSummary,
 };
 use crate::{
     Error, bigram, build_scheme_pack, emoji, english, gboard, lexicon, libcangjie, neural, opencc,
-    packing, personal, radical_hint, scheme, simplified, unihan, word_trigram, words_hk,
+    packing, personal, radical_hint, scheme, simplified, typo, unihan, word_trigram, words_hk,
 };
 
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
@@ -288,6 +288,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
     let mut benches: Vec<(String, String)> = Vec::new();
     // 各語料的 train 切分與權重，bigram 用；洩漏檢查也比對它們。
     let mut trains: Vec<(PathBuf, u64)> = Vec::new();
+    // 觸控模擬的點擊抽在預設佈局上（M4 票 08）；基準讀寫出去的同一份佈局檔（`typo::TOUCH_LAYOUT`）。
+    let touch_page = &typo::touch_page(gboard::layout());
     for corpus in &CORPORA {
         let source = source_of(corpus.source_id)?;
         let paths = source
@@ -311,6 +313,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             create(&train_path)?,
             create(&dev_path)?,
             &dir,
+            touch_page,
         )?;
         let bench_dir = root.join(corpus.group.dir());
         std::fs::create_dir_all(&bench_dir).map_err(Error::io(&bench_dir))?;
@@ -320,6 +323,34 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         std::fs::create_dir_all(&context_dir).map_err(Error::io(&context_dir))?;
         let context_rel = format!("{}/{}.tsv", corpus.group.context_dir(), corpus.name);
         write(root.join(&context_rel), first.context_bench.as_bytes())?;
+        let mut typo_summary = None;
+        if let (Some(built), Some(typo_dir), Some(touch_dir)) = (
+            &first.typo,
+            corpus.group.typo_dir(),
+            corpus.group.touch_dir(),
+        ) {
+            let written = |dir: &str, contents: &str| -> Result<PathBuf, Error> {
+                let path = root.join(dir);
+                std::fs::create_dir_all(&path).map_err(Error::io(&path))?;
+                let rel = PathBuf::from(format!("{dir}/{}.tsv", corpus.name));
+                write(root.join(&rel), contents.as_bytes())?;
+                Ok(rel)
+            };
+            typo_summary = Some(TypoSummary {
+                typo: written(typo_dir, &built.test.typo)?,
+                typo_stats: built.test.typo_stats,
+                touch: written(touch_dir, &built.test.touch)?,
+                touch_stats: built.test.touch_stats,
+            });
+            write(
+                corpora::dev_typo_items_path(root, corpus.name),
+                built.dev.typo.as_bytes(),
+            )?;
+            write(
+                corpora::dev_touch_items_path(root, corpus.name),
+                built.dev.touch.as_bytes(),
+            )?;
+        }
         write(dir.join("chars.tsv"), first.chars.as_bytes())?;
         write(
             corpora::dev_items_path(root, corpus.name),
@@ -354,18 +385,31 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             bench: bench_rel.into(),
             context_sentences: first.context_bench.lines().count(),
             context_bench: context_rel.into(),
+            typo: typo_summary,
         });
         attributions.push((corpus.group, corpus.attribution(source)));
         if verify {
             // 第二次從快取重讀來源，只算 sha256、不寫檔。
             let sink = || Hashed::new(io::sink());
-            let second = build_corpus(corpus, &paths, &forms, &transcoder, sink(), sink(), &dir)?;
+            let second = build_corpus(
+                corpus,
+                &paths,
+                &forms,
+                &transcoder,
+                sink(),
+                sink(),
+                &dir,
+                touch_page,
+            )?;
             corpus_checks.extend(
                 verify::corpus(
                     corpus.name,
                     &transcoder,
                     &first.bench,
                     &first.context_bench,
+                    &first.typo.as_ref().map_or(Vec::new(), |t| {
+                        vec![t.test.typo.as_str(), t.test.touch.as_str()]
+                    }),
                     open(&train_path)?,
                     open(&dev_path)?,
                     &first.digests(),
@@ -1039,6 +1083,7 @@ fn build_personal(root: &Path, transcoder: &Transcoder) -> Result<Option<persona
 }
 
 /// 一份語料建一次；train、dev 寫進兩個 writer，同時算 sha256。寫入失敗時報 `dir`。
+#[allow(clippy::too_many_arguments)] // 語料、來源、轉換、兩份切分的輸出、目錄與觸控佈局，拆成結構只為了湊參數數
 fn build_corpus<W: Write>(
     corpus: &Corpus,
     paths: &[PathBuf],
@@ -1047,6 +1092,7 @@ fn build_corpus<W: Write>(
     train: Hashed<W>,
     dev: Hashed<W>,
     dir: &Path,
+    touch_page: &qim_layout::Page,
 ) -> Result<Built, Error> {
     let mut builder = Builder::new(transcoder, train, dev);
     if corpus.conversational() {
@@ -1072,7 +1118,22 @@ fn build_corpus<W: Write>(
         train,
         dev,
     } = builder.finish().map_err(Error::io(dir))?;
+    // 打錯碼的集合（M4 票 08）由 test 與 dev 的題決定；只有口語有（`Group::typo_dir`）。
+    let typo = match corpus.group.typo_dir() {
+        None => None,
+        Some(_) => {
+            let generate = |what: &str, items: &str| {
+                typo::generate(items, touch_page)
+                    .map_err(|e| Error::invalid(format!("{} 的{what}", corpus.name), e.to_string()))
+            };
+            Some(TypoBuilt {
+                test: generate("基準題", &bench)?,
+                dev: generate("dev 題", &dev_items)?,
+            })
+        }
+    };
     Ok(Built {
+        typo,
         counts,
         bench,
         dev_items,
@@ -1094,8 +1155,17 @@ fn open(path: &Path) -> Result<BufReader<File>, Error> {
         .map_err(Error::io(path))
 }
 
+/// 一個語料的「含打錯碼」與「觸控模擬」題（test、dev）。
+struct TypoBuilt {
+    test: typo::Generated,
+    /// dev 的由 `dev_items` 決定，不另比。
+    dev: typo::Generated,
+}
+
 /// 建一次語料的結果，train、dev 只留 sha256。
 struct Built {
+    /// 打錯碼的集合；[`crate::corpora::Group::typo_dir`] 沒有的語料是 `None`。
+    typo: Option<TypoBuilt>,
     counts: crate::corpus::Counts,
     bench: String,
     /// dev 的調參題；由 dev 切分決定，`dev` 的 sha256 相同它就相同，不另比。
@@ -1122,6 +1192,12 @@ impl Built {
         CorpusDigests {
             bench: sha256_hex(self.bench.as_bytes()),
             context_bench: sha256_hex(self.context_bench.as_bytes()),
+            typo: self.typo.as_ref().map(|t| {
+                [
+                    sha256_hex(t.test.typo.as_bytes()),
+                    sha256_hex(t.test.touch.as_bytes()),
+                ]
+            }),
             train: self.train.clone(),
             dev: self.dev.clone(),
             chars: sha256_hex(self.chars.as_bytes()),

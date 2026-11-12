@@ -1,5 +1,10 @@
 //! 題目檔的格式：`bench/fixed.tsv`、`bench/corpus/<名>.tsv`、「有前文」的 `bench/corpus/context/<名>.tsv`
-//! 與個人集 `bench/personal/rime-userdb.tsv`（`docs/development.md`〈首選字基準〉）。
+//! 與個人集 `bench/personal/rime-userdb.tsv`，「含打錯碼」的 `bench/colloquial/typo/<名>.tsv` 與「觸控模擬」的
+//! `bench/colloquial/touch/<名>.tsv`（`docs/development.md`〈首選字基準〉）。
+
+use qim_core::Key;
+
+use crate::keys::{TouchSurface, physical_key};
 
 /// 一題：把輸入碼逐鍵打進核心，首選應該是期望的文字。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,6 +19,10 @@ pub struct Item {
     pub weight: u64,
     /// 輸入框裡題目前面的文字（`Session::set_context`）；只有「有前文」的題有。
     pub context: Option<String>,
+    /// 實際按的鍵，每個單位一組（可以是空的：那個字的碼全漏了）；只有「含打錯碼」與「觸控模擬」的題有
+    /// （M4 票 08）。有的話第一次打整題按這些鍵，卡住後一個字一個字重打時照 `units` 的碼（使用者看到打錯了，
+    /// 重打想打的字）。
+    pub typed: Option<Vec<Vec<Key>>>,
 }
 
 /// 基準模擬打字的單位：一段輸入碼與它該打出的文字。是題目檔的切法，和核心組字的〈分段〉（`Segment`）無關。
@@ -61,6 +70,7 @@ pub fn parse_fixed(text: &str) -> Result<Vec<Item>, String> {
             label: source.to_string(),
             weight: 1,
             context: None,
+            typed: None,
         });
     }
     Ok(items)
@@ -95,6 +105,73 @@ pub fn parse_context(text: &str) -> Result<Vec<Item>, String> {
         items.push(Item {
             context: Some(context.to_string()),
             ..per_character(number, codes, sentence, 1)?
+        });
+    }
+    Ok(items)
+}
+
+/// 「含打錯碼」的題（M4 票 08）：`<逐字實際按的鍵，空格分隔><TAB><逐字速成碼><TAB><句子>`，由
+/// `cargo xtask data` 產生。實際按的鍵照原本的字分組、可以是空的（漏碼），每一鍵照實體鍵位轉成按鍵機率
+/// （[`physical_key`]）。
+pub fn parse_typo(text: &str) -> Result<Vec<Item>, String> {
+    parse_typed(text, |_, unit| Ok(unit.chars().map(physical_key).collect()))
+}
+
+/// 「觸控模擬」的題（M4 票 08）：`<逐字的點擊，空格分隔><TAB><逐字速成碼><TAB><句子>`；一個字的點擊以 `;`
+/// 分隔，每個是畫布座標 `x,y`，點擊數同那個字的碼長。每個點擊經 `surface` 的空間模型轉成按鍵機率。
+pub fn parse_touch(text: &str, surface: &TouchSurface) -> Result<Vec<Item>, String> {
+    parse_typed(text, |code, unit| {
+        let taps: Vec<&str> = unit.split(';').collect();
+        if taps.len() != code.chars().count() {
+            return Err(format!("碼 {code} 有 {} 個點擊", taps.len()));
+        }
+        taps.iter()
+            .map(|tap| {
+                let (x, y) = tap
+                    .split_once(',')
+                    .and_then(|(x, y)| Some((x.parse::<f64>().ok()?, y.parse::<f64>().ok()?)))
+                    .ok_or_else(|| format!("點擊要寫成 x,y：{tap}"))?;
+                surface
+                    .tap(x, y)
+                    .ok_or_else(|| format!("({x}, {y}) 附近沒有字母鍵"))
+            })
+            .collect()
+    })
+}
+
+/// 「實際按的<TAB>逐字速成碼<TAB>句子」：第一欄每個字一組，`keys` 把一個字的碼與那一組轉成按鍵。
+fn parse_typed(
+    text: &str,
+    keys: impl Fn(&str, &str) -> Result<Vec<Key>, String>,
+) -> Result<Vec<Item>, String> {
+    let mut items = Vec::new();
+    for (number, line) in numbered_lines(text) {
+        let fields: Vec<&str> = line.split('\t').collect();
+        let [typed, codes, sentence] = fields.as_slice() else {
+            return Err(format!(
+                "第 {number} 行要有 3 欄（實際按的、輸入碼、句子），實際 {} 欄",
+                fields.len()
+            ));
+        };
+        let item = per_character(number, codes, sentence, 1)?;
+        let typed: Vec<&str> = typed.split(' ').collect();
+        if typed.len() != item.units.len() {
+            return Err(format!(
+                "第 {number} 行實際按的有 {} 組、字有 {} 個",
+                typed.len(),
+                item.units.len()
+            ));
+        }
+        let typed = item
+            .units
+            .iter()
+            .zip(typed)
+            .map(|(unit, typed)| keys(&unit.code, typed))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("第 {number} 行：{e}"))?;
+        items.push(Item {
+            typed: Some(typed),
+            ..item
         });
     }
     Ok(items)
@@ -136,6 +213,7 @@ pub fn substrings(items: &[Item], len: usize) -> Vec<Item> {
                 label: format!("第 {line} 題"),
                 weight: 0,
                 context: None,
+                typed: None,
             });
             line - 1
         });
@@ -171,6 +249,7 @@ fn per_character(number: usize, codes: &str, text: &str, weight: u64) -> Result<
         label: format!("第 {number} 行"),
         weight,
         context: None,
+        typed: None,
     })
 }
 

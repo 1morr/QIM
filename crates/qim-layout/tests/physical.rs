@@ -111,3 +111,20 @@ fn non_letter_codes_have_no_weights() {
         assert_eq!(model.letter_weights(code), None, "{code}");
     }
 }
+
+/// 打錯碼的基準（M4 票 08）在 `qim-databuild` 照實體鍵位抽鄰鍵，鍵位要由這裡給、不另寫一份。
+#[test]
+fn letter_key_centres_cover_the_alphabet_with_staggered_rows() {
+    let keys = qim_layout::physical_letter_keys();
+    let mut letters: Vec<char> = keys.iter().map(|&(c, _, _)| c).collect();
+    letters.sort_unstable();
+    assert_eq!(letters, ('a'..='z').collect::<Vec<_>>());
+    let centre = |c: char| {
+        let &(_, x, y) = keys.iter().find(|&&(d, _, _)| d == c).unwrap();
+        (x, y)
+    };
+    assert_eq!(centre('q'), (2.0, 0.0));
+    assert_eq!(centre('a'), (2.25, 1.0));
+    assert_eq!(centre('z'), (2.75, 2.0));
+    assert_eq!(centre('f'), (5.25, 1.0));
+}
