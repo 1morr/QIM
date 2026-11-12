@@ -488,7 +488,14 @@ fn completions<'a>(
     user: &'a UserModel,
     input: &str,
 ) -> impl Iterator<Item = &'a str> {
-    let typed = without_separators(input);
+    // 萬用鍵略過不比：英文使用者詞只比方案字母（[`crate::english_user::letters`]），萬用鍵以前在組字中
+    // 吃下不動作，含 `z` 的 email 照那時一樣打得出（M4 票 11）。整串的英文使用者詞（規則 4）不必另外
+    // 排除萬用鍵：它要整串都是方案字母（[`UserModel::english_typed_as`]）。
+    let wildcard = engine.scheme().wildcard;
+    let typed: String = without_separators(input)
+        .chars()
+        .filter(|&c| Some(c) != wildcard)
+        .collect();
     let long_enough = typed.len() > usize::from(engine.scheme().max_code_length);
     long_enough
         .then(|| {

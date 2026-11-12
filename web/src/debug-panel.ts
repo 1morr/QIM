@@ -25,6 +25,8 @@ export interface InspectedSegment {
 	source: SegmentSource;
 	learned: boolean;
 	personalBigram: boolean;
+	/** 碼有萬用鍵時實際對到的碼。 */
+	matchedCode?: string;
 }
 
 /** 一個候選（綁定的 `InspectedCandidate` 讀成一般物件）。 */
@@ -48,6 +50,8 @@ interface Inspection {
 	precedingWord?: string;
 	segments: { code: string; text: string; selected: boolean }[];
 	candidates: InspectedCandidate[];
+	/** 最近一個鍵是觸控字母鍵時各字母的機率，由高到低（M4 票 06）；其他鍵是空的。 */
+	touch: { letter: string; probability: number }[];
 }
 
 /** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
@@ -86,6 +90,7 @@ function read(inspection: WasmInspection): Inspection {
 						source: s.source as SegmentSource,
 						learned: s.learned,
 						personalBigram: s.personalBigram,
+						matchedCode: s.matchedCode,
 					})),
 				),
 				score: c.score,
@@ -95,6 +100,10 @@ function read(inspection: WasmInspection): Inspection {
 				rerankInserted: c.rerankInserted,
 			})),
 		),
+		touch: i.touchLetters.map((letter, k) => ({
+			letter,
+			probability: i.touchProbabilities[k],
+		})),
 	}));
 }
 
@@ -175,6 +184,13 @@ function table(
 	return { table: node, body };
 }
 
+/** 候選表「切段」欄的一段：`碼→字詞`；有萬用鍵時碼後面括號是實際對到的碼（`hz（ho）→的`）。 */
+export function segmentText(segment: InspectedSegment): string {
+	const matched =
+		segment.matchedCode === undefined ? "" : `（${segment.matchedCode}）`;
+	return `${segment.code}${matched}→${segment.text}`;
+}
+
 /**
  * 一個候選的來源標記：機器讀的代號（e2e 比對）與中文標籤。字詞是各段的來源（碼表、詞庫、使用者詞），
  * 多段的另標連打，學過的段標學習計數、接得上前一個字詞的標個人 bigram；其餘是候選的種類。
@@ -204,6 +220,9 @@ export function candidateSources(candidate: InspectedCandidate): {
 		}
 		if (segments.some((s) => s.personalBigram)) {
 			add("personalBigram", "個人 bigram");
+		}
+		if (segments.some((s) => s.matchedCode !== undefined)) {
+			add("wildcard", "萬用鍵");
 		}
 	} else {
 		add(candidate.kind, KIND_LABELS[candidate.kind]);
@@ -284,6 +303,24 @@ export function mountDebugPanel(
 		return line;
 	};
 
+	// 觸控的空間模型：最近一下點擊算出的各字母機率；容錯進核心之前核心只用第一個。
+	const touchLine = (inspection: Inspection): HTMLElement => {
+		const line = make("p", "觸控機率：", { "data-testid": "debug-touch" });
+		if (inspection.touch.length === 0) {
+			line.append("（最近一個鍵不是觸控字母鍵）");
+		}
+		for (const { letter, probability } of inspection.touch) {
+			line.append(
+				make("code", `${letter} ${(probability * 100).toFixed(1)}%`, {
+					"data-letter": letter,
+					"data-probability": String(probability),
+				}),
+				" ",
+			);
+		}
+		return line;
+	};
+
 	const topLine = (inspection: Inspection): HTMLElement => {
 		const top = inspection.candidates[0];
 		const line = make("p", "", { "data-testid": "debug-top" });
@@ -321,10 +358,7 @@ export function mountDebugPanel(
 				make("td", labels.join("、")),
 				make("td", score(candidate.score)),
 				make("td", score(candidate.learning)),
-				make(
-					"td",
-					candidate.segments.map((s) => `${s.code}→${s.text}`).join(" "),
-				),
+				make("td", candidate.segments.map(segmentText).join(" ")),
 			);
 			body.append(row);
 		});
@@ -407,6 +441,7 @@ export function mountDebugPanel(
 		root.replaceChildren(
 			contextLine(inspection),
 			segmentsLine(inspection),
+			touchLine(inspection),
 			topLine(inspection),
 			candidateTable(inspection),
 			rerankSection(),

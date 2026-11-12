@@ -40,3 +40,7 @@ Blocked by: 12
   - 上限淘汰把打過一次的詞典詞也當沒到門檻（`UserModel` 看不到英文詞典）：和「詞典有的詞不受門檻」字面不一致，第二期英文建議列靠詞典詞的學習排前時會先被淘汰。plan §2.4〈條目上限〉已註明；票 24 接英文建議列時決定要不要學習時記下「是不是詞典詞」或淘汰時傳入判斷。
   - v3 草稿 `string` 列不轉換（見上）：判斷題，v3 未發佈，不改。
   - Standards 審查的 Feature Envy（`enforce_limits` 直接讀英文使用者詞的欄位）：抽了 `passed`、`insert`，淘汰的排序鍵仍在 `user.rs`（`Eviction` 是它的型別），等票 17 改合併時再看要不要整個搬進 `english_user.rs`。
+- 2026-11-12 合併 main（`e57b0cd`，票 06、11、05b、05c、06b）：
+  - 票 11 的萬用鍵在新名詞下照樣成立：前綴補完比對時略過 `z`（`lattice.rs` 的 `completions`）；含 `z` 的輸入不出整串的英文使用者詞（`typed_as` 要整串是方案字母）。票 11 加在舊 `remembered_strings.rs` 的測試搬到 `english_user_words.rs`，另補規則 4 一條；拿掉略過 `z` 的過濾時前一條會紅（試過）。plan §2.5 萬用鍵段改用新名詞。
+  - 資料包格式升到 8（票 11），跑 e2e、bench 前要先 `cargo xtask data`。
+  - 驗證：`cargo test --workspace` 1067 passed；`cargo xtask check` 通過（e2e 244 passed、2 skipped）。`bench --check` 通過，12 個集合的答錯、修正都等於 baseline，沒有翻盤，固定題 84/84。原生 p95：空白 74.1 µs／80.0 µs／1.31 ms，學過 150 µs／228 µs／1.89 ms。`--learning` 和合併前逐項相同。

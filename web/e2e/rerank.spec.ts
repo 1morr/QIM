@@ -6,6 +6,7 @@ import { expect, type Page, test } from "@playwright/test";
 function ui(page: Page) {
 	return {
 		text: page.getByRole("textbox", { name: "輸入框" }),
+		list: page.getByRole("list", { name: "候選" }),
 		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		all: page.getByRole("list", { name: "全部候選" }).getByRole("listitem"),
 		rerank: page.getByRole("combobox", { name: "重排" }),
@@ -74,6 +75,39 @@ test("把最後一條路徑排最前：候選列沒有它，插到第 2 位，�
 	// 選它照那條路徑上屏。
 	await page.keyboard.press("2");
 	await expect(text).toHaveValue(inserted);
+});
+
+// 翻到後面的頁時結果才回來（plan §2.1 的重排）：看得到的那頁不變，回到第一頁才插入（M4 票 05c）。
+// 網址的 `rerank-delay` 讓結果晚 1 秒套用，確定翻頁後才回來，不靠機器負載。
+test("翻頁中途重排回來：那頁不變，回到第一頁才插入", async ({
+	page,
+}, testInfo) => {
+	await page.goto("/?rerank-delay=1000");
+	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+	const { text, list, items, rerank } = ui(page);
+	const { first } = await unranked(page);
+	await rerank.selectOption("raise-last");
+	await text.focus();
+	await page.keyboard.type(CODE);
+	await page.keyboard.press("=");
+	await expect(items.first()).not.toHaveText(`1${first[0]}`);
+	const second = await items.allTextContents();
+
+	// 翻頁中收到的結果先記著：核心回同一個 `generation`，網頁記成名次沒變，這裡拿它當結果已回來的訊號；
+	// 之後網頁若把延後套用另記一種結果，這行跟著改。
+	await expect(list).toHaveAttribute("data-rerank-unchanged", "1", {
+		timeout: 5000,
+	});
+	await expect(list).not.toHaveAttribute("data-rerank-applied");
+	await expect(items).toHaveText(second);
+	await page.screenshot({ path: testInfo.outputPath("page-2-kept.png") });
+
+	await page.keyboard.press("-");
+	await expect(items.first()).toHaveText(`1${first[0]}`);
+	await expect(items.nth(2)).toHaveText(`3${first[1]}`);
+	const inserted = ((await items.nth(1).textContent()) ?? "").slice(1);
+	expect(first).not.toContain(inserted);
+	await page.screenshot({ path: testInfo.outputPath("page-1-raised.png") });
 });
 
 // 插入的整句選了之後照學習規則記下（M3 票 11c 協調者回饋）：學到的分數把它拉進候選列，選兩次

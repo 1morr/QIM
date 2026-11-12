@@ -21,6 +21,7 @@ mod scheme;
 mod session;
 mod simplifier;
 mod user;
+mod weights;
 mod word_list;
 mod word_trigram;
 
@@ -53,6 +54,7 @@ pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{
     ImportError, ImportWarning, Imported, InvalidDeviceId, Limits, Phrase, UserModel, UserWordError,
 };
+pub use weights::{Weights, WeightsError};
 pub use word_list::{
     Shortcuts, SkipReason, SkippedLine, TriggerShortcut, UnusedShortcut, WordListError,
     WordListFormat, WordListReport,

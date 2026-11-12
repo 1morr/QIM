@@ -5,7 +5,7 @@
 
 use super::{Session, ShownCandidate};
 use crate::lattice::{Preceding, SpanKind};
-use crate::{CLAUSE_START, Engine, Segment, UserModel};
+use crate::{CLAUSE_START, Engine, Segment, UserModel, Weights};
 
 /// [`Session::inspect`] 的結果。
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +20,8 @@ pub struct Inspection {
     pub segments: Vec<Segment>,
     /// 全部候選（不分頁），依目前的順序。
     pub candidates: Vec<InspectedCandidate>,
+    /// 最近一個鍵是觸控的 [`crate::Key::Weighted`] 時，它的各字母機率（M4 票 06）；其他鍵是 `None`。
+    pub touch_weights: Option<Weights>,
 }
 
 /// 核心記著的前文是什麼。
@@ -98,6 +100,8 @@ pub struct InspectedSegment {
     pub learned: bool,
     /// 有它接在前一個字詞後面的個人 bigram。
     pub personal_bigram: bool,
+    /// 碼有萬用鍵（brief §1.5）時它實際對到的碼（不含分隔記號，同學習記的碼）；沒有萬用鍵是 `None`。
+    pub matched_code: Option<String>,
 }
 
 /// 一段字詞從哪裡來。
@@ -140,6 +144,7 @@ impl Session {
             preceding_word: before.word,
             segments: self.composition(engine).segments,
             candidates,
+            touch_weights: self.touch_weights.clone(),
         }
     }
 }
@@ -184,6 +189,7 @@ fn inspect_candidate(
                 source: scored.map_or_else(|| engine.source_of(&s.code, &s.text), |x| x.source),
                 learned: scored.is_some_and(|x| x.learned),
                 personal_bigram: scored.is_some_and(|x| x.personal_bigram),
+                matched_code: engine.matched_code(user, &s.code, &s.text),
             }
         })
         .collect();

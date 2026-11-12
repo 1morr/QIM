@@ -16,12 +16,18 @@ const EMAIL: &str = "ivan.test@example.com";
 
 /// 每個字母都是一個字的碼（`a` 日、`b` 月…），所以任何字母串都有中文候選。
 fn engine() -> Engine {
+    engine_with(None)
+}
+
+/// 同 [`engine`]，萬用鍵是 `wildcard`。
+fn engine_with(wildcard: Option<char>) -> Engine {
     let scheme = Scheme {
         id: "quick".into(),
         name: "速成".into(),
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard,
         radicals: BTreeMap::new(),
         packs: Packs {
             language_model: Some("model".into()),
@@ -366,6 +372,30 @@ fn letters_the_scheme_cannot_type_are_skipped() {
     assert_eq!(ime.candidates("exa")[1], "zz98765@example.org");
 }
 
+/// 英文使用者詞只比方案字母：方案設了萬用鍵時，前綴補完略過輸入碼裡的 `z`（萬用鍵以前在組字中
+/// 吃下不動作），打 `lizzy` 照樣補出 `lizzy@example.com`（M4 票 11）。
+#[test]
+fn the_wildcard_is_skipped_when_matching_a_completion() {
+    let email = "lizzy@example.com";
+    let mut ime = Ime::new();
+    ime.engine = engine_with(Some('z'));
+    ime.type_in_english_times(email, 3);
+    let shown = ime.candidates("lizzy");
+    assert_eq!(shown.get(1).map(String::as_str), Some(email), "{shown:?}");
+}
+
+/// 含萬用鍵的輸入碼在中文組字是比對模式，不出整串的英文使用者詞（同英文詞典的候選，plan §4.4）：
+/// 打過兩次的 `lizzy` 打 `lizzy` 時不出，`z` 照萬用鍵比對中文。
+#[test]
+fn an_input_with_the_wildcard_is_not_an_english_user_word() {
+    let mut ime = Ime::new();
+    ime.engine = engine_with(Some('z'));
+    ime.type_in_english_times("lizzy", 2);
+    let shown = ime.candidates("lizzy");
+    assert!(!shown.iter().any(|c| c == "lizzy"), "{shown:?}");
+    assert!(!shown.is_empty(), "萬用鍵照樣比對中文");
+}
+
 #[test]
 fn incognito_does_not_learn() {
     let mut ime = Ime::with_options(Options {
@@ -585,7 +615,7 @@ fn enter_and_tab_end_the_string() {
     for key in [Key::Enter, Key::Other] {
         let mut ime = Ime::new();
         ime.type_in_english_without_ending(EMAIL);
-        ime.press(key);
+        ime.press(key.clone());
         assert_eq!(ime.learned(), [EMAIL], "{key:?}");
     }
 }

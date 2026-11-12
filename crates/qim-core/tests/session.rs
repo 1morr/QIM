@@ -24,6 +24,7 @@ fn pack_bytes() -> Vec<u8> {
         version: "1".into(),
         alphabet: "abcdefghijklmnopqrstuvwxy".into(),
         max_code_length: 2,
+        wildcard: None,
         radicals: BTreeMap::from([('a', "日".into()), ('b', "月".into())]),
         packs: Packs::default(),
         ranking: Ranking::default(),
@@ -240,12 +241,12 @@ fn editing_and_paging_keys_without_composition_are_left_to_the_host() {
     ];
     for key in keys {
         let mut ime = Ime::new();
-        let fresh = ime.press(key);
+        let fresh = ime.press(key.clone());
         assert!(!fresh.handled, "{key:?} before typing");
 
         ime.press(Key::Letter('a'));
         ime.press(Key::Space);
-        let after_commit = ime.press(key);
+        let after_commit = ime.press(key.clone());
         assert!(!after_commit.handled, "{key:?} after a commit");
         assert_eq!(after_commit.commit, None, "{key:?} after a commit");
     }
@@ -302,7 +303,7 @@ fn toggle_ascii_passes_keys_to_the_host_until_toggled_back() {
         Key::Enter,
         Key::Other,
     ] {
-        let pressed = ime.press(key);
+        let pressed = ime.press(key.clone());
         assert!(!pressed.handled, "{key:?}");
         assert!(pressed.ascii, "{key:?}");
         assert_eq!(pressed.composition.input, "", "{key:?}");

@@ -8,7 +8,7 @@ use crate::association::{self, ASSOCIATION_TAIL};
 use crate::english_user::TypedRun;
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding};
 use crate::scheme::{SEPARATOR, without_separators};
-use crate::{Engine, UserModel, punctuation};
+use crate::{Engine, UserModel, Weights, punctuation};
 
 mod inspect;
 
@@ -187,7 +187,7 @@ impl Default for Options {
 }
 
 /// 殼轉過來的按鍵。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Key {
     /// 字母，含大寫；方案的字母表以外的也是，由核心決定怎麼處理。
     Letter(char),
@@ -210,13 +210,17 @@ pub enum Key {
     /// 換鍵盤。組字中同 `Other` 吃下；沒有組字時交還宿主，但不結束數字（brief §4.7，同 librime
     /// 不記沒有字元的鍵）。
     Modifier,
+    /// 觸控點一下字母鍵：各字母的機率，由殼經 `qim-layout` 依點擊位置與按鍵幾何算出（M4 票 06）。
+    /// 容錯進核心之前只用機率最高的字母，其餘同 `Letter`；[`Session::inspect`] 看得到這組機率。
+    Weighted(Weights),
 }
 
 impl Key {
     /// 由「種類 + 值」讀出按鍵，綁定收不了帶資料的列舉時用（網頁、Swift）；同 librime 能從字串讀按鍵。
     /// 種類是 `letter`、`punct`、`digit`、`space`、`enter`、`backspace`、`escape`、`pageUp`、`pageDown`、
-    /// `left`、`right`、`toggleAscii`、`other`、`modifier`；`letter`、`punct` 的值是一個字元，`digit` 是 `0`–`9`，
-    /// `toggleAscii` 是 `left` 或 `right`，其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
+    /// `left`、`right`、`toggleAscii`、`other`、`modifier`、`weighted`；`letter`、`punct` 的值是一個字元，`digit` 是
+    /// `0`–`9`，`toggleAscii` 是 `left` 或 `right`，`weighted` 是 `字母:機率` 以逗號分隔（`a:0.62,s:0.38`，
+    /// 見 [`Weights::new`]），其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
     pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError> {
         let error = || KeyError {
             kind: kind.to_owned(),
@@ -246,6 +250,7 @@ impl Key {
             ("right", None) => Key::Right,
             ("other", None) => Key::Other,
             ("modifier", None) => Key::Modifier,
+            ("weighted", Some(value)) => Key::Weighted(Weights::parse(value).ok_or_else(error)?),
             _ => return Err(error()),
         };
         Ok(key)
@@ -469,6 +474,9 @@ pub struct Session {
     /// 翻到後面的頁時收到的重排結果：那時的 `generation` 與 `order`。回到第一頁時 `generation`
     /// 沒變（候選沒變）才套用（[`Session::apply_rerank`]）。
     waiting_rerank: Option<(u64, Vec<usize>)>,
+    /// 最近一個鍵是觸控的 [`Key::Weighted`] 時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
+    /// 其他鍵與 [`Session::text`] 清掉。容錯的票再決定要不要逐碼記。
+    touch_weights: Option<Weights>,
 }
 
 impl Session {
@@ -709,7 +717,19 @@ impl Session {
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
-        let snapshot = self.handle_key(engine, user, key);
+        // 容錯進核心之前，觸控的機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
+        let key = match key {
+            Key::Weighted(weights) => {
+                let top = weights.top();
+                self.touch_weights = Some(weights);
+                Key::Letter(top)
+            }
+            key => {
+                self.touch_weights = None;
+                key
+            }
+        };
+        let snapshot = self.handle_key(engine, user, key.clone());
         if !snapshot.handled {
             self.passed_to_host(user, key);
         }
@@ -784,7 +804,7 @@ impl Session {
 
     fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         if self.association.is_some()
-            && let Some(snapshot) = self.handle_association(engine, user, key)
+            && let Some(snapshot) = self.handle_association(engine, user, key.clone())
         {
             return snapshot;
         }
@@ -799,7 +819,7 @@ impl Session {
             return self.snapshot(engine, false, None);
         }
         if let Key::Letter(c) = key
-            && engine.scheme().alphabet.contains(c)
+            && engine.scheme().is_code_key(c)
         {
             self.focus = None;
             if self.lattice.input().is_empty() {
@@ -897,11 +917,14 @@ impl Session {
                 }
                 self.snapshot(engine, true, None)
             }
-            // 方案以外的小寫字母（速成的 `z`，萬用鍵在 M4）、其他鍵：吃下不動作。
+            // 方案以外的小寫字母（方案沒設萬用鍵時的 `z`）、其他鍵：吃下不動作。
             // 切中英在上面處理過了。
-            Key::Letter(_) | Key::ToggleAscii(_) | Key::Other | Key::Modifier => {
-                self.snapshot(engine, true, None)
-            }
+            // `Weighted` 在 `handle` 已換成機率最高的字母，到不了這裡。
+            Key::Letter(_)
+            | Key::ToggleAscii(_)
+            | Key::Other
+            | Key::Modifier
+            | Key::Weighted(_) => self.snapshot(engine, true, None),
         }
     }
 
@@ -1178,6 +1201,7 @@ impl Session {
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
         self.apply_pending_options(engine, user);
         self.end_association();
+        self.touch_weights = None;
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
@@ -1249,16 +1273,16 @@ impl Session {
     }
 
     /// 學一次上屏（plan §2.4）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
-    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。個人 bigram 的
-    /// 第一段接組字開頭時前文給的字詞（[`Session::composition_word`]）。
+    /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。有萬用鍵的碼換成
+    /// 字詞實際的碼（[`Engine::learned_code`]），換不了時整次不學。個人 bigram 的第一段接組字開頭時
+    /// 前文給的字詞（[`Session::composition_word`]）。
     fn learn(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
         if !self.writes_learning() {
             return;
         }
-        let segments: Vec<Segment> = segments
-            .iter()
-            .map(|s| Segment::new(without_separators(&s.code), s.text.clone()))
-            .collect();
+        let Some(segments) = learned_segments(engine, user, segments) else {
+            return;
+        };
         let previous = self.composition_word.as_deref();
         user.learn(&engine.scheme().id, previous, &segments);
     }
@@ -1273,15 +1297,16 @@ impl Session {
     }
 
     /// 把這次上屏的整串輸入碼 → 文字記成使用者詞；碼表或詞庫已有的不記（libime 也略過已有的
-    /// 詞，`docs/research/libime-user-model.md` §5）。無痕或學習關掉時不記。
+    /// 詞，`docs/research/libime-user-model.md` §5）。無痕或學習關掉時不記。碼同 [`Session::learn`]
+    /// 去掉分隔記號、萬用鍵換成實際的碼，換不了時不記。
     fn add_auto_phrase(&self, engine: &Engine, user: &mut UserModel, segments: &[Segment]) {
         if !self.writes_learning() {
             return;
         }
-        let code: String = segments
-            .iter()
-            .map(|s| without_separators(&s.code))
-            .collect();
+        let Some(segments) = learned_segments(engine, user, segments) else {
+            return;
+        };
+        let code: String = segments.iter().map(|s| s.code.as_str()).collect();
         let text: String = segments.iter().map(|s| s.text.as_str()).collect();
         if !engine.has_entry(&code, &text) {
             user.add_auto_phrase(&engine.scheme().id, &code, &text);
@@ -1594,6 +1619,22 @@ impl Session {
             generation: self.generation,
         }
     }
+}
+
+/// 學習記的分段（plan §2.4）：碼去掉分隔記號，有萬用鍵的換成字詞實際的碼
+/// （[`Engine::learned_code`]）；有一段換不了時是 `None`。
+fn learned_segments(
+    engine: &Engine,
+    user: &UserModel,
+    segments: &[Segment],
+) -> Option<Vec<Segment>> {
+    segments
+        .iter()
+        .map(|s| {
+            let code = engine.learned_code(user, &without_separators(&s.code), &s.text)?;
+            Some(Segment::new(code, s.text.clone()))
+        })
+        .collect()
 }
 
 /// 補上各分段的字根：分段在 `Session` 裡不帶字根，公開的方法回傳前都經過這裡。

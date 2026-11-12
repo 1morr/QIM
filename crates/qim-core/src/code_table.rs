@@ -32,10 +32,25 @@ impl CodeTable {
         self.entries.get(code).map_or(&[], Vec::as_slice)
     }
 
+    /// 有沒有以 `prefix` 開頭的輸入碼（萬用鍵展開時剪枝用）。
+    pub(crate) fn has_prefix(&self, prefix: &str) -> bool {
+        has_key_with_prefix(&self.entries, prefix)
+    }
+
     /// 依輸入碼的字典序列出全部輸入碼與它的字。
     pub fn iter(&self) -> impl Iterator<Item = (&str, &[CodeEntry])> {
         self.entries
             .iter()
             .map(|(code, e)| (code.as_str(), e.as_slice()))
     }
+}
+
+/// 依字串排序的表裡有沒有以 `prefix` 開頭的鍵：從 `prefix` 起的第一個鍵以它開頭就有。
+pub(crate) fn has_key_with_prefix<V>(map: &BTreeMap<String, V>, prefix: &str) -> bool {
+    map.range::<str, _>((
+        std::ops::Bound::Included(prefix),
+        std::ops::Bound::Unbounded,
+    ))
+    .next()
+    .is_some_and(|(key, _)| key.starts_with(prefix))
 }

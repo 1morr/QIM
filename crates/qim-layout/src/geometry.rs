@@ -85,6 +85,13 @@ impl Key {
 
     /// 點到觸控範圍的距離；在範圍內是 0。
     pub fn distance(&self, x: f64, y: f64) -> f64 {
+        let (dx, dy) = self.offset(x, y);
+        dx.hypot(dy)
+    }
+
+    /// 觸控範圍上離點最近的地方到點的向量，在按鍵自己的座標（旋轉前的軸）；在範圍內是 `(0, 0)`。
+    /// 空間模型（[`crate::SpatialModel`]）依它與鍵的兩軸大小算機率。
+    pub fn offset(&self, x: f64, y: f64) -> (f64, f64) {
         let (lx, ly) = to_local(self, x, y);
         let area = touch_area(self);
         let r = area.radius;
@@ -92,9 +99,20 @@ impl Key {
             (area.left + area.right) / 2.0,
             (area.top + area.bottom) / 2.0,
         );
-        let qx = ((lx - cx).abs() - ((area.right - area.left) / 2.0 - r)).max(0.0);
-        let qy = ((ly - cy).abs() - ((area.bottom - area.top) / 2.0 - r)).max(0.0);
-        ((qx * qx + qy * qy).sqrt() - r).max(0.0)
+        // 圓角矩形是內縮 r 的矩形往外長 r：先找到內縮矩形的向量，再扣掉 r。
+        let (px, py) = (lx - cx, ly - cy);
+        let (hx, hy) = (
+            (area.right - area.left) / 2.0 - r,
+            (area.bottom - area.top) / 2.0 - r,
+        );
+        let qx = px.signum() * (px.abs() - hx).max(0.0);
+        let qy = py.signum() * (py.abs() - hy).max(0.0);
+        let length = qx.hypot(qy);
+        if length <= r {
+            return (0.0, 0.0);
+        }
+        let shrink = (length - r) / length;
+        (qx * shrink, qy * shrink)
     }
 
     /// 畫出來的矩形（旋轉後、不含 `extendedEdges` 與圓角）的四個角，順時針。

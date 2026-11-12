@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use qim_bench::{Mode, node_wasm_timer, run, run_dev};
+use qim_bench::{Mode, Timers, native_timing_with, node_wasm_timer, run, run_dev};
 
 const USAGE: &str = "用法：qim-bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
@@ -43,7 +43,11 @@ fn main() -> ExitCode {
         }
     };
     let root = Path::new(".");
-    let outcome = match run(root, mode, lexicon, &node_wasm_timer(root)) {
+    let timers = Timers {
+        native: &native_timing_with,
+        wasm: &node_wasm_timer(root),
+    };
+    let outcome = match run(root, mode, lexicon, timers) {
         Ok(outcome) => outcome,
         Err(error) => {
             eprintln!("{error}");

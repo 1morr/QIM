@@ -15,6 +15,7 @@ export function hostDefault(
 ): void {
 	switch (snapshot.action) {
 		case "letter":
+		case "weighted":
 		case "punct":
 			insert(text, snapshot.character ?? "");
 			return;

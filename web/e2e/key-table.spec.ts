@@ -10,6 +10,7 @@ function ui(page: Page) {
 		segments: page.getByTestId("composition").locator(".segment"),
 		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		mode: page.getByTestId("mode"),
+		rerank: page.getByRole("combobox", { name: "重排" }),
 	};
 }
 
@@ -43,8 +44,12 @@ test("1–9：選對應候選", async ({ page }) => {
 	await expect(ui(page).text).toHaveValue("曰");
 });
 
+// 只驗翻頁鍵，關掉停鍵重排：它在翻頁中途回來時，回到第一頁才插入（rerank.spec），順序就和翻頁前讀的
+// 不同；高負載時常碰到（M4 票 05c）。
 test("- / =、PageUp / PageDown：翻頁", async ({ page }) => {
-	const { items } = ui(page);
+	const { text, items, rerank } = ui(page);
+	await rerank.selectOption("off");
+	await text.focus();
 	await page.keyboard.type("ar");
 	const first = await items.allTextContents();
 	for (const [next, back] of [

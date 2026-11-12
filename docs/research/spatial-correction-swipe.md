@@ -123,7 +123,7 @@ key press model 的結論（逐字）：
 | Fowler et al. 2015（Google，CHI 2015）[原] | 固定毫米：σx = 1.97 mm、σy = 1.88 mm；模擬用 Nexus 5 的鍵：寬 6.16 mm、高 9.42 mm | σ 約為鍵寬的 0.32、鍵高的 0.20（我算的）。數值取自 Azenkot & Zhai 2012 [1]。產生 per-tap 錯誤率 12.8%、38.4% 的詞至少有一個錯鍵 |
 | VelociTap（Vertanen 2015，CHI 2015）[原] | 「The x- and y-variance of a key's Gaussian distribution is computed by multiplying the x- and y-size of each key in pixels by an x- and y-scale factor. We use the same two scale factors for every key.」 | 每鍵 σ 跟自己的大小成比例，全鍵共用兩個比例，在開發集上調。論文寫「variance」，字面是變異數乘以尺寸 |
 | RoboType（Komninos 2023）[原] | 「zero as a mean, and a fraction of each key's width and height as the standard deviation」；範例輸出含 QWERTY、FITALY、OPTI-II 三種佈局 | 模擬使用者；在非 QWERTY 佈局上也用同一個比例 |
-| FFitts law（Bi, Li, Zhai, CHI 2013）[文] | 觸控落點變異 σ² 拆成兩項：速度精度取捨造成的（隨目標大小與速度變）和手指絕對不精確 σa²（與取捨無關）：`T = a + b·log2( A / √(2πe(σ² − σa²)) + 1 )` | 說明：小鍵上 σ 不會隨鍵大小一路縮到零，有 σa 的底。論文以鍵盤打字實驗驗證 |
+| FFitts law（Bi, Li, Zhai, CHI 2013）[文] | 觸控落點變異 σ² 拆成兩項：速度精度取捨造成的（隨目標大小與速度變）和手指絕對不精確 σa²（與取捨無關）：`T = a + b·log2( A / √(2πe(σ² − σa²)) + 1 )` | 說明：小鍵上 σ 不會隨鍵大小一路縮到零，有 σa 的底。論文以鍵盤打字實驗驗證。σa 的值：一維橫條目標 0.94 mm、圓形目標 1.5 mm（Bi et al. 的值，由 [Issues Related to Using Finger-Fitts law…](https://par.nsf.gov/servlets/purl/10337563) 引用採用 [文]，2026-11-12 票 06 查）；QIM 的初值取 1.5 mm |
 | AOSP [原] | 半徑 = 比例 × 該鍵對角線（預設比例 0.15，holo 資料約 0.15–0.158） | 不是 σ 但是同一個想法：尺度跟著鍵 |
 | FlorisBoard 滑動 [原] | `LOCATION_STD(0.5109) × min(key.visibleBounds.height, key.visibleBounds.width)`（`StatisticalGlideTypingClassifier.kt:221`） | 形狀與位置兩個高斯，位置的 σ 隨鍵的短邊 |
 
