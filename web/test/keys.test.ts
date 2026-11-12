@@ -7,6 +7,7 @@ import {
 	physicalCode,
 	shiftSwitch,
 	toKey,
+	usCharacter,
 } from "../src/keys.ts";
 
 function press(key: string, modifiers: Partial<KeyEvent> = {}): KeyEvent {
@@ -297,4 +298,105 @@ test("非字母鍵不送 code，即使配列讓它打出字母", () => {
 	assert.equal(physicalCode(physical("Digit1", "1"), false), null);
 	assert.equal(physicalCode(physical("Space", " "), false), null);
 	assert.equal(physicalCode(physical("", "f"), false), null);
+});
+
+// 中文模式整個當美式鍵盤（使用者 2026-11-12 決定，M4 票 07）：字母與標點都照實體鍵位。
+
+test("Dvorak：實體 W、E、Z、Q 鍵打美式的字母，標點鍵打美式的標點", () => {
+	const dvorak: [string, string, string][] = [
+		["KeyW", ",", "w"],
+		["KeyE", ".", "e"],
+		["KeyZ", ";", "z"],
+		["KeyQ", "'", "q"],
+		["Comma", "w", ","],
+		["Period", "v", "."],
+		["Semicolon", "s", ";"],
+		["Quote", "-", "'"],
+		["Slash", "z", "/"],
+		["BracketLeft", "/", "["],
+		["Minus", "[", "-"],
+		["Equal", "]", "="],
+	];
+	for (const [code, key, us] of dvorak) {
+		assert.equal(usCharacter(physical(code, key)), us, code);
+	}
+});
+
+test("AZERTY：字母、標點與數字列照美式鍵盤", () => {
+	const azerty: [string, string, string][] = [
+		["KeyQ", "a", "q"],
+		["KeyW", "z", "w"],
+		["KeyZ", "w", "z"],
+		["KeyM", ",", "m"],
+		["Semicolon", "m", ";"],
+		["Comma", ";", ","],
+		["Period", ":", "."],
+		["Slash", "!", "/"],
+		["Quote", "ù", "'"],
+		["Digit1", "&", "1"],
+		["Digit2", "é", "2"],
+		["Backquote", "²", "`"],
+	];
+	for (const [code, key, us] of azerty) {
+		assert.equal(usCharacter(physical(code, key)), us, code);
+	}
+});
+
+test("Shift 與 CapsLock 照美式鍵盤：Shift 換上排的符號，CapsLock 只管字母", () => {
+	// AZERTY 的 Shift+實體 1 鍵打 1，美式是 !；Dvorak 的 Shift+實體 W 鍵打 <。
+	assert.equal(usCharacter(physical("Digit1", "1", { shiftKey: true })), "!");
+	assert.equal(usCharacter(physical("KeyW", "<", { shiftKey: true })), "W");
+	assert.equal(usCharacter(physical("Comma", "W", { shiftKey: true })), "<");
+	assert.equal(usCharacter(physical("KeyQ", "'", {}, ["CapsLock"])), "Q");
+	assert.equal(
+		usCharacter(physical("KeyQ", '"', { shiftKey: true }, ["CapsLock"])),
+		"q",
+	);
+	assert.equal(usCharacter(physical("Digit1", "&", {}, ["CapsLock"])), "1");
+});
+
+test("美式鍵盤沒有的鍵、具名的鍵、組合鍵與 AltGr 不換", () => {
+	for (const [code, key] of [
+		["IntlBackslash", "<"],
+		["Enter", "Enter"],
+		["Backspace", "Backspace"],
+		["ArrowLeft", "ArrowLeft"],
+		["Numpad1", "1"],
+		["ShiftLeft", "Shift"],
+		["", "a"],
+	]) {
+		assert.equal(usCharacter(physical(code, key)), undefined, code);
+	}
+	for (const modifier of ["ctrlKey", "metaKey", "altKey"] as const) {
+		assert.equal(
+			usCharacter(physical("KeyQ", "a", { [modifier]: true })),
+			undefined,
+			modifier,
+		);
+	}
+	assert.equal(
+		usCharacter(physical("Digit2", "~", {}, ["AltGraph"])),
+		undefined,
+	);
+	assert.equal(
+		usCharacter(physical("KeyQ", "a", { isComposing: true })),
+		undefined,
+	);
+});
+
+test("key 本來就是美式鍵盤這個鍵的字元時不換", () => {
+	// 美式鍵盤、AZERTY 的實體 E 鍵，與 Playwright 的 press("@")（`code` Digit2、沒帶 shiftKey）。
+	assert.equal(usCharacter(physical("KeyE", "e")), undefined);
+	assert.equal(
+		usCharacter(physical("KeyF", "F", { shiftKey: true })),
+		undefined,
+	);
+	assert.equal(usCharacter(physical("Digit2", "@")), undefined);
+	assert.equal(usCharacter(physical("Slash", "?")), undefined);
+	assert.equal(
+		usCharacter(physical("Quote", '"', { shiftKey: true })),
+		undefined,
+	);
+	// 同一個字元在美式鍵盤的別的鍵上（AZERTY 實體 1 鍵的 & 是美式 7 鍵的）照樣換。
+	assert.equal(usCharacter(physical("Digit1", "&")), "1");
 });

@@ -148,6 +148,88 @@ export function physicalCode(
 	return event.code;
 }
 
+/**
+ * 美式鍵盤上各實體鍵（`KeyboardEvent.code`）打的字元：不按 Shift、按 Shift。字母鍵另算（`usCharacter`）。
+ * 照 W3C UI Events KeyboardEvent code Values 的美式配列。
+ */
+const US_SYMBOLS: Record<string, [string, string]> = {
+	Backquote: ["`", "~"],
+	Digit1: ["1", "!"],
+	Digit2: ["2", "@"],
+	Digit3: ["3", "#"],
+	Digit4: ["4", "$"],
+	Digit5: ["5", "%"],
+	Digit6: ["6", "^"],
+	Digit7: ["7", "&"],
+	Digit8: ["8", "*"],
+	Digit9: ["9", "("],
+	Digit0: ["0", ")"],
+	Minus: ["-", "_"],
+	Equal: ["=", "+"],
+	BracketLeft: ["[", "{"],
+	BracketRight: ["]", "}"],
+	Backslash: ["\\", "|"],
+	Semicolon: [";", ":"],
+	Quote: ["'", '"'],
+	Comma: [",", "<"],
+	Period: [".", ">"],
+	Slash: ["/", "?"],
+};
+
+/**
+ * 中文模式整個當美式鍵盤（使用者 2026-11-12 決定，M4 票 07）：這個鍵在美式鍵盤上打的字元，換 Dvorak、
+ * AZERTY 等配列時中文模式的手感跟美式一樣。照實體鍵位（`code`）與 Shift，CapsLock 只管字母（Shift 加
+ * CapsLock 是小寫）。美式鍵盤沒有的鍵（ISO 的 `IntlBackslash`…）、具名的鍵、數字鍵台、組合鍵、AltGr 與
+ * 別的輸入法組字中是 `undefined`，照 `key`；`key` 本來就是美式鍵盤上的那個字元時也是（不必換）。
+ * 英文直通與臨時英文照配列，呼叫端不換。
+ */
+export function usCharacter(event: PhysicalKeyEvent): string | undefined {
+	if (
+		event.isComposing ||
+		event.ctrlKey ||
+		event.metaKey ||
+		event.altKey ||
+		event.getModifierState("AltGraph")
+	) {
+		return undefined;
+	}
+	const letter = /^Key([A-Z])$/.exec(event.code)?.[1];
+	const us: [string, string] | undefined =
+		letter !== undefined
+			? [letter.toLowerCase(), letter]
+			: US_SYMBOLS[event.code];
+	if (us === undefined) {
+		return undefined;
+	}
+	const shifted =
+		letter !== undefined
+			? event.shiftKey !== event.getModifierState("CapsLock")
+			: event.shiftKey;
+	const want = us[shifted ? 1 : 0];
+	// 已經是美式鍵盤上的字元，不必換：美式與字母位置相同的配列；Playwright 的 press("@") 送上排的字元卻
+	// 沒帶 shiftKey，也當成已經是美式。
+	if (event.key === want || (!event.shiftKey && event.key === us[1])) {
+		return undefined;
+	}
+	return want;
+}
+
+/**
+ * 給 `toKey` 的事件：中文模式（`ascii` 為假）把 `key` 換成美式鍵盤的字元（`usCharacter`），英文直通與
+ * 臨時英文照原樣（照配列）。`us` 是換上的字元，沒換時是 `undefined`。
+ */
+export function usKeyEvent(
+	event: PhysicalKeyEvent,
+	ascii: boolean,
+): { event: KeyEvent; us: string | undefined } {
+	const us = ascii ? undefined : usCharacter(event);
+	if (us === undefined) {
+		return { event, us };
+	}
+	const { isComposing, ctrlKey, metaKey, altKey } = event;
+	return { event: { key: us, isComposing, ctrlKey, metaKey, altKey }, us };
+}
+
 /** Shift 按下到放開多久以內算單按：librime `ascii_composer` 的 500 ms。 */
 export const LONE_SHIFT_MS = 500;
 

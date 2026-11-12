@@ -99,3 +99,98 @@ test("英文直通照配列打，不送機率", async ({ page }) => {
 		"按鍵機率：（最近一個鍵沒有送機率）",
 	);
 });
+
+// 中文模式整個當美式鍵盤（使用者 2026-11-12 決定）：換配列時字母與標點都照實體鍵位，英文直通照配列。
+// Playwright 的鍵盤固定美式，別的配列用合成的 keydown（`key` 照那個配列、`code` 是實體鍵位）；合成事件
+// 沒有瀏覽器的預設動作，所以「交還瀏覽器」從事件有沒有被攔下（`defaultPrevented`）讀。
+
+/** 在輸入框送一個合成的 keydown；回傳網頁有沒有攔下（攔下就是網頁或核心處理了，不交給瀏覽器照 `key` 打）。 */
+async function dispatch(
+	page: Page,
+	code: string,
+	key: string,
+	init: KeyboardEventInit = {},
+) {
+	return page.getByRole("textbox", { name: "輸入框" }).evaluate(
+		(element, [code, key, init]) =>
+			!element.dispatchEvent(
+				new KeyboardEvent("keydown", {
+					...(init as KeyboardEventInit),
+					key: key as string,
+					code: code as string,
+					bubbles: true,
+					cancelable: true,
+				}),
+			),
+		[code, key, init] as const,
+	);
+}
+
+test("Dvorak：實體 W、Q 鍵打碼，逗號、句號、分號鍵打美式的標點", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const composition = page.getByTestId("composition");
+	expect(await dispatch(page, "KeyW", ",")).toBe(true);
+	expect(await dispatch(page, "KeyQ", "'")).toBe(true);
+	await expect(composition).toHaveText("田手");
+	// Dvorak 的實體逗號鍵打 w：照美式是逗號，先上屏組字再接全形逗號。
+	expect(await dispatch(page, "Comma", "w")).toBe(true);
+	await expect(composition).toHaveText("");
+	await expect(text).toHaveValue(/，$/);
+	expect(await dispatch(page, "Period", "v")).toBe(true);
+	await expect(text).toHaveValue(/，。$/);
+	expect(await dispatch(page, "Semicolon", "s")).toBe(true);
+	await expect(text).toHaveValue(/，。；$/);
+	// 實體 E、Z 鍵（Dvorak 的 . 與 ;）是字母 e、z，不是標點。
+	expect(await dispatch(page, "KeyE", ".")).toBe(true);
+	await expect(composition).toHaveText("水");
+	const weights = await keyProbabilities(page);
+	expect(weights[0].letter).toBe("e");
+	expect(await dispatch(page, "KeyZ", ";")).toBe(true);
+	await expect(
+		page.getByTestId("debug-weights").locator("code").first(),
+	).toHaveAttribute("data-letter", "z");
+	await expect(text).toHaveValue(/，。；$/);
+});
+
+test("AZERTY：實體 Q、W、M 鍵打美式的字母，數字列不按 Shift 就是數字", async ({
+	page,
+}) => {
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	const composition = page.getByTestId("composition");
+	// AZERTY 的實體 Q、W、M 鍵打 a、z、,。
+	await dispatch(page, "KeyQ", "a");
+	await dispatch(page, "KeyW", "z");
+	await expect(composition).toHaveText("手田");
+	await page.keyboard.press("Escape");
+	await dispatch(page, "KeyM", ",");
+	await expect(composition).toHaveText("一");
+	// 實體逗號鍵（AZERTY 的 ;）照美式是逗號。
+	await dispatch(page, "Comma", ";");
+	await expect(composition).toHaveText("");
+	await expect(text).toHaveValue(/，$/);
+	// 沒有組字時實體 1 鍵（AZERTY 的 &）照美式是 1：核心交還宿主，網頁插入 1，不是 &。
+	expect(await dispatch(page, "Digit1", "&")).toBe(true);
+	await expect(text).toHaveValue(/，1$/);
+	// Shift+實體 1 鍵（AZERTY 的 1）照美式是 !，中文模式上屏全形驚嘆號。
+	expect(await dispatch(page, "Digit1", "1", { shiftKey: true })).toBe(true);
+	await expect(text).toHaveValue(/，1！$/);
+});
+
+test("英文直通照配列：Dvorak 與 AZERTY 的鍵交還瀏覽器照 key 打", async ({
+	page,
+}) => {
+	await page.keyboard.down("Shift");
+	await page.keyboard.up("Shift");
+	await expect(page.getByTestId("mode")).toHaveAttribute("aria-label", "英文");
+	// 不攔下：瀏覽器照 `key`（Dvorak 的 ,、AZERTY 的 &）打。
+	expect(await dispatch(page, "KeyW", ",")).toBe(false);
+	expect(await dispatch(page, "Digit1", "&")).toBe(false);
+	expect(await dispatch(page, "Comma", "w")).toBe(false);
+	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("");
+	await expect(page.getByTestId("composition")).toHaveText("");
+	await expect(page.getByTestId("debug-weights")).toHaveText(
+		"按鍵機率：（最近一個鍵沒有送機率）",
+	);
+});

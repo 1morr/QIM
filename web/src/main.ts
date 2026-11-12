@@ -8,7 +8,7 @@ import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { hostDefault, insert } from "./host.ts";
-import { LoneShift, physicalCode, toKey } from "./keys.ts";
+import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
 import {
 	checkModelPack,
 	NeuralReranker,
@@ -347,7 +347,9 @@ async function start(): Promise<void> {
 			panel.setOpen(event.key === "ArrowDown");
 			return;
 		}
-		const key = toKey(event, shown.composing, shown.inlineAscii);
+		// 中文模式整個當美式鍵盤：字母與標點照實體鍵位（M4 票 07）；英文直通與臨時英文照配列。
+		const remapped = usKeyEvent(event, shown.ascii);
+		const key = toKey(remapped.event, shown.composing, shown.inlineAscii);
 		if (!key) {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
 			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作。
@@ -382,6 +384,11 @@ async function start(): Promise<void> {
 			: session.press(key.kind, key.value);
 		try {
 			if (!snapshot.handled) {
+				// 換成美式字元的鍵：瀏覽器會照配列插入 `key`，改由網頁插入核心收到的那個字元。
+				if (remapped.us !== undefined && remapped.us !== event.key) {
+					event.preventDefault();
+					insert(text, remapped.us);
+				}
 				// 交還瀏覽器的鍵（空白、Enter、方向鍵…）收起了聯想：候選列跟著清掉。
 				render(snapshot);
 				afterHostKey(key.kind);
