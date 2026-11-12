@@ -123,7 +123,7 @@ async function rankOfNiAfter(page: Page, before: string): Promise<number> {
 test("在「我」後面選「你」一次，「我」後面的 of 比在「他」後面選時把「你」排得更前", async ({
 	page,
 	browser,
-}) => {
+}, testInfo) => {
 	/** 新頁面在前文 `before` 後打 of 選「你」一次，回傳之後前文「我」時「你」的位置。 */
 	const learnAfter = async (target: Page, before: string): Promise<number> => {
 		const { text } = await ready(target);
@@ -149,7 +149,6 @@ test("在「我」後面選「你」一次，「我」後面的 of 比在「他�
 	await expect(
 		page.getByRole("list", { name: "候選" }).getByRole("listitem").nth(afterMe),
 	).toHaveText(`${afterMe + 1}你`);
-	await page.screenshot({
-		path: `${import.meta.dirname}/../../.scratch/m3/evidence/23-personal-bigram.png`,
-	});
+	// 截圖寫到 Playwright 的輸出目錄：M3 已封存，不再改寫 `.scratch/m3/evidence/` 的證據。
+	await page.screenshot({ path: testInfo.outputPath("personal-bigram.png") });
 });
