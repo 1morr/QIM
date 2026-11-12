@@ -474,6 +474,27 @@ fn an_english_user_word_can_be_forgotten() {
     assert!(!ime.user.export().contains(EMAIL));
 }
 
+/// 撤銷學習（M4 票 16）：組字中清掉英文使用者詞的候選（規則 4 或前綴補完）就是忘掉那個英文使用者詞。
+#[test]
+fn forgetting_an_english_user_word_candidate_forgets_the_word() {
+    let mut ime = Ime::new();
+    ime.type_in_english_times("rrrrrr", 2);
+    ime.type_in_english_times(EMAIL, 3);
+    for (code, text) in [("rrrrrr", "rrrrrr"), ("iva", EMAIL)] {
+        ime.type_text(code);
+        let at = ime
+            .session
+            .all_candidates()
+            .iter()
+            .position(|c| c.text == text);
+        let forgotten = ime.session.forget(&ime.engine, &mut ime.user, at.unwrap());
+        assert!(!forgotten.candidates.iter().any(|c| c.text == text));
+        ime.press(Key::Escape);
+        assert!(!ime.offers(code, text));
+    }
+    assert!(ime.learned().is_empty());
+}
+
 /// 用自己的 tick：學英文使用者詞不推進個人 bigram 的 tick（`#@/tick`）。
 #[test]
 fn english_user_words_have_their_own_tick() {

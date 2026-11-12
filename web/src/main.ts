@@ -71,6 +71,16 @@ function composingChinese(): boolean {
 	return shown.composing && !shown.inlineAscii;
 }
 
+/** 撤銷學習的鍵：Delete 加上 Shift 或 Ctrl 其中一個，沒有別的修飾鍵（plan §2.4）。 */
+function isForgetKey(event: KeyboardEvent): boolean {
+	return (
+		event.key === "Delete" &&
+		event.shiftKey !== event.ctrlKey &&
+		!event.metaKey &&
+		!event.altKey
+	);
+}
+
 /**
  * 結果回來後再等幾毫秒才套用（網址的 `?rerank-delay=<ms>`）：e2e 模擬慢的模型，驗重排回來前繼續打字時
  * 舊結果不套用。平常沒有。
@@ -365,6 +375,17 @@ async function start(): Promise<void> {
 		) {
 			event.preventDefault();
 			panel.setOpen(event.key === "ArrowDown");
+			return;
+		}
+		// 組字中 Shift+Delete 或 Ctrl+Delete 清掉目前頁第一個候選學到的（撤銷學習，M4 票 16）：librime 綁
+		// Ctrl+Delete，Shift 當 Ctrl 的退路也收 Shift+Delete，作用在高亮的候選，高亮預設是首選、翻頁後是新頁的
+		// 第一個；這裡沒有高亮，照它的預設。沒有組字時照常交還瀏覽器。
+		if (shown.composing && isForgetKey(event)) {
+			event.preventDefault();
+			withSnapshot(session.forget(shown.page * pageSize()), (snapshot) => {
+				saveLearning();
+				apply(snapshot, false);
+			});
 			return;
 		}
 		// 中文模式整個當美式鍵盤：字母與標點照實體鍵位（M4 票 07）；英文直通與臨時英文照配列。

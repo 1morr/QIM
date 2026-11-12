@@ -25,7 +25,7 @@
 | 個人模型 | `UserModel` | 空間模型 | `SpatialModel` |
 | 重排 | `Rerank` | 譯詞 | `Gloss` |
 | 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
-| 退格撤銷 / 動作 | `Undo`（`Session::expire_undo`） / `Action` | | |
+| 退格撤銷 / 動作 | `Undo`（`Session::expire_undo`） / `Action` | 撤銷學習 | `forget`（`Session::forget`、`UserModel::forget`） |
 | 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
 | 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
 | 簡體模式 / 簡體字排後 | `Options::simplified` / `simplified_after_traditional` | 簡體字（碼表的標記） | `CodeEntry::simplified` |
@@ -180,6 +180,7 @@ impl Session {
     pub fn select(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot;
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot; // 觸控鍵盤的 `text` 動作
     pub fn focus_segment(&mut self, engine: &Engine, user: &mut UserModel, segment: usize) -> Snapshot;
+    pub fn forget(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot; // 撤銷學習：清掉全部候選的第 index 個學到的（§2.4，M4 票 16）
     pub fn set_options(&mut self, options: Options);
     pub fn options(&self) -> Options;                                 // 殼改一項時讀出來改，不另存
     pub fn composing(&self) -> bool;                                  // 有還沒上屏的輸入碼（臨時英文也算）
@@ -331,6 +332,12 @@ P_段內 = 1（單字）
 - 退格撤銷（M4 票 15，brief §4.5，照 librime `Memory` 的 `DiscardSession`，brief §12.2）：`Session` 的每個動作（按鍵、點候選 `select`、點分段 `focus_segment`、打文字 `text`）學到的東西記一份撤銷紀錄（`UserModel` 裡的 `Undo`：每個被改到的條目第一次改之前的值與各 tick，上限淘汰刪掉的也記），下一個動作開始時收起。上一個動作之後第一個交還宿主的鍵是退格時，宿主照常刪字，那份紀錄放回去，學習資料（整串上屏次數、衰減值、tick、自動造詞、個人 bigram、英文使用者詞）和那個動作之前逐字相同（匯出比對）。中文的上屏與英文直通打完一串（讓它打完的空白、標點、Enter，或接著上屏的中文）都是動作，同一個動作學到的一起撤銷；撤銷時正在打的英文串回到那個動作之前，所以 `teh` 空白、退格改成 `the` 再打完，學的是 `the`。不送字的動作（方向鍵、Tab 這類移走游標的鍵讓英文串打完）學到的不能撤銷：之後的退格不在那串旁邊。不送字元的修飾鍵、只收起聯想的退格（§2.1）不算夾在中間，下一個鍵照樣能撤銷（librime-predict 吃下的退格也不到 `OnUnhandledKey`）；其他鍵都算夾在中間、不撤銷，含 Esc 收起聯想、開始組字的字母與單按 Shift 切中英（librime 的 Shift 單按到不到 `OnUnhandledKey` 沒查，這裡照「中間夾了其他鍵」從嚴）。
   - 時限（協調者 2026-11-12 決定，照 librime `RevertRecentTransaction` 的 3 秒）：核心不讀時間（§1.3），由殼計時。殼的契約：核心可能學到東西的動作之後（上屏、交還宿主的空白、標點、Enter 這類讓英文串打完的鍵）從頭計 3 秒，到了呼叫 `Session::expire_undo`；使用者點輸入框移游標時也呼叫；換欄位時呼叫的 `Session::clear_context` 本身就讓紀錄失效。只收起聯想的退格不重新計時（librime 從上屏開交易時起算）。網頁在 `saveLearning` 重新計時（`web/src/undo-window.ts`），`pointerdown` 輸入框時呼叫 `expireUndo`。
   - 和 librime 不同：「緊接著」是上一個動作之後的第一個鍵，librime 打了字又刪光再按退格仍會撤銷 3 秒內的上屏，這裡不會；撤銷紀錄記著是哪個 `Session` 寫的，幾個輸入框共用一份個人模型時，別的輸入框的退格與 `expire_undo` 不動它；無痕、學習關掉時不撤銷（不動學習資料）；手動加詞、常用語、刪英文使用者詞、匯入這類使用者明確的操作丟掉紀錄。撤銷紀錄不進匯出檔；網頁在交還瀏覽器的退格之後存檔。
+- 撤銷學習（M4 票 16，brief §4.5）：`Session::forget(index)` 清掉全部候選的第 `index` 個學到的，候選列跟著重排（lattice 從頭建），詞庫原有的詞回到不學習時的位置、自動造詞不再出；沒有墓碑，再選就重新學（選兩次又成首選），不做永久屏蔽（CyIME 的永久屏蔽被使用者評為偏離預期，`docs/research/cyime.md` §4）。清的範圍（`UserModel::forget`）：
+  - 字詞：候選那一列（去掉分隔記號、萬用鍵換成實際的碼，同學習記的碼）的計數（整串上屏次數、衰減值）與自動造詞。刪學習資料從嚴（協調者 2026-11-12 決定）：個人 bigram 只清「候選列現在接的前一個字詞 → 它」那一組（沒有目前分段時同打分接的，目前分段時是前一段、第 0 段是組字開頭時前文給的），別的前一個字詞後面學到的不動：個人 bigram 只看文字，清一個常用字（「的」）若清掉所有指向它的組，會抹掉它在所有前文後面的正確學習，又沒有墓碑救回。所以 debug 面板的學習加分只在現在的前文下歸零。自動造詞刪掉時，落在它裡面前後相接的組（「乙丁」的「乙 → 丁」，造詞那次學到的段間接續）一起清，否則同樣的字會以句子候選回到前面。手動加詞與常用語只清計數、詞留著（打觸發詞仍是首選）。句子候選的各段是各自的學習，不清（librime 刪候選也只刪那個詞條，brief §12.2）；以句子路徑上屏過幾次的詞，清掉後各字學到的計數還在，可能仍排在後面幾位。重算後目前分段那一段的碼還在才留著，否則回到整串。
+  - 英文候選、英文使用者詞與前綴補完：忘掉那個英文使用者詞（同 `forget_english_user_word`）；emoji 沒有學習。
+  - 無痕、學習關掉時也清得掉（是刪除，不是學習）；撤銷紀錄跟著丟掉（使用者明確的操作）。沒有組字時不動作、`handled` 為假，臨時英文中吃下不動作。
+  - 桌面殼的按鍵：組字中 Shift+Delete 或 Ctrl+Delete 清目前頁的第一個，翻頁前就是首選（librime 預設綁 Ctrl+Delete、Shift 當 Ctrl 的退路也收 Shift+Delete，作用在高亮的候選；QIM 桌面沒有高亮，照 librime 的預設高亮：首選，翻頁後是新頁的第一個，brief §12.2）。成熟產品沒有共通的「刪第 N 個」按鍵（fcitx5 的 Ctrl+7 再選是孤例，在瀏覽器裡是切分頁，brief §12.4），所以桌面清不到第一頁第 2 位起的候選：自動造詞釘在第 2 位（規則 3），造錯的在它成首選前桌面清不掉。`forget` 收任何位置，觸控的手勢（長按候選維持字根提示，brief §4.4）跟 M5 重做候選列一起定，到時補上這個缺口。
+  - 刪除怎麼同步到別台由 M4 票 17 定（墓碑）；現在是直接刪列。
 - 今天的日期（M4 票 12，殼的日期契約）：核心不讀系統時間（§1.3），殼用 `UserModel::set_today` 給使用者當地的日曆日（`qim_core::Date`，`YYYY-MM-DD`）。殼必須在第一次學習前給（含匯入存檔之前，v1、v2 的列取匯入那天），之後每次使用者操作前再給一次，過了午夜才不會記成前一天；網頁在 `window` 捕獲 `keydown`、`pointerdown` 時給。學到或改到的每個條目（學習計數、使用者詞、個人 bigram、英文使用者詞）記最後使用的日期，同一組（方案, 輸入碼, 詞）的計數與使用者詞是同一個日期；手動加詞、常用語記加進來（或改觸發詞）的那天。殼沒給過日期時學到的條目沒有日期（`None`，匯出時日期欄留空），不寫假日期：之後的一年時限（M4 票 13）跳過沒有日期的條目，免得殼漏給時資料被當成很久沒用而停用。
 - 學習的時限（M4 票 13，使用者 2026-11-12 決定，產品決定、不由基準調）：一年是 365 天，比較殼給的今天與條目的日期，任一個不知道（`None`）時不算過期。整串上屏另記最後一次的日期（`last_commit_date`，句中用過不延長它）：整串上屏距上一次超過 365 天從 1 重算，規則 2、3 只看一年內的整串上屏（上面）。最後使用的日期距今超過 365 天的條目停用、不刪（使用者 2026-11-12 決定；LatinIME 是 GC 時移除 300 天沒用的，`docs/research/learning-forgetting-sync.md` §2.2）：學習計數不給個人分、不算規則 2、3，自動造詞不進 lattice，個人 bigram 與英文使用者詞當作沒學過；手動加詞與常用語一直有效（打觸發詞學到的計數是另一列學習計數，照樣停用）。理由：核心分不出殼給的日期是真的還是時鐘錯了（重開機後亂掉、被改到幾年後），收到新日期就刪的話，時鐘改回來也救不回；停用的條目在時鐘改回來後恢復作用，一年多前的備份匯入也照收。查詢都經 `UserModel::for_scheme` 回的 `SchemeUser`（帶著今天），過期與否在查詢時算。實體刪除只在到條目上限時淘汰（下一段），最舊的（多半就是停用的）先刪。
 - 條目上限（M4 票 13，照 LatinIME 的結構，`docs/research/learning-forgetting-sync.md` §2.3）：分兩個上限（`Limits`，LatinIME 也分 unigram 與 bigram），（方案, 輸入碼, 詞）的列（學習計數與自動造詞，各方案合計；手動加詞與常用語不算、不刪）與英文使用者詞（M4 票 14，LatinIME 的 unigram 也不分來源）合計預設 2 萬（`ENTRY_LIMIT`）、個人 bigram 預設 3 萬（`BIGRAM_LIMIT`，同 LatinIME）：學完全部公開集合（約 9,700 句）是約 1.9 萬列、2.8 萬組，「學過」的每鍵延遲就是量這個大小，使用者的 Rime 資料約 4,600 條；量法見票 13 的 Comments。每次學習後數條目，到上限的 1.2 倍（LatinIME 的 `getEntryCountHardLimit`）才清到上限，不必每次學習都淘汰。淘汰順序：先刪沒到出現門檻的（中文條目沒有出現門檻、都算過了；英文使用者詞一年內打過 2 次才算過，`UserModel` 不知道英文詞典，詞典有的詞打過一次也算沒到），再刪最後使用的日期最舊的（停用的條目日期最舊，所以先刪；沒有日期的排在有日期的後面，同時限跳過它們），同一天的刪衰減值衰減到現在較小的（最近用得少的），再依鍵的順序（LatinIME 依 timestamp、count、key）。殼可用 `UserModel::set_limits` 改上限（LatinIME 由字典檔頭的 `MAX_UNIGRAM_ENTRY_COUNT` 覆寫），不進匯出檔。
@@ -500,6 +507,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
   - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
   - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，brief §12.4）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗報不報由 `web/src/neural-rerank.ts` 的 `NeuralReranker` 管，換模型 A→B 時 A 晚失敗不報（M4 票 02）；沒有模型時不重排、打字與候選照常。開始、改設定、換資料包、模型載入失敗之後把重排識別交給 `Session.setRerankerId`（§2.7 停鍵結果快取）。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
 - debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、英文使用者詞、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram、萬用鍵實際對到的碼（M4 票 11），路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）、最近一個字母鍵的按鍵機率（觸控或實體鍵盤，M4 票 06、07，`Inspection::key_weights`，面板 `debug-weights`）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）；候選列是否照停鍵結果快取排（`Inspection::rerank_cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`）也在這一段（M4 票 03）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因（容錯修正、空間模型的機率），在 `Inspection` 與面板加一欄，測試用面板讀回原因。
+- 撤銷學習（M4 票 16，§2.4）：組字中 Shift+Delete 或 Ctrl+Delete 呼叫 `Session.forget` 清目前頁的第一個（翻頁前是首選）、存檔；沒有組字時照常交還瀏覽器。debug 面板每個候選列的 `data-learning` 是它的學習加分，e2e 讀它看清掉後歸零（`e2e/forget.spec.ts`）。
 - 使用者資料存 `localStorage`（經 `web/src/storage.ts`）；瀏覽器封鎖網站資料或存不下時，第一次出錯起寫入只留在記憶體、照樣能打字，狀態列說明學習資料與設定這次不會存（M4 票 02）。提供匯出、匯入。匯入會覆蓋全部學習資料（§2.4），所以先檢查格式，再在頁面上寫出會覆蓋幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）。
 - LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
 - 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。
@@ -829,7 +837,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - 面板：emoji 面板（分類、最近用過、搜尋）、文字編輯面板（方向鍵、選取、全選、複製、貼上）、剪貼簿（瀏覽器讀不到系統剪貼簿歷史，開工時查限制，做得到的範圍先做）。
 - 調整鍵盤高度。
 - 從 M4 移來（使用者 2026-11-12 同意，觸控手勢放在重做鍵盤的這個里程碑）：空白鍵滑動移游標、英文滑動輸入（開工讀 FlorisBoard v0.5.2 與 AnySoftKeyboard，brief §12.4）、評估中文滑動輸入（結論寫回 brief）。滑動的解碼用 `qim-layout` 的按鍵幾何，不寫死 QWERTY；和佈局裡按鍵自己的滑動動作（flick）怎麼分，開工時定，研究建議照青簡的方向扇形（`docs/research/spatial-correction-swipe.md` §5）；形碼的滑行沒有先例，先用模擬軌跡量首選率再決定做不做畫面。
-- 從 M4 來的觸控入口（使用者 2026-11-12 同意）：撤銷學習的手勢、譯詞的上屏方式，跟重做的候選列一起定；長按候選目前是字根提示（brief §4.4）。
+- 從 M4 來的觸控入口（使用者 2026-11-12 同意）：撤銷學習的手勢、譯詞的上屏方式，跟重做的候選列一起定；長按候選目前是字根提示（brief §4.4）。撤銷學習的手勢要能指定任一個候選（`Session::forget` 收任何位置）：桌面只清得到首選，釘在第 2 位的自動造詞要靠它（M4 票 16，§2.4）。
 - 盤點時使用者勾的其他項目。平台才有的（按鍵音、震動、語音、懸浮鍵盤）只在設定頁留位置與說明。
 - 完成標準：
   - Playwright 用手機 viewport 讀回候選列在鍵盤頂端、工具列與各面板開得了、設定頁改了會生效，截圖存證，平台里程碑拿它當對照。

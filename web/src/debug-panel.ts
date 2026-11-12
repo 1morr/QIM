@@ -357,6 +357,7 @@ export function mountDebugPanel(
 				"data-text": candidate.text,
 				"data-kind": candidate.kind,
 				"data-sources": codes.join(" "),
+				"data-learning": score(candidate.learning),
 			});
 			row.append(
 				make("td", String(i + 1)),
