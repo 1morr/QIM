@@ -24,6 +24,49 @@ const BIGRAM_WEIGHT: f64 = 0.8;
 /// 排位規則 2 的期限：距最後上屏不超過這麼多次上屏（plan §2.4 的初值）。
 pub(crate) const RECENT_COMMITS: u64 = 10_000;
 
+/// 學習的時限（plan §2.4，M4 票 13）：最後使用的日期距今天超過這麼多天就算一年沒用。整串上屏隔了
+/// 這麼久從 1 重算、規則 2、3 不再用它，一年沒用的條目停用（不刪，[`SchemeUser`]）。產品決定（使用者 2026-11-12），不由基準調；
+/// LatinIME 是 300 天。
+const EXPIRY_DAYS: i32 = 365;
+
+/// 日期 `last` 距 `today` 超過 [`EXPIRY_DAYS`]；任一個不知道（殼沒給日期）時不算，時限跳過它。
+fn expired(last: Option<Date>, today: Option<Date>) -> bool {
+    matches!((last, today), (Some(last), Some(today)) if today.days_after(last) > EXPIRY_DAYS)
+}
+
+/// 學習資料的條目上限（plan §2.4，M4 票 13），照 LatinIME 的結構：條目數到上限的 1.2 倍才清到上限，
+/// 不必每次學習都淘汰。LatinIME 分 unigram（1 萬）與 bigram（3 萬）兩個上限，這裡也分兩個。
+/// LatinIME 的上限可由字典檔頭覆寫（`MAX_UNIGRAM_ENTRY_COUNT`），這裡由殼用 [`UserModel::set_limits`] 改。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// （方案, 輸入碼, 詞）的列：學習計數與自動造詞，各方案合計；手動加詞與常用語不算、不刪。
+    pub entries: usize,
+    /// 個人 bigram 的組數。
+    pub bigrams: usize,
+}
+
+impl Limits {
+    /// 到這個數就清到 `limit`：LatinIME 的 `getEntryCountHardLimit`（上限 × 1.2）。
+    fn hard(limit: usize) -> usize {
+        limit + limit / 5
+    }
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            entries: ENTRY_LIMIT,
+            bigrams: BIGRAM_LIMIT,
+        }
+    }
+}
+
+/// [`Limits::entries`] 的預設值：學完全部公開集合（約 9,700 句）是約 1.9 萬列，「學過」的每鍵延遲就是量
+/// 這個大小；使用者的 Rime 資料約 4,600 條。量法見 M4 票 13 的 Comments。
+const ENTRY_LIMIT: usize = 20_000;
+/// [`Limits::bigrams`] 的預設值：同上約 2.8 萬組；LatinIME 的 bigram 上限也是 3 萬。
+const BIGRAM_LIMIT: usize = 30_000;
+
 /// 使用者詞與學習計數；殼負責保存（plan §2.1）。各輸入方案分開記，互不影響（plan §2.4）。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UserModel {
@@ -38,6 +81,8 @@ pub struct UserModel {
     today: Option<Date>,
     /// 這台裝置的 id（[`UserModel::set_device`]），匯出時寫進檔頭；跨裝置合併時分辨各台（M4 票 17）。
     device: Option<String>,
+    /// 條目上限（[`UserModel::set_limits`]）；不進匯出檔。
+    limits: Limits,
 }
 
 /// 個人 bigram（plan §2.3）：上屏時記「前一個字詞 → 這一段」的衰減值，算分時給這一段接在
@@ -78,6 +123,8 @@ impl Decayed {
 pub(crate) struct Following<'a> {
     next: &'a BTreeMap<String, Decayed>,
     tick: u64,
+    /// 殼給的今天：一年沒用的組停用（當作沒學過）。
+    today: Option<Date>,
     /// 這個字詞後面各段的衰減值衰減到現在的總和：條件機率的分母。
     total: f64,
 }
@@ -87,6 +134,7 @@ impl Following<'_> {
     pub(crate) fn probability(&self, text: &str) -> f64 {
         self.next
             .get(text)
+            .filter(|d| !expired(d.last_used, self.today))
             .map_or(0.0, |d| d.at(self.tick) / self.total)
     }
 
@@ -94,6 +142,7 @@ impl Following<'_> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&str, f64)> + '_ {
         self.next
             .iter()
+            .filter(|(_, d)| !expired(d.last_used, self.today))
             .map(|(text, d)| (text.as_str(), d.at(self.tick) / self.total))
     }
 }
@@ -158,8 +207,11 @@ struct Count {
     decayed: f64,
     /// 最後一次（整串或句中）上屏時的 tick。
     last_tick: u64,
-    /// 最後使用的日期：最後一次上屏時殼給的今天；殼沒給時是 `None`。
+    /// 最後使用的日期：最後一次（整串或句中）上屏時殼給的今天；殼沒給時是 `None`。一年沒用的條目停用（[`SchemeUser`]）。
     last_used: Option<Date>,
+    /// 最後一次整串上屏的日期；`commits` 是 0 或殼沒給日期時是 `None`。距今超過一年時整串上屏的次數
+    /// 當作 0（[`Count::commits_on`]）：規則 2、3 只看一年內的整串上屏，句中用過的不延長它。
+    last_commit_date: Option<Date>,
 }
 
 impl Count {
@@ -170,17 +222,57 @@ impl Count {
             && self.decayed == 0.0
             && self.last_tick == 0
     }
+
+    /// `today` 時算數的整串上屏次數：最後一次整串上屏距今超過一年時是 0（下一次從 1 重算，plan §2.4）。
+    fn commits_on(&self, today: Option<Date>) -> u64 {
+        if expired(self.last_commit_date, today) {
+            0
+        } else {
+            self.commits
+        }
+    }
+}
+
+/// 條目過了出現門檻沒有（上限淘汰先刪沒到的）。中文條目沒有出現門檻，都是 `Passed`；英文使用者詞的
+/// 門檻由 M4 票 14 接上（協調者 2026-11-12 決定，票 13 的 Comments）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Threshold {
+    // 中文條目沒有出現門檻，票 13 還沒有條目用到它；票 14 接上英文使用者詞時拿掉這行。
+    #[expect(dead_code, reason = "英文使用者詞的出現門檻由 M4 票 14 接上")]
+    Below,
+    Passed,
+}
+
+/// 上限淘汰的排序鍵（[`UserModel::enforce_limits`]），[`Eviction::order`] 小的先刪：沒到出現門檻的、
+/// 最後使用的日期最舊的（沒有日期的排在有日期的後面）、次數（衰減到現在的衰減值）小的。
+#[derive(Debug, Clone, Copy)]
+struct Eviction {
+    threshold: Threshold,
+    last_used: Option<Date>,
+    used: f64,
+}
+
+impl Eviction {
+    fn order(&self, other: &Self) -> std::cmp::Ordering {
+        let key = |e: &Self| (e.threshold, e.last_used.is_none(), e.last_used);
+        key(self)
+            .cmp(&key(other))
+            .then(self.used.total_cmp(&other.used))
+    }
 }
 
 impl UserModel {
-    /// 方案 `scheme` 的個人模型；沒記過時是空的。
-    pub(crate) fn for_scheme(&self, scheme: &str) -> &SchemeModel {
+    /// 方案 `scheme` 的個人模型，照殼給的今天看（停用一年沒用的條目）；沒記過時是空的。
+    pub(crate) fn for_scheme(&self, scheme: &str) -> SchemeUser<'_> {
         static EMPTY: SchemeModel = SchemeModel {
             tick: 0,
             entries: BTreeMap::new(),
             words: BTreeMap::new(),
         };
-        self.schemes.get(scheme).unwrap_or(&EMPTY)
+        SchemeUser {
+            model: self.schemes.get(scheme).unwrap_or(&EMPTY),
+            today: self.today,
+        }
     }
 
     /// 學一次上屏（plan §2.4）：方案 `scheme` 的學習計數（[`SchemeModel::learn`]），加上個人
@@ -193,6 +285,7 @@ impl UserModel {
         let today = self.today;
         self.for_scheme_mut(scheme).learn(segments, today);
         self.bigrams.learn(previous, segments, today);
+        self.enforce_limits();
     }
 
     /// 選了一個聯想（plan §2.4）：只記個人 bigram「`previous` → `text`」。聯想沒有輸入碼，
@@ -203,6 +296,7 @@ impl UserModel {
             &[Segment::new(String::new(), text.to_string())],
             self.today,
         );
+        self.enforce_limits();
     }
 
     /// 學過個人 bigram 沒有。
@@ -213,9 +307,18 @@ impl UserModel {
     /// 前一個字詞是 `previous` 的個人 bigram；沒學過時是 `None`。
     pub(crate) fn bigrams_after(&self, previous: &str) -> Option<Following<'_>> {
         let next = self.bigrams.entries.get(previous)?;
-        let tick = self.bigrams.tick;
-        let total = next.values().map(|d| d.at(tick)).sum();
-        Some(Following { next, tick, total })
+        let (tick, today) = (self.bigrams.tick, self.today);
+        let total: f64 = next
+            .values()
+            .filter(|d| !expired(d.last_used, today))
+            .map(|d| d.at(tick))
+            .sum();
+        (total > 0.0).then_some(Following {
+            next,
+            tick,
+            today,
+            total,
+        })
     }
 
     /// 記住一個字串（[`crate::Session`] 從送出去的字裡認出來的 email）：衰減值加一，共用的 tick 加一。
@@ -261,6 +364,7 @@ impl UserModel {
         let mut found: Vec<(f64, &str)> = self
             .remembered
             .iter()
+            .filter(|(_, d)| !expired(d.last_used, self.today))
             .filter(|(text, _)| remembered::letters(text, alphabet).starts_with(prefix))
             .map(|(text, d)| (d.at(tick), text.as_str()))
             .collect();
@@ -271,8 +375,77 @@ impl UserModel {
     /// 殼交給核心今天的日期（使用者當地的日曆日）；之後學到或改到的條目記成最後使用的日期。核心不讀
     /// 系統時間（plan §1.3）。殼的契約（plan §2.4）：在第一次學習前、之後每次使用者操作前給，換日後
     /// 才不會記成前一天。沒給過時學到的條目沒有日期（不寫假日期），一年的時限跳過它們。
+    ///
+    /// 距今超過一年沒用的條目停用（不再影響排序）但不刪：殼的時鐘可能錯（重開機後亂掉、被改到幾年後），
+    /// 刪了改回來也救不回（使用者 2026-11-12 決定）；時鐘改回來就恢復作用。實體刪除只在到上限時淘汰。
     pub fn set_today(&mut self, today: Date) {
         self.today = Some(today);
+    }
+
+    /// 改條目上限（[`Limits`]）；超過新上限 1.2 倍的照樣等下一次學習才清。殼不改時是 [`Limits::default`]。
+    pub fn set_limits(&mut self, limits: Limits) {
+        self.limits = limits;
+    }
+
+    /// 條目數到上限的 1.2 倍時清到上限（plan §2.4，LatinIME 的 `truncateEntries`）。淘汰順序：先刪沒到
+    /// 出現門檻的（中文條目沒有出現門檻，都算過了；英文使用者詞的門檻由 M4 票 14 接上），再刪最後使用
+    /// 的日期最舊的（沒有日期的當作最新，同時限跳過它們）、同一天的刪衰減值小的（最近用得少的），再依
+    /// 鍵的順序。手動加詞與常用語不算、不刪。
+    fn enforce_limits(&mut self) {
+        let Limits { entries, bigrams } = self.limits;
+        let rows: usize = self.schemes.values().map(|m| m.evictable().count()).sum();
+        if rows >= Limits::hard(entries) {
+            let mut order: Vec<(Eviction, String, String, String)> = Vec::with_capacity(rows);
+            for (scheme, model) in &self.schemes {
+                for (code, text) in model.evictable_rows() {
+                    let eviction = model.eviction(&code, &text);
+                    order.push((eviction, scheme.clone(), code, text));
+                }
+            }
+            order.sort_by(|a, b| {
+                a.0.order(&b.0)
+                    .then_with(|| (&a.1, &a.2, &a.3).cmp(&(&b.1, &b.2, &b.3)))
+            });
+            for (_, scheme, code, text) in order.into_iter().take(rows - entries) {
+                if let Some(model) = self.schemes.get_mut(&scheme) {
+                    model.remove_row(&code, &text);
+                }
+            }
+        }
+        let pairs: usize = self.bigrams.entries.values().map(BTreeMap::len).sum();
+        if pairs >= Limits::hard(bigrams) {
+            let tick = self.bigrams.tick;
+            let mut order: Vec<(Eviction, String, String)> = self
+                .bigrams
+                .entries
+                .iter()
+                .flat_map(|(previous, next)| {
+                    next.iter().map(move |(text, d)| {
+                        (
+                            Eviction {
+                                threshold: Threshold::Passed,
+                                last_used: d.last_used,
+                                used: d.at(tick),
+                            },
+                            previous.clone(),
+                            text.clone(),
+                        )
+                    })
+                })
+                .collect();
+            order.sort_by(|a, b| {
+                a.0.order(&b.0)
+                    .then_with(|| (&a.1, &a.2).cmp(&(&b.1, &b.2)))
+            });
+            let doomed: BTreeSet<(String, String)> = order
+                .into_iter()
+                .take(pairs - bigrams)
+                .map(|(_, previous, text)| (previous, text))
+                .collect();
+            self.bigrams.retain(|previous, text, _| {
+                !doomed.contains(&(previous.to_string(), text.to_string()))
+            });
+        }
     }
 
     /// 殼最後給的今天（[`UserModel::set_today`]）；沒給過時是 `None`。
@@ -297,12 +470,15 @@ impl UserModel {
 
     /// 拿 `learned`（[`UserModel::import`] 讀出來的檔，或空白的個人模型）取代全部學習資料；殼給的今天與
     /// 這台裝置的 id 留著，不換成檔裡的（檔可能是別台匯出的，換過來各台分開的次數會記錯格）。
+    /// 條目上限也留著自己的。很久以前的備份照收：一年沒用的條目停用、不刪。
     pub fn replace_learning(&mut self, learned: UserModel) {
         let today = self.today;
         let device = self.device.take();
+        let limits = self.limits;
         *self = UserModel {
             today,
             device,
+            limits,
             ..learned
         };
     }
@@ -313,6 +489,7 @@ impl UserModel {
         let today = self.today;
         self.for_scheme_mut(scheme)
             .add_auto_phrase(code, text, today);
+        self.enforce_limits();
     }
 
     /// 方案 `scheme` 的個人模型，沒有就建一個空的。
@@ -387,10 +564,9 @@ impl UserModel {
 
     /// 這個方案的常用語，依文字排（同 iOS 文字替代的清單依字母排）。
     pub fn phrases(&self, engine: &Engine) -> Vec<Phrase> {
-        let model = self.for_scheme(&engine.scheme().id);
-        model
-            .words
-            .get(PHRASE_CODE)
+        self.schemes
+            .get(&engine.scheme().id)
+            .and_then(|model| model.words.get(PHRASE_CODE))
             .into_iter()
             .flatten()
             .map(|(text, word)| Phrase {
@@ -464,6 +640,14 @@ fn check_user_word(
 }
 
 impl Bigrams {
+    /// 只留 `keep` 為真的組；前一個字詞後面都刪光時連它一起刪。
+    fn retain(&mut self, mut keep: impl FnMut(&str, &str, &Decayed) -> bool) {
+        self.entries.retain(|previous, next| {
+            next.retain(|text, decayed| keep(previous, text, decayed));
+            !next.is_empty()
+        });
+    }
+
     /// 一次上屏的個人 bigram：`previous` → 第一段、相鄰兩段各記一次；有兩段以上時 `previous` →
     /// 整串也記（整串可能是自動造詞的使用者詞，同 [`SchemeModel::learn`] 整串和各段都記）。
     /// 同一組只記一次。
@@ -501,6 +685,73 @@ impl Bigrams {
 }
 
 impl SchemeModel {
+    /// 碼 `code`、詞 `text` 的使用者詞。
+    fn word(&self, code: &str, text: &str) -> Option<&UserWord> {
+        self.words.get(code)?.get(text)
+    }
+
+    /// 上限與時限管得到的列（[`Limits::entries`]）：有學習計數或是自動造詞，而且不是手動加詞或常用語
+    /// （那兩種的觸發詞學到的計數另是一列學習計數，照樣管）。依（碼, 詞）排。
+    fn evictable(&self) -> impl Iterator<Item = (&str, &str)> {
+        let counted = self.entries.iter().flat_map(move |(code, texts)| {
+            texts
+                .keys()
+                .map(move |text| (code.as_str(), text.as_str()))
+                .filter(|&(code, text)| {
+                    self.word(code, text)
+                        .is_none_or(|w| w.source == WordSource::AutoPhrase)
+                })
+        });
+        let uncounted_auto = self.words.iter().flat_map(move |(code, words)| {
+            words
+                .iter()
+                .filter(move |(text, w)| {
+                    w.source == WordSource::AutoPhrase && self.count(code, text).is_none()
+                })
+                .map(move |(text, _)| (code.as_str(), text.as_str()))
+        });
+        counted.chain(uncounted_auto)
+    }
+
+    /// [`SchemeModel::evictable`] 的列，複製出來給要邊走邊刪的呼叫端。
+    fn evictable_rows(&self) -> Vec<(String, String)> {
+        self.evictable()
+            .map(|(code, text)| (code.to_string(), text.to_string()))
+            .collect()
+    }
+
+    /// 一列最後使用的日期：有計數時是計數的（和使用者詞一樣，[`SchemeModel::stamp`]），否則是使用者詞的。
+    fn row_last_used(&self, code: &str, text: &str) -> Option<Date> {
+        match self.count(code, text) {
+            Some(count) => count.last_used,
+            None => self.word(code, text).and_then(|w| w.last_used),
+        }
+    }
+
+    /// 一列在上限淘汰時的順序（[`UserModel::enforce_limits`]）：次數用衰減到現在的衰減值，整串和句中的
+    /// 上屏都算；只有使用者詞、沒有計數的是 0。
+    fn eviction(&self, code: &str, text: &str) -> Eviction {
+        let used = self
+            .count(code, text)
+            .map_or(0.0, |c| c.decayed * decay(self.tick - c.last_tick));
+        Eviction {
+            threshold: Threshold::Passed,
+            last_used: self.row_last_used(code, text),
+            used,
+        }
+    }
+
+    /// 刪掉一整列：學習計數與使用者詞。
+    fn remove_row(&mut self, code: &str, text: &str) {
+        self.forget(code, text);
+        if let Some(words) = self.words.get_mut(code) {
+            words.remove(text);
+            if words.is_empty() {
+                self.words.remove(code);
+            }
+        }
+    }
+
     /// 刪掉（`code`, `text`）學到的計數。
     fn forget(&mut self, code: &str, text: &str) {
         if let Some(texts) = self.entries.get_mut(code) {
@@ -543,10 +794,11 @@ impl SchemeModel {
                 .or_default();
             count.decayed = 1.0 + count.decayed * decay(tick - count.last_tick);
             count.last_tick = tick;
-            // `keys` 的第一個是整串。
+            // `keys` 的第一個是整串；距上一次整串上屏超過一年時從 1 重算。
             if i == 0 {
-                count.commits += 1;
+                count.commits = count.commits_on(today) + 1;
                 count.last_commit_tick = tick;
+                count.last_commit_date = today;
             }
             self.stamp(&segment.code, &segment.text, today);
         }
@@ -563,10 +815,50 @@ impl SchemeModel {
         }
     }
 
+    /// [`UserModel::add_auto_phrase`]。
+    fn add_auto_phrase(&mut self, code: &str, text: &str, today: Option<Date>) {
+        self.words_at(code)
+            .entry(text.to_string())
+            .or_insert(UserWord {
+                source: WordSource::AutoPhrase,
+                trigger: None,
+                last_used: today,
+            });
+        self.stamp(code, text, today);
+    }
+
+    fn count(&self, code: &str, text: &str) -> Option<&Count> {
+        self.entries.get(code)?.get(text)
+    }
+}
+
+/// 一個輸入方案的個人模型，照殼給的今天看（[`UserModel::for_scheme`]）：查詢都經它，最後使用的日期距今
+/// 超過一年的條目當作沒有（停用，plan §2.4〈學習的時限〉），但留在資料裡，時鐘改回來就恢復作用。
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SchemeUser<'a> {
+    model: &'a SchemeModel,
+    today: Option<Date>,
+}
+
+impl<'a> SchemeUser<'a> {
+    /// 沒停用的計數。
+    fn count(&self, code: &str, text: &str) -> Option<&'a Count> {
+        self.model
+            .count(code, text)
+            .filter(|c| !expired(c.last_used, self.today))
+    }
+
+    /// 沒停用的使用者詞：手動加詞與常用語一直有效，自動造詞照它那列最後使用的日期。
+    fn active(&self, code: &str, text: &str, word: &UserWord) -> bool {
+        word.source != WordSource::AutoPhrase
+            || !expired(self.model.row_last_used(code, text), self.today)
+    }
+
     /// 觸發詞剛好是 `input` 的使用者詞（排位規則 1）；有幾個時，以 `input` 最近整串上屏的在前，
     /// 其餘依（碼, 詞）的順序。
-    pub(crate) fn triggered(&self, input: &str) -> Vec<&str> {
+    pub(crate) fn triggered(&self, input: &str) -> Vec<&'a str> {
         let mut found: Vec<(u64, &str)> = self
+            .model
             .words
             .values()
             .flatten()
@@ -580,76 +872,76 @@ impl SchemeModel {
         found.into_iter().map(|(_, text)| text).collect()
     }
 
-    /// [`UserModel::add_auto_phrase`]。
-    fn add_auto_phrase(&mut self, code: &str, text: &str, today: Option<Date>) {
-        self.words_at(code)
-            .entry(text.to_string())
-            .or_insert(UserWord {
-                source: WordSource::AutoPhrase,
-                trigger: None,
-                last_used: today,
-            });
-        self.stamp(code, text, today);
-    }
-
-    /// （`code`, `text`）是不是使用者詞（任何來源）。
+    /// （`code`, `text`）是不是使用者詞（任何來源，沒停用的）。
     pub(crate) fn is_word(&self, code: &str, text: &str) -> bool {
-        self.words.get(code).is_some_and(|w| w.contains_key(text))
+        self.model
+            .word(code, text)
+            .is_some_and(|w| self.active(code, text, w))
     }
 
-    /// 碼剛好是 `code` 的使用者詞。
-    pub(crate) fn words(&self, code: &str) -> impl Iterator<Item = &str> {
-        self.words
-            .get(code)
+    /// 碼剛好是 `code` 的使用者詞（沒停用的）。
+    pub(crate) fn words(self, code: &str) -> impl Iterator<Item = &'a str> + use<'a> {
+        let this = self;
+        self.model
+            .words
+            .get_key_value(code)
             .into_iter()
-            .flat_map(|words| words.keys().map(String::as_str))
+            .flat_map(move |(code, words)| {
+                words
+                    .iter()
+                    .filter(move |(text, w)| this.active(code, text, w))
+                    .map(|(text, _)| text.as_str())
+            })
     }
 
-    /// 有沒有以 `prefix` 開頭的使用者詞的碼（萬用鍵展開時剪枝用）。
+    /// 有沒有以 `prefix` 開頭的使用者詞的碼（萬用鍵展開時剪枝用；停用的也算，只是少剪一點，
+    /// 實際列詞仍經 [`SchemeUser::words`] 濾掉停用的）。
     pub(crate) fn has_word_code_prefix(&self, prefix: &str) -> bool {
-        crate::code_table::has_key_with_prefix(&self.words, prefix)
+        crate::code_table::has_key_with_prefix(&self.model.words, prefix)
     }
 
-    /// 最長的使用者詞的碼長；lattice 往回找詞的上限要算進它。
+    /// 最長的使用者詞的碼長；lattice 往回找詞的上限要算進它（停用的也算，上限只是放寬）。
     pub(crate) fn longest_word_code(&self) -> usize {
-        self.words.keys().map(String::len).max().unwrap_or(0)
+        self.model.words.keys().map(String::len).max().unwrap_or(0)
     }
 
-    /// （碼, 字詞）整串上屏的次數；排位規則 2 的「剛好 1 次的不靠分數成首選」用。
+    /// （碼, 字詞）算數的整串上屏次數（一年內，[`Count::commits_on`]）；排位規則 2 的「剛好 1 次的不靠
+    /// 分數成首選」用。
     pub(crate) fn whole_commits(&self, code: &str, text: &str) -> u64 {
-        self.count(code, text).map_or(0, |count| count.commits)
+        self.count(code, text)
+            .map_or(0, |count| count.commits_on(self.today))
     }
 
-    /// 排位規則 3（plan §2.4）：（`code`, `text`）是使用者詞且整串上屏過時，回傳最後一次整串
-    /// 上屏的 tick，越大越近；否則是 `None`。
+    /// 排位規則 3（plan §2.4）：（`code`, `text`）是使用者詞且一年內整串上屏過時，回傳最後一次整串
+    /// 上屏的 tick，越大越近；否則是 `None`（一年沒上屏的回到一般排序）。
     pub(crate) fn last_tick_if_used_word(&self, code: &str, text: &str) -> Option<u64> {
-        self.words.get(code)?.get(text)?;
+        if !self.is_word(code, text) {
+            return None;
+        }
         let count = self.count(code, text)?;
-        (count.commits >= 1).then_some(count.last_commit_tick)
+        (count.commits_on(self.today) >= 1).then_some(count.last_commit_tick)
     }
 
-    /// 這組（碼, 字詞）學過沒有。
+    /// 這組（碼, 字詞）學過沒有（沒停用的）。
     pub(crate) fn has_learned(&self, code: &str, text: &str) -> bool {
         self.count(code, text).is_some()
     }
 
-    /// 排位規則 2（plan §2.4）：整串上屏 ≥ 2 次且距最後一次整串上屏不超過 [`RECENT_COMMITS`]
-    /// 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的上屏不算。
+    /// 排位規則 2（plan §2.4）：一年內整串上屏 ≥ 2 次（[`Count::commits_on`]），且距最後一次整串
+    /// 上屏不超過 [`RECENT_COMMITS`] 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的
+    /// 上屏不算。
     pub(crate) fn last_tick_if_chosen_twice(&self, code: &str, text: &str) -> Option<u64> {
         let count = self.count(code, text)?;
-        (count.commits >= 2 && self.tick - count.last_commit_tick <= RECENT_COMMITS)
+        (count.commits_on(self.today) >= 2
+            && self.model.tick - count.last_commit_tick <= RECENT_COMMITS)
             .then_some(count.last_commit_tick)
     }
 
-    /// 個人機率（plan §2.3）：衰減值衰減到現在，除以它的上限；沒學過時是 0。
+    /// 個人機率（plan §2.3）：衰減值衰減到現在，除以它的上限；沒學過或停用時是 0。
     pub(crate) fn personal_probability(&self, code: &str, text: &str) -> f64 {
         self.count(code, text).map_or(0.0, |count| {
-            count.decayed * decay(self.tick - count.last_tick) / max_decayed()
+            count.decayed * decay(self.model.tick - count.last_tick) / max_decayed()
         })
-    }
-
-    fn count(&self, code: &str, text: &str) -> Option<&Count> {
-        self.entries.get(code)?.get(text)
     }
 }
 
@@ -682,7 +974,7 @@ const BIGRAM: &str = "bigram";
 /// v3 的種類：記住的字串。
 const STRING: &str = "string";
 /// 欄名註解行；匯入時和其他 `#` 開頭的行一樣略過。
-const COLUMNS: &str = "# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tsource\ttrigger";
+const COLUMNS: &str = "# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger";
 /// 個人 bigram 的欄名註解行，有個人 bigram 時寫在它們前面。
 const BIGRAM_COLUMNS: &str = "# kind\tprevious\tword\tdecayed\tlast_tick\tlast_used";
 /// 記住的字串的欄名註解行，有記住的字串時寫在它們前面。
@@ -736,6 +1028,7 @@ impl UserModel {
                     .expect("每組鍵不是有計數就是使用者詞");
                 let last_used = DateField(last_used);
                 let count = count.copied().unwrap_or_default();
+                let last_commit_date = DateField(count.last_commit_date);
                 let source = word.map(|w| w.source);
                 let (_, source) = SOURCE_NAMES
                     .into_iter()
@@ -744,7 +1037,7 @@ impl UserModel {
                 let trigger = word.and_then(|w| w.trigger.as_deref()).unwrap_or("");
                 let text = escape(text);
                 out.push_str(&format!(
-                    "{ENTRY}\t{scheme}\t{text}\t{code}\t{}\t{}\t{}\t{}\t{last_used}\t{source}\t{trigger}\n",
+                    "{ENTRY}\t{scheme}\t{text}\t{code}\t{}\t{}\t{}\t{}\t{last_used}\t{last_commit_date}\t{source}\t{trigger}\n",
                     count.commits, count.last_commit_tick, count.decayed, count.last_tick,
                 ));
             }
@@ -1021,7 +1314,7 @@ impl<'a> Row<'a> {
     fn parse(line: &'a str, version: Version, today: Option<Date>) -> Result<Self, &'static str> {
         let v1 = version == Version::V1;
         let fields: Vec<&str> = line.split('\t').collect();
-        let (fields, last_used) = match (version, &fields[..]) {
+        let (fields, last_used, last_commit_date) = match (version, &fields[..]) {
             (
                 Version::V3,
                 &[
@@ -1033,6 +1326,7 @@ impl<'a> Row<'a> {
                     decayed,
                     last_tick,
                     last_used,
+                    last_commit_date,
                     source,
                     trigger,
                 ],
@@ -1049,9 +1343,11 @@ impl<'a> Row<'a> {
                     trigger,
                 ],
                 parse_date(last_used)?,
+                Some(parse_date(last_commit_date)?),
             ),
-            (Version::V3, _) => return Err("entry 要有 11 欄（含種類），以 Tab 分隔"),
-            (_, &[a, b, c, d, e, f, g, h, i]) => ([a, b, c, d, e, f, g, h, i], today),
+            (Version::V3, _) => return Err("entry 要有 12 欄（含種類），以 Tab 分隔"),
+            // v1、v2 沒有日期：整串上屏過的，最後一次整串上屏的日期也取 `today`。
+            (_, &[a, b, c, d, e, f, g, h, i]) => ([a, b, c, d, e, f, g, h, i], today, None),
             _ => return Err("要有 9 欄，以 Tab 分隔"),
         };
         let [
@@ -1078,12 +1374,22 @@ impl<'a> Row<'a> {
         if !decayed.is_finite() || decayed < 0.0 {
             return Err("衰減值要是非負的有限數");
         }
+        let commits = integer(commits)?;
+        let last_commit_date = match last_commit_date {
+            Some(Some(_)) if commits == 0 => {
+                return Err("沒有整串上屏過（commits 是 0）時最後整串上屏的日期要留空");
+            }
+            Some(date) => date,
+            None if commits == 0 => None,
+            None => today,
+        };
         let count = Count {
-            commits: integer(commits)?,
+            commits,
             last_commit_tick: integer(last_commit_tick)?,
             decayed,
             last_tick: integer(last_tick)?,
             last_used,
+            last_commit_date,
         };
         let trigger = (!trigger.is_empty()).then(|| trigger.to_string());
         let (source, _) = SOURCE_NAMES

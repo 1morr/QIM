@@ -31,11 +31,14 @@
 | 2026-11-12 | M4 05 | `bench --check` 擋原生每鍵 p95（空白、學過兩組），WebAssembly 只報；數字與翻頁 e2e 的既有競態見票 05 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
 | 2026-11-12 | M4 04 | 簡體模式的前文轉回繁體再接字級 bigram、詞級 trigram 與個人 bigram（剛上屏那段取原文）；bench 與 --learning 前後相同；見票 04 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
 | 2026-11-12 | M4 01 | debug 面板：核心 `Session::inspect`（不進 Snapshot）、網頁面板與重排模型總分；bench、--learning 前後逐行相同，延遲高負載下交替量在雜訊內；見票 01 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
+| 2026-11-12 | M4 13 | 一年時限（整串上屏另記日期、規則 2、3 只看一年內、一年沒用的停用不刪）、條目上限 2 萬列／3 萬組（LatinIME 1.2 倍）；v3 entry 12 欄；見票 13 | 新 session 下 `/implement .scratch/m4/issues/14-english-user-words.md` |
 | 2026-11-12 | M4 11 | 萬用鍵 `z`：每個代一碼、任一位置，學習記實際的碼，面板標萬用鍵；整句首選約原樣七成、單字 1–2%（票 18 評估）；bench 前後相同；見票 11 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
 
 ## 偏差與決定
 
 - 2026-11-12 M4 票 11：沒有組字時 `z` 改為開始組字（brief §4.3 原本交還宿主），不設開關；單獨的 `z` 代一碼字、每段最多兩個；協調者補 `Blocked by: 01`；見票 11。
+- 2026-11-12 M4 票 13（使用者決定）：一年沒用的條目停用、不刪（時鐘錯了改回來要恢復、舊備份照收），實體刪除只在到上限時淘汰；改 plan §2.4、brief §4.5、spec〈細節〉。
+- 2026-11-12 M4 票 13（協調者決定）：中文條目沒有出現門檻，上限淘汰「先刪沒到門檻的」由票 14 驗；v3 的 entry 加 `last_commit_date`（12 欄）；改 plan §2.4、brief §4.5。
 - 2026-11-12 M4 票 12（協調者要求）：殼沒給日期時條目沒有日期（`Option`，匯出留空），不寫 1970-01-01，票 13 的時限跳過它們；plan §2.4 加殼的日期契約。
 - 2026-11-12 M4（拆票，使用者決定）：每鍵延遲改成會擋，原生 p95 空白 ≤ 1 ms／選開頭一段 ≤ 5 ms、學過 ≤ 3／10 ms（spec〈每鍵延遲上限〉）；第二期的研究票也等期中檢查。
 - 2026-11-12 M4（檢視，使用者決定）：照子代理審查改 D1–D8：學習時限改一年日曆、退格撤銷、v3 各台計數相加、改刪字的 Snapshot、M4 分兩期；改 brief §4.5、plan §7.5、§7.9。

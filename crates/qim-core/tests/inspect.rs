@@ -258,6 +258,57 @@ fn a_learned_segment_shows_its_learning_bonus_and_personal_bigram() {
     assert!(elsewhere.segments[0].learned && !elsewhere.segments[0].personal_bigram);
 }
 
+/// 學習的時限（M4 票 13）：一年沒用而停用的條目不顯示學習加分，和排序一致；日期改回來又顯示。
+#[test]
+fn an_entry_unused_for_a_year_shows_no_learning_bonus() {
+    let mut blank = Ime::new();
+    let unlearned = candidate_after(&mut blank, "丁", "ab", "丙");
+
+    let mut ime = Ime::new();
+    ime.user.set_today("2026-01-01".parse().unwrap());
+    ime.session.set_context("丁");
+    let shown = ime.type_code("ab");
+    ime.pick(&shown, "丙");
+
+    ime.user.set_today("2027-01-02".parse().unwrap());
+    let expired = candidate_after(&mut ime, "丁", "ab", "丙");
+    let segment = &expired.segments[0];
+    assert!(!segment.learned && !segment.personal_bigram, "{segment:?}");
+    assert_eq!(expired.learning, Some(0.0));
+    assert_eq!(expired.score, unlearned.score);
+
+    ime.user.set_today("2026-06-01".parse().unwrap());
+    let back = candidate_after(&mut ime, "丁", "ab", "丙");
+    assert!(back.learning.unwrap() > 0.0);
+    assert!(back.segments[0].learned && back.segments[0].personal_bigram);
+}
+
+/// 停用的個人 bigram 也不算進條件機率的分母：「丁」後面的「丙」停用了，「乙」的加分就和「丁」後面
+/// 從沒接過「丙」時一樣。
+#[test]
+fn an_expired_personal_bigram_leaves_the_others_as_if_it_never_was() {
+    let learn = |first_context: &str| {
+        let mut ime = Ime::new();
+        ime.user.set_today("2026-01-01".parse().unwrap());
+        ime.session.set_context(first_context);
+        let shown = ime.type_code("ab");
+        ime.pick(&shown, "丙");
+        ime.user.set_today("2026-12-01".parse().unwrap());
+        ime.session.set_context("丁");
+        let shown = ime.type_code("ab");
+        ime.pick(&shown, "乙");
+        ime.user.set_today("2027-01-02".parse().unwrap());
+        let second = candidate_after(&mut ime, "丁", "ab", "乙");
+        let first = candidate_after(&mut ime, "丁", "ab", "丙");
+        (second, first)
+    };
+    let (with_expired, expired) = learn("丁");
+    let (without, _) = learn("天");
+    assert!(with_expired.segments[0].personal_bigram);
+    assert_eq!(with_expired.learning, without.learning);
+    assert!(!expired.segments[0].personal_bigram, "{expired:?}");
+}
+
 #[test]
 fn the_composition_start_says_what_it_follows() {
     let mut ime = Ime::new();
