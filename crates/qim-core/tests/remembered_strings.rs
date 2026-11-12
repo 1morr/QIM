@@ -122,6 +122,20 @@ fn an_email_typed_in_english_comes_back_as_the_second_candidate_and_commits_whol
     assert_eq!(done.commit.as_deref(), Some(EMAIL));
 }
 
+/// 學習的時限（M4 票 13）：一年沒打的記住的字串停用、不刪，日期改回來又出現。
+#[test]
+fn a_string_not_typed_for_a_year_is_not_offered_but_kept() {
+    let mut ime = Ime::new();
+    ime.user.set_today("2026-01-01".parse().unwrap());
+    ime.type_in_english(EMAIL);
+    ime.user.set_today("2027-01-02".parse().unwrap());
+    let shown = ime.candidates("iva");
+    assert!(!shown.iter().any(|t| t == EMAIL), "{shown:?}");
+    assert_eq!(ime.user.remembered_strings(), [EMAIL]);
+    ime.user.set_today("2027-01-01".parse().unwrap());
+    assert!(ime.candidates("iva").iter().any(|t| t == EMAIL));
+}
+
 #[test]
 fn incognito_does_not_remember() {
     let mut ime = Ime::with_options(Options {
@@ -308,7 +322,7 @@ fn touch_text_keys_count_as_typed() {
 const TWO_EMAILS: &str = "\
 # qim-userdict v3
 #@/tick\t3
-# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tsource\ttrigger
+# kind\tscheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tlast_used\tlast_commit_date\tsource\ttrigger
 # kind\tstring\tdecayed\tlast_tick\tlast_used
 string\tivan.test@example.com\t1.990049833749168\t3\t
 string\tivan@work.example.org\t1\t2\t

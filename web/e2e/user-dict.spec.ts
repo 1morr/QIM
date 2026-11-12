@@ -132,9 +132,9 @@ test("匯出 v3 的檔頭有裝置 id、每列有日期，換一天上屏後日�
 	expect(lines[0]).toBe("# qim-userdict v3");
 	expect(lines[1]).toMatch(/^#@\/device\t[0-9a-f-]{36}$/);
 	const [yunHau] = entryRows(first, "雲口");
-	// kind scheme word code commits last_commit_tick decayed last_tick last_used source trigger
+	// kind scheme word code commits last_commit_tick decayed last_tick last_used last_commit_date source trigger
 	expect(yunHau?.slice(3, 5)).toEqual(["mir", "1"]);
-	expect(yunHau?.slice(8, 10)).toEqual(["2026-11-12", "auto"]);
+	expect(yunHau?.slice(8, 11)).toEqual(["2026-11-12", "2026-11-12", "auto"]);
 	const [yun] = entryRows(first, "雲");
 	expect(yun?.[8]).toBe("2026-11-12");
 
@@ -146,7 +146,7 @@ test("匯出 v3 的檔頭有裝置 id、每列有日期，換一天上屏後日�
 	expect(second.split("\n")[1]).toBe(lines[1]);
 	const [again] = entryRows(second, "雲口");
 	expect(again?.[4]).toBe("2");
-	expect(again?.[8]).toBe("2026-11-13");
+	expect(again?.slice(8, 10)).toEqual(["2026-11-13", "2026-11-13"]);
 	expect(entryRows(second, "雲")[0]?.[8]).toBe("2026-11-12");
 
 	// 重新整理後裝置 id 不變（存在 localStorage）。
@@ -163,7 +163,7 @@ test("匯入 v3 時不認得的種類略過並說明，其他列照收", async (
 		"# qim-userdict v3",
 		"#@/device\tother-device",
 		"#@/tick/quick\t0",
-		"entry\tquick\t速成\tqim\t0\t0\t0\t0\t2026-01-02\tmanual\tqc",
+		"entry\tquick\t速成\tqim\t0\t0\t0\t0\t2026-01-02\t\tmanual\tqc",
 		"tombstone\tquick\t速成\tqim\t2026-01-03",
 		"",
 	].join("\n");
@@ -181,6 +181,7 @@ test("匯入 v3 時不認得的種類略過並說明，其他列照收", async (
 	const exported = await exportedFile(page);
 	expect(entryRows(exported, "速成")[0]?.slice(8)).toEqual([
 		"2026-01-02",
+		"",
 		"manual",
 		"qc",
 	]);
