@@ -293,3 +293,13 @@ fn a_typed_wildcard_is_never_swapped_for_a_neighbor_letter() {
     let (_, _, tapped) = type_keys(&engine, Options::default(), &keys);
     assert_eq!(texts(&tapped), texts(&literal));
 }
+
+#[test]
+fn a_neighbor_reading_never_becomes_the_first_candidate_even_when_the_literal_reading_has_none() {
+    let engine = engine();
+    // w 不在碼表：原樣讀法沒有候選，a 的「日」也不當首選（不搶首選）。
+    let (_, _, literal) = type_keys(&engine, Options::default(), &letters("w"));
+    assert!(texts(&literal).is_empty());
+    let (_, _, tapped) = type_keys(&engine, Options::default(), &[tap('w', 'a', 0.4)]);
+    assert_eq!(texts(&tapped), texts(&literal));
+}

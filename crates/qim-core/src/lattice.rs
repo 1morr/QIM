@@ -301,6 +301,8 @@ impl Lattice {
 
     /// 多一碼、算新的一欄（[`Lattice::push`]）；鄰鍵讀法的 lattice 的邊另含換成鄰鍵字母的字詞。
     fn advance(&mut self, engine: &Engine, user: &UserModel, c: char, weights: Option<Weights>) {
+        // 位置一律是位元組位移、一碼一欄（`columns`、`weights`、邊的起點），靠的是方案的碼都是 ASCII。
+        debug_assert!(c.is_ascii(), "輸入碼的字元要是 ASCII：{c:?}");
         self.input.push(c);
         self.weights.push(weights);
         if c == SEPARATOR {
@@ -674,9 +676,10 @@ pub(crate) fn candidates(
 
 /// 鄰鍵讀法（M4 票 09c）插進候選列：鄰鍵讀法的 lattice 蓋滿整串、換過碼的路徑，依分數取最多
 /// [`neighbor::LIMIT`] 個，從第 [`neighbor::SLOT`] 格起依序插入；文字已在它前面的不插，在後面的移上來。
-/// 原樣的首選照舊在第 1 格。
+/// 原樣的首選照舊在第 1 格；原樣讀法沒有候選時不插。
 fn with_neighbor_readings(lattice: &Lattice, mut list: Vec<CandidateSpan>) -> Vec<CandidateSpan> {
-    let Some(neighbor) = &lattice.neighbor else {
+    // 原樣讀法沒有候選時也不插：插了就是首選（不搶首選）。
+    let Some(neighbor) = lattice.neighbor.as_ref().filter(|_| !list.is_empty()) else {
         return list;
     };
     let n = lattice.input.len();

@@ -864,7 +864,11 @@ impl Engine {
                 let alternatives = neighbor::alternatives(letter, key, self.scheme.wildcard, |c| {
                     self.scheme.is_code_key(c)
                 });
-                for (other, penalty) in alternatives {
+                for neighbor::Alternative {
+                    letter: other,
+                    penalty,
+                } in alternatives
+                {
                     let mut code = typed.to_string();
                     code.replace_range(
                         offset..offset + letter.len_utf8(),

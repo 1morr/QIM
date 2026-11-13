@@ -70,7 +70,7 @@ pub struct InspectedNeighbor {
 /// 鄰鍵讀法換的一碼。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Swap {
-    /// 在剩下的輸入碼裡的位置（從 0 起，以字元計，分隔記號也算）。
+    /// 在剩下的輸入碼裡的位置（位元組位移，從 0 起，分隔記號也算；方案的碼都是 ASCII，同字元位置）。
     pub position: usize,
     /// 實際打出的字母（按鍵機率最高的）。
     pub typed: char,
@@ -203,11 +203,10 @@ fn inspect_candidate(
             InspectedNeighbor {
                 swaps: n
                     .typed
-                    .chars()
+                    .char_indices()
                     .zip(code.chars())
-                    .enumerate()
-                    .filter(|(_, (typed, code))| typed != code)
-                    .map(|(position, (typed, code))| Swap {
+                    .filter(|((_, typed), code)| typed != code)
+                    .map(|((position, typed), code)| Swap {
                         position,
                         typed,
                         code,
