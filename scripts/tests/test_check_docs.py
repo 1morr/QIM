@@ -275,10 +275,10 @@ class LayoutTest(Repo):
         self.clean()
 
     def test_claude_md_counts_when_there_is_no_agents_md(self):
-        (self.root / "AGENTS.md").rename(self.root / "CLAUDE.md")
+        (self.root / "AGENTS.md").rename(self.root / "AGENTS.md")
         self.clean()
         self.write("docs/notes.md", "# 筆記\n")
-        self.red("docs/notes.md：CLAUDE.md 沒有提到它")
+        self.red("docs/notes.md：AGENTS.md 沒有提到它")
 
     def test_without_an_instruction_file_or_for_hidden_and_nested_entries_nothing_is_checked(self):
         self.write("docs/.gitkeep", "")

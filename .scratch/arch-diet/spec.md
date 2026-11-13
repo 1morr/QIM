@@ -1,6 +1,6 @@
 # arch-diet：plan 縮成架構總覽
 
-不是里程碑，規格就是本檔（使用者 2026-11-13 同意）。不改產品行為；只動 `docs/`、`ARCHITECTURE.md`、`CLAUDE.md`、`.scratch/arch-diet/`，以及程式碼裡指向文件的註解。
+不是里程碑，規格就是本檔（使用者 2026-11-13 同意）。不改產品行為；只動 `docs/`、`ARCHITECTURE.md`、`AGENTS.md`、`.scratch/arch-diet/`，以及程式碼裡指向文件的註解。
 
 ## 目標
 
@@ -11,7 +11,7 @@
 ### 做
 
 - plan 每一節的每一段歸到四處之一：留在 `ARCHITECTURE.md`（模組分工、依賴規則、跨模組的資料與契約、測試策略）、搬到 `docs/development.md`（操作步驟）、寫成 ADR（選型與取捨的理由）、刪掉（程式碼與測試已經說明的行為）。
-- `ARCHITECTURE.md` 的節用標題、不編號；引用 plan 的地方（`CLAUDE.md`、roadmap、brief、ADR、M4 還沒做的票、程式碼註解的 `plan〈…〉`）跟著改。
+- `ARCHITECTURE.md` 的節用標題、不編號；引用 plan 的地方（`AGENTS.md`、roadmap、brief、ADR、M4 還沒做的票、程式碼註解的 `plan〈…〉`）跟著改。
 - 做完刪掉 `docs/plan.md`，`scripts/check_docs.py` 的 15,000 字上限開始生效。
 
 ### 不做

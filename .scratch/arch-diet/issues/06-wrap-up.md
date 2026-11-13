@@ -2,11 +2,11 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02, 03, 04, 05
-讀: `.scratch/arch-diet/spec.md`；plan 剩下的全部；`CLAUDE.md`；`docs/agents/`；roadmap；brief；M4 還沒做的票
+讀: `.scratch/arch-diet/spec.md`；plan 剩下的全部；`AGENTS.md`；`docs/agents/`；roadmap；brief；M4 還沒做的票
 
 ## What to build
 
-把 plan §8〈風險與回寫點〉歸位，確認 plan 每一節都只剩標題與指向，然後刪掉 `docs/plan.md`。改引用：`CLAUDE.md`、`docs/agents/milestone.md`、`docs/agents/ticket-template.md`、`docs/agents/issue-tracker.md`、roadmap 的「拆票前讀」、brief、ADR、M4 還沒做的票與 spec、程式碼註解裡的 `plan〈…〉`，都改成 `architecture〈節名〉` 或實際的檔。最後把使用者試的清單給使用者，`docs/progress.md` 的下一步寫 `等使用者：讀 ARCHITECTURE.md`。
+把 plan §8〈風險與回寫點〉歸位，確認 plan 每一節都只剩標題與指向，然後刪掉 `docs/plan.md`。改引用：`AGENTS.md`、`docs/agents/milestone.md`、`docs/agents/ticket-template.md`、`docs/agents/issue-tracker.md`、roadmap 的「拆票前讀」、brief、ADR、M4 還沒做的票與 spec、程式碼註解裡的 `plan〈…〉`，都改成 `architecture〈節名〉` 或實際的檔。最後把使用者試的清單給使用者，`docs/progress.md` 的下一步寫 `等使用者：讀 ARCHITECTURE.md`。
 
 ## 驗收
 

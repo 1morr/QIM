@@ -5,7 +5,7 @@
 ## 0. 工程慣例
 
 - Rust edition 2024，toolchain 用 stable（寫本檔時 1.99.1），`rust-toolchain.toml` 釘版本。
-- 核心的新功能與修 bug 走 `mattpocock-skills:tdd`；一個 session 一張票（`CLAUDE.md`）。
+- 核心的新功能與修 bug 走 `mattpocock-skills:tdd`；一個 session 一張票（`AGENTS.md`）。
 - 程式碼識別符用英文，對應 `GLOSSARY.md` 的詞：
 
 | 名詞 | 識別符 | 名詞 | 識別符 |
@@ -529,7 +529,7 @@ sentences = 3         # 候選列最多放幾條多段路徑
 
 ### 3.2 macOS（M7）
 
-InputMethodKit，Swift，經 `qim-ffi`（uniffi）呼叫核心。使用者資料存在輸入法自己的 Application Support。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證（`CLAUDE.md`〈驗收輸入行為〉）。沒有付費帳號，先用本機簽章（brief §10）。
+InputMethodKit，Swift，經 `qim-ffi`（uniffi）呼叫核心。使用者資料存在輸入法自己的 Application Support。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證（`AGENTS.md`〈驗收輸入行為〉）。沒有付費帳號，先用本機簽章（brief §10）。
 
 ### 3.3 之後的平台
 
@@ -735,7 +735,7 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
 ### 5.4 平台殼
 
 - 網頁：Playwright e2e，實體鍵盤與觸控兩種模式都要測。
-- 原生殼：在真的宿主程式裡打字讀回（`CLAUDE.md`〈驗收輸入行為〉），單元測試不能取代。
+- 原生殼：在真的宿主程式裡打字讀回（`AGENTS.md`〈驗收輸入行為〉），單元測試不能取代。
 
 ## 6. 開發環境與閘門
 

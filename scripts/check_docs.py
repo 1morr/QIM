@@ -15,7 +15,7 @@
     - 字元上限（Python `len`）：AGENTS.md 8,000、ARCHITECTURE.md 15,000、docs/progress.md 20,000、docs/design-brief.md 30,000；不存在的檔不查
     - docs/design-brief.md、ARCHITECTURE.md 不寫票號（「票 12」「票12」）；程式碼區塊裡的不算
   docs/ 的結構
-    - docs/ 第一層的每個檔與資料夾，名字都出現在指令檔（AGENTS.md，沒有就看 CLAUDE.md）裡；兩個都沒有就不查
+    - docs/ 第一層的每個檔與資料夾，名字都出現在指令檔（AGENTS.md，沒有就看 AGENTS.md）裡；兩個都沒有就不查
     - docs/research/ 第一層：檔名裡有日期的，日期在最後（`<主題>-YYYY-MM-DD`）；`facts-*.md` 有〈事實〉段
   程式碼
     - git 追蹤的檔，除了 Markdown、docs/、.scratch/ 與本腳本和它的測試，不引用 brief 或架構文檔的章節號（「brief §4」「architecture §3」「plan §3.2」）；
@@ -43,7 +43,7 @@ TICKET_NUMBER = re.compile(r"票\s*\d")
 SECTION_REF = re.compile(r"(?:architecture|plan|brief)(?:\.md)?\s*§\s*\d", re.I)
 NOT_CODE = ("docs/", ".scratch/", "scripts/check_docs.py", "scripts/tests/test_check_docs.py")
 MAX_SCANNED_BYTES = 1_000_000
-INSTRUCTIONS = ("AGENTS.md", "CLAUDE.md")
+INSTRUCTIONS = ("AGENTS.md", "AGENTS.md")
 DATED = re.compile(r"\d{4}-\d{2}-\d{2}")
 DATED_LAST = re.compile(r"-\d{4}-\d{2}-\d{2}$")
 FACTS = "事實"

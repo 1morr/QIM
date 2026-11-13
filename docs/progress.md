@@ -4,7 +4,7 @@
 
 ## 寫法與封存
 
-- 做票的分支不改本檔：票的 Comments 留 `Session 紀錄：` 行，合併的人在主分支抄成這裡的一列（`CLAUDE.md`〈每個 session 的流程〉）。
+- 做票的分支不改本檔：票的 Comments 留 `Session 紀錄：` 行，合併的人在主分支抄成這裡的一列（`AGENTS.md`〈每個 session 的流程〉）。
 - 一列不超過 200 字元；細節在票的 `## Comments`，這裡只放指向它的一句話。
 - 「票」欄標里程碑（`M0 01`），封存時靠它分。
 - 里程碑驗收時（步驟在 `docs/agents/milestone.md`〈收尾票〉），把它的 session 紀錄移到 `docs/archive/<里程碑>.md` 的 `## Session 紀錄`、`docs/decisions.md` 裡它的決定移到同一個檔的 `## 決定`，逐列逐條比對沒有遺失，`docs/roadmap.md` 里程碑表的狀態換成那個檔的連結。同一個 commit 把下一個里程碑標成進行中，「下一步」寫 `/1morr:checkpoint <封存的里程碑>`。本檔只留進行中的里程碑。

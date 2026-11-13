@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn unrelated_formatting_is_green() {
         assert_green("\n\nchore: add stuff  \r\n\r\nbody\r\n");
-        assert_green("docs: 72-char subjects and `CLAUDE.md` map");
+        assert_green("docs: 72-char subjects and `AGENTS.md` map");
         assert_green("feat(qim-core): add stuff: with a colon");
         assert_green(
             "chore: add stuff\n# ------------------------ >8 ------------------------\n\
