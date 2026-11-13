@@ -1,0 +1,16 @@
+# 不加進 repo 的 workspace（.scratch/m4/spec.md〈共同規則〉）：空的 [workspace] 讓它自成一個。
+[package]
+name = "neighbor-readings"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+qim-bench = { path = "../../../crates/qim-bench" }
+qim-core = { path = "../../../crates/qim-core" }
+qim-databuild = { path = "../../../crates/qim-databuild" }
+qim-layout = { path = "../../../crates/qim-layout" }
+rand_chacha = "0.10.0"
+sha2 = "0.11.1"

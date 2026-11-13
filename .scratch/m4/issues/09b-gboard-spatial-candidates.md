@@ -1,6 +1,6 @@
 # 09b: Gboard 式的觸控鄰鍵候選實驗
 
-Status: ready-for-agent
+Status: done
 Blocked by: —
 讀: brief §4.8、§12.4（Gboard 那列）；`docs/research/blackbox-baseline.md` T2a、T2b 與〈對照〉的容錯列；`docs/research/tolerance.md`；`docs/research/spatial-correction-swipe.md` §1、§2、§4；plan §2.6〈空間模型〉、§5.2；spec〈容錯採用門檻〉〈每鍵延遲上限〉〈共同規則〉；票 09、10 的 Comments
 
@@ -22,9 +22,26 @@ Blocked by: —
 
 ## 驗收
 
-- [ ] README（日期、機器與系統、commit、量法、各放法的 dev 結果、test 一次的結果表）。
-- [ ] 對照〈容錯採用門檻〉逐條列出過或沒過；第一頁比例與平均名次和基線並列；沒打錯集合被擠後的比例；延遲對照〈每鍵延遲上限〉。
-- [ ] Gboard 放法的依據：補的黑箱（截圖存 `docs/research/` 或 `.scratch/m4/evidence/`）或寫明是由 T2a 推的。
-- [ ] 結論寫進 `docs/research/`（可補在 `tolerance.md` 新的一節），摘進 brief §4.8；progress.md 寫「等使用者：Gboard 式鄰鍵候選採不採用」；核心沒有留下實驗機制，`cargo xtask check` 綠燈。
+- [x] README（日期、機器與系統、commit、量法、各放法的 dev 結果、test 一次的結果表）。
+- [x] 對照〈容錯採用門檻〉逐條列出過或沒過；第一頁比例與平均名次和基線並列；沒打錯集合被擠後的比例；延遲對照〈每鍵延遲上限〉。
+- [x] Gboard 放法的依據：補的黑箱（截圖存 `docs/research/` 或 `.scratch/m4/evidence/`）或寫明是由 T2a 推的。
+- [x] 結論寫進 `docs/research/`（可補在 `tolerance.md` 新的一節），摘進 brief §4.8；progress.md 寫「等使用者：Gboard 式鄰鍵候選採不採用」；核心沒有留下實驗機制，`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 2026-11-14 結論：**等使用者決定採不採用**，建議採用（限觸控、做成開關）。test 跑一次（第 2 格起最多 2 個、floor 0.2、不搶首選），觸控模擬兩個語料合計：修正次數 −12.5%（過）、改錯 0（過）、打錯的題整句在第一頁 35.5%（基線 0%）、平均第 2.2 名；首選與 McNemar 設計上不搶首選、量不到（沒過）；沒打錯的集合改成觸控點對鍵送，答錯不變但修正多 5.6–8.4%，12 個都沒過；延遲在上限內。含打錯碼與照實體鍵送的集合設計上不適用，開關前後逐題相同。觸控集合分開看：打錯的句子每句省 0.735 次、打對的每句多 0.120 次，有錯的句子過約 14% 就淨省。單字集合（審查後補）：點錯的字 66% 在第一頁。數字與分析：`docs/research/tolerance.md`〈Gboard 式的鄰鍵讀法〉，完整的表：`scripts/experiments/neighbor-readings/README.md`。
+- progress.md 的「等使用者：Gboard 式鄰鍵候選採不採用」照 AGENTS.md 由合併的人寫（票的分支不改 progress.md），下面的 Session 紀錄就是那一列。
+- 票寫的「brief §12.4（Gboard 那列）」現在是 brief §1.3 的對照表；brief §4.8 加了一條量到的結果，「單碼不列鄰鍵的字」沒改（等使用者決定）。
+- 做票中發現並修了票外的問題：worktree 裡經 pre-commit hook commit 時，`scripts/tests/test_check_docs.py` 在暫存目錄跑的 `git` 繼承了 hook 的 `GIT_INDEX_FILE`（絕對路徑），把測試的假檔案寫進這個 repo 的 index，最早的兩個 commit 因此只剩 9 個檔；測試在暫存目錄跑的 `git init` 也繼承了 `GIT_DIR`，把共用的 `.git/config` 寫成 `core.bare = true`（00:07，主目錄的 `git status` 因此報 must be run in a work tree），已由協調者改回 false。`a8cd2cc` 讓測試清掉 `GIT_*` 並加了回歸測試（先紅後綠）；壞的兩個 commit 拿掉（備份在 `backup/t09b-broken-hook-commits-20261114`，確認不需要後 `git branch -D` 刪掉），機制從 git 物件找回、重新 commit 成 `330f4b4`，在它上面重跑 dev 的 `combo` 逐字相同。協調者要求在 progress.md〈偏差與決定〉記一行，現在的 progress.md 沒有那一段（`check_docs.py` 擋），改記成下面的「決定：」行。
+- `cargo xtask bench --check`：機制在、預設關（`012b199`，load 5–7）與刪掉之後（`a73d849`，load 9–14）都通過，16 個集合沒有翻盤、固定題 84/84。原生 p95（µs）預設關：空白 63 / 66 / 1234、學過 144 / 201 / 1876、萬用鍵空白 278 / 211 / 1279、學過 410 / 279 / 1920；刪掉後：空白 64 / 67 / 1246、學過 195 / 417 / 2118、萬用鍵空白 539 / 447 / 2321、學過 422 / 289 / 1965（刪掉後那次和實驗程式同時編譯、負載較高）。核心和開工時逐字相同，`model-ladder` 不用重跑。`cargo xtask check` 與 `cargo test --workspace` 綠燈。
+- code-review（`75671c4` 起）已處理：重跑的 commit 改成 `012b199`（`330f4b4` 沒有實驗 crate）、已不存在的 commit 只留一句；觸控集合沒打錯／打錯分開報（損益兩平改成量的）；被擠往後幾格的分布；延遲改送票 08 的觸控模擬點擊重量（差不多、仍在上限內）；單字集合；「每鍵慢 2–3 倍」改成分批寫；固定題標成過。沒處理：只插蓋滿整串的讀法、不插只蓋住開頭一段的（T2a `snr` 第 6 格的「日」），第一頁指標也只量整句，好處可能低估，實作票再補；機制裡 `weights` 用字元位置、取用時用位元組位移（輸入碼全是 ASCII，不影響數字；實作時統一）；`Lattice` 的 `spatial` 旗標與 `(Edge, String, f64)` tuple（實作時拆型別）；實驗複製了 `simulate` 與觸控抽點（一次性實驗，保留）；修正次數的模擬分不出第 2 與第 5 格，格數留給實作票。
+
+Session 紀錄：Gboard 式鄰鍵讀法：觸控修正 −12.5%、打錯句 35.5% 第一頁找回，點對鍵時修正 +5.6–8.4%、延遲在上限內；機制量完刪掉；另修 hook 寫壞 index 的測試
+決定：機制照票 09 的做法暫時進核心（`330f4b4`）、量完刪掉（`a73d849`），實驗 crate 在 `012b199` 上跑（Agent 定）
+決定：Gboard 的放法由 T2a 的截圖推、不補黑箱，模擬器上的 Gboard 是共用裝置（Agent 定）
+決定：核心分不出觸控與實體鍵，實驗把「不是實體鍵的按鍵機率」當觸控（Agent 定）
+決定：修正次數的模擬複製進實驗、重打改點觸控點對鍵；沒打錯的集合改成觸控點對鍵送，沿用票 08 的觸控錯誤模型、點到別的鍵重抽，協調者要求（Agent 定）
+決定：dev 三步挑修正次數最少的（平手取第一頁多、再取先列的），挑到第 2 格起最多 2 個、floor 0.2、不搶首選；搶首選的門檻改錯都超過 1%（Agent 定）
+決定：test 第一次在固定題當掉（分隔記號），修好後照同一組設定重跑；審查後再補跑加分開的數字，三次的數字逐字相同（Agent 定）
+決定：審查後補單字集合與照觸控模擬點擊的延遲，設定不變（Agent 定）
+決定：票外修文件檢查的測試在 worktree 的 hook 裡寫壞 index（`a8cd2cc`），壞的 commit 拿掉重做，協調者要求（Agent 定）
