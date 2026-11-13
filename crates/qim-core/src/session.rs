@@ -1030,8 +1030,7 @@ impl Session {
                 }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
-            self.lattice
-                .push_weighted(engine, user, c, self.key_weights.clone());
+            self.lattice.push(engine, user, c);
             self.refresh_candidates(engine, user);
             return self.snapshot(engine, true, None);
         }
@@ -1637,18 +1636,9 @@ impl Session {
     }
 
     /// 剩下的輸入碼換成 `input`，lattice 從頭建。
-    ///
-    /// `input` 是現在的輸入碼的結尾時（選了開頭一段、改選某一段），那幾碼的按鍵機率照留（鄰鍵讀法，M4 票 09b
-    /// 的實驗）；其他（放回選定的分段）沒有。
     fn recompose(&mut self, engine: &Engine, user: &UserModel, input: &str) {
         let before = self.before_unselected(engine);
-        let current = self.lattice.input();
-        let weights = if current.ends_with(input) {
-            self.lattice.weights()[current.len() - input.len()..].to_vec()
-        } else {
-            Vec::new()
-        };
-        self.lattice = Lattice::from_keys(engine, user, before, input, &weights);
+        self.lattice = Lattice::from_input(engine, user, before, input);
     }
 
     /// 沒選定的輸入碼前面是什麼（plan〈排序：同一把尺〉）：最後選定的分段（它的最後一字與它）；沒有選定的

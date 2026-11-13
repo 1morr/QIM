@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::lattice::{self, Lattice, Listing, Preceding};
 use crate::lexicon::WordsByText;
-use crate::neighbor::NeighborReadings;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::session::SegmentSource;
@@ -11,8 +10,7 @@ use crate::user::{SchemeUser, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
-    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Weights, Word, WordTrigram,
-    WordTrigramPack,
+    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Word, WordTrigram, WordTrigramPack,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -45,8 +43,6 @@ pub struct Engine {
     /// 詞級 trigram（[`Engine::with_word_trigram`]）：有掛上時 lattice 的靜態機率改用它，沒有統計的
     /// 地方退回字級 bigram；`None` 只用字級 bigram（plan〈排序：同一把尺〉）。
     word_trigram: Option<WordTrigram>,
-    /// 鄰鍵讀法（[`Engine::with_neighbor_readings`]，M4 票 09b 的實驗）；`None` 是關。
-    neighbor_readings: Option<NeighborReadings>,
 }
 
 /// 一段前面的兩段在詞級 trigram 詞表的編號：`[前前一段, 前一段]`，沒有或不在詞表是 `None`。
@@ -164,7 +160,6 @@ impl Engine {
             english: EnglishWords::default(),
             emoji: EmojiTable::default(),
             word_trigram: None,
-            neighbor_readings: None,
         })
     }
 
@@ -174,23 +169,6 @@ impl Engine {
     pub fn with_word_trigram(mut self, pack: WordTrigramPack) -> Self {
         self.word_trigram = Some(pack.model);
         self
-    }
-
-    /// 開鄰鍵讀法（M4 票 09b 的實驗，[`NeighborReadings`]）：只給基準與實驗用，殼不接；量完刪掉。
-    #[must_use]
-    pub fn with_neighbor_readings(mut self, readings: NeighborReadings) -> Self {
-        self.neighbor_readings = Some(readings);
-        self
-    }
-
-    pub(crate) fn neighbor_readings(&self) -> Option<&NeighborReadings> {
-        self.neighbor_readings.as_ref()
-    }
-
-    /// 鄰鍵讀法開著、這一下是它收的（觸控）按鍵機率時留著它，否則是 `None`。
-    pub(crate) fn neighbor_weights(&self, weights: Option<Weights>) -> Option<Weights> {
-        let readings = self.neighbor_readings.as_ref()?;
-        weights.filter(|w| (readings.accepts)(w) && w.entries().len() > 1)
     }
 
     /// 有沒有掛上詞級 trigram：有才要算 [`Engine::edge_score`] 的前面兩段。
@@ -804,14 +782,6 @@ impl Engine {
     /// 往回找的上限算的是字母數，分隔記號不算。
     pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let user = user.for_scheme(&self.scheme.id);
-        self.edge_starts(user, input)
-            .into_iter()
-            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
-            .collect()
-    }
-
-    /// 結束在 `input` 結尾的邊的起點，由前到後（[`Engine::edges_ending`]）。
-    fn edge_starts(&self, user: SchemeUser<'_>, input: &str) -> Vec<usize> {
         let longest = self
             .longest_word_code
             .max(usize::from(self.scheme.max_code_length))
@@ -826,62 +796,9 @@ impl Engine {
         // 同分時照邊的順序決定名次（[`Lattice::push`]），起點由前到後。
         starts.reverse();
         starts
-    }
-
-    /// 鄰鍵讀法的 lattice（M4 票 09b）結束在 `input` 結尾的邊：[`Engine::edges_ending`] 的邊，加上一段輸入碼裡
-    /// 換一碼成鄰鍵字母（[`NeighborReadings::alternatives`]，`weights` 是 `input` 每一碼收下的按鍵機率）才查得到
-    /// 的字詞。每條邊另回它的碼（換過的）與空間懲罰（沒換是 0），分數已扣掉 `weight × 懲罰`。有分隔記號或
-    /// 萬用鍵的段不換；換的那一碼前面的碼要是某個碼的開頭（剪枝）。
-    pub(crate) fn neighbor_edges_ending(
-        &self,
-        user: &UserModel,
-        input: &str,
-        weights: &[Option<Weights>],
-    ) -> Vec<(Edge, String, f64)> {
-        let Some(readings) = self.neighbor_readings.as_ref() else {
-            return Vec::new();
-        };
-        let user = user.for_scheme(&self.scheme.id);
-        let longest_char = usize::from(self.scheme.max_code_length);
-        let exists = |prefix: &str| {
-            prefix.is_empty()
-                || (prefix.len() <= longest_char && self.code_table.has_prefix(prefix))
-                || self.lexicon.has_code_prefix(prefix)
-                || user.has_word_code_prefix(prefix)
-        };
-        let allowed = |c: char| self.scheme.is_code_key(c) && Some(c) != self.scheme.wildcard;
-        let mut edges = Vec::new();
-        for start in self.edge_starts(user, input) {
-            let typed = &input[start..];
-            edges.extend(
-                self.exact(user, typed, start, self.beam())
-                    .into_iter()
-                    .map(|e| (e, typed.to_string(), 0.0)),
-            );
-            if typed.contains(SEPARATOR) || self.scheme.has_wildcard(typed) {
-                continue;
-            }
-            for (offset, letter) in typed.char_indices() {
-                if !exists(&typed[..offset]) {
-                    break;
-                }
-                let Some(Some(key)) = weights.get(start + offset) else {
-                    continue;
-                };
-                for (other, cost) in readings.alternatives(letter, key, allowed) {
-                    let mut code = typed.to_string();
-                    code.replace_range(offset..offset + letter.len_utf8(), &other.to_string());
-                    if !exists(&code) {
-                        continue;
-                    }
-                    for mut edge in self.exact(user, &code, start, self.beam()) {
-                        edge.inner -= readings.weight * cost;
-                        edges.push((edge, code.clone(), cost));
-                    }
-                }
-            }
-        }
-        edges
+            .into_iter()
+            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
+            .collect()
     }
 
     /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面的分數，依分數由高到低

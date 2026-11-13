@@ -3,11 +3,11 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use crate::engine::{Edge, Spanned, WordHistory};
+use crate::engine::{Spanned, WordHistory};
 use crate::english_user::ENGLISH_COMPLETION_LIMIT;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Following, SchemeUser};
-use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel, Weights};
+use crate::{EMOJI_LIMIT, Engine, ScoredPath, Segment, UserModel};
 
 /// 一串輸入碼的 lattice：`columns[j]` 是結束在位置 `j` 的部分路徑，依分數由高到低，
 /// 最多 beam 條、文字互不相同。`columns[0]` 只有空路徑。
@@ -25,13 +25,6 @@ pub(crate) struct Lattice {
     /// 用的引擎與學習資料不變：撤銷學習從頭建 lattice，`Session::refresh` 丟掉這份重算；組字途中殼另改了
     /// 學習資料（匯入、加詞）又沒呼叫它時，開頭各段和 `columns` 一樣照舊（票 18b 的 Comments）。
     spans: Vec<Option<Vec<Spanned>>>,
-    /// `input` 每一碼收下的觸控按鍵機率（[`Engine::neighbor_weights`]，M4 票 09b 的實驗）；沒有的是 `None`。
-    weights: Vec<Option<Weights>>,
-    /// 鄰鍵讀法的 lattice（M4 票 09b 的實驗）：同一串輸入碼，邊另含換一碼成鄰鍵字母的字詞
-    /// （[`Engine::neighbor_edges_ending`]）。第一次收下觸控的按鍵機率時才建，之前的碼補上。
-    neighbor: Option<Box<Lattice>>,
-    /// 這是鄰鍵讀法的 lattice（[`Lattice::neighbor`]）。
-    spatial: bool,
 }
 
 /// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（plan〈排序：同一把尺〉）。
@@ -62,10 +55,6 @@ struct Node {
     text: String,
     /// 最後一段的起點欄與在那一欄的位置；空路徑是 `None`。
     prev: Option<(usize, usize)>,
-    /// 鄰鍵讀法的 lattice 才有：路徑的碼（換過的鄰鍵字母照換過的），和輸入碼一樣長。
-    code: Option<String>,
-    /// 路徑換過的碼的空間懲罰總和（[`crate::NeighborReadings::alternatives`]）；沒換是 0。
-    cost: f64,
 }
 
 /// 一個候選與它蓋住的輸入碼長度（從剩下的輸入碼開頭算）。
@@ -150,13 +139,8 @@ impl Default for Lattice {
                 score: 0.0,
                 text: String::new(),
                 prev: None,
-                code: None,
-                cost: 0.0,
             }]],
             spans: Vec::new(),
-            weights: Vec::new(),
-            neighbor: None,
-            spatial: false,
         }
     }
 }
@@ -180,29 +164,8 @@ impl Lattice {
         lattice
     }
 
-    /// 同 [`Lattice::from_input`]，`weights` 是 `input` 每一碼的按鍵機率（可以比 `input` 短，不足的是 `None`）；
-    /// 鄰鍵讀法（M4 票 09b）用。
-    pub fn from_keys(
-        engine: &Engine,
-        user: &UserModel,
-        before: Preceding,
-        input: &str,
-        weights: &[Option<Weights>],
-    ) -> Self {
-        let mut lattice = Self::starting_after(before);
-        for (i, c) in input.chars().enumerate() {
-            lattice.push_weighted(engine, user, c, weights.get(i).cloned().flatten());
-        }
-        lattice
-    }
-
     pub fn input(&self) -> &str {
         &self.input
-    }
-
-    /// `input` 每一碼收下的按鍵機率（[`Lattice::weights`]），和 `input` 一樣長。
-    pub fn weights(&self) -> &[Option<Weights>] {
-        &self.weights
     }
 
     /// 組字前面是什麼（開頭的字接它）。
@@ -214,65 +177,13 @@ impl Lattice {
     /// 沒有邊結束或開始在它上面，路徑在它這裡斷開時它算在前一段的碼尾。邊只有詞能跨過它，
     /// 而且它要落在詞內兩字的碼之間（`Engine::exact`）。
     pub fn push(&mut self, engine: &Engine, user: &UserModel, c: char) {
-        self.push_weighted(engine, user, c, None);
-    }
-
-    /// 同 [`Lattice::push`]，帶這一碼的按鍵機率：鄰鍵讀法（M4 票 09b）開著、是觸控的機率時，另推進鄰鍵讀法的
-    /// lattice（[`Lattice::neighbor`]）。
-    pub fn push_weighted(
-        &mut self,
-        engine: &Engine,
-        user: &UserModel,
-        c: char,
-        weights: Option<Weights>,
-    ) {
-        let weights = engine.neighbor_weights(weights);
-        if self.neighbor.is_some() || weights.is_some() {
-            if self.neighbor.is_none() {
-                let mut neighbor = Lattice {
-                    spatial: true,
-                    ..Lattice::starting_after(self.before.clone())
-                };
-                for (i, earlier) in self.input.chars().enumerate() {
-                    neighbor.advance(engine, user, earlier, self.weights[i].clone());
-                }
-                self.neighbor = Some(Box::new(neighbor));
-            }
-            if let Some(neighbor) = &mut self.neighbor {
-                neighbor.advance(engine, user, c, weights.clone());
-            }
-        }
-        self.advance(engine, user, c, weights);
-    }
-
-    /// 多一碼、算新的一欄（[`Lattice::push`]）；鄰鍵讀法的 lattice 的邊另含換成鄰鍵字母的字詞。
-    fn advance(&mut self, engine: &Engine, user: &UserModel, c: char, weights: Option<Weights>) {
         self.input.push(c);
-        self.weights.push(weights);
         if c == SEPARATOR {
-            let mut previous = self.columns.last().expect("至少有空路徑的一欄").clone();
-            // 鄰鍵讀法的路徑的碼和輸入碼一樣長：分隔記號也接上（[`Lattice::path`] 照位置切）。
-            if self.spatial {
-                for node in &mut previous {
-                    node.code.get_or_insert_with(String::new).push(SEPARATOR);
-                }
-            }
+            let previous = self.columns.last().expect("至少有空路徑的一欄").clone();
             self.columns.push(previous);
             return;
         }
-        let edges: Vec<(Edge, Option<String>, f64)> = if self.spatial {
-            engine
-                .neighbor_edges_ending(user, &self.input, &self.weights)
-                .into_iter()
-                .map(|(e, code, cost)| (e, Some(code), cost))
-                .collect()
-        } else {
-            engine
-                .edges_ending(user, &self.input)
-                .into_iter()
-                .map(|e| (e, None, 0.0))
-                .collect()
-        };
+        let edges = engine.edges_ending(user, &self.input);
         // 起點欄 → 那一欄每條部分路徑的最後一段後面的個人 bigram；每條部分路徑只查一次。
         // 沒學過個人 bigram 時不查（每鍵都走這裡）。
         let has_bigrams = user.has_bigrams();
@@ -280,7 +191,7 @@ impl Lattice {
         // 起點欄 → 每條部分路徑的最後兩段在詞級 trigram 的編號；只在掛上詞級 trigram 時算。
         let mut histories: BTreeMap<usize, Vec<WordHistory>> = BTreeMap::new();
         let mut extended: Vec<(f64, usize, usize)> = Vec::new();
-        for (e, (edge, _, _)) in edges.iter().enumerate() {
+        for (e, edge) in edges.iter().enumerate() {
             let after = has_bigrams.then(|| {
                 &*following.entry(edge.start).or_insert_with(|| {
                     (0..self.columns[edge.start].len())
@@ -318,18 +229,13 @@ impl Lattice {
             if column.len() == engine.beam() {
                 break;
             }
-            let (edge, code, cost) = &edges[e];
-            let from = &self.columns[edge.start][k];
-            let text = format!("{}{}", from.text, edge.text);
+            let edge = &edges[e];
+            let text = format!("{}{}", self.columns[edge.start][k].text, edge.text);
             if column.iter().all(|n| n.text != text) {
                 column.push(Node {
                     score,
                     text,
                     prev: Some((edge.start, k)),
-                    code: code
-                        .as_ref()
-                        .map(|code| format!("{}{code}", from.code.as_deref().unwrap_or(""))),
-                    cost: from.cost + cost,
                 });
             }
         }
@@ -371,11 +277,7 @@ impl Lattice {
     pub fn pop(&mut self) {
         if self.input.pop().is_some() {
             self.columns.pop();
-            self.weights.pop();
             self.spans.truncate(self.input.len() + 1);
-            if let Some(neighbor) = &mut self.neighbor {
-                neighbor.pop();
-            }
         }
     }
 
@@ -445,12 +347,10 @@ impl Lattice {
     /// 結束在位置 `end`、在那一欄第 `k` 名的部分路徑的各段。
     fn path(&self, end: usize, k: usize) -> Vec<Segment> {
         let mut segments = Vec::new();
-        // 鄰鍵讀法的路徑照換過的碼（和輸入碼一樣長，位置相同）。
-        let code = self.columns[end][k].code.as_deref().unwrap_or(&self.input);
         let (mut j, mut k) = (end, k);
         while let Some((i, prev)) = self.columns[j][k].prev {
             let text = &self.columns[j][k].text[self.columns[i][prev].text.len()..];
-            segments.push(Segment::new(code[i..j].to_string(), text.to_string()));
+            segments.push(Segment::new(self.input[i..j].to_string(), text.to_string()));
             (j, k) = (i, prev);
         }
         segments.reverse();
@@ -609,59 +509,7 @@ pub(crate) fn candidates(
     for rule in RULES {
         rule(&mut ranked);
     }
-    with_neighbor_readings(engine, lattice, ranked.into_list())
-}
-
-/// 鄰鍵讀法（M4 票 09b 的實驗，[`crate::NeighborReadings`]）插進候選列：鄰鍵讀法的 lattice 蓋滿整串、換過碼的
-/// 路徑，依分數取最多 `limit` 個，從第 `slot` 格起依序插入；文字已在它前面的不插，在後面的移上來。最好的那個
-/// 模稜兩可（換的碼的機率比乘起來 ≥ `ambiguous`）又比原樣的首選路徑分數高時，插在第 1 格。
-fn with_neighbor_readings(
-    engine: &Engine,
-    lattice: &Lattice,
-    mut list: Vec<CandidateSpan>,
-) -> Vec<CandidateSpan> {
-    let (Some(readings), Some(neighbor)) = (engine.neighbor_readings(), &lattice.neighbor) else {
-        return list;
-    };
-    let n = lattice.input.len();
-    let literal_best = lattice.columns[n].first().map(|node| node.score);
-    let mut at = readings.slot.saturating_sub(1);
-    let mut added = 0;
-    for (k, node) in neighbor.columns[n].iter().enumerate() {
-        if added == readings.limit {
-            break;
-        }
-        if node.cost <= 0.0 || n == 0 {
-            continue;
-        }
-        let takes_first = added == 0
-            && readings
-                .ambiguous
-                .is_some_and(|t| node.cost <= -f64::from(t).ln())
-            && literal_best.is_none_or(|best| node.score > best);
-        let index = if takes_first { 0 } else { at.min(list.len()) };
-        match list.iter().position(|c| c.text == node.text) {
-            Some(i) if i < index => continue,
-            Some(i) => {
-                list.remove(i);
-            }
-            None => {}
-        }
-        list.insert(
-            index,
-            CandidateSpan {
-                text: node.text.clone(),
-                len: n,
-                segments: neighbor.path(n, k),
-                kind: SpanKind::Word,
-                rule: None,
-            },
-        );
-        added += 1;
-        // 搶到首選時原樣的首選退到第 2 格，其餘照樣從第 `slot` 格起、排在原樣的首選後面。
-        at = if takes_first { at + 1 } else { index + 1 };
-    }
-    list
+    ranked.into_list()
 }
 
 /// 整串輸入碼 `input` 剛好是打過兩次的英文使用者詞時是它的寫法（排位規則 4）；輸入碼要長過方案一個字的
