@@ -109,3 +109,28 @@ test("實體鍵盤打同一串沒有鄰鍵讀法", async ({ page }) => {
 	await expect(ui(page).composition).toHaveText("尸弓口");
 	expect(await shown(page)).not.toContain("門口");
 });
+
+test("停鍵重排開著（預設）：重排的路徑排在第 2 格，鄰鍵讀法在它後面、仍在手機候選列看得到的範圍內", async ({
+	page,
+}, testInfo) => {
+	// 兩者都從第 2 格起插時，重排的在前（重排是使用者確認的第 2 位，協調者定）。
+	const rerank = ui(page).settings.getByRole("combobox", { name: "重排" });
+	await rerank.selectOption("neural");
+	await tapSnr(page);
+	const list = page.getByRole("list", { name: "候選" });
+	// 停鍵後神經模型把一條路徑插到第 2 格（這個例子是「刷口」）。
+	await expect(list).toHaveAttribute("data-rerank-applied", "1");
+	const reranked = ui(page).rows.filter({ hasText: "重排插入" });
+	await expect(reranked).toHaveCount(1);
+	const items = ui(page).items;
+	const texts = await shown(page);
+	const at = texts.indexOf("門口");
+	expect(at, `${texts}`).toBeGreaterThanOrEqual(2);
+	await expect(items.nth(1)).toHaveText(
+		`2${await reranked.locator("td:nth-child(2)").textContent()}`,
+	);
+	await expect(items.nth(at)).toBeInViewport({ ratio: 1 });
+	await page.screenshot({
+		path: testInfo.outputPath("09c-neighbor-with-rerank.png"),
+	});
+});
