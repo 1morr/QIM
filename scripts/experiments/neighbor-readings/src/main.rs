@@ -1,15 +1,17 @@
 //! Gboard 式的觸控鄰鍵讀法實驗（M4 票 09b）：觸控的按鍵機率裡的鄰鍵字母換進輸入碼，換出來的讀法插在候選列
 //! 的指定格（原樣讀法照舊當首選，點擊模稜兩可時才讓鄰鍵讀法當首選）。量觸控的題的首選、修正次數、改錯、
 //! 想打的字詞在第一頁的比例與名次、沒打錯的題被擠後的比例，與每鍵延遲，對照 `.scratch/m4/spec.md`
-//! 〈容錯採用門檻〉〈每鍵延遲上限〉。機制在 `330f4b4` 的核心裡預設關（`Engine::with_neighbor_readings`），量完
-//! 之後的 commit 刪掉，所以這個 crate 只在 `330f4b4` 上編得過（README〈怎麼重跑〉）。
+//! 〈容錯採用門檻〉〈每鍵延遲上限〉。機制在 `330f4b4` 進核心、預設關（`Engine::with_neighbor_readings`），
+//! `a73d849` 刪掉，所以這個 crate 只在留有機制的 commit（`012b199`）上編得過（README〈怎麼重跑〉）。
 //!
 //! 用法（repo 根目錄先跑 `cargo xtask data`），`cargo run --release -- <指令> [選項]`：
 //! - `weights`：dev 觸控題的按鍵機率長怎樣（第二高 ÷ 最高的分布），定 `floor` 的範圍用，不看結果。
 //! - `dev`：只看 dev 切分，照 README 的三步挑放法、`floor`、模稜兩可的門檻，印出 `test` 要的參數。
 //! - `combo [設定]`：只在 dev 打一種設定，含觸控點對鍵的沒打錯集合。
 //! - `test [設定]`：設定定案後在 test 切分跑一次，逐條對照門檻。
-//! - `latency [設定]`：原生每鍵延遲，照觸控點對鍵的按鍵機率送，關與開交替，空白與學過、含萬用鍵的各一組。
+//! - `latency [設定] [--taps noisy]`：原生每鍵延遲，照觸控點對鍵（或 `--taps noisy`：票 08 的觸控模擬、可能點到
+//!   鄰鍵）的按鍵機率送，關與開交替，空白與學過、含萬用鍵的各一組。
+//! - `single [設定] [--split test]`：口語語料拆成一個字一題的觸控集合（單碼列鄰鍵的字）。
 //!
 //! 設定：`--slot N --limit N --floor X --letters N --weight X --ambiguous X|none`；`--root <repo 根目錄>`
 //! 預設是 `../../..`。
@@ -176,8 +178,9 @@ impl Taps {
         }
     }
 
-    /// 點對 `c` 鍵的一下；佈局沒有的字元（分隔記號）照 `Key::for_input`。
-    fn key(&self, c: char, rng: &mut ChaCha8Rng) -> Key {
+    /// 打 `c` 鍵的一下：`on_key` 為真時點到別的鍵就重抽（點對鍵），為假時只在點到字母鍵以外才重抽（同票 08 的
+    /// 觸控模擬，可能點到鄰鍵）。佈局沒有的字元（分隔記號）照 `Key::for_input`。
+    fn key(&self, c: char, rng: &mut ChaCha8Rng, on_key: bool) -> Key {
         let Some(key) = self
             .page
             .keys
@@ -203,8 +206,11 @@ impl Taps {
             let (dx, dy) = (a * noise.sigma_x_mm, b * noise.sigma_y_mm);
             let x = round_tenth(mean_x + (dx * cos - dy * sin) / self.mm);
             let y = round_tenth(mean_y + (dx * sin + dy * cos) / self.mm);
-            if self.letter_at(x, y) == Some(c) {
-                return self.surface.tap(x, y).expect("點在字母鍵上");
+            match self.letter_at(x, y) {
+                Some(hit) if hit == c || !on_key => {
+                    return self.surface.tap(x, y).expect("點在字母鍵上");
+                }
+                _ => {}
             }
         }
         panic!("{c:?} 抽了一萬次都沒點到");
@@ -212,11 +218,25 @@ impl Taps {
 
     /// 每個單位的碼都點對鍵；`seed` 決定抽到的點（同一題每次一樣）。
     fn clean(&self, seed: &str, item: &Item) -> Vec<Vec<Key>> {
-        let digest = Sha256::digest(format!("touch-clean\0{seed}").as_bytes());
+        self.taps("touch-clean", seed, item, true)
+    }
+
+    /// 照票 08 的觸控模擬抽點擊（可能點到鄰鍵），code-review 後補量的延遲與單字集合用。
+    fn noisy(&self, seed: &str, item: &Item) -> Vec<Vec<Key>> {
+        self.taps("touch-noisy", seed, item, false)
+    }
+
+    fn taps(&self, kind: &str, seed: &str, item: &Item, on_key: bool) -> Vec<Vec<Key>> {
+        let digest = Sha256::digest(format!("{kind}\0{seed}").as_bytes());
         let mut rng = ChaCha8Rng::from_seed(digest.into());
         item.units
             .iter()
-            .map(|u| u.code.chars().map(|c| self.key(c, &mut rng)).collect())
+            .map(|u| {
+                u.code
+                    .chars()
+                    .map(|c| self.key(c, &mut rng, on_key))
+                    .collect()
+            })
             .collect()
     }
 }
@@ -669,6 +689,8 @@ struct Crowd {
     items: usize,
     later: usize,
     off_page: usize,
+    /// 往後的題依往後幾格分：1 格、2 格、3 格以上（含翻出最多 [`PAGES`] 頁）。
+    shift: [usize; 3],
 }
 
 impl Crowd {
@@ -677,13 +699,26 @@ impl Crowd {
             self.items += 1;
             self.later += usize::from(after.is_none_or(|a| a > before));
             self.off_page += usize::from(before <= PAGE && after.is_none_or(|a| a > PAGE));
+            if after.is_none_or(|a| a > before) {
+                let by = after.map_or(3, |a| (a - before).min(3));
+                self.shift[by - 1] += 1;
+            }
         }
+    }
+
+    /// 往後幾格的分布（佔有選得到的題的比例）。
+    fn shifts(&self) -> String {
+        let [one, two, more] = self.shift.map(|n| 100.0 * ratio(n, self.items));
+        format!("往後 1 格 {one:.2}%、2 格 {two:.2}%、3 格以上 {more:.2}%")
     }
 
     fn merge(&mut self, o: Crowd) {
         self.items += o.items;
         self.later += o.later;
         self.off_page += o.off_page;
+        for i in 0..3 {
+            self.shift[i] += o.shift[i];
+        }
     }
 
     fn cell(&self) -> String {
@@ -765,6 +800,11 @@ struct TouchCompare {
     corrections_on: usize,
     literal_correct: usize,
     false_corrections: usize,
+    /// 沒打錯的題：題數、答錯（關、開）、修正次數（關、開）；打錯的題的修正次數（關、開）。
+    clean: usize,
+    clean_wrong: [usize; 2],
+    clean_corrections: [usize; 2],
+    mistyped_corrections: [usize; 2],
     ranks_off: Ranks,
     ranks_on: Ranks,
     groups_off: [Ranks; 4],
@@ -781,12 +821,19 @@ impl TouchCompare {
             c.corrections_on += b.corrections;
             let expected = task.item.expected();
             if a.clean {
+                c.clean += 1;
+                c.clean_wrong[0] += usize::from(!a.correct);
+                c.clean_wrong[1] += usize::from(!b.correct);
+                c.clean_corrections[0] += a.corrections;
+                c.clean_corrections[1] += b.corrections;
                 if a.correct {
                     c.literal_correct += 1;
                     c.false_corrections += usize::from(!b.correct);
                 }
                 c.crowd.add(&expected, &a.list, &b.list);
             } else {
+                c.mistyped_corrections[0] += a.corrections;
+                c.mistyped_corrections[1] += b.corrections;
                 c.mistyped += 1;
                 c.mistyped_correct_off += usize::from(a.correct);
                 c.mistyped_correct_on += usize::from(b.correct);
@@ -813,6 +860,12 @@ impl TouchCompare {
         self.corrections_on += o.corrections_on;
         self.literal_correct += o.literal_correct;
         self.false_corrections += o.false_corrections;
+        self.clean += o.clean;
+        for i in 0..2 {
+            self.clean_wrong[i] += o.clean_wrong[i];
+            self.clean_corrections[i] += o.clean_corrections[i];
+            self.mistyped_corrections[i] += o.mistyped_corrections[i];
+        }
         self.ranks_off.merge(o.ranks_off);
         self.ranks_on.merge(o.ranks_on);
         for g in 0..GROUPS.len() {
@@ -901,12 +954,12 @@ impl CleanCompare {
 
 fn clean_table(rows: &[CleanCompare]) -> String {
     let mut out = String::from(
-        "| 集合（觸控點對鍵） | 題數 | 答錯（關 → 開） | 修正次數（關 → 開） | 被擠後 / 擠出第一頁 | 不退步 |\n| --- | ---: | --- | --- | --- | --- |\n",
+        "| 集合（觸控點對鍵） | 題數 | 答錯（關 → 開） | 修正次數（關 → 開） | 被擠後 / 擠出第一頁 | 往後幾格 | 不退步 |\n| --- | ---: | --- | --- | --- | --- | --- |\n",
     );
     for r in rows {
         let _ = writeln!(
             out,
-            "| {} | {} | {} → {} | {} → {} ({:+.1}%) | {} | {} |",
+            "| {} | {} | {} → {} | {} → {} ({:+.1}%) | {} | {} | {} |",
             r.name,
             r.total,
             r.wrong_off,
@@ -915,6 +968,7 @@ fn clean_table(rows: &[CleanCompare]) -> String {
             r.corrections_on,
             100.0 * (r.corrections_on as f64 / r.corrections_off as f64 - 1.0),
             r.crowd.cell(),
+            r.crowd.shifts(),
             if r.passes() { "過" } else { "**沒過**" }
         );
     }
@@ -938,6 +992,28 @@ fn touch_row(label: &str, c: &TouchCompare) -> String {
         c.p(),
         c.ranks_on.cell(),
         c.crowd.cell()
+    )
+}
+
+/// 沒打錯與打錯的題分開：答錯、修正次數，與被擠往後幾格（code-review 後補）。
+fn breakdown(c: &TouchCompare) -> String {
+    let change = |[off, on]: [usize; 2]| 100.0 * (on as f64 / off.max(1) as f64 - 1.0);
+    format!(
+        "- 沒打錯的 {} 題：答錯 {} → {}，修正 {} → {} 次（{:+.1}%，每句 {:+.3} 次）；被擠：{}\n- 打錯的 {} 題：修正 {} → {} 次（{:+.1}%，每句 {:+.3} 次）\n",
+        c.clean,
+        c.clean_wrong[0],
+        c.clean_wrong[1],
+        c.clean_corrections[0],
+        c.clean_corrections[1],
+        change(c.clean_corrections),
+        (c.clean_corrections[1] as f64 - c.clean_corrections[0] as f64) / c.clean.max(1) as f64,
+        c.crowd.shifts(),
+        c.mistyped,
+        c.mistyped_corrections[0],
+        c.mistyped_corrections[1],
+        change(c.mistyped_corrections),
+        (c.mistyped_corrections[1] as f64 - c.mistyped_corrections[0] as f64)
+            / c.mistyped.max(1) as f64,
     )
 }
 
@@ -1125,7 +1201,8 @@ fn combo(root: &Path, config: &Config) {
     let c = runner.touch(config);
     println!("## dev：{}\n\n{TOUCH_HEADER}", config.describe());
     println!("{}", touch_row(&config.describe(), &c));
-    println!("\n{}", groups_table(&c));
+    println!("\n{}", breakdown(&c));
+    println!("{}", groups_table(&c));
     println!("{}", clean_table(&runner.clean(config)));
 }
 
@@ -1171,6 +1248,7 @@ fn test(root: &Path, config: &Config) {
         "\n修正次數：關 {} 次、開 {} 次；打錯的題 {} 題、沒打錯的題裡關的時候首選正確 {} 題",
         c.corrections_off, c.corrections_on, c.mistyped, c.literal_correct
     );
+    println!("\n{}", breakdown(&c));
     println!("\n{}", groups_table(&c));
     println!("### 對照〈容錯採用門檻〉（觸控那幾條）\n");
     let line = |name: &str, value: String, limit: String, ok: bool| {
@@ -1281,7 +1359,7 @@ fn load_average() -> String {
         .unwrap_or_default()
 }
 
-fn latency(root: &Path, config: &Config) {
+fn latency(root: &Path, config: &Config, noisy: bool) {
     let engine = load(root);
     let on = engine.clone().with_neighbor_readings(config.readings());
     let taps = Taps::new(root);
@@ -1305,8 +1383,12 @@ fn latency(root: &Path, config: &Config) {
                     context: None,
                     typed: None,
                 };
-                taps.clean(&format!("latency\0{label}\0{i}"), &item)
-                    .concat()
+                let seed = format!("latency\0{label}\0{i}");
+                if noisy {
+                    taps.noisy(&seed, &item).concat()
+                } else {
+                    taps.clean(&seed, &item).concat()
+                }
             })
             .collect()
     };
@@ -1336,7 +1418,12 @@ fn latency(root: &Path, config: &Config) {
             .chain(&context_items),
     );
     println!(
-        "## 每鍵延遲（原生 release；觸控點對鍵；{}）\n",
+        "## 每鍵延遲（原生 release；{}；{}）\n",
+        if noisy {
+            "觸控模擬的點擊（可能點到鄰鍵）"
+        } else {
+            "觸控點對鍵"
+        },
         config.describe()
     );
     println!("開始時：{}\n", load_average());
@@ -1367,6 +1454,82 @@ fn latency(root: &Path, config: &Config) {
         }
     }
     println!("\n結束時：{}", load_average());
+}
+
+// ---------------------------------------------------------------- 單字
+
+/// 單字集合每個語料最多幾題。
+const SINGLE_LIMIT: usize = 3000;
+
+/// 單碼列鄰鍵的字（code-review 後補，設定照 test 定案的不再調）：口語兩個語料的題拆成一個字一題（每個語料前
+/// [`SINGLE_LIMIT`] 個字），第一次照票 08 的觸控模擬點（可能點到鄰鍵）、重打點對鍵，量法同觸控模擬集合。
+fn single(root: &Path, config: &Config, test_split: bool) {
+    let engine = load(root);
+    let taps = Taps::new(root);
+    let corpora: Vec<(String, Vec<Item>)> = if test_split {
+        load_corpora(root)
+            .unwrap()
+            .into_iter()
+            .filter(|(name, _)| COLLOQUIAL.contains(&name.as_str()))
+            .collect()
+    } else {
+        COLLOQUIAL
+            .iter()
+            .map(|name| {
+                let text = read(&root.join(qim_bench::dev_items(name)));
+                (name.to_string(), parse_corpus(&text).unwrap())
+            })
+            .collect()
+    };
+    let on = engine.clone().with_neighbor_readings(config.readings());
+    let mut total = TouchCompare::default();
+    for (name, items) in corpora {
+        let singles: Vec<Item> = items
+            .iter()
+            .flat_map(|item| {
+                item.units.iter().enumerate().map(move |(u, unit)| Item {
+                    units: vec![unit.clone()],
+                    line: item.line * 1000 + u,
+                    label: String::new(),
+                    weight: 1,
+                    context: None,
+                    typed: None,
+                })
+            })
+            .take(SINGLE_LIMIT)
+            .collect();
+        let tasks = singles
+            .into_iter()
+            .map(|item| {
+                let seed = format!("single\0{name}\0{}", item.line);
+                let typed = taps.noisy(&seed, &item);
+                let retype = taps.clean(&seed, &item);
+                Task {
+                    clean: is_clean(&item, &typed),
+                    item,
+                    typed,
+                    retype,
+                }
+            })
+            .collect();
+        let set = Set {
+            name: name.clone(),
+            tasks,
+        };
+        let (off, with) = (score(&engine, &set), score(&on, &set));
+        total = total.add(TouchCompare::of(&set, &off, &with));
+    }
+    println!(
+        "## 單字（{}，口語兩個語料各前 {SINGLE_LIMIT} 字；{}）\n\n{TOUCH_HEADER}",
+        if test_split { "test" } else { "dev" },
+        config.describe()
+    );
+    println!("{}", touch_row("開", &total));
+    println!(
+        "\n關：想打的字在第一頁 {}\n\n{}",
+        total.ranks_off.cell(),
+        breakdown(&total)
+    );
 }
 
 // ---------------------------------------------------------------- 按鍵機率的分布
@@ -1419,9 +1582,18 @@ fn weights(root: &Path) {
 
 // ---------------------------------------------------------------- 參數
 
-fn parse_args(args: &[String]) -> (PathBuf, Config) {
+/// 設定以外的選項（code-review 後補）：`--taps noisy|clean`（延遲送哪種觸控點擊，預設 clean）、
+/// `--split dev|test`（`single` 打哪個切分，預設 dev）。
+#[derive(Debug, Clone, Copy, Default)]
+struct Opts {
+    noisy_taps: bool,
+    test_split: bool,
+}
+
+fn parse_args(args: &[String]) -> (PathBuf, Config, Opts) {
     let mut root = PathBuf::from("../../..");
     let mut config = Config::default();
+    let mut opts = Opts::default();
     let mut it = args.iter();
     while let Some(flag) = it.next() {
         let value = it.next().unwrap_or_else(|| panic!("{flag} 要給值"));
@@ -1435,10 +1607,12 @@ fn parse_args(args: &[String]) -> (PathBuf, Config) {
             "--ambiguous" => {
                 config.ambiguous = (value != "none").then(|| value.parse().unwrap());
             }
+            "--taps" => opts.noisy_taps = value == "noisy",
+            "--split" => opts.test_split = value == "test",
             other => panic!("沒有這個選項：{other}"),
         }
     }
-    (root, config)
+    (root, config, opts)
 }
 
 fn main() {
@@ -1449,14 +1623,15 @@ fn main() {
         );
         std::process::exit(2);
     };
-    let (root, config) = parse_args(rest);
+    let (root, config, opts) = parse_args(rest);
     let started = Instant::now();
     match command.as_str() {
         "weights" => weights(&root),
         "dev" => dev(&root),
         "combo" => combo(&root, &config),
         "test" => test(&root, &config),
-        "latency" => latency(&root, &config),
+        "latency" => latency(&root, &config, opts.noisy_taps),
+        "single" => single(&root, &config, opts.test_split),
         other => panic!("沒有這個指令：{other}"),
     }
     eprintln!("花了 {:.0} 秒", started.elapsed().as_secs_f64());
