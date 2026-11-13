@@ -39,6 +39,10 @@ export interface InspectedCandidate {
 	rule?: number;
 	rerankPath?: number;
 	rerankInserted: boolean;
+	/** 鄰鍵讀法（M4 票 09c）換的每一碼：在剩下的輸入碼裡的位置（從 0 起）、打出的與換成的字母；不是鄰鍵讀法時是空的。 */
+	neighborSwaps: { position: number; typed: string; code: string }[];
+	/** 鄰鍵讀法的空間懲罰（已從路徑分扣掉）。 */
+	neighborPenalty?: number;
 }
 
 /** 綁定的 `Inspection` 讀成一般物件：綁定的 getter 每次都複製一份，讀一次、釋放完再畫。 */
@@ -100,6 +104,12 @@ function read(inspection: WasmInspection): Inspection {
 				rule: c.rule,
 				rerankPath: c.rerankPath,
 				rerankInserted: c.rerankInserted,
+				neighborSwaps: Array.from(c.neighborPositions, (position, k) => ({
+					position,
+					typed: c.neighborTyped[k],
+					code: c.neighborCodes[k],
+				})),
+				neighborPenalty: c.neighborPenalty,
 			})),
 		),
 		weights: i.weightLetters.map((letter, k) => ({
@@ -229,6 +239,13 @@ export function candidateSources(candidate: InspectedCandidate): {
 		}
 	} else {
 		add(candidate.kind, KIND_LABELS[candidate.kind]);
+	}
+	if (candidate.neighborSwaps.length > 0) {
+		const swaps = candidate.neighborSwaps
+			.map((s) => `第 ${s.position + 1} 碼 ${s.typed}→${s.code}`)
+			.join("、");
+		const penalty = candidate.neighborPenalty?.toFixed(2) ?? "";
+		add("neighbor", `鄰鍵（${swaps}，懲罰 ${penalty}）`);
 	}
 	if (candidate.rerankPath !== undefined) {
 		const inserted = candidate.rerankInserted;

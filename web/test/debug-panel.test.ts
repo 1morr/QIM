@@ -24,6 +24,7 @@ function word(segments: InspectedSegment[]): InspectedCandidate {
 		kind: "word",
 		segments,
 		rerankInserted: false,
+		neighborSwaps: [],
 	};
 }
 
@@ -59,6 +60,7 @@ test("英文、emoji、英文使用者詞、聯想照種類；重排與排位規
 		segments: [],
 		rule: 4,
 		rerankInserted: false,
+		neighborSwaps: [],
 	};
 	assert.deepEqual(candidateSources(english).codes, ["english", "rule4"]);
 	const inserted: InspectedCandidate = {
@@ -80,4 +82,19 @@ test("有萬用鍵的段標「萬用鍵」，切段欄附實際對到的碼", ()
 	assert.deepEqual(labels, ["詞庫", "萬用鍵"]);
 	assert.equal(segmentText(wild), "hiz（hio）→的人");
 	assert.equal(segmentText(segment("hio", "的人", "lexicon")), "hio→的人");
+});
+
+test("鄰鍵讀法標「鄰鍵」，寫出換了第幾碼與懲罰", () => {
+	const neighbor: InspectedCandidate = {
+		...word([segment("anr", "門口", "lexicon")]),
+		neighborSwaps: [{ position: 0, typed: "s", code: "a" }],
+		neighborPenalty: 0.8473,
+	};
+	const { codes, labels } = candidateSources(neighbor);
+	assert.deepEqual(codes, ["lexicon", "neighbor"]);
+	assert.equal(labels[1], "鄰鍵（第 1 碼 s→a，懲罰 0.85）");
+	assert.deepEqual(
+		candidateSources(word([segment("anr", "門口", "lexicon")])).codes,
+		["lexicon"],
+	);
 });
