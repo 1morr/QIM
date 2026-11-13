@@ -5,12 +5,14 @@
 ## 文件
 
 - `docs/design-brief.md`：需求與決定。決定衝突時以它為準。
-- `docs/research/facts-*.md`：查證過的外部事實，每條有編號與來源；索引在 brief〈事實索引〉。
+- `docs/research/`：一層、不分資料夾，檔名三種：`facts-<主題>.md` 是查證過的外部事實（每條有編號與來源，索引在 brief〈事實索引〉）；`<主題>.md` 是會更新的主題整理；`<主題>-<YYYY-MM-DD>.md` 是寫完就凍結的調查或實驗紀錄。
 - `docs/plan.md`：架構、依賴規則、測試策略（`.scratch/arch-diet/` 做完後縮成根目錄的 `ARCHITECTURE.md`）。
 - `docs/roadmap.md`：里程碑的順序、狀態與閱讀指引；還沒開工的里程碑各有一小節，開工後縮成一行連到它的 spec；〈不排里程碑〉收沒人接的遺留。
 - `docs/progress.md`：進行中里程碑的 session 紀錄。每個 session 的起點與終點。
 - `docs/decisions.md`：進行中里程碑的決策紀錄，一條一行，標決定者；驗收後跟著封存。
 - `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收（Agent 驗、使用者試）與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
+- `docs/development.md`：開發指令的單一來源；`docs/agents/`：給工程 skill 讀的票與里程碑慣例；`docs/archive/`：已驗收里程碑的紀錄。
+- 上面這些檔名與位置是固定的，別的 skill 靠它們找檔。`docs/` 第一層每多一個檔或資料夾，就在這一段加一行說明它是什麼（`scripts/check_docs.py` 擋）；不再維護的搬進 `docs/legacy/`。
 - `GLOSSARY.md`、`docs/adr/`：名詞表與架構決定，由 `/grill-with-docs` 按需建立；命名一律用名詞表的詞。
 
 ## 目錄
