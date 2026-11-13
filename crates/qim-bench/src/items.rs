@@ -23,6 +23,10 @@ pub struct Item {
     /// （M4 票 08）。有的話第一次打整題按這些鍵，卡住後一個字一個字重打時照 `units` 的碼（使用者看到打錯了，
     /// 重打想打的字）。
     pub typed: Option<Vec<Vec<Key>>>,
+    /// 發現打錯後照 `units` 的碼重打的鍵，每個單位一組；只有「觸控模擬」的題有（M4 票 09c）：使用者重打時點的是
+    /// 自己想打的鍵，每一碼一個觸控點對鍵的點擊（`Key::Weighted`，[`crate::Taps`]），帶著鄰鍵的機率。
+    /// `None` 時照 [`physical_key`] 重打（含打錯碼的題、沒打錯碼的集合）。載入題目時由 [`crate::load_typo_sets`] 填。
+    pub retyped: Option<Vec<Vec<Key>>>,
 }
 
 /// 基準模擬打字的單位：一段輸入碼與它該打出的文字。是題目檔的切法，和核心組字的〈分段〉（`Segment`）無關。
@@ -71,6 +75,7 @@ pub fn parse_fixed(text: &str) -> Result<Vec<Item>, String> {
             weight: 1,
             context: None,
             typed: None,
+            retyped: None,
         });
     }
     Ok(items)
@@ -214,6 +219,7 @@ pub fn substrings(items: &[Item], len: usize) -> Vec<Item> {
                 weight: 0,
                 context: None,
                 typed: None,
+                retyped: None,
             });
             line - 1
         });
@@ -250,6 +256,7 @@ fn per_character(number: usize, codes: &str, text: &str, weight: u64) -> Result<
         weight,
         context: None,
         typed: None,
+        retyped: None,
     })
 }
 

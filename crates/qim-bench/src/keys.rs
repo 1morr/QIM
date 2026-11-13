@@ -40,6 +40,11 @@ impl TouchSurface {
         Ok(Self { page, mm_per_unit })
     }
 
+    /// 佈局的字母頁（[`crate::Taps`] 找鍵與判斷點擊落在哪個鍵用）。
+    pub fn page(&self) -> &Page {
+        &self.page
+    }
+
     /// 在畫布座標 `(x, y)` 點一下：各字母的機率（組字中、Shift 沒開）；點的不是字母鍵附近時是 `None`。
     pub fn tap(&self, x: f64, y: f64) -> Option<Key> {
         let state = KeyState {

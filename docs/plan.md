@@ -140,7 +140,7 @@ flowchart LR
 | `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2 票 07 確認）；proc-macro 宣告介面，`uniffi-bindgen-swift` 從靜態函式庫產生綁定（library mode），它要的 `cli` feature 只在 `qim-ffi` 的 `bindgen` feature 開 | 一份介面產生兩種語言 |
 | `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
 | `rustc-hash` | 2.1.3 | `qim-databuild` 數詞級 trigram 的次數（兩千萬種 trigram 的雜湊表，§4.3） | rustc 自己用的雜湊，比標準庫的 SipHash 快得多；建置端不必防碰撞攻擊；票 08 的實驗也用它 |
-| `rand_chacha` | 0.10.0 | `qim-databuild` 產生打錯碼的基準集合（M4 票 08）：每題以那一行的 sha256 當種子的 ChaCha8 | rust-random 維護，官方保證跨平台、跨版本輸出相同；常態分布自己寫，不用數值可能隨小版本變的 `rand_distr` |
+| `rand_chacha` | 0.10.0 | `qim-databuild` 產生打錯碼的基準集合（M4 票 08）：每題以那一行的 sha256 當種子的 ChaCha8；`qim-bench` 抽觸控點對鍵的點擊（M4 票 09c），種子同樣是字串的 sha256 | rust-random 維護，官方保證跨平台、跨版本輸出相同；常態分布自己寫，不用數值可能隨小版本變的 `rand_distr` |
 | `strsim` | 0.11.1 | `qim-bench` 算字正確率的編輯距離（以字計的 Levenshtein） | 維護中、無依賴；不自己寫 |
 | `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU；網頁經 `qim-wasm` 編成 WebAssembly、開 SIMD128，§3.1）與量化（`qim-databuild` 匯入模型時經 `qim-neural`） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
 | `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |

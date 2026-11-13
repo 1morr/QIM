@@ -166,7 +166,7 @@ cargo xtask bench --lexicon quick-lexicon-words-hk --check   # 換成粵典詞�
 
 `--lexicon <id>` 放在最前面，讀 `build/packs/<id>/<id>.pack` 換掉方案指名的詞庫，其餘資料包不變；和印結果、`--check`、`--dev` 合用（`cargo xtask bench --lexicon <id> --dev --set …`）。baseline 是預設詞庫的數字，所以不能和 `--update-baseline` 合用，`--check` 照樣和它比、看換了詞庫有沒有變差；`--learning` 不收它。
 
-`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。按鍵照殼的做法送：字母照實體鍵位經 `qim_layout::PhysicalModel` 轉成按鍵機率（同網頁的 `pressCode`），觸控模擬的點擊經 `qim_layout::SpatialModel` 轉成按鍵機率（同網頁的 `tap`）。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`；每次上屏後換回空白的 `UserModel`，題內也不學（核心只在上屏時學；不開無痕，無痕連前文也不用）。「有前文」的題給前文時，兩次都先 `Session::set_context`：
+`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。按鍵照殼的做法送：字母照實體鍵位經 `qim_layout::PhysicalModel` 轉成按鍵機率（同網頁的 `pressCode`），觸控模擬的點擊經 `qim_layout::SpatialModel` 轉成按鍵機率（同網頁的 `tap`）；觸控模擬的題打錯後照碼重打時，每一碼點對鍵（`qim_bench::Taps`：同〈語料〉的觸控錯誤模型抽點擊、點到別的鍵就重抽，種子是集合名與行號的 sha256，載入題目時填 `Item::retyped`）。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`；每次上屏後換回空白的 `UserModel`，題內也不學（核心只在上屏時學；不開無痕，無痕連前文也不用）。「有前文」的題給前文時，兩次都先 `Session::set_context`：
 
 1. 逐鍵打完輸入碼、不選字，取當下的第一個候選當首選；沒有候選時首選是空字串。途中的首選拿來算跳動。
 2. 模擬使用者選字打出整題，算修正次數與按鍵數：
@@ -181,7 +181,7 @@ cargo xtask bench --lexicon quick-lexicon-words-hk --check   # 換成粵典詞�
 | `bench/fixed.tsv` | 固定必過題，一行 `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。輸入碼可以含分隔記號 `'`，照實體鍵盤的 `'` 鍵按（「回報」照打的記）。案例通過的那張票才加，不先加會紅的題 |
 | `bench/corpus/<名>.tsv`、`bench/colloquial/<名>.tsv` | 一個檔一個集合，集合名是檔名，兩個目錄間不能重名；先跑維基、再跑口語。格式見〈資料建置〉的〈語料〉 |
 | `bench/corpus/context/<名>.tsv`、`bench/colloquial/context/<名>.tsv` | 「有前文」的題，一行 `<前文><TAB><逐字速成碼，空格分隔><TAB><句子>`，由 `cargo xtask data` 產生（plan §5.2）。每個檔打兩次：給前文的集合 `<名>·前文`、不給前文的 `<名>·前文·不給`，都進 baseline、都由 `--check` 擋；不量每鍵延遲 |
-| `bench/colloquial/typo/<名>.tsv`、`bench/colloquial/touch/<名>.tsv` | 「含打錯碼」與「觸控模擬」的題，格式與產生方式見〈資料建置〉的〈語料〉（M4 票 08）。集合名 `<名>·打錯`、`<名>·觸控`，接在「有前文」的集合之後，都進 baseline、都由 `--check` 擋；不量每鍵延遲、不進學過的學習資料。觸控模擬要讀 `build/layouts/gboard-quick.json`，沒有就失敗、提示先跑 `cargo xtask data` |
+| `bench/colloquial/typo/<名>.tsv`、`bench/colloquial/touch/<名>.tsv` | 「含打錯碼」與「觸控模擬」的題，格式與產生方式見〈資料建置〉的〈語料〉（M4 票 08）。集合名 `<名>·打錯`、`<名>·觸控`，接在「有前文」的集合之後，都進 baseline、都由 `--check` 擋；不量每鍵延遲、不進學過的學習資料。觸控模擬的集合另用鄰鍵讀法關掉（`Options::neighbor_readings: false`）打一次，報告多一張表：開與關的修正次數、打錯的題想打的整句在第一頁的比例與平均名次（只算在第一頁內的）；baseline 記開著的（預設選項）。觸控模擬要讀 `build/layouts/gboard-quick.json`，沒有就失敗、提示先跑 `cargo xtask data` |
 | `bench/personal/rime-userdb.tsv` | 個人集的題目：第一行 `# rime-userdb.txt sha256 <sha256>` 記轉自哪份資料，之後一行 `<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 `bench/personal/rime-userdb.txt` 轉出（見〈資料建置〉的〈個人集〉）；集合名 `personal`，語料不能用這個名字 |
 | `bench/baseline.json` | `{"<集合名>": {"wrong": <答錯數>, "correction_count": <修正次數總和>, "wrong_lines": "<答錯的行號，如 1-3,7>"}}`，固定題不記。只用 `--update-baseline` 改，同一個 commit 說明原因 |
 | `bench/personal/baseline.json` | 個人集的 baseline，格式同上，只在本機 |
@@ -233,7 +233,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 ### 每鍵延遲
 
-每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分三組：「全部」；「第 20 碼起」只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋，「輸入數」是長到 20 碼的輸入有幾個；「選開頭一段」是打完有兩段以上的輸入再按分段數那麼多次 ←（不計時）移到第一段、選它的首選（`select(0)`）的那一次，選定後剩下的輸入碼從頭重建 lattice，是最重的一種鍵（規則在 `qim_bench::lefts_to_first_segment`）。三組再各量兩份學習資料：「空白」是空白的 `UserModel`（同基準其他部分），「學過」是一個 `UserModel` 依序照修正次數的模擬學完各語料集合與「有前文」的題（給前文，同 `--learning` 的學習開）之後（M3 票 12 的量法），計時的輸入就是學過的句子，偏向最壞情況。輸入另量一批「含萬用鍵的輸入」：同一批輸入、每個輸入的第一碼換成方案的萬用鍵（速成的 `z`，規則在 `qim_bench::wildcard_inputs`，M4 票 18b），空白、學過、原生、WebAssembly 都和基準的輸入一樣量，報告的「批次」欄分開兩批；萬用鍵在開頭時每個開頭長度的碼都要展開它，比沒有萬用鍵的輸入每鍵慢。原生的 p95 由 `--check` 擋，兩批輸入同一組上限，在 [M4 spec〈每鍵延遲上限〉](../.scratch/m4/spec.md#每鍵延遲上限)（`qim_bench::p95_limits_ms`），報告的「p95 上限」欄列出、超過的註明；WebAssembly 只報；baseline 都不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上、量選開頭一段的輸入和原生不同、方案沒有萬用鍵）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
+每次 `cargo xtask bench`（`--learning` 以外的模式）都在報告最後印每鍵延遲：每次按鍵到 `Snapshot` 回來的 p50 / p95，單位 µs，原生與 WebAssembly 各一次，各分三組：「全部」；「第 20 碼起」只算每個輸入的第 20 鍵起（組字已有 19 碼再按的鍵），看連打變長時延遲會不會跟著長，前 19 鍵算進來會稀釋，「輸入數」是長到 20 碼的輸入有幾個；「選開頭一段」是打完有兩段以上的輸入再按分段數那麼多次 ←（不計時）移到第一段、選它的首選（`select(0)`）的那一次，選定後剩下的輸入碼從頭重建 lattice，是最重的一種鍵（規則在 `qim_bench::lefts_to_first_segment`）。三組再各量兩份學習資料：「空白」是空白的 `UserModel`（同基準其他部分），「學過」是一個 `UserModel` 依序照修正次數的模擬學完各語料集合與「有前文」的題（給前文，同 `--learning` 的學習開）之後（M3 票 12 的量法），計時的輸入就是學過的句子，偏向最壞情況。輸入另量一批「含萬用鍵的輸入」：同一批輸入、每個輸入的第一碼換成方案的萬用鍵（速成的 `z`，規則在 `qim_bench::wildcard_inputs`，M4 票 18b），空白、學過、原生、WebAssembly 都和基準的輸入一樣量，報告的「批次」欄分開兩批；萬用鍵在開頭時每個開頭長度的碼都要展開它，比沒有萬用鍵的輸入每鍵慢。原生每一鍵送觸控點對鍵的點擊（`qim_bench::Taps`，選項預設、鄰鍵讀法開，萬用鍵 `z` 照它在佈局上的鍵點，分隔記號照舊；種子是輸入碼），WebAssembly 的腳本照實體鍵送（沒有鄰鍵讀法）。原生的 p95 由 `--check` 擋，兩批輸入同一組上限，在 [M4 spec〈每鍵延遲上限〉](../.scratch/m4/spec.md#每鍵延遲上限)（`qim_bench::p95_limits_ms`），報告的「p95 上限」欄列出、超過的註明；WebAssembly 只報；baseline 都不記。量不了（沒有 Node、綁定編不起來、計時結果和輸入對不上、量選開頭一段的輸入和原生不同、方案沒有萬用鍵）則是錯誤，整個基準失敗、不印結果，`--check` 也是，免得延遲安靜地缺席。表頭上方註明機器（CPU、作業系統、架構），「環境」欄註明原生的 build profile 與 WebAssembly 的 runtime 版本。
 
 - 量哪些輸入：固定題與各語料集合的每一題（個人集不量，各機器才比得起來）和它們的含萬用鍵版本（見上），每題從空的組字逐鍵打輸入碼、不選字；打完有兩段以上的另量「選開頭一段」那一鍵（見上）。不含載入資料包。
 - 原生：`qim-bench` 在同一個行程裡，每題用新的 `Session`，各題共用那份學習資料的一份複本（打字與選開頭一段都不上屏、不學），只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。
@@ -250,7 +250,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 `cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開（plan §5.2）。「有前文」的題只打給前文的（集合名 `<名>·前文`）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關同一般模式，每題用空白的 `UserModel`、上屏後換回空白的（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
 
-`--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
+`--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到、觸控集合鄰鍵讀法開著的修正次數比關著的多、照實體鍵送的集合（固定題、語料、「有前文」兩種、含打錯碼）用鄰鍵讀法關掉另打一次後逐題結果不同（列出前幾個題號）；後兩條讓 `--check` 多打一輪這些集合。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 
 ## 網頁
 

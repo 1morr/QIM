@@ -142,6 +142,12 @@ fn with_wasm(wasm: WasmTimer) -> Timers {
     }
 }
 
+/// 真的原生計時器，按鍵照兩鍵佈局（[`TWO_KEY_LAYOUT`]）送觸控點對鍵的點擊，佈局沒有的字母照 `Key::for_input`。
+fn real_native(engine: &Engine, user: &UserModel, inputs: &[String]) -> Timing {
+    let taps = qim_bench::Taps::from_json(TWO_KEY_LAYOUT).unwrap();
+    qim_bench::native_timing_with(engine, user, inputs, Some(&taps))
+}
+
 /// 假的原生計時器：每鍵 0.05 ms、選開頭一段 0.5 ms，都在每鍵延遲上限內。
 fn fast_native(engine: &Engine, user: &UserModel, inputs: &[String]) -> Timing {
     fixed_native(0.05, 0.5)(engine, user, inputs)
@@ -1418,7 +1424,7 @@ fn a_scheme_without_a_wildcard_is_an_error() {
 fn the_real_native_timer_times_every_key_and_the_same_selects_as_wasm() {
     let repo = repo_with_long_input();
     let timers = Timers {
-        native: &qim_bench::native_timing_with,
+        native: &real_native,
         wasm: &slow_wasm,
     };
     let outcome = qim_bench::run(repo.path(), Mode::Report, None, timers).unwrap();
@@ -1984,4 +1990,150 @@ fn a_mistyped_composition_is_cleared_without_turning_pages() {
         (item.correction_count, item.keys, item.finished),
         (1, 4, true)
     );
+}
+
+/// 觸控模擬的題載入時填 `retyped`（M4 票 09c）：每個單位照碼每一碼一個點對鍵的點擊；含打錯碼的題沒有。
+#[test]
+fn touch_items_get_on_key_taps_for_retyping() {
+    let repo = repo();
+    write(
+        repo.path(),
+        qim_bench::TOUCH_LAYOUT,
+        TWO_KEY_LAYOUT.as_bytes(),
+    );
+    write(
+        repo.path(),
+        "bench/colloquial/touch/toy.tsv",
+        "60.0,25.0 60.0,25.0\ta b\t日月\n".as_bytes(),
+    );
+    write(
+        repo.path(),
+        "bench/colloquial/typo/toy.tsv",
+        "b\ta\t日\n".as_bytes(),
+    );
+    let sets = qim_bench::load_typo_sets(repo.path()).unwrap();
+    let items = |name: &str| &sets.iter().find(|(n, _)| n == name).unwrap().1;
+    let touch = &items("toy·觸控")[0];
+    // 第一次打的點擊都點在 b 上（第一個字打錯），重打照碼點對鍵。
+    let retyped = touch.retyped.as_ref().expect("觸控的題有重打的點擊");
+    let tops: Vec<Vec<Option<char>>> = retyped
+        .iter()
+        .map(|unit| unit.iter().map(qim_bench::top_char).collect())
+        .collect();
+    assert_eq!(tops, [[Some('a')], [Some('b')]]);
+    assert!(
+        retyped
+            .iter()
+            .flatten()
+            .all(|key| matches!(key, Key::Weighted(_)))
+    );
+    assert!(items("toy·打錯")[0].retyped.is_none());
+    // 每次載入抽到同樣的點。
+    let again = qim_bench::load_typo_sets(repo.path()).unwrap();
+    assert_eq!(sets, again);
+}
+
+/// 觸控集合另用鄰鍵讀法關掉打一次；報表有開／關的修正次數與第一頁比例；`--check` 在開著不比關著多時通過。
+#[test]
+fn touch_sets_are_scored_with_the_neighbour_readings_on_and_off() {
+    let repo = repo();
+    write(
+        repo.path(),
+        qim_bench::TOUCH_LAYOUT,
+        TWO_KEY_LAYOUT.as_bytes(),
+    );
+    // 第 2 行要打 a 卻點到 b（打錯）。
+    write(
+        repo.path(),
+        "bench/colloquial/touch/toy.tsv",
+        "10.0,25.0\ta\t日\n60.0,25.0\ta\t日\n".as_bytes(),
+    );
+    let outcome = run(repo.path(), Mode::UpdateBaseline).unwrap();
+    let set = outcome.sets.iter().find(|s| s.name == "toy·觸控").unwrap();
+    let off = set.neighbor_off.expect("觸控集合有關著時的結果");
+    assert!(set.correction_count() <= off.correction_count);
+    assert_eq!(set.mistyped_page().mistyped, 1);
+    assert_eq!(off.page.mistyped, 1);
+    // 其他集合不另打。
+    assert!(
+        outcome
+            .sets
+            .iter()
+            .filter(|s| s.name != "toy·觸控")
+            .all(|s| s.neighbor_off.is_none())
+    );
+    let report = outcome.report();
+    assert!(
+        report.contains("| 集合 | 題數 | 修正（開） | 修正（關） |"),
+        "{report}"
+    );
+    assert!(report.contains("| toy·觸控 | 2 | "), "{report}");
+    assert_eq!(check(&repo), Vec::<String>::new());
+}
+
+/// 解出的集合改成「開著比關著多一次修正」：閘門報出兩個數字。
+fn touch_result_with(on: usize, off: usize) -> qim_bench::SetResult {
+    let repo = repo();
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let mut set = outcome.sets[0].clone();
+    for item in &mut set.items {
+        item.correction_count = 0;
+    }
+    set.items[0].correction_count = on;
+    set.neighbor_off = Some(qim_bench::NeighborOff {
+        correction_count: off,
+        page: qim_bench::PageStats::default(),
+    });
+    set
+}
+
+#[test]
+fn the_touch_gate_flags_more_corrections_with_the_neighbour_readings_on() {
+    let violation = qim_bench::touch_violation(&touch_result_with(3, 2)).expect("開著比關著多");
+    assert!(
+        violation.contains('3') && violation.contains('2'),
+        "{violation}"
+    );
+    assert!(violation.contains("toy"), "{violation}");
+    // 相等或較少、或不是觸控集合（沒有關著的結果）都沒有違規。
+    assert!(qim_bench::touch_violation(&touch_result_with(2, 2)).is_none());
+    assert!(qim_bench::touch_violation(&touch_result_with(1, 2)).is_none());
+    let mut plain = touch_result_with(5, 0);
+    plain.neighbor_off = None;
+    assert!(qim_bench::touch_violation(&plain).is_none());
+}
+
+/// 照實體鍵送的集合：開關前後逐題相同沒有違規，有一題的任何欄位不同就報出題號。
+#[test]
+fn the_physical_gate_flags_items_that_differ_between_the_switch_on_and_off() {
+    let repo = repo();
+    let outcome = run(repo.path(), Mode::Report).unwrap();
+    let on = outcome.sets[0].clone();
+    assert!(qim_bench::physical_violation("toy", &on, &on.clone()).is_none());
+    let mut off = on.clone();
+    off.items[1].keys += 1;
+    let violation = qim_bench::physical_violation("toy", &on, &off).expect("第 2 題不同");
+    assert!(violation.contains("toy"), "{violation}");
+    assert!(
+        violation.contains(&on.items[1].line.to_string()),
+        "{violation}"
+    );
+    assert!(violation.contains("1 題"), "{violation}");
+    // 首選不同也算（整個結構比）。
+    let mut off = on.clone();
+    off.items[0].correct = !off.items[0].correct;
+    assert!(qim_bench::physical_violation("toy", &on, &off).is_some());
+}
+
+/// `--check` 對固定題、語料、有前文兩種、含打錯碼都另打一次比較；實體鍵盤不換讀法，所以現有的集合都沒有違規。
+#[test]
+fn check_compares_the_physical_sets_with_the_switch_off_and_finds_no_difference() {
+    let repo = repo_with_context();
+    write(
+        repo.path(),
+        "bench/colloquial/typo/toy.tsv",
+        "b a\ta b\t日月\n".as_bytes(),
+    );
+    run(repo.path(), Mode::UpdateBaseline).unwrap();
+    assert_eq!(check(&repo), Vec::<String>::new());
 }

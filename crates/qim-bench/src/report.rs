@@ -97,6 +97,44 @@ fn typo_table<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {
     )
 }
 
+/// 觸控模擬的集合（M4 票 09c）：鄰鍵讀法開與關的修正次數，與打錯的題想打的整句在第一頁的比例、平均名次；
+/// 沒有這種集合時是空字串。
+fn touch_table<'a>(sets: impl Iterator<Item = &'a SetResult>) -> String {
+    let rows: String = sets
+        .filter_map(|set| {
+            let off = set.neighbor_off?;
+            let on = set.mistyped_page();
+            let rank = |rank: Option<f64>| rank.map_or_else(|| "—".into(), |r| format!("{r:.2}"));
+            Some(format!(
+                "| {} | {} | {} | {} | {} | {}/{} ({}) | {}/{} ({}) | {} | {} |\n",
+                set.name,
+                set.total(),
+                set.correction_count(),
+                off.correction_count,
+                on.mistyped,
+                on.on_page,
+                on.mistyped,
+                percent(on.on_page_rate()),
+                off.page.on_page,
+                off.page.mistyped,
+                percent(off.page.on_page_rate()),
+                rank(on.mean_rank()),
+                rank(off.page.mean_rank()),
+            ))
+        })
+        .collect();
+    if rows.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n觸控模擬的集合：照碼重打時每一碼點觸控點對鍵的點擊（`qim_bench::Taps`），鄰鍵讀法開（預設）與關各打一次；\
+         第一頁比例是打錯的題逐鍵打完不選字、想打的整句在第一頁的比例，名次只算在第一頁內的題\n\n\
+         | 集合 | 題數 | 修正（開） | 修正（關） | 打錯 | 第一頁（開） | 第一頁（關） | 平均名次（開） | 平均名次（關） |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n\
+         {rows}"
+    )
+}
+
 /// 翻盤清單每個方向最多列幾題，其餘只報題數。
 const FLIPS_SHOWN: usize = 20;
 
@@ -160,6 +198,7 @@ pub fn render(outcome: &Outcome) -> String {
     out.push_str(&length_groups(outcome.scored_sets()));
     out.push_str(&context_pairs(&outcome.sets));
     out.push_str(&typo_table(outcome.sets.iter()));
+    out.push_str(&touch_table(outcome.sets.iter()));
 
     out.push_str("\n翻盤清單（和 baseline 比）\n");
     for set in outcome.scored_sets() {
@@ -231,6 +270,7 @@ pub fn render_dev(outcome: &DevOutcome) -> String {
     out.push_str(&length_groups(outcome.sets.iter().filter(|s| !is_short(s))));
     out.push_str(&context_pairs(&outcome.sets));
     out.push_str(&typo_table(outcome.sets.iter()));
+    out.push_str(&touch_table(outcome.sets.iter()));
     let fixed = &outcome.fixed;
     out.push_str(&format!(
         "\n固定題 {}/{} 通過\n",
@@ -289,6 +329,8 @@ fn latency(latency: &Latency) -> String {
          學習資料「空白」是空白的 UserModel，「學過」是一個 UserModel 依序學完各語料集合與「有前文」的題\
          （給前文）之後（WebAssembly 先 loadUserDict）。\
          「含萬用鍵的輸入」是同一批輸入、每個輸入的第一碼換成萬用鍵（`qim_bench::wildcard_inputs`），上限相同。\
+         原生的每一鍵送觸控點對鍵的點擊（`qim_bench::Taps`，鄰鍵讀法開、萬用鍵照它在佈局上的鍵點），\
+         WebAssembly 照實體鍵送（`web/bench/latency.ts`，沒有鄰鍵讀法）。\
          WebAssembly 用 {WASM_BINDINGS}（`cargo xtask bench` 以 release 編）。\n\n\
          | 批次 | 學習資料 | 環境 | 輸入 | 輸入數 | 鍵數 | p50 | p95 | p95 上限 |\n\
          | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |\n",

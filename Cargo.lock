@@ -1726,6 +1726,7 @@ version = "0.0.0"
 dependencies = [
  "qim-core",
  "qim-layout",
+ "rand_chacha 0.10.0",
  "serde",
  "serde_json",
  "sha2",

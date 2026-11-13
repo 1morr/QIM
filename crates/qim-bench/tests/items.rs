@@ -22,6 +22,7 @@ fn item(units: Vec<Unit>, line: usize, label: &str, weight: u64) -> Item {
         label: label.into(),
         weight,
         typed: None,
+        retyped: None,
     }
 }
 
@@ -135,7 +136,7 @@ fn typo_reads_typed_keys_per_character_and_allows_an_omitted_character() {
     let tops: Vec<char> = typed[0].iter().filter_map(top_char).collect();
     assert_eq!(tops, ['r', 'a']);
     assert!(
-        matches!(typed[0][0], Key::Weighted(_)),
+        matches!(typed[0][0], Key::Physical(_)),
         "實體鍵送按鍵機率，同網頁"
     );
 }
