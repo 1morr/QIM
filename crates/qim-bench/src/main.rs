@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use qim_bench::{Mode, Timers, native_timing_with, node_wasm_timer, run, run_dev};
+use qim_bench::{Mode, Taps, Timers, native_timing_with, node_wasm_timer, run, run_dev};
 
 const USAGE: &str = "用法：qim-bench [--lexicon <id>] [--check | --update-baseline | --learning | --dev [--set <鍵>=<值>]...]";
 
@@ -43,8 +43,19 @@ fn main() -> ExitCode {
         }
     };
     let root = Path::new(".");
+    // 原生每鍵延遲照觸控點對鍵送（M4 票 09c）。
+    let taps = match Taps::load(root) {
+        Ok(taps) => taps,
+        Err(error) => {
+            eprintln!("{error}");
+            eprintln!("bench 失敗");
+            return ExitCode::FAILURE;
+        }
+    };
+    let native =
+        |engine: &_, user: &_, inputs: &_| native_timing_with(engine, user, inputs, Some(&taps));
     let timers = Timers {
-        native: &native_timing_with,
+        native: &native,
         wasm: &node_wasm_timer(root),
     };
     let outcome = match run(root, mode, lexicon, timers) {

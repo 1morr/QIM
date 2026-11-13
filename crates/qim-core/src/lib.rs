@@ -13,6 +13,7 @@ mod language_model;
 mod lattice;
 mod lexicon;
 mod manifest;
+mod neighbor;
 mod pack;
 mod pack_index;
 mod punctuation;
@@ -46,9 +47,9 @@ pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
     CONTEXT_LIMIT, Candidate, CandidateKind, Composition, ContextState, InspectedCandidate,
-    InspectedSegment, Inspection, Key, KeyError, Options, PAGE_SIZE, PrecedingChar,
-    RERANK_CACHE_LIMIT, RERANK_CONTEXT, RERANK_PATHS, RerankRequest, Reranked, ScoredPath, Segment,
-    SegmentSource, Session, ShiftKey, ShiftSwitch, Snapshot,
+    InspectedNeighbor, InspectedSegment, Inspection, Key, KeyError, Options, PAGE_SIZE,
+    PrecedingChar, RERANK_CACHE_LIMIT, RERANK_CONTEXT, RERANK_PATHS, RerankRequest, Reranked,
+    ScoredPath, Segment, SegmentSource, Session, ShiftKey, ShiftSwitch, Snapshot, Swap,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{

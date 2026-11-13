@@ -1,6 +1,6 @@
 # 09c: 觸控鄰鍵讀法進核心
 
-Status: ready-for-agent
+Status: done
 Blocked by: 09b
 讀: `docs/research/tolerance.md`〈Gboard 式的鄰鍵讀法〉；`scripts/experiments/neighbor-readings/README.md`；票 09b 的 Comments；brief §1.3 對照表的 Gboard 那列、§4.8、§7；plan §2.1、§2.4、§2.6〈空間模型〉、§5.2；spec〈每鍵延遲上限〉〈共同規則〉；`docs/decisions.md` 票 09b 那幾條
 
@@ -19,9 +19,53 @@ Blocked by: 09b
 
 ## 驗收
 
-- [ ] 核心測試（先紅後綠）：觸控打錯一碼時想打的字或詞出現在第 2 格起、不是首選；實體鍵盤同一串候選不變；開關關掉時候選不變；選了鄰鍵讀法學的是換過的碼。
-- [ ] `bench --check` 通過；觸控集合修正次數與第一頁比例對照票 09b 的 test 數字貼在 Comments（相差大時說明原因）；每鍵延遲在上限內。
-- [ ] Playwright：觸控鍵盤點在錯鍵中心時，候選列第 2 格起有想打的字（截圖）；設定關掉後沒有；實體鍵盤打同一串沒有；debug 面板標出鄰鍵讀法。
-- [ ] 文件依上面改寫；`cargo xtask check` 綠燈。
+- [x] 核心測試（先紅後綠）：觸控打錯一碼時想打的字或詞出現在第 2 格起、不是首選；實體鍵盤同一串候選不變；開關關掉時候選不變；選了鄰鍵讀法學的是換過的碼。
+- [x] `bench --check` 通過；觸控集合修正次數與第一頁比例對照票 09b 的 test 數字貼在 Comments（相差大時說明原因）；每鍵延遲在上限內。
+- [x] Playwright：觸控鍵盤點在錯鍵中心時，候選列第 2 格起有想打的字（截圖）；設定關掉後沒有；實體鍵盤打同一串沒有；debug 面板標出鄰鍵讀法。
+- [x] 文件依上面改寫；`cargo xtask check` 綠燈。
 
 ## Comments
+
+- 核心（`827f13e`、`c683ba9`）：核心靠變體分來源，`Key::Weighted` 只代表觸控，實體鍵盤改送新的 `Key::Physical`（`Key::parse` 加 `physical`，網頁 `pressCode` 與基準的 `physical_key` 改送它），照 LatinIME 只對有座標的觸控事件用鄰鍵資訊，寫回 plan §2.1。`Options::neighbor_readings` 預設開；鄰鍵讀法的 lattice 第一次收到觸控的按鍵機率時才建。票 09b 的 review 留下的 (3)：位置一律用位元組位移，加 ASCII 斷言。(4)：`Reading` enum、`ColumnEdge`、`NeighborEdge`、`NeighborSpan`、`neighbor::Alternative` 取代旗標與 tuple。選開頭一段、撤銷學習後重算時，剩下的碼保留觸控機率。核心測試 `crates/qim-core/tests/neighbor_readings.rs` 14 個，涵蓋驗收的四種情況與萬用鍵兩條（`neighbor.rs` 的單元測試），寫在實作前、當時編不過即紅。另做變異：鄰鍵讀法一律關掉，6 個紅；觸控判斷拿掉，實體鍵那條紅；萬用鍵規則拿掉，單元測試紅。
+- dev 量（第 2 格、floor 0.2 為準，兩個語料合計修正次數，關 9,759）：現行（只插蓋滿整串的）8,491（−13.0%）；第 3 格、第 5 格同為 8,491，只差名次；補只蓋住開頭一段的讀法，共用 2 個名額 8,503（+12）、另加 1 個名額 8,885（+394）。所以不補開頭一段，格數維持第 2 格（手機候選列一次只看得到約 4 個，第 5 格看不到）。實驗碼量完還原。
+- `bench --check`（`c683ba9`，負載 5.3–8.6）通過。觸控集合（test）照票 09b 的量法（重打點觸控點對鍵），和票 09b 的 test 數字逐字相同：修正次數開 8,658、關 9,892（−12.5%）；打錯的題整句在第一頁 644／1,814（35.5%），平均第 2.18、2.24 名（兩個語料）。照實體鍵送的集合（固定題、語料、有前文、含打錯碼）開關前後逐題相同；baseline 只動兩個觸控集合的修正次數。
+- 每鍵延遲：原生每一鍵送觸控點對鍵的點擊、鄰鍵讀法開，p95（µs）如下，都在上限內；空白的選開頭一段 4.05 ms 離 5 ms 不遠。WebAssembly 的計時腳本照實體鍵送，只報。
+  - 空白：189／202／4,054。
+  - 學過：343／628／5,850。
+  - 含萬用鍵空白：437／370／4,298。
+  - 含萬用鍵學過：685／545／6,096。
+  - bench 子代理在 load 4–7 量的兩次：空白選開頭一段 4,045、4,287。
+- bench（`2331775`，子代理照計畫做）：`qim_bench::Taps` 照票 08 的觸控錯誤模型抽點擊、點到別的鍵重抽。`qim-bench` 不能依賴 `qim-databuild`，參數複製一份，由 `xtask/tests/shared_paths.rs` 比對；加依賴 `rand_chacha`。觸控集合另用鄰鍵讀法關掉打一次，報開與關的修正次數、第一頁比例與平均名次（平均名次票沒要求，順手報）。閘門兩條：觸控集合開著的修正次數比關著的多、照實體鍵送的集合開關前後逐題不同。`--check` 因此多打一輪，約多 8%。
+- 網頁（`c5522ee`、`f66de6b`）：wasm 加 `setNeighborReadings`；設定表加「容錯（觸控鄰鍵）」；debug 面板標「鄰鍵（第 N 碼 s→a，懲罰 x）」（`InspectedCandidate::neighbor`）。Playwright `e2e/neighbor-readings.spec.ts` 4 條：
+  - 點錯在錯鍵靠想打的鍵那側時，第 2 格起有門口，面板標鄰鍵。
+  - 設定關掉後沒有。
+  - 實體鍵盤打同一串沒有。
+  - 重排開著時，重排插入的「刷口」在第 2 格，門口在第 3 格，仍在手機候選列看得到的範圍內（讀回截圖確認）。
+  - 截圖在 `.scratch/m4/evidence/09c-*.png`。另亂按 220 步（觸控各種位置、退格、選候選、空白、中途切開關、分隔鍵、Enter），沒有頁面錯誤（`09c-exploratory.png`）。
+- 鄰鍵讀法與停鍵重排：兩者都從第 2 格起插，同時出現時重排的在前，鄰鍵讀法往後一格（plan §2.4）。bench 的數字是重排關著量的（基準不跑重排），Playwright 只守一個例子。model-ladder 打字送 `Letter`，鄰鍵讀法不會啟動，照實體鍵送的集合 baseline 也逐字沒變，所以不重跑。重排開著時觸控集合的修正次數，model-ladder 沒有觸控的路，量不了，留給收尾票 31。
+- 文件：brief §1.3 Gboard 那列、§1.5、§4.8、§7；plan §1.4（`rand_chacha`）、§2.1、§2.4、§2.5、§2.6、§3.1、§5.2；`docs/development.md`；名詞表；`docs/research/tolerance.md` 的結論補「採用」。`docs/decisions.md` 的（使用者定）那條協調者已在主分支記過（2026-11-14 採用、預設開），這裡不重記。
+- code-review（`a98f81f` 起）已處理：原樣讀法沒有候選時鄰鍵讀法會變首選（先紅後綠，改成不插）；位置單位統一；`(char, f64)` 拆成 `Alternative`；`LETTERS` 改名。
+- code-review 沒處理，都是判斷題：
+  - 鄰鍵讀法的 `(code, penalty)` 仍散在 `ColumnEdge`、`Node`、`NeighborSpan`（`Node` 的懲罰是累計的，語意不同）。
+  - `Session` 的 `tapped` 旗標和 `key_weights` 成對。
+  - bench 的 `Options { neighbor_readings: false, .. }` 在兩處各組一次；觸控錯誤模型的參數是 5 個散開的常數，抽點的演算法也複製了一份（`shared_paths` 只比常數）。
+  - `physical_violations` 收 7 個參數、用集合名字尾判斷種類。
+  - wasm 用三條平行陣列給鄰鍵的換碼。
+  - 組字中途才把開關打開時，前面已打的碼沒有存觸控機率，從下一碼起才有（plan §2.1 已寫明）。
+- plan §0 的命名對照表：協調者確認要加（照使用者同意的名詞表做的對照），加「鄰鍵讀法」一列（`Options::neighbor_readings`、模組 `neighbor`、`Engine::neighbor_edges_ending`、`InspectedCandidate::neighbor`，原樣讀法是 `Reading::Literal`）；「容錯」那列原本指 `Correction`，程式裡沒有這個型別，改成「四種修正沒做、沒有識別符；速成的容錯是鄰鍵讀法」；按鍵機率那列補 `Key::Physical`。
+
+Session 紀錄：觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分來源）；bench 重打點觸控、兩條閘門；test 修正 −12.5%、第一頁 35.5% 同 09b；網頁開關與面板標記
+決定：核心分觸控與實體鍵：`Key::Weighted` 只代表觸控，實體鍵盤改送新的 `Key::Physical`，`Key::parse` 加 `physical`（Agent 定）
+決定：萬用鍵不換也不換成萬用鍵，有萬用鍵的段整段不換，協調者定（Agent 定）
+決定：票的「含萬用鍵」是筆誤，開關前後逐題相同的閘門照「含打錯碼」與照實體鍵送的集合做，協調者定（Agent 定）
+決定：維持 floor 0.2，點在錯鍵正中心不出鄰鍵讀法，Playwright 改點在錯鍵靠想打的鍵那側，協調者定（Agent 定）
+決定：只蓋住開頭一段的鄰鍵讀法不插，dev 補了修正次數變多（Agent 定）
+決定：格數維持第 2 格，dev 第 2、3、5 格修正次數相同（Agent 定）
+決定：停鍵重排和鄰鍵讀法同時出現時重排的在前，寫進 plan §2.4，協調者定（Agent 定）
+決定：名詞表新增鄰鍵讀法並改寫容錯等四條（使用者同意）
+決定：觸控點對鍵的抽點法複製進 qim-bench、參數由 shared_paths 比對，加依賴 rand_chacha（Agent 定）
+決定：原樣讀法（改錯的比較基準）改成關掉鄰鍵讀法（Agent 定）
+決定：原樣讀法沒有候選時鄰鍵讀法不插，code-review 後改（Agent 定）
+決定：model-ladder 不重跑（送 Letter、照實體鍵送的集合不變）；重排開著時的觸控修正次數留給收尾票 31（Agent 定）
+決定：WebAssembly 的延遲照舊照實體鍵送、只報（Agent 定）
+決定：plan §0 命名對照表加鄰鍵讀法、修容錯那列，協調者定（Agent 定）

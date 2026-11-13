@@ -10,8 +10,10 @@ mod baseline;
 mod items;
 mod keys;
 mod latency;
+mod neighbor;
 mod report;
 mod score;
+mod taps;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use qim_core::{
-    EmojiPack, Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Pack, Ranking,
-    SchemePack, WordTrigramPack,
+    EmojiPack, Engine, EnglishPack, LanguageModelPack, Lexicon, LexiconPack, Options, Pack,
+    Ranking, SchemePack, WordTrigramPack,
 };
 use sha2::{Digest, Sha256};
 
@@ -34,12 +36,18 @@ pub use latency::{
     WASM_BINDINGS, WasmTimer, lefts_to_first_segment, native_timing, native_timing_with,
     node_wasm_timer, parse_timing, percentile, wildcard_inputs,
 };
+pub use neighbor::{physical_violation, touch_violation};
 /// 照修正次數的模擬依序學完題目的 `UserModel`（延遲的「學過」那組）；萬用鍵實驗也用它（M4 票 11）。
 pub use score::learned_model;
 /// 打一個集合，指標同基準；模型階梯實驗用它照基準的定義打自己挑的題（M3 票 07）。
 pub use score::score as score_set;
 pub use score::{
-    Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, SetResult, TypoStats,
+    Failure, GroupStats, ItemResult, LENGTH_GROUPS, LearningSet, Metrics, NeighborOff, PageStats,
+    SetResult, Typed, TypoStats, score_touch,
+};
+pub use taps::{
+    TOUCH_DOWN_MM, TOUCH_EDGE_PULL_SIGMA, TOUCH_ROTATION_DEG, TOUCH_SIGMA_X_MM, TOUCH_SIGMA_Y_MM,
+    Taps,
 };
 
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
@@ -268,8 +276,9 @@ pub fn run(
         sets.extend(score_with_and_without_context(&engine, name, items));
     }
     // 打錯碼的題（M4 票 08）不量延遲、不進學過的學習資料：輸入碼和一般的題同一批句子。
-    for (name, items) in load_typo_sets(root)? {
-        sets.push(score::score(&engine, &name, &items, false));
+    let typo_sets = load_typo_sets(root)?;
+    for (name, items) in &typo_sets {
+        sets.push(score_typo_set(&engine, name, items));
     }
     let personal =
         load_personal(root)?.map(|items| score::score(&engine, PERSONAL_SET, &items, true));
@@ -301,6 +310,16 @@ pub fn run(
                 .map(|failure| format!("固定題沒過：{failure}"))
                 .collect();
             violations.extend(baseline::check(&sets_only, limits, BASELINE));
+            violations.extend(sets.iter().filter_map(neighbor::touch_violation));
+            violations.extend(physical_violations(
+                &engine,
+                &sets,
+                &fixed,
+                &fixed_items,
+                &corpora,
+                &context_sets,
+                &typo_sets,
+            ));
             violations.extend(latency.violations());
             // 沒有個人集的檔時跳過整個個人集，連它的 baseline 也不比。
             if let Personal::Ran(set) = &personal {
@@ -328,6 +347,57 @@ pub fn run(
         latency,
         violations,
     })
+}
+
+/// 照實體鍵送的集合（固定題、語料、有前文的兩種、含打錯碼）用鄰鍵讀法關掉再打一次，和開著的結果逐題比
+/// （[`physical_violation`]）；觸控模擬的集合不在內。`sets` 與 `fixed` 是開著時的結果。
+fn physical_violations(
+    engine: &Engine,
+    sets: &[SetResult],
+    fixed: &SetResult,
+    fixed_items: &[Item],
+    corpora: &[(String, Vec<Item>)],
+    context_sets: &[(String, Vec<Item>)],
+    typo_sets: &[(String, Vec<Item>)],
+) -> Vec<String> {
+    let off = Options {
+        neighbor_readings: false,
+        ..Options::default()
+    };
+    let [given, not_given] = CONTEXT_SUFFIXES;
+    let mut checks: Vec<(String, Vec<Item>)> = vec![("fixed".into(), fixed_items.to_vec())];
+    checks.extend(corpora.iter().cloned());
+    for (name, items) in context_sets {
+        checks.push((format!("{name}{given}"), items.clone()));
+        checks.push((format!("{name}{not_given}"), without_context(items)));
+    }
+    checks.extend(
+        typo_sets
+            .iter()
+            .filter(|(name, _)| !name.ends_with(TOUCH_SUFFIX))
+            .cloned(),
+    );
+    checks
+        .iter()
+        .filter_map(|(name, items)| {
+            let on = if name == "fixed" {
+                fixed
+            } else {
+                sets.iter().find(|s| &s.name == name)?
+            };
+            let off = score::score_with(engine, off, name, items, false);
+            neighbor::physical_violation(name, on, &off)
+        })
+        .collect()
+}
+
+/// 觸控模擬的集合用 [`score_touch`]（再打一次鄰鍵讀法關掉的），其餘照常。
+fn score_typo_set(engine: &Engine, name: &str, items: &[Item]) -> SetResult {
+    if name.ends_with(TOUCH_SUFFIX) {
+        score::score_touch(engine, name, items)
+    } else {
+        score::score(engine, name, items, false)
+    }
 }
 
 /// dev 模式的結果：調參用（plan〈排序：同一把尺〉〈首選字基準〉），只報、不比 baseline，不跑個人集與每鍵延遲。
@@ -425,13 +495,9 @@ pub fn run_dev(
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(format!("讀不到 {rel}：{e}")),
             };
-            let items = typo.parse(kind, &text, &rel)?;
-            sets.push(score::score(
-                &engine,
-                &format!("{name}{}", kind.suffix()),
-                &items,
-                false,
-            ));
+            let name = format!("{name}{}", kind.suffix());
+            let items = typo.parse(kind, &name, &text, &rel)?;
+            sets.push(score_typo_set(&engine, &name, &items));
         }
     }
     Ok(DevOutcome {
@@ -445,17 +511,22 @@ pub fn run_dev(
 /// 「有前文」的一批題打兩次（[`CONTEXT_SUFFIXES`]）：給前文，與拿掉前文的同一批題。
 fn score_with_and_without_context(engine: &Engine, name: &str, items: &[Item]) -> [SetResult; 2] {
     let [given, not_given] = CONTEXT_SUFFIXES;
-    let without: Vec<Item> = items
+    let without = without_context(items);
+    [
+        score::score(engine, &format!("{name}{given}"), items, false),
+        score::score(engine, &format!("{name}{not_given}"), &without, false),
+    ]
+}
+
+/// 拿掉前文的同一批題。
+fn without_context(items: &[Item]) -> Vec<Item> {
+    items
         .iter()
         .map(|item| Item {
             context: None,
             ..item.clone()
         })
-        .collect();
-    [
-        score::score(engine, &format!("{name}{given}"), items, false),
-        score::score(engine, &format!("{name}{not_given}"), &without, false),
-    ]
+        .collect()
 }
 
 /// `--set` 能蓋的鍵：方案檔 `[ranking]` 的欄位名。
@@ -532,8 +603,10 @@ pub fn load_typo_sets(root: &Path) -> Result<Vec<(String, Vec<Item>)>, String> {
     for (kind, dirs) in [(TypoKind::Typo, TYPO_DIRS), (TypoKind::Touch, TOUCH_DIRS)] {
         for dir in dirs {
             for (name, path) in corpus_files(&root.join(dir))? {
-                let items = reader.parse(kind, &read(&path)?, &path.display().to_string())?;
-                sets.push((format!("{name}{}", kind.suffix()), items));
+                let name = format!("{name}{}", kind.suffix());
+                let items =
+                    reader.parse(kind, &name, &read(&path)?, &path.display().to_string())?;
+                sets.push((name, items));
             }
         }
     }
@@ -559,38 +632,45 @@ impl TypoKind {
 /// 讀打錯碼的題；觸控的題要 [`TOUCH_LAYOUT`]，第一次讀到觸控的題才載入、之後共用。
 struct TypoReader<'a> {
     root: &'a Path,
-    surface: Option<TouchSurface>,
+    taps: Option<Taps>,
 }
 
 impl<'a> TypoReader<'a> {
     fn new(root: &'a Path) -> Self {
-        Self {
-            root,
-            surface: None,
-        }
+        Self { root, taps: None }
     }
 
-    /// `what` 是錯誤訊息裡指出的檔案。
-    fn parse(&mut self, kind: TypoKind, text: &str, what: &str) -> Result<Vec<Item>, String> {
+    /// `name` 是集合名（含 [`TYPO_SUFFIX`] 或 [`TOUCH_SUFFIX`]），`what` 是錯誤訊息裡指出的檔案。觸控的題另填
+    /// [`Item::retyped`]：照碼每一碼一個點對鍵的點擊，種子是集合名與行號。
+    fn parse(
+        &mut self,
+        kind: TypoKind,
+        name: &str,
+        text: &str,
+        what: &str,
+    ) -> Result<Vec<Item>, String> {
         let items = match kind {
             TypoKind::Typo => parse_typo(text),
             TypoKind::Touch => {
-                let surface = match &mut self.surface {
-                    Some(surface) => surface,
-                    empty => empty.insert(load_touch_surface(self.root)?),
+                let taps = match &mut self.taps {
+                    Some(taps) => taps,
+                    empty => empty.insert(Taps::load(self.root)?),
                 };
-                parse_touch(text, surface)
+                parse_touch(text, taps.surface()).map(|items| {
+                    items
+                        .into_iter()
+                        .map(|item| Item {
+                            retyped: Some(
+                                taps.unit_keys(&format!("{name}\0{}", item.line), &item.units),
+                            ),
+                            ..item
+                        })
+                        .collect()
+                })
             }
         };
         items.map_err(|e| format!("{what}：{e}"))
     }
-}
-
-/// 讀 [`TOUCH_LAYOUT`]。
-fn load_touch_surface(root: &Path) -> Result<TouchSurface, String> {
-    let json = fs::read_to_string(root.join(TOUCH_LAYOUT))
-        .map_err(|e| format!("讀不到 {TOUCH_LAYOUT}：{e}；先跑 `cargo xtask data`"))?;
-    TouchSurface::from_json(&json, TOUCH_MM_PER_UNIT).map_err(|e| format!("{TOUCH_LAYOUT}：{e}"))
 }
 
 /// 「有前文」的各批題的名稱與題目，依 [`CONTEXT_DIRS`] 的順序，同一目錄內依名稱排序。

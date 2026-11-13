@@ -108,6 +108,14 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setEnglishUserWords(on),
 	},
 	{
+		// 容錯：觸控點一下的鄰鍵字母換進輸入碼，換出來的讀法從候選列第 2 格起插、不搶首選；實體鍵盤不換（M4 票 09c）。
+		kind: "checkbox",
+		id: "neighbor-readings",
+		label: "容錯（觸控鄰鍵）",
+		checked: true,
+		apply: (session, on) => session.setNeighborReadings(on),
+	},
+	{
 		// 上屏之後候選列給接下來可能要打的字詞（M3 票 13），數字鍵或點選選。
 		kind: "checkbox",
 		id: "association",

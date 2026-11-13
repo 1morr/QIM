@@ -1,10 +1,10 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（plan〈依賴規則〉）。
 
 use qim_core::{
-    CandidateKind, CangjieVersion, ContextState, Date, Engine, Imported, IndexEntry, Inspection,
-    Key, Manifest, ModelPack, Options, Pack, PackIndex, PrecedingChar, RadicalHintPack,
-    RadicalHints, Scheme, SegmentSource, Session, ShiftKey, Shortcuts, Snapshot, UserModel,
-    Weights, WordListReport,
+    CandidateKind, CangjieVersion, ContextState, Date, Engine, Imported, IndexEntry,
+    InspectedNeighbor, Inspection, Key, Manifest, ModelPack, Options, Pack, PackIndex,
+    PrecedingChar, RadicalHintPack, RadicalHints, Scheme, SegmentSource, Session, ShiftKey,
+    Shortcuts, Snapshot, Swap, UserModel, Weights, WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, PhysicalModel, Target, Touch, When};
 use wasm_bindgen::prelude::*;
@@ -404,6 +404,14 @@ impl WebSession {
         self.session.refresh(&self.engine, &self.user).into()
     }
 
+    /// 容錯（觸控鄰鍵讀法，M4 票 09c，brief〈容錯〉）：觸控點一下的鄰鍵字母換進輸入碼，換出來的讀法從候選列
+    /// 第 2 格起插，預設開。組字中切換也立刻重列候選。
+    #[wasm_bindgen(js_name = setNeighborReadings)]
+    pub fn set_neighbor_readings(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.neighbor_readings = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
     /// 聯想（M3 票 13，brief〈設定與同步〉）：上屏之後候選列給接下來可能要打的字詞，預設開。聯想顯示中
     /// 關掉也立刻收起。
     #[wasm_bindgen(js_name = setAssociation)]
@@ -428,7 +436,7 @@ impl WebSession {
     }
 
     /// 按實體鍵盤的字母鍵 `code`（`KeyboardEvent.code`，`KeyA`–`KeyZ`）：照實體鍵位算按下的字母與鄰鍵的
-    /// 機率（[`PhysicalModel`]）送 `Key::Weighted`（M4 票 07）。不是字母鍵時丟例外。
+    /// 機率（[`PhysicalModel`]）送 `Key::Physical`（M4 票 07；實體鍵盤不列鄰鍵讀法，票 09c）。不是字母鍵時丟例外。
     #[wasm_bindgen(js_name = pressCode)]
     pub fn press_code(&mut self, code: &str) -> Result<WebSnapshot, JsError> {
         let weights = PhysicalModel::default()
@@ -436,7 +444,7 @@ impl WebSession {
             .ok_or_else(|| JsError::new(&format!("{code} 不是字母鍵")))?;
         // `qim-layout` 給的一定收得下（字母、不重複、正數）；收不下是 bug，照例外丟給網頁。
         let weights = Weights::new(weights).map_err(js_error)?;
-        Ok(self.handle(Key::Weighted(weights)).into())
+        Ok(self.handle(Key::Physical(weights)).into())
     }
 
     /// 按一個鍵（實體鍵盤）：種類與值照 [`Key::parse`]，例如 `("letter", "a")`、`("digit", "1")`、
@@ -775,6 +783,18 @@ pub struct WebInspectedCandidate {
     /// 停鍵重排插入的（候選列原本沒有）；從後面移上來的是 `false`。
     #[wasm_bindgen(readonly, js_name = rerankInserted)]
     pub rerank_inserted: bool,
+    /// 鄰鍵讀法（M4 票 09c）換的每一碼在剩下的輸入碼裡的位置（從 0 起）；不是鄰鍵讀法時是空的。
+    #[wasm_bindgen(readonly, js_name = neighborPositions)]
+    pub neighbor_positions: Vec<usize>,
+    /// 換的每一碼實際打出的字母，和 `neighborPositions` 一一對應。
+    #[wasm_bindgen(readonly, js_name = neighborTyped)]
+    pub neighbor_typed: Vec<String>,
+    /// 換成的鄰鍵字母，和 `neighborPositions` 一一對應。
+    #[wasm_bindgen(readonly, js_name = neighborCodes)]
+    pub neighbor_codes: Vec<String>,
+    /// 鄰鍵讀法的空間懲罰；不是鄰鍵讀法時沒有。
+    #[wasm_bindgen(readonly, js_name = neighborPenalty)]
+    pub neighbor_penalty: Option<f64>,
 }
 
 /// debug 面板的候選的一段（`qim_core::InspectedSegment`）。JS 端叫 `InspectedSegment`。
@@ -795,6 +815,14 @@ pub struct WebInspectedSegment {
     /// 碼有萬用鍵時實際對到的碼；沒有萬用鍵時沒有。
     #[wasm_bindgen(readonly, js_name = matchedCode)]
     pub matched_code: Option<String>,
+}
+
+/// 鄰鍵讀法換的每一碼取 `field`（[`WebInspectedCandidate::neighbor_positions`] 那幾欄）；不是鄰鍵讀法時是空的。
+fn swaps<T>(neighbor: &Option<InspectedNeighbor>, field: impl Fn(&Swap) -> T) -> Vec<T> {
+    neighbor
+        .iter()
+        .flat_map(|n| n.swaps.iter().map(&field))
+        .collect()
 }
 
 impl From<Inspection> for WebInspection {
@@ -855,6 +883,10 @@ impl From<Inspection> for WebInspection {
                     rule: c.rule,
                     rerank_path: c.rerank.map(|r| r.path),
                     rerank_inserted: c.rerank.is_some_and(|r| r.inserted),
+                    neighbor_positions: swaps(&c.neighbor, |s| s.position),
+                    neighbor_typed: swaps(&c.neighbor, |s| String::from(s.typed)),
+                    neighbor_codes: swaps(&c.neighbor, |s| String::from(s.code)),
+                    neighbor_penalty: c.neighbor.as_ref().map(|n| n.penalty),
                 })
                 .collect(),
         }

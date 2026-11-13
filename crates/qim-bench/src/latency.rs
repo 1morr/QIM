@@ -15,6 +15,8 @@ use std::time::Instant;
 
 use qim_core::{Engine, Key, Session, Snapshot, UserModel};
 
+use crate::taps::Taps;
+
 /// 計時時的學習資料。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserData {
@@ -314,26 +316,39 @@ pub fn percentile(values: &[f64], p: u32) -> Option<f64> {
 }
 
 /// 原生在空白的學習資料下量一次 `inputs`（模型階梯也用它量換了語言模型的引擎，M3 票 08），
-/// 見 [`native_timing_with`]。
+/// 按鍵照 `Key::for_input` 送，見 [`native_timing_with`]。
 pub fn native_timing(engine: &Engine, inputs: &[String]) -> Timing {
-    native_timing_with(engine, &UserModel::default(), inputs)
+    native_timing_with(engine, &UserModel::default(), inputs, None)
 }
 
 /// 原生在學習資料 `user` 下量一次 `inputs`（[`measure`] 的原生那一半）：每個輸入用新的 `Session`，
 /// 只計 `Session::handle`（選開頭一段是 `Session::select`）那一次呼叫。各輸入共用 `user` 的一份複本，
 /// 同 WebAssembly 一個 `Session` 打到底（打字與選開頭一段都不上屏，不學）。
-pub fn native_timing_with(engine: &Engine, user: &UserModel, inputs: &[String]) -> Timing {
+///
+/// 有 `taps` 時每個字母送觸控點對鍵的點擊（`Key::Weighted`，萬用鍵照它在佈局上的鍵點，分隔記號照舊 `Punct`，
+/// 選項預設、鄰鍵讀法開，M4 票 09c），點擊先抽好、不計時；種子是輸入碼，同一批輸入每次量到一樣的按鍵。
+/// 沒有時照 `Key::for_input` 送。WebAssembly 的計時腳本照實體鍵送，不經這裡。
+pub fn native_timing_with(
+    engine: &Engine,
+    user: &UserModel,
+    inputs: &[String],
+    taps: Option<&Taps>,
+) -> Timing {
     let mut user = user.clone();
     let (per_key_ms, select_ms) = inputs
         .iter()
         .map(|input| {
             let mut session = Session::default();
             let mut last = Snapshot::default();
-            let keys = input
-                .chars()
-                .map(|c| {
+            let keys: Vec<Key> = match taps {
+                Some(taps) => taps.input_keys(&format!("latency\0{input}"), input),
+                None => input.chars().map(Key::for_input).collect(),
+            };
+            let keys = keys
+                .into_iter()
+                .map(|key| {
                     let start = Instant::now();
-                    let snapshot = session.handle(engine, &mut user, Key::for_input(c));
+                    let snapshot = session.handle(engine, &mut user, key);
                     let ms = start.elapsed().as_secs_f64() * 1000.0;
                     last = black_box(snapshot);
                     ms

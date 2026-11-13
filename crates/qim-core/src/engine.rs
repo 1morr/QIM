@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::lattice::{self, Lattice, Listing, Preceding};
 use crate::lexicon::WordsByText;
+use crate::neighbor;
 use crate::pack::Pack;
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::session::SegmentSource;
@@ -10,7 +11,8 @@ use crate::user::{SchemeUser, personal_bonus};
 use crate::{
     CLAUSE_START, CodeEntry, CodeTable, EmojiPack, EmojiTable, EnglishPack, EnglishWords,
     LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, PackError, PackKind, Scheme,
-    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Word, WordTrigram, WordTrigramPack,
+    SchemePack, Segment, Simplifier, SimplifierPack, UserModel, Weights, Word, WordTrigram,
+    WordTrigramPack,
 };
 
 /// 不可變的方案與資料包，多個 [`crate::Session`] 共用。
@@ -67,6 +69,17 @@ pub(crate) struct Edge {
     word: Option<u32>,
     /// 碼表的字、詞庫的詞或使用者詞（debug 面板，[`Engine::inspect_path`]）。
     source: SegmentSource,
+}
+
+/// 鄰鍵讀法的 lattice 的一條邊（[`Engine::neighbor_edges_ending`]）。
+#[derive(Debug, Clone)]
+pub(crate) struct NeighborEdge {
+    /// 分數已扣掉 `penalty`。
+    pub edge: Edge,
+    /// 這條邊的碼：換過的鄰鍵字母照換過的，和它蓋住的輸入碼一樣長。
+    pub code: String,
+    /// 空間懲罰（[`neighbor::alternatives`]）；沒換碼是 0。
+    pub penalty: f64,
 }
 
 /// 一條路徑的一段的分數與來源（[`Engine::inspect_path`]）。
@@ -319,6 +332,7 @@ impl Engine {
             emoji_candidates: false,
             english_user_words: false,
             simplified_last: true,
+            neighbor_readings: false,
         };
         lattice::candidates(self, user, &mut lattice, listing)
             .into_iter()
@@ -782,6 +796,14 @@ impl Engine {
     /// 往回找的上限算的是字母數，分隔記號不算。
     pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let user = user.for_scheme(&self.scheme.id);
+        self.edge_starts(user, input)
+            .into_iter()
+            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
+            .collect()
+    }
+
+    /// 結束在 `input` 結尾的邊的起點（位元組位移），由前到後（[`Engine::edges_ending`]）。
+    fn edge_starts(&self, user: SchemeUser<'_>, input: &str) -> Vec<usize> {
         let longest = self
             .longest_word_code
             .max(usize::from(self.scheme.max_code_length))
@@ -796,9 +818,77 @@ impl Engine {
         // 同分時照邊的順序決定名次（[`Lattice::push`]），起點由前到後。
         starts.reverse();
         starts
-            .into_iter()
-            .flat_map(|start| self.exact(user, &input[start..], start, self.beam()))
-            .collect()
+    }
+
+    /// 鄰鍵讀法的 lattice（M4 票 09c）結束在 `input` 結尾的邊：[`Engine::edges_ending`] 的邊（沒換碼），加上一段
+    /// 輸入碼裡換一碼成鄰鍵字母（[`neighbor::alternatives`]）才查得到的字詞，分數已扣掉空間懲罰。`weights[i]` 是
+    /// `input` 位元組位移 `i` 那一碼收下的觸控按鍵機率（方案的碼都是 ASCII，一碼一位元組，同 lattice 的欄）。
+    /// 有分隔記號或萬用鍵的段不換，也不換成萬用鍵（協調者定：萬用鍵展開又慢又雜）；換的那一碼前面的碼要是
+    /// 某個碼的開頭（剪枝）。
+    pub(crate) fn neighbor_edges_ending(
+        &self,
+        user: &UserModel,
+        input: &str,
+        weights: &[Option<Weights>],
+    ) -> Vec<NeighborEdge> {
+        let user = user.for_scheme(&self.scheme.id);
+        let longest_char = usize::from(self.scheme.max_code_length);
+        let exists = |prefix: &str| {
+            prefix.is_empty()
+                || (prefix.len() <= longest_char && self.code_table.has_prefix(prefix))
+                || self.lexicon.has_code_prefix(prefix)
+                || user.has_word_code_prefix(prefix)
+        };
+        let mut edges = Vec::new();
+        for start in self.edge_starts(user, input) {
+            let typed = &input[start..];
+            edges.extend(
+                self.exact(user, typed, start, self.beam())
+                    .into_iter()
+                    .map(|edge| NeighborEdge {
+                        edge,
+                        code: typed.to_string(),
+                        penalty: 0.0,
+                    }),
+            );
+            if typed.contains(SEPARATOR) || self.scheme.has_wildcard(typed) {
+                continue;
+            }
+            for (offset, letter) in typed.char_indices() {
+                if !exists(&typed[..offset]) {
+                    break;
+                }
+                let Some(Some(key)) = weights.get(start + offset) else {
+                    continue;
+                };
+                let alternatives = neighbor::alternatives(letter, key, self.scheme.wildcard, |c| {
+                    self.scheme.is_code_key(c)
+                });
+                for neighbor::Alternative {
+                    letter: other,
+                    penalty,
+                } in alternatives
+                {
+                    let mut code = typed.to_string();
+                    code.replace_range(
+                        offset..offset + letter.len_utf8(),
+                        other.encode_utf8(&mut [0; 4]),
+                    );
+                    if !exists(&code) {
+                        continue;
+                    }
+                    for mut edge in self.exact(user, &code, start, self.beam()) {
+                        edge.inner -= penalty;
+                        edges.push(NeighborEdge {
+                            edge,
+                            code: code.clone(),
+                            penalty,
+                        });
+                    }
+                }
+            }
+        }
+        edges
     }
 
     /// 輸入碼 `input` 的全部連打字集的字與詞與它們接在 `before` 後面的分數，依分數由高到低

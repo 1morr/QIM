@@ -47,6 +47,18 @@ fn databuild(corpora: &[&str]) -> Shared {
         "觸控模擬的畫布尺寸".into(),
         typo::TOUCH_MM_PER_UNIT.to_string(),
     ));
+    // 觸控錯誤模型的參數：`qim_bench::Taps` 抽點對鍵的點擊用的那份複本（M4 票 09c）。
+    let noise = typo::TouchNoise::default();
+    shared.extend([
+        ("觸控錯誤模型的 σx".into(), noise.sigma_x_mm.to_string()),
+        ("觸控錯誤模型的 σy".into(), noise.sigma_y_mm.to_string()),
+        ("觸控錯誤模型的旋轉".into(), noise.rotation_deg.to_string()),
+        ("觸控錯誤模型的往下偏".into(), noise.down_mm.to_string()),
+        (
+            "觸控錯誤模型的往中心拉".into(),
+            noise.edge_pull_sigma.to_string(),
+        ),
+    ]);
     // 照 `/` 接，Windows 的 `\` 才不算不一致。
     let slashed = |path: std::path::PathBuf| {
         let parts: Vec<String> = path
@@ -132,6 +144,28 @@ fn bench(corpora: &[&str]) -> Shared {
         "觸控模擬的畫布尺寸".into(),
         qim_bench::TOUCH_MM_PER_UNIT.to_string(),
     ));
+    shared.extend([
+        (
+            "觸控錯誤模型的 σx".into(),
+            qim_bench::TOUCH_SIGMA_X_MM.to_string(),
+        ),
+        (
+            "觸控錯誤模型的 σy".into(),
+            qim_bench::TOUCH_SIGMA_Y_MM.to_string(),
+        ),
+        (
+            "觸控錯誤模型的旋轉".into(),
+            qim_bench::TOUCH_ROTATION_DEG.to_string(),
+        ),
+        (
+            "觸控錯誤模型的往下偏".into(),
+            qim_bench::TOUCH_DOWN_MM.to_string(),
+        ),
+        (
+            "觸控錯誤模型的往中心拉".into(),
+            qim_bench::TOUCH_EDGE_PULL_SIGMA.to_string(),
+        ),
+    ]);
     for name in corpora {
         shared.push((format!("{name} 的 dev 題"), qim_bench::dev_items(name)));
         shared.push((

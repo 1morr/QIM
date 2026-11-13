@@ -88,6 +88,17 @@ fn weighted_parses_letter_probabilities_sorted_and_normalised() {
     assert_eq!(rounded.top(), 'a');
 }
 
+/// 實體鍵盤的按鍵機率（M4 票 07、09c）：值同 `weighted`，種類分開，核心才分得出觸控（只有觸控列鄰鍵讀法）。
+#[test]
+fn physical_parses_like_weighted_but_stays_a_physical_key() {
+    let key = Key::parse("physical", Some("s:0.3,a:0.6")).unwrap();
+    let Key::Physical(weights) = &key else {
+        panic!("{key:?}");
+    };
+    assert_eq!(weights.top(), 'a');
+    assert!(Key::parse("physical", None).is_err());
+}
+
 #[test]
 fn weighted_with_a_bad_format_is_an_error() {
     let wrong = [

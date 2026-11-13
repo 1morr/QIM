@@ -20,7 +20,8 @@ pub struct Inspection {
     pub segments: Vec<Segment>,
     /// 全部候選（不分頁），依目前的順序。
     pub candidates: Vec<InspectedCandidate>,
-    /// 最近一個鍵是 [`crate::Key::Weighted`]（觸控或實體鍵盤的字母鍵）時，它的各字母機率（M4 票 06、07）；其他鍵是 `None`。
+    /// 最近一個鍵是 [`crate::Key::Weighted`]（觸控）或 [`crate::Key::Physical`]（實體鍵盤）時，它的各字母機率（M4 票 06、07）；
+    /// 其他鍵是 `None`。
     pub key_weights: Option<Weights>,
     /// 候選列的停鍵重排來自快取（plan〈模型分層〉，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
     pub rerank_cached: bool,
@@ -53,6 +54,28 @@ pub struct InspectedCandidate {
     pub rule: Option<u8>,
     /// 停鍵重排放到這裡的。
     pub rerank: Option<Reranked>,
+    /// 鄰鍵讀法（[`crate::Options::neighbor_readings`]，M4 票 09c）插進來的：換了哪幾碼與空間懲罰。各段的碼是換過的。
+    pub neighbor: Option<InspectedNeighbor>,
+}
+
+/// 鄰鍵讀法的候選換了什麼（[`InspectedCandidate::neighbor`]）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct InspectedNeighbor {
+    /// 換過的每一碼，依位置。
+    pub swaps: Vec<Swap>,
+    /// 空間懲罰的和（`ln(打出的字母的機率 ÷ 換成的字母的機率)` 相加），已從路徑分扣掉。
+    pub penalty: f64,
+}
+
+/// 鄰鍵讀法換的一碼。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Swap {
+    /// 在剩下的輸入碼裡的位置（位元組位移，從 0 起，分隔記號也算；方案的碼都是 ASCII，同字元位置）。
+    pub position: usize,
+    /// 實際打出的字母（按鍵機率最高的）。
+    pub typed: char,
+    /// 換成的鄰鍵字母。
+    pub code: char,
 }
 
 /// 停鍵重排放到第 2 位的候選（[`Session::apply_rerank`]）。
@@ -175,6 +198,23 @@ fn inspect_candidate(
         learning: None,
         rule: span.rule,
         rerank: candidate.rerank,
+        neighbor: span.neighbor.as_ref().map(|n| {
+            let code: String = span.segments.iter().map(|s| s.code.as_str()).collect();
+            InspectedNeighbor {
+                swaps: n
+                    .typed
+                    .char_indices()
+                    .zip(code.chars())
+                    .filter(|((_, typed), code)| typed != code)
+                    .map(|((position, typed), code)| Swap {
+                        position,
+                        typed,
+                        code,
+                    })
+                    .collect(),
+                penalty: n.penalty,
+            }
+        }),
     };
     if kind != CandidateKind::Word {
         return inspected;
