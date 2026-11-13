@@ -190,7 +190,7 @@ fn touch_rejects_tap_counts_that_differ_from_the_code() {
 /// 其他照 `Key::for_input`。
 #[test]
 fn physical_keys_carry_neighbour_probabilities_like_the_web() {
-    let Key::Weighted(weights) = physical_key('f') else {
+    let Key::Physical(weights) = physical_key('f') else {
         panic!("字母送按鍵機率");
     };
     assert_eq!(weights.top(), 'f');

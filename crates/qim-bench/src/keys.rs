@@ -1,5 +1,5 @@
 //! 基準照殼的做法把按鍵交給核心（M4 票 08）：實體鍵盤的字母鍵經 `qim_layout::PhysicalModel` 轉成
-//! `Key::Weighted`（同網頁的 `pressCode`，票 07），觸控點擊經 `qim_layout::SpatialModel` 轉成
+//! `Key::Physical`（同網頁的 `pressCode`，票 07），觸控點擊經 `qim_layout::SpatialModel` 轉成
 //! `Key::Weighted`（同網頁的 `tap`，票 06）。會用到機率的功能進核心後，基準量到的就是殼實際送的機率。
 
 use qim_core::{Key, Weights};
@@ -18,7 +18,7 @@ pub fn physical_key(c: char) -> Key {
     PhysicalModel::default()
         .letter_weights(&code)
         .and_then(|weights| Weights::new(weights).ok())
-        .map_or(Key::Letter(c), Key::Weighted)
+        .map_or(Key::Letter(c), Key::Physical)
 }
 
 /// 觸控模擬的鍵盤：佈局檔的手機直向鍵盤一開始顯示的頁（字母頁，同 `qim_databuild::typo::touch_page`）與畫布尺寸。
@@ -56,11 +56,11 @@ impl TouchSurface {
     }
 }
 
-/// 按鍵機率最高的字母；`Weighted` 以外的鍵照它本身（`Letter` 的字母、`Punct` 的符號）。判斷一題有沒有
+/// 按鍵機率最高的字母；`Weighted`、`Physical` 以外的鍵照它本身（`Letter` 的字母、`Punct` 的符號）。判斷一題有沒有
 /// 打錯用：每一鍵最高的字母都等於原本的碼，就是「沒打錯的題」。
 pub fn top_char(key: &Key) -> Option<char> {
     match key {
-        Key::Weighted(weights) => Some(weights.top()),
+        Key::Weighted(weights) | Key::Physical(weights) => Some(weights.top()),
         Key::Letter(c) | Key::Punct(c) => Some(*c),
         _ => None,
     }

@@ -428,7 +428,7 @@ impl WebSession {
     }
 
     /// 按實體鍵盤的字母鍵 `code`（`KeyboardEvent.code`，`KeyA`–`KeyZ`）：照實體鍵位算按下的字母與鄰鍵的
-    /// 機率（[`PhysicalModel`]）送 `Key::Weighted`（M4 票 07）。不是字母鍵時丟例外。
+    /// 機率（[`PhysicalModel`]）送 `Key::Physical`（M4 票 07；實體鍵盤不列鄰鍵讀法，票 09c）。不是字母鍵時丟例外。
     #[wasm_bindgen(js_name = pressCode)]
     pub fn press_code(&mut self, code: &str) -> Result<WebSnapshot, JsError> {
         let weights = PhysicalModel::default()
@@ -436,7 +436,7 @@ impl WebSession {
             .ok_or_else(|| JsError::new(&format!("{code} 不是字母鍵")))?;
         // `qim-layout` 給的一定收得下（字母、不重複、正數）；收不下是 bug，照例外丟給網頁。
         let weights = Weights::new(weights).map_err(js_error)?;
-        Ok(self.handle(Key::Weighted(weights)).into())
+        Ok(self.handle(Key::Physical(weights)).into())
     }
 
     /// 按一個鍵（實體鍵盤）：種類與值照 [`Key::parse`]，例如 `("letter", "a")`、`("digit", "1")`、

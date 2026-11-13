@@ -15,8 +15,8 @@ mod inspect;
 mod rerank_cache;
 
 pub use inspect::{
-    CandidateKind, ContextState, InspectedCandidate, InspectedSegment, Inspection, PrecedingChar,
-    Reranked, SegmentSource,
+    CandidateKind, ContextState, InspectedCandidate, InspectedNeighbor, InspectedSegment,
+    Inspection, PrecedingChar, Reranked, SegmentSource, Swap,
 };
 pub use rerank_cache::RERANK_CACHE_LIMIT;
 use rerank_cache::{RerankCache, RerankKey};
@@ -109,6 +109,10 @@ pub struct Options {
     /// 聯想（brief〈設定與同步〉，M3 票 13）：上屏組字或選了聯想之後、還沒打下一個字時，候選列給接下來可能要
     /// 打的字詞（[`Session::select`] 或數字鍵選）。預設開（brief〈設定與同步〉）。
     pub association: bool,
+    /// 觸控鄰鍵讀法（brief〈設定與同步〉的「容錯」，M4 票 09c）：觸控點一下（[`Key::Weighted`]）的按鍵機率裡的
+    /// 鄰鍵字母換進輸入碼（一段碼換一碼，單字也換），換出來的讀法從候選列第 2 格起插、最多 2 個、不搶首選；
+    /// 實體鍵盤（[`Key::Physical`]）不換。選了它學的是換過的碼。預設開。
+    pub neighbor_readings: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -186,6 +190,7 @@ impl Default for Options {
             simplified_after_traditional: true,
             english_user_words: true,
             association: true,
+            neighbor_readings: true,
         }
     }
 }
@@ -215,16 +220,20 @@ pub enum Key {
     /// 不記沒有字元的鍵）。
     Modifier,
     /// 觸控點一下字母鍵：各字母的機率，由殼經 `qim-layout` 依點擊位置與按鍵幾何算出（M4 票 06）。
-    /// 核心只用機率最高的字母，其餘同 `Letter`；[`Session::inspect`] 看得到這組機率。
+    /// 打的是機率最高的字母，其餘同 `Letter`；[`Options::neighbor_readings`] 開著時另列鄰鍵讀法（M4 票 09c）。
+    /// [`Session::inspect`] 看得到這組機率。
     Weighted(Weights),
+    /// 實體鍵盤按字母鍵：各字母的機率，由殼經 `qim-layout` 依實體鍵位算出（鄰鍵先驗，M4 票 07）。
+    /// 打的是機率最高的字母，其餘同 `Letter`，不列鄰鍵讀法；[`Session::inspect`] 看得到這組機率。
+    Physical(Weights),
 }
 
 impl Key {
     /// 由「種類 + 值」讀出按鍵，綁定收不了帶資料的列舉時用（網頁、Swift）；同 librime 能從字串讀按鍵。
     /// 種類是 `letter`、`punct`、`digit`、`space`、`enter`、`backspace`、`escape`、`pageUp`、`pageDown`、
-    /// `left`、`right`、`toggleAscii`、`other`、`modifier`、`weighted`；`letter`、`punct` 的值是一個字元，`digit` 是
-    /// `0`–`9`，`toggleAscii` 是 `left` 或 `right`，`weighted` 是 `字母:機率` 以逗號分隔（`a:0.62,s:0.38`，
-    /// 見 [`Weights::new`]），其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
+    /// `left`、`right`、`toggleAscii`、`other`、`modifier`、`weighted`（觸控）、`physical`（實體鍵盤）；`letter`、`punct`
+    /// 的值是一個字元，`digit` 是 `0`–`9`，`toggleAscii` 是 `left` 或 `right`，`weighted`、`physical` 是 `字母:機率`
+    /// 以逗號分隔（`a:0.62,s:0.38`，見 [`Weights::new`]），其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
     pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError> {
         let error = || KeyError {
             kind: kind.to_owned(),
@@ -255,6 +264,7 @@ impl Key {
             ("other", None) => Key::Other,
             ("modifier", None) => Key::Modifier,
             ("weighted", Some(value)) => Key::Weighted(Weights::parse(value).ok_or_else(error)?),
+            ("physical", Some(value)) => Key::Physical(Weights::parse(value).ok_or_else(error)?),
             _ => return Err(error()),
         };
         Ok(key)
@@ -483,9 +493,11 @@ pub struct Session {
     /// 翻到後面的頁時收到的重排結果：那時的 `generation` 與 `order`。回到第一頁時 `generation`
     /// 沒變（候選沒變）才套用（[`Session::apply_rerank`]）。
     waiting_rerank: Option<(u64, Vec<usize>)>,
-    /// 最近一個鍵是 [`Key::Weighted`]（觸控或實體鍵盤的字母鍵）時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
+    /// 最近一個鍵是 [`Key::Weighted`] 或 [`Key::Physical`] 時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
     /// 其他鍵與 [`Session::text`] 清掉。
     key_weights: Option<Weights>,
+    /// `key_weights` 是觸控（[`Key::Weighted`]）的：鄰鍵讀法只收它（[`Session::neighbor_weights`]）。
+    tapped: bool,
     /// 停鍵結果快取（plan〈模型分層〉，M4 票 03）：重排要求 → 模型給的名次，都是 `reranker` 排的。
     rerank_cache: RerankCache,
     /// 殼正在用的停鍵層模型的識別（[`Session::set_reranker_id`]）；`None` 時不留快取。
@@ -857,15 +869,18 @@ impl Session {
 
     pub fn handle(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
         self.apply_pending_options(engine, user);
-        // 按鍵機率只記給 debug 面板，鍵照機率最高的字母處理（M4 票 06）。
+        // 鍵照機率最高的字母處理（M4 票 06）；按鍵機率記給 debug 面板，觸控的另給鄰鍵讀法（M4 票 09c）。
+        let is_tap = matches!(key, Key::Weighted(_));
         let key = match key {
-            Key::Weighted(weights) => {
+            Key::Weighted(weights) | Key::Physical(weights) => {
+                self.tapped = is_tap;
                 let top = weights.top();
                 self.key_weights = Some(weights);
                 Key::Letter(top)
             }
             key => {
                 self.key_weights = None;
+                self.tapped = false;
                 key
             }
         };
@@ -1030,7 +1045,8 @@ impl Session {
                 }
                 self.lattice = Lattice::starting_after(self.before_unselected(engine));
             }
-            self.lattice.push(engine, user, c);
+            let weights = self.neighbor_weights();
+            self.lattice.push_weighted(engine, user, c, weights);
             self.refresh_candidates(engine, user);
             return self.snapshot(engine, true, None);
         }
@@ -1121,12 +1137,13 @@ impl Session {
             }
             // 方案以外的小寫字母（方案沒設萬用鍵時的 `z`）、其他鍵：吃下不動作。
             // 切中英在上面處理過了。
-            // `Weighted` 在 `handle` 已換成機率最高的字母，到不了這裡。
+            // `Weighted`、`Physical` 在 `handle` 已換成機率最高的字母，到不了這裡。
             Key::Letter(_)
             | Key::ToggleAscii(_)
             | Key::Other
             | Key::Modifier
-            | Key::Weighted(_) => self.snapshot(engine, true, None),
+            | Key::Weighted(_)
+            | Key::Physical(_) => self.snapshot(engine, true, None),
         }
     }
 
@@ -1405,6 +1422,7 @@ impl Session {
         let action = self.begin_action(user);
         self.end_association();
         self.key_weights = None;
+        self.tapped = false;
         let text = Commit {
             text: self.output(engine, text),
             original: text.to_string(),
@@ -1526,6 +1544,7 @@ impl Session {
             emoji_candidates: whole_input && options.emoji_candidates,
             english_user_words: whole_input && options.english_user_words,
             simplified_last: options.simplified_after_traditional && !options.simplified,
+            neighbor_readings: whole_input && options.neighbor_readings,
         }
     }
 
@@ -1636,9 +1655,21 @@ impl Session {
     }
 
     /// 剩下的輸入碼換成 `input`，lattice 從頭建。
+    ///
+    /// `input` 是現在的輸入碼的結尾時（選了開頭一段、撤銷學習後重算），那幾碼的觸控按鍵機率照留，鄰鍵讀法
+    /// 照樣列（M4 票 09c）；其他（放回選定的分段）沒有。
     fn recompose(&mut self, engine: &Engine, user: &UserModel, input: &str) {
         let before = self.before_unselected(engine);
-        self.lattice = Lattice::from_input(engine, user, before, input);
+        let weights = self.lattice.weights_of_suffix(input);
+        self.lattice = Lattice::from_keys(engine, user, before, input, &weights);
+    }
+
+    /// 這一下要交給鄰鍵讀法的按鍵機率（M4 票 09c）：開關開著、這一下是觸控（[`Key::Weighted`]）、而且有鄰鍵
+    /// 字母時是它的按鍵機率，否則是 `None`。
+    fn neighbor_weights(&self) -> Option<Weights> {
+        let weights = self.key_weights.as_ref()?;
+        (self.options.neighbor_readings && self.tapped && weights.entries().len() > 1)
+            .then(|| weights.clone())
     }
 
     /// 沒選定的輸入碼前面是什麼（plan〈排序：同一把尺〉）：最後選定的分段（它的最後一字與它）；沒有選定的
