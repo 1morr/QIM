@@ -40,3 +40,4 @@
 | 2026-11-13 | M4 18c | 有聯想時退格交還宿主刪字、聯想收起，照〈退格撤銷〉撤銷這次上屏；Esc 照舊；plan §2.1、§2.4、brief §4.5 與事實檔已改；bench 不變；見票 18c | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-13 | M4 18b | 含萬用鍵的輸入每鍵延遲：候選列重用開頭各段的 span、字頻排序只查一次，空白全部 p95 961→237 µs；`bench --check` 加這批輸入、同一組上限；見票 18b | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-13 | M4 流程 | 對齊 project-init：roadmap、事實編號、決策紀錄、票留 Session 紀錄由合併的人寫本檔、收尾票加使用者試；文件檢查換成 `scripts/check_docs.py` | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
+| 2026-11-13 | M4 流程 | 里程碑表的狀態改成固定詞開頭（已驗收），`arch-diet` 佔一列；`scripts/check_docs.py` 換成新版：有票的目錄要列在表裡、票要有 `## 驗收` | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
