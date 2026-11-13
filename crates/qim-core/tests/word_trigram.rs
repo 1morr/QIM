@@ -1,4 +1,4 @@
-//! 詞級 trigram（M3 票 11b，plan §2.3）：lattice 的靜態機率改用它，前一段不在表裡、或前文沒留下
+//! 詞級 trigram（M3 票 11b，plan〈排序：同一把尺〉）：lattice 的靜態機率改用它，前一段不在表裡、或前文沒留下
 //! 任何 n-gram 時照現行打分；沒有統計的模型和沒掛上時完全相同。
 
 use std::collections::BTreeMap;
@@ -319,7 +319,7 @@ fn file<P: Pack>(pack: &P) -> (Manifest, Vec<u8>) {
     )
 }
 
-/// 方案指名的是預設的那份，可以換成同種的另一份（plan §4.6）；方案要時不能不給、不要時不能給。
+/// 方案指名的是預設的那份，可以換成同種的另一份（plan〈資料包 manifest〉）；方案要時不能不給、不要時不能給。
 #[test]
 fn engine_open_takes_a_word_trigram_only_when_the_scheme_names_one() {
     let bigram = file(&bigram());

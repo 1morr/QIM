@@ -125,7 +125,7 @@ test("沒有組字時，帶 Ctrl、Meta、Alt 的事件留給瀏覽器", () => {
 	}
 });
 
-// brief §4.3：組字中每個鍵都吃下，Cmd+V 貼上的話組字還留著。
+// brief〈桌面鍵盤操作〉：組字中每個鍵都吃下，Cmd+V 貼上的話組字還留著。
 test("組字中帶 Ctrl、Meta、Alt 的事件是 other，由核心吃下", () => {
 	for (const modifier of ["ctrlKey", "metaKey", "altKey"] as const) {
 		assert.deepEqual(

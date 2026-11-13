@@ -1,4 +1,4 @@
-// 停鍵層的 Web Worker（plan §2.7、§3.1，M3 票 11e）：載入模型資料包建 `Reranker`，收重排要求、回路徑的
+// 停鍵層的 Web Worker（plan〈模型分層〉〈網頁 prototype〉，M3 票 11e）：載入模型資料包建 `Reranker`，收重排要求、回路徑的
 // 名次與算了多久。和主執行緒用同一份 WebAssembly 綁定，各自一個實例；主執行緒的 `Session` 不在這裡。
 
 import type { WorkerReply, WorkerRequest } from "./neural-rerank.ts";

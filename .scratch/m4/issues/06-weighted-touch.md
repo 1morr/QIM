@@ -33,3 +33,5 @@ Blocked by: 01
 - 驗證：`cargo xtask check` 綠（e2e 236 passed，含新的 `web/e2e/touch-weighted.spec.ts` 兩條）。截圖 `.scratch/m4/evidence/06-weighted-touch.png` 是從 Playwright 輸出目錄手動複製的，e2e 不直接寫 evidence（`e5e4686` 為了不改寫封存的證據）。亂按一輪：一次性腳本在 Pixel 7 viewport 隨機點鍵盤 300 下（縫隙、快速連按、開關面板與數字列），126 次觸控字母鍵的機率和都是 1、第一名都等於點中的鍵、沒有頁面錯誤。
 - `cargo xtask check` 跑了四次，兩次在 `qim-bench` 的 `tests/run.rs` 紅：`check_blocks_native_latency_only_and_update_baseline_ignores_latency` 與 `check_passes_when_counts_equal_baseline` 在並行測試負載下把小資料包的每鍵 p95 量成 1.45–1.50 ms（> 1 ms 上限），單獨重跑也偶爾紅，最後一次整個 check 綠。本票沒動 `qim-bench`，`bench --check` 的真實延遲是 73 µs：用小資料包量真實延遲的測試在機器忙時會抖，與本票無關（票 05 加的閘門），留給收尾票：那幾條測試應該用假的計時，不量真實延遲。
 - code-review 未處理（判斷題）：`handle_key` 的 `Key::Weighted` 分支照註解到不了，沒改成 `unreachable!()`（寧可吃下也不在網頁 panic）；網頁 `host.ts` 與 `main.ts` 兩處的 `"letter" | "weighted"` 判斷沒有收成一處（兩處、各一行）；`Key::parse` 收不下時只回籠統的 `KeyError`、不說是哪一種錯（同其他種類的鍵）；`Weights::new` 與 `letter_weights` 各做一次正規化是依賴規則（核心不依賴 `qim-layout`）逼出來的。
+
+Session 紀錄：`Key::Weighted` 與 `qim-layout` 的空間模型（到形狀的距離加 2D Gaussian、點中的鍵一定最高）；網頁觸控送機率、面板顯示；bench 前後相同

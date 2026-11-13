@@ -1,4 +1,4 @@
-//! 每鍵延遲（plan §5.2）：逐鍵打基準的每個輸入碼，量每次按鍵到 `Snapshot` 回來的時間，
+//! 每鍵延遲（plan〈首選字基準〉）：逐鍵打基準的每個輸入碼，量每次按鍵到 `Snapshot` 回來的時間，
 //! 原生與 WebAssembly 各量一次，報 p50 / p95；空白的學習資料與學過的（[`UserData`]）各一組，
 //! 基準的輸入與含萬用鍵的輸入（[`InputBatch`]）各量一次。原生的 p95 由 `--check` 擋（[`p95_limits_ms`]），
 //! WebAssembly 只報；baseline 不記。

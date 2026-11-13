@@ -1,7 +1,7 @@
 //! 經 [`qim_bench::run`] 跑整條基準：暫存目錄擺出 repo 的佈局（資料包、`bench/`），
 //! 數字都是照下面的小資料包手算的。
 //!
-//! `toy` 三句的模擬（plan §5.2，`docs/development.md`〈首選字基準〉）：
+//! `toy` 三句的模擬（plan〈首選字基準〉，`docs/development.md`〈首選字基準〉）：
 //! - 第 1 行 `a 日`：`a` 空白，2 鍵、修正 0、跳動 0，答對。
 //! - 第 2 行 `a 曰`：`a` 後首選「日」接不上，按 2 選「曰」，2 鍵、修正 1，答錯（首選「日」，錯 1 字）。
 //! - 第 3 行 `a b 日月`：`ab` 的首選「明」接不上又沒有下一頁，Esc（修正 1）後一個字一個字打：
@@ -812,7 +812,7 @@ fn report_gives_the_load_time_of_both_environments() {
     assert!(line.contains("WebAssembly 12.5 ms"), "{line}");
 }
 
-/// 「有前文」的集合（plan §5.2）：`bench/<目錄>/context/<名>.tsv`，一行「前文<TAB>逐字碼<TAB>句子」。
+/// 「有前文」的集合（plan〈首選字基準〉）：`bench/<目錄>/context/<名>.tsv`，一行「前文<TAB>逐字碼<TAB>句子」。
 /// 語言模型只有「日 → 曰」，所以前文以「日」結尾時 `a` 的首選是「曰」。
 fn repo_with_context() -> TempDir {
     let repo = repo();

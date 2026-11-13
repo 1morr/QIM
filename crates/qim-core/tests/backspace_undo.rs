@@ -1,4 +1,4 @@
-//! 上屏後緊接著退格撤銷這次的學習（M4 票 15，plan §2.4，照 librime `memory.cc` 的 `DiscardSession`）：
+//! 上屏後緊接著退格撤銷這次的學習（M4 票 15，plan〈學習與排位〉，照 librime `memory.cc` 的 `DiscardSession`）：
 //! 上屏後第一個交還宿主的鍵是退格時，這次上屏學到的（整串上屏次數、衰減值、tick、自動造詞、個人
 //! bigram、英文使用者詞）都回到上屏前；中間夾了別的鍵就不撤銷。退格照常交給宿主刪字。
 
@@ -396,7 +396,7 @@ fn only_the_same_session_outside_incognito_undoes_its_commit() {
     assert_eq!(ime.user.export(), learned, "無痕中的退格");
 }
 
-/// 殼計時（照 librime 的 3 秒，plan §2.4）：上屏後過了時限，殼呼叫 `expire_undo`，之後緊接著的退格只刪字、
+/// 殼計時（照 librime 的 3 秒，plan〈學習與排位〉）：上屏後過了時限，殼呼叫 `expire_undo`，之後緊接著的退格只刪字、
 /// 不撤銷；時限內照樣撤銷。另一個輸入框的 `expire_undo` 不影響這裡的紀錄。
 #[test]
 fn backspace_after_the_shell_expires_the_undo_keeps_the_learning() {

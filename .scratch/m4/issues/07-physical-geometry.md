@@ -32,3 +32,5 @@ Blocked by: 06
 - code-review 處理了：CapsLock 改用 `getModifierState`（Dvorak 上 `key` 看不出大小寫）、排除 AltGr、`physicalLetter` 改名 `physicalCode`（回的是 `code`）、拿掉和半徑重複的 `limit`、`ROWS` 改存字母不再從字串位元組拆、plan 裡沒查證的「macOS 輸入法把字母鍵固定成美式鍵盤」刪掉。沒處理：兩個 e2e 讀面板機率的 helper 重複（`touch-weighted` 與 `physical-weighted` 各 10 行，等第三個用到再抽）；`total > 0` 不成立的分支照現在的幾何到不了，留著防除以 0。
 - 美式鍵盤這輪的 code-review（`d7d7af2` 起）處理了：上面的大小寫、dead key、拿掉遷就 Playwright 的例外、`main.ts` 多餘的條件、兩個函式重複的修飾鍵判斷收成 `plain`、`us`／`want` 這類太短的名字、臨時英文補 e2e 並在 brief、plan、progress 標明是推論。沒處理：Chrome 在 macOS 的 ISO 鍵盤上 `Backquote` 與 `IntlBackslash` 對調（審查自己說信心低，沒有實機可驗，平台殼照系統的實體鍵位）；名詞表收「美式鍵盤」「配列」（一般用語，不是本專案的名詞）；`[string, string]` 的下標取值（兩處，改成具名欄位沒有多得什麼）；e2e 舊的 Dvorak F 合成事件沒改用新的 `dispatch` helper（同檔，留著不影響）。
 - 2026-11-12 合併 main（票 11 萬用鍵、14 英文使用者詞、02 網頁修補）：`main.ts` 的送鍵改用票 02 的 `withSnapshot`、`pressCode` 留在裡面；plan §3.1 的 debug 面板取 main 的寫法、換回按鍵機率；票 11 的 `wildcard.spec.ts` 讀 `debug-weights`。萬用鍵 `z` 照實體鍵位：實體 Z 鍵送 `code` KeyZ，`PhysicalModel` 最高的是 z，核心照萬用鍵處理；補 e2e（Dvorak 實體 Z 鍵 `;`、AZERTY 實體 Z 鍵 `w`，打 hzo 都是「竹＊人」、首選「的人」）。合併後 `cargo xtask data` 重建成資料包格式 v8。
+
+Session 紀錄：實體鍵盤送 `code`，`qim-layout` 的鄰鍵先驗轉成 `Weighted`；中文模式整個當美式鍵盤（使用者決定）；名詞改成按鍵機率；bench 前後相同

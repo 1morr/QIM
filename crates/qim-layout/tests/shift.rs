@@ -1,4 +1,4 @@
-//! Shift 鍵（brief §4.4，照 Gboard 速成，M1 票 27）：點一下，下一個字母鍵直接輸入大寫英文字母，
+//! Shift 鍵（brief〈手機觸控鍵盤〉，照 Gboard 速成，M1 票 27）：點一下，下一個字母鍵直接輸入大寫英文字母，
 //! 打完自動解除；快速點兩下鎖定大寫，再點一下解除。長按一律照長按清單（小寫）。
 
 use qim_layout::{Action, KeyState, Layout, Shift, Target, validate};

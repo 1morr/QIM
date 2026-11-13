@@ -1,4 +1,4 @@
-//! OpenCC 字典 → 簡繁資料包（plan §4.4）：照 OpenCC `data/config/hk2s.json` 組出香港繁體轉簡體的
+//! OpenCC 字典 → 簡繁資料包（plan〈英文、簡繁與 emoji〉）：照 OpenCC `data/config/hk2s.json` 組出香港繁體轉簡體的
 //! 轉換表。字典格式與反轉規則照 OpenCC `data/scripts/common.py`；釘的版本在 `data/sources.toml`。
 
 use std::collections::{BTreeMap, HashSet};

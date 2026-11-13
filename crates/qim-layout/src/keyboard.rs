@@ -1,5 +1,5 @@
 //! 殼的觸控鍵盤狀態：選到的佈局版本、目前頁、觸控 Shift，與點按之後要交給核心的輸入。
-//! 各平台殼共用，綁定只轉型別（plan §1.2、§2.6，M2 票 03）。
+//! 各平台殼共用，綁定只轉型別（plan〈目錄結構〉〈佈局：畫布模型〉，M2 票 03）。
 
 use crate::model::{Action, Key, KeyState, Layout, LayoutVariant, Page, Shift, When};
 use crate::spatial::{SpatialModel, Touch};
@@ -17,7 +17,7 @@ pub struct Keyboard {
 }
 
 /// 觸控鍵盤點按後送出、殼交給核心的東西。只改鍵盤狀態的動作（切頁、⇧、換鍵盤）已在 [`Keyboard`] 做完，
-/// 剩下 `Modifier`：核心組字中吃下、沒有組字時交還宿主但不結束數字（brief §4.7）。
+/// 剩下 `Modifier`：核心組字中吃下、沒有組字時交還宿主但不結束數字（brief〈英文模式與欄位類型〉）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum Output {
     /// 字母鍵，同實體鍵盤按那個字母。

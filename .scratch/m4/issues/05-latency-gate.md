@@ -41,3 +41,5 @@ Blocked by: None (can start immediately)
   - Node 那條路（`node_wasm_timer` 寫暫存檔、`latency.ts` 解析 `--user-dict`）沒有自動測試，同以前的 Node 路徑；以實跑 `cargo xtask bench` 驗證（學過那組 WebAssembly 量選開頭一段的輸入數 4,809 與原生相同）。
   - `learned_model` 和 `score::learning` 的學習迴圈相似，但 `learning` 每題要交錯打學習關與學習開，不硬抽。
   - 發現與本票無關的既有競態（留給 M4 票 02 的網頁加固或收尾票）：`web/e2e/key-table.spec.ts` 與 `keys.spec.ts` 的「翻頁」測試在打完 `ar` 立刻擷取候選列當 `first`，機器高負載時停鍵層的重排晚到、改了候選順序，之後的 `toHaveText(first)` 逾時；高負載下 `cargo xtask check` 三次裡兩次因它紅，單獨跑都過。
+
+Session 紀錄：`bench --check` 擋原生每鍵 p95（空白、學過兩組），WebAssembly 只報；數字與翻頁 e2e 的既有競態見票 05

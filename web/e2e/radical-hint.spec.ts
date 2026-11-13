@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// 組字中的字根與字根提示（M1 票 22，brief §4.3、§4.4）。
+// 組字中的字根與字根提示（M1 票 22，brief〈桌面鍵盤操作〉〈手機觸控鍵盤〉）。
 function ui(page: Page) {
 	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
 	return {

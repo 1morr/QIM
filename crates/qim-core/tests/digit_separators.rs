@@ -1,4 +1,4 @@
-//! 數字後的句點、冒號用半形（brief §4.7，M1 票 26）：游標前的字是半形數字時直接上屏半形，
+//! 數字後的句點、冒號用半形（brief〈英文模式與欄位類型〉，M1 票 26）：游標前的字是半形數字時直接上屏半形，
 //! 不待定、不出候選；逗號照舊全形（使用者決定，同 librime 預設 `.:` 加 `digit_separator_action:
 //! commit`）。
 
@@ -147,7 +147,7 @@ fn with_the_switch_off_a_period_after_a_digit_is_full_width() {
 
 #[test]
 fn digits_and_punctuation_in_inline_english_stay_as_typed() {
-    // 留碼接英文（左 Shift 的預設，brief §4.3）時字元照原樣接在英文後，不套數字後半形。
+    // 留碼接英文（左 Shift 的預設，brief〈桌面鍵盤操作〉）時字元照原樣接在英文後，不套數字後半形。
     let mut ime = Ime::new();
     ime.type_keys("a");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
@@ -196,7 +196,7 @@ fn tapping_a_candidate_with_nothing_composed_does_not_end_the_number() {
 
 #[test]
 fn an_arrow_key_passed_to_the_host_ends_the_number() {
-    // 不學 Rime（它不記方向鍵）：游標已離開數字（brief §4.7）。
+    // 不學 Rime（它不記方向鍵）：游標已離開數字（brief〈英文模式與欄位類型〉）。
     let mut ime = Ime::new();
     ime.type_keys("3");
     assert!(!ime.press(Key::Left).handled);
@@ -262,7 +262,7 @@ fn the_context_from_the_host_decides_whether_a_period_follows_a_digit() {
     assert_eq!(ime.text, "3。");
 }
 
-/// 無痕時殼不給前文（brief §8），核心丟掉之前給的，只看自己送出去的字。
+/// 無痕時殼不給前文（brief〈隱私與安全〉），核心丟掉之前給的，只看自己送出去的字。
 #[test]
 fn turning_incognito_on_forgets_a_digit_in_the_context() {
     let mut ime = Ime::new();

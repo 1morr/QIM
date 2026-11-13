@@ -1,4 +1,4 @@
-//! 讀方案檔（`data/schemes/*.toml`，plan §2.5）並轉成 `qim_core::Scheme`。
+//! 讀方案檔（`data/schemes/*.toml`，plan〈輸入方案〉）並轉成 `qim_core::Scheme`。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -15,12 +15,12 @@ struct SchemeFile {
     version: String,
     alphabet: String,
     max_code_length: u8,
-    /// 萬用鍵（plan §2.5）：選填，一個不在 alphabet 的 ASCII 小寫字母。
+    /// 萬用鍵（plan〈輸入方案〉）：選填，一個不在 alphabet 的 ASCII 小寫字母。
     wildcard: Option<String>,
     radicals: BTreeMap<String, String>,
     #[serde(default)]
     packs: PacksTable,
-    /// `[ranking]`：連打的打分參數（plan §2.3），每個方案自己調，所以必填。
+    /// `[ranking]`：連打的打分參數（plan〈排序：同一把尺〉），每個方案自己調，所以必填。
     ranking: Ranking,
 }
 

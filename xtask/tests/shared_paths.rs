@@ -1,4 +1,4 @@
-//! `qim-databuild` 寫、`qim-bench` 讀的路徑與檔頭在兩個 crate 各寫一份（plan §1.3 不讓
+//! `qim-databuild` 寫、`qim-bench` 讀的路徑與檔頭在兩個 crate 各寫一份（plan〈依賴規則〉 不讓
 //! `qim-bench` 依賴 `qim-databuild`）；`xtask` 不受依賴規則限制，在這裡比對兩邊。
 
 use std::path::Path;

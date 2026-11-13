@@ -1,7 +1,7 @@
-//! 停鍵層的神經重排（plan §2.7、ADR 0005）：Gboard 級的字級 CIFG-LSTM（約 1.4M 參數）給 lattice
+//! 停鍵層的神經重排（plan〈模型分層〉、ADR 0005）：Gboard 級的字級 CIFG-LSTM（約 1.4M 參數）給 lattice
 //! 的前幾條路徑打分，照 `路徑分 + λ·神經分` 回名次。
 //!
-//! 模型與字表由殼以位元組交進來（模型資料包，plan §4.6），不碰檔案、不開執行緒；殼在背景執行緒或
+//! 模型與字表由殼以位元組交進來（模型資料包，plan〈資料包 manifest〉），不碰檔案、不開執行緒；殼在背景執行緒或
 //! Web Worker 呼叫。實作從模型階梯的實驗（`scripts/experiments/model-ladder/src/neural.rs`）搬來，
 //! 只留採用的 LSTM。依賴規則見 `docs/plan.md` §1.3。
 
@@ -13,7 +13,7 @@ use std::fmt;
 pub use lstm::{Format, Model, to_gguf};
 pub(crate) use vocab::Vocab;
 
-/// 交給模型的前文最多幾個字（brief §8，模型階梯定的 50 字）：取最後這麼多字。
+/// 交給模型的前文最多幾個字（brief〈隱私與安全〉，模型階梯定的 50 字）：取最後這麼多字。
 pub const CONTEXT_CHARS: usize = 50;
 
 /// 句首與子句之間的記號：訓練語料在標點處切句，前文裡的標點、空白、符號也換成它。

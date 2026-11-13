@@ -1,8 +1,8 @@
-// WebAssembly 的每鍵延遲（plan §5.2）：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈首選字基準〉。
+// WebAssembly 的每鍵延遲（plan〈首選字基準〉）：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈首選字基準〉。
 //
 // 用法：node bench/latency.ts [--user-dict <學習資料>] <資料包路徑>…，stdin 一行一個輸入碼。給了學習資料
 // （`exportUserDict` 的文字檔）時，建好 Session 後先 `loadUserDict`（不計入載入），各輸入共用它。每份資料包旁要有它的 manifest.json
-// （plan §4.6），種類照 manifest、順序不拘：速成方案一份必給，詞庫、語言模型、詞級 trigram、英文、emoji
+// （plan〈資料包 manifest〉），種類照 manifest、順序不拘：速成方案一份必給，詞庫、語言模型、詞級 trigram、英文、emoji
 // 各至多一份。stdout 第一行是 runtime、` | ` 與 `new Session` 的毫秒數（載入：核對 manifest、解開、建
 // Engine），之後每個輸入一行、各鍵的毫秒數以空白分隔；打完有兩段以上時按 ← 到第一段（不計時）再選它的
 // 首選，行尾接 ` | ` 與那一次的毫秒數（`qim_bench::lefts_to_first_segment`）。

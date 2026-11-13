@@ -110,7 +110,7 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 ### 個人集
 
-有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，brief §12.2 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
+有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，`docs/research/facts-rime.md` 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
 
 `bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數。邏輯在 `crates/qim-databuild/src/personal.rs`。個人集的路徑與檔頭、基準目錄與「有前文」的目錄、`build/corpus/<名>/dev.tsv`、`dev-context.tsv`、兩份長前文題與兩份口語長前文題在 `qim-databuild`（寫）與 `qim-bench`（讀）各有一份（plan §1.3 不讓 `qim-bench` 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
 
@@ -313,7 +313,7 @@ cargo xtask check
 | `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | 跑 |
 | `test` | `cargo test --workspace` | 跳過 |
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
-| `docs` | 文件規則（plan §6）：`docs/progress.md` 的段落、表格、長度、里程碑標記、下一步指令，與 `.scratch/` 的 spec | 跑 |
+| `docs` | 文件規則：跑 `python3 scripts/check_docs.py` 與它的測試（要 Python 3），規則寫在腳本開頭 | 跑 |
 | `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
 | `tsc` | `web/` 的 `tsc --noEmit`（`src/`），再對 `tsconfig.node.json`（Playwright 設定、`e2e/`、`test/`）與 `web/bench/` 各跑一次（`npm run typecheck`） | 跑 |
 | `biome` | `web/` 的 `biome check`（`npm run lint`） | 跑 |
@@ -326,7 +326,7 @@ CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `cargo
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。
 
-`docs` 失敗時每條違規印一行 `檔案:行號: 說明`，規則在 `xtask/src/docs.rs`。最常見的是平行的票合併後 `docs/progress.md` 被 union 合併抄出第二個〈Session 紀錄〉段：把第二段新的列移回第一段的表尾、刪掉重複段。
+`docs` 失敗時每條違規印一行 `檔案:行號：說明`，規則在 `scripts/check_docs.py` 開頭。做票的分支不改 `docs/progress.md` 與 `docs/decisions.md`，由合併的人在主分支寫（`CLAUDE.md`〈每個 session 的流程〉）。
 
 格式自動修正：`cargo fmt --all`、`npm run --prefix web lint -- --write`。
 

@@ -3,18 +3,18 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// 手動分隔記號（brief §4.3）：組字中按它指定這裡一定要斷字：單字的碼不跨過它，詞只在它落在
-/// 兩字的碼之間時跨過它（plan §2.3）。
+/// 手動分隔記號（brief〈桌面鍵盤操作〉）：組字中按它指定這裡一定要斷字：單字的碼不跨過它，詞只在它落在
+/// 兩字的碼之間時跨過它（plan〈排序：同一把尺〉）。
 /// 同 Rime 拼音方案 `speller/delimiter` 的 `'`；速成、倉頡的碼不用這個字元，所以各方案共用一個，
 /// 不放進方案檔。它留在輸入碼裡，算在前一段的碼尾；查碼表、學習時去掉。
 pub const SEPARATOR: char = '\'';
 
-/// 輸入碼去掉分隔記號：查碼表、學習計數的碼（plan §2.4）。
+/// 輸入碼去掉分隔記號：查碼表、學習計數的碼（plan〈學習與排位〉）。
 pub(crate) fn without_separators(input: &str) -> String {
     input.chars().filter(|&c| c != SEPARATOR).collect()
 }
 
-/// 輸入方案：方案檔（`data/schemes/*.toml`）由 `qim-databuild` 編進資料包，欄位見 plan §2.5。
+/// 輸入方案：方案檔（`data/schemes/*.toml`）由 `qim-databuild` 編進資料包，欄位見 plan〈輸入方案〉。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Scheme {
     pub id: String,
@@ -23,7 +23,7 @@ pub struct Scheme {
     /// 方案用到的鍵，依鍵盤標籤的順序；都是 ASCII 字母，輸入碼的位置就是位元組位置。
     pub alphabet: String,
     pub max_code_length: u8,
-    /// 萬用鍵（brief §1.5、plan §2.5）：輸入碼裡代替任一個方案的鍵，每個剛好代一碼，放在碼的任一
+    /// 萬用鍵（brief〈功能分級〉、plan〈輸入方案〉）：輸入碼裡代替任一個方案的鍵，每個剛好代一碼，放在碼的任一
     /// 位置都行；是碼表與詞庫的比對模式，不是容錯（Apple 倉頡的 `Z`、fcitx 表格的 `MatchingKey`）。
     /// 不在 `alphabet` 裡；`None` 時沒有萬用鍵，那個鍵照方案以外的鍵處理。
     pub wildcard: Option<char>,
@@ -85,7 +85,7 @@ pub struct Packs {
     pub radical_hint: Option<String>,
 }
 
-/// 連打的打分參數（方案檔的 `[ranking]`，plan §2.3）。方案檔照它讀，欄位都必填、不收別的欄位。
+/// 連打的打分參數（方案檔的 `[ranking]`，plan〈排序：同一把尺〉）。方案檔照它讀，欄位都必填、不收別的欄位。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ranking {

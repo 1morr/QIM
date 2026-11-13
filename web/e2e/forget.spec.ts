@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// 撤銷學習（M4 票 16，plan §2.4）：組字中 Shift+Delete 或 Ctrl+Delete（librime 的綁定）清掉首選學到的，候選回到不學習時
+// 撤銷學習（M4 票 16，plan〈學習與排位〉）：組字中 Shift+Delete 或 Ctrl+Delete（librime 的綁定）清掉首選學到的，候選回到不學習時
 // 的位置，debug 面板的學習加分歸零；再選兩次又成首選。沒有組字時 Shift+Delete 照常交還瀏覽器。
 
 function ui(page: Page) {

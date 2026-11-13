@@ -1,4 +1,4 @@
-//! 詞表匯入（M3 票 17，plan §2.4）：把別的輸入法匯出或自己整理的詞表加進使用者詞。收 Rime
+//! 詞表匯入（M3 票 17，plan〈學習與排位〉）：把別的輸入法匯出或自己整理的詞表加進使用者詞。收 Rime
 //! `.dict.yaml`、Gboard 個人字典的 `dictionary.txt`、一行一詞的純文字；碼照手動加詞由字推出。
 
 use std::collections::BTreeMap;

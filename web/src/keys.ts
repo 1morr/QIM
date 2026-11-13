@@ -26,7 +26,7 @@ export type Key =
 export type ShiftKey = "left" | "right";
 
 /**
- * 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`，brief §4.3）：`rime` 左 Shift 留碼接英文、
+ * 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`，brief〈桌面鍵盤操作〉）：`rime` 左 Shift 留碼接英文、
  * 右 Shift 先上屏組字；`commit-text` 左右都先上屏；`inline-ascii` 左右都留碼。
  */
 export type ShiftSwitch = "rime" | "commit-text" | "inline-ascii";
@@ -42,7 +42,7 @@ export type KeyEvent = Pick<
 	"key" | "isComposing" | "ctrlKey" | "metaKey" | "altKey"
 >;
 
-/** 不帶資料的鍵：`KeyboardEvent.key` → `Key`；`-` / `=` 也是翻頁（brief §4.3）。 */
+/** 不帶資料的鍵：`KeyboardEvent.key` → `Key`；`-` / `=` 也是翻頁（brief〈桌面鍵盤操作〉）。 */
 const NAMED: Record<string, Key> = {
 	" ": { kind: "space" },
 	Enter: { kind: "enter" },
@@ -58,7 +58,7 @@ const NAMED: Record<string, Key> = {
 
 /**
  * 單按時沒有字元的修飾鍵（`KeyboardEvent.key`），照 MDN「Modifier keys」一表；Rime 不記這類鍵，
- * 送核心的 `modifier` 不結束數字（brief §4.7）。
+ * 送核心的 `modifier` 不結束數字（brief〈英文模式與欄位類型〉）。
  */
 const MODIFIERS = new Set([
 	"Alt",
@@ -80,7 +80,7 @@ const MODIFIERS = new Set([
 /**
  * 鍵盤事件轉成 `Key`；屬於別的輸入法的事件回 `null`，直接留給瀏覽器。帶 Ctrl、Meta、Alt 的
  * 組合鍵沒有組字時也回 `null`；`composing`（組字中）時是 `other`，由核心吃下：組字中每個鍵都
- * 吃下，否則 Cmd+V 貼進輸入框而組字還在（brief §4.3）。
+ * 吃下，否則 Cmd+V 貼進輸入框而組字還在（brief〈桌面鍵盤操作〉）。
  * 單按修飾鍵（Ctrl、Cmd、Alt、CapsLock…，事件本身也帶 `ctrlKey` 這類旗標）是 `modifier`。
  * 其他沒有對應的鍵是 `other`：組字中核心吃下，免得 Tab、Delete、方向鍵改到輸入框。
  * `inlineAscii`（臨時英文，組字中單按留碼的 Shift）時 `-` / `=` 是字元，接在英文後面。
@@ -237,7 +237,7 @@ const SHIFT_SIDE: Record<string, ShiftKey> = {
 };
 
 /**
- * 判定單按 Shift（切中英，brief §4.3）：Shift 按下到放開不超過 `LONE_SHIFT_MS`、中間沒有按
+ * 判定單按 Shift（切中英，brief〈桌面鍵盤操作〉）：Shift 按下到放開不超過 `LONE_SHIFT_MS`、中間沒有按
  * 別的鍵（打大寫字母就不算）。照 librime `ascii_composer`：按下時武裝，任何別的鍵按下或放開就解除。
  * 用 `KeyboardEvent.code` 分辨左右：組字中左右 Shift 的處理可以不同（Rime 預設）。左右一起按時
  * 也照 librime：第二個不重新計時，先放開的那邊算。

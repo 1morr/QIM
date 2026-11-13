@@ -1,4 +1,4 @@
-//! 實體鍵盤的鄰鍵先驗（plan §2.6，M4 票 07）：按一個實體鍵（`KeyboardEvent.code`）算成各字母的機率。
+//! 實體鍵盤的鄰鍵先驗（plan〈佈局：畫布模型〉，M4 票 07）：按一個實體鍵（`KeyboardEvent.code`）算成各字母的機率。
 //! 照實體鍵位（各排錯位，含上下排與斜角）；輸入只有 `code`，換 Dvorak 等配列（`key` 不同）結果不變，
 //! 網頁從事件挑出 `code` 的那一半測在 `web/test/keys.test.ts`。
 

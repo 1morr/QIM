@@ -1,4 +1,4 @@
-//! `cargo xtask ffi`：給 Apple 平台的 Swift 綁定（`qim-ffi`，plan §1.1）。
+//! `cargo xtask ffi`：給 Apple 平台的 Swift 綁定（`qim-ffi`，plan〈執行形態〉）。
 //!
 //! 用 release 編 `qim-ffi` 的靜態函式庫（這台機器的架構），再用 uniffi 的 `uniffi-bindgen-swift`
 //! 從它產生 Swift 原始碼、C 標頭與 modulemap 到 [`SWIFT_DIR`]。Swift 程式連結 [`STATIC_LIB`]、
@@ -10,7 +10,7 @@ use std::process::Command;
 
 use crate::run_command;
 
-/// 產生的 `qim.swift`、`qimFFI.h`、`module.modulemap`；不進 git（plan §1.2）。
+/// 產生的 `qim.swift`、`qimFFI.h`、`module.modulemap`；不進 git（plan〈目錄結構〉）。
 pub const SWIFT_DIR: &str = "build/ffi/swift";
 /// Swift 程式要連結的靜態函式庫。
 pub const STATIC_LIB: &str = "target/release/libqim_ffi.a";

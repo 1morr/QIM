@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-/// 詞庫：輸入碼 → 多字詞，加上給單字排序的字頻（兩者放同一個資料包）；每個輸入方案各建一份碼索引（plan §2.5、§4.2）。
+/// 詞庫：輸入碼 → 多字詞，加上給單字排序的字頻（兩者放同一個資料包）；每個輸入方案各建一份碼索引（plan〈輸入方案〉〈詞庫〉）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Lexicon {
     words: BTreeMap<String, Vec<Word>>,
@@ -52,7 +52,7 @@ impl Lexicon {
     }
 }
 
-/// 詞庫的詞依文字排序、同文字只留一個，和它的 ln unigram：聯想查「以某串字開頭的詞」用（plan §2.3）。
+/// 詞庫的詞依文字排序、同文字只留一個，和它的 ln unigram：聯想查「以某串字開頭的詞」用（plan〈排序：同一把尺〉）。
 /// 文字接成一整串、只記位移，不為每個詞各配一塊記憶體（約 26 萬詞時約 4 MB，各自配是約 12 MB）。
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WordsByText {

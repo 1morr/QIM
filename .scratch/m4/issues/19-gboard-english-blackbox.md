@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 18
-讀: brief §4.7、§12.4；spec〈細節〉 第二期；`docs/research/blackbox-baseline.md`（量法參考）；skill `orca-emulator-android`
+讀: brief §4.7、`docs/research/facts-products.md`；spec〈細節〉 第二期；`docs/research/blackbox-baseline.md`（量法參考）；skill `orca-emulator-android`
 
 ## What to build
 
@@ -13,9 +13,9 @@ Blocked by: 18
 - 建議列：幾個、排法、使用者打過的詞何時出現。
 - 欄位類型：email、網址、數字欄出什麼鍵盤、開不開自動修正。
 
-寫到 `docs/research/gboard-english.md`（Gboard 版本、步驟、截圖、結論），摘進 brief §12.4。
+寫到 `docs/research/gboard-english.md`（Gboard 版本、步驟、截圖、結論），摘進 `docs/research/facts-products.md`。
 
 ## 驗收
 
 - [ ] 每項有步驟、Gboard 版本、截圖與結論。
-- [ ] 摘進 brief §12.4；列出影響票 21、25、26、27 的決定。
+- [ ] 摘進 `docs/research/facts-products.md`；列出影響票 21、25、26、27 的決定。

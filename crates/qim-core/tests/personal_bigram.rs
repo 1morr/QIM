@@ -1,4 +1,4 @@
-//! 個人 bigram 與學習總開關（plan §2.3、§2.4，M3 票 12）：上屏時記「前一個字詞 → 這一段」，
+//! 個人 bigram 與學習總開關（plan〈排序：同一把尺〉〈學習與排位〉，M3 票 12）：上屏時記「前一個字詞 → 這一段」，
 //! 之後同樣的前一個字詞後面這一段加分。前一個字詞是同一次組字的前一段，或前文：前文以上一次
 //! 上屏的字詞結尾時是那個字詞，否則是前文的最後一字。只看文字、跨方案共用。
 
@@ -192,7 +192,7 @@ fn context_ending_with_the_last_committed_word_uses_that_word() {
     );
 }
 
-/// 個人 bigram 只看文字：在一個方案學到的，另一個方案同樣的字也用得到（plan §2.4）。
+/// 個人 bigram 只看文字：在一個方案學到的，另一個方案同樣的字也用得到（plan〈學習與排位〉）。
 #[test]
 fn a_bigram_learned_in_one_scheme_applies_in_another() {
     let quick = engine("quick");
@@ -270,7 +270,7 @@ fn simplified_context_reads_and_writes_the_traditional_previous_word() {
     );
 }
 
-/// 無痕模式不用前文（brief §8），個人 bigram 也不接前文。
+/// 無痕模式不用前文（brief〈隱私與安全〉），個人 bigram 也不接前文。
 #[test]
 fn incognito_does_not_use_the_context_for_the_personal_bigram() {
     let engine = engine("quick");
@@ -289,7 +289,7 @@ fn incognito_does_not_use_the_context_for_the_personal_bigram() {
     );
 }
 
-/// 學習總開關（brief §4.5、§7）：關掉時不寫任何學習資料，已學的照用；和無痕不同，前文照用。
+/// 學習總開關（brief〈學習與排位〉〈設定與同步〉）：關掉時不寫任何學習資料，已學的照用；和無痕不同，前文照用。
 #[test]
 fn with_learning_off_nothing_is_written_and_what_was_learned_still_applies() {
     let engine = engine("quick");
@@ -328,7 +328,7 @@ fn learning_is_on_by_default() {
     assert!(Options::default().learning);
 }
 
-/// 組字中給的前文由下一次組字用（plan §2.1）：學到的前一個字詞是組字開頭時的前文，和打分時
+/// 組字中給的前文由下一次組字用（plan〈介面〉）：學到的前一個字詞是組字開頭時的前文，和打分時
 /// 用的一樣。
 #[test]
 fn context_set_while_composing_does_not_change_what_this_composition_learns() {
@@ -352,7 +352,7 @@ fn context_set_while_composing_does_not_change_what_this_composition_learns() {
     );
 }
 
-/// brief §4.5：「兩次」只算單獨打這串碼時選它，句中用過的只在連打裡加分。連打裡選過一次
+/// brief〈學習與排位〉：「兩次」只算單獨打這串碼時選它，句中用過的只在連打裡加分。連打裡選過一次
 /// 「丁 → 己」（`fg` 整串上屏 0 次），之後前文「丁」單打 `fg`，己不成首選；單打選兩次照常成首選。
 #[test]
 fn a_bigram_learned_mid_sentence_does_not_make_y_the_top_when_its_code_is_typed_alone() {

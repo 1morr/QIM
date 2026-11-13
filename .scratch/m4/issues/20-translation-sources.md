@@ -11,7 +11,7 @@ Blocked by: 18
 - CC-CEDICT、CC-Canto 是不是 share-alike、能不能以資料包散布；粵典的英文釋義是非商業條款；其他候選來源。
 - 查不到合用的，評估自己用 LLM 離線生成（青簡做法）：成本、生成結果的授權、品質抽查方法。要花錢的先問使用者。
 
-輸出 `docs/research/translation-sources.md`，結論摘進 brief §12.1 與 §11。
+輸出 `docs/research/translation-sources.md`，結論摘進 `docs/research/facts-tables.md` 與 §11。
 
 ## 驗收
 

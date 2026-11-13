@@ -1,4 +1,4 @@
-//! 字根提示資料包的內容（plan §4.1 步驟 5）：字 → 倉頡三代 / 五代碼。
+//! 字根提示資料包的內容（plan〈速成碼表〉 步驟 5）：字 → 倉頡三代 / 五代碼。
 
 use qim_core::{CangjieCodes, CangjieVersion};
 use qim_databuild::{libcangjie, radical_hint};

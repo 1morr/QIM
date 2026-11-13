@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
 
-// 資料包線上更新（M3 票 21，plan §4.7）：Playwright 起的本機靜態伺服器扮演 GitHub release，放
+// 資料包線上更新（M3 票 21，plan〈線上更新〉）：Playwright 起的本機靜態伺服器扮演 GitHub release，放
 // `e2e/fixtures/pack-release/`（`index.json` 列出 `e2e-update-lexicon` 1.1.0，`anr` 是「新版詞庫」）。
 // 網頁經開發伺服器的 `/pack-updates/` 轉發去讀。先從檔案匯入舊版 1.0.0（`anr` 是「舊版詞庫」）；
 // 線上更新只換裝著的資料包的新版。

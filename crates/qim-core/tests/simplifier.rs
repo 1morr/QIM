@@ -1,4 +1,4 @@
-//! 簡繁轉換（plan §4.4）：照 OpenCC `hk2s` 的規則轉換，表由簡繁資料包給。
+//! 簡繁轉換（plan〈英文、簡繁與 emoji〉）：照 OpenCC `hk2s` 的規則轉換，表由簡繁資料包給。
 
 use qim_core::{ConversionTable, Pack, PackError, Simplifier, SimplifierPack};
 

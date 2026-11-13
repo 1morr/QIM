@@ -1,4 +1,4 @@
-//! 按鍵標籤與動作（plan §2.6）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母；
+//! 按鍵標籤與動作（plan〈佈局：畫布模型〉）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母；
 //! 組字中改用 `composing` 寫的標籤與動作。
 
 use qim_layout::{Action, KeyState, Layout};
@@ -139,7 +139,7 @@ fn long_press_options_are_labelled_by_what_they_type_or_do() {
 
 #[test]
 fn keys_that_type_show_a_magnified_preview_and_function_keys_do_not() {
-    // 按住時的放大預覽（brief §4.4）：會輸入字的鍵（字母、文字）才有；組字中照 `composing` 的動作。
+    // 按住時的放大預覽（brief〈手機觸控鍵盤〉）：會輸入字的鍵（字母、文字）才有；組字中照 `composing` 的動作。
     let layout = keys(
         r#"[
             { "id": "a", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "tap": { "letter": "a" } },

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
 
-// 停鍵層的神經模型（plan §2.7、§3.1，M3 票 11e）：停鍵後 Web Worker 裡的 1.4M 模型給 lattice 的前 9 條
+// 停鍵層的神經模型（plan〈模型分層〉〈網頁 prototype〉，M3 票 11e）：停鍵後 Web Worker 裡的 1.4M 模型給 lattice 的前 9 條
 // 路徑排名次，核心把排出的路徑放到第 2 位，候選列沒有就插入；首選不動。
 //
 // `fukjctd`（口語集的「光大實業」）：同步層的首選是「光大額葉」、第 2 個是「火山大額葉」，全部候選裡沒有

@@ -45,3 +45,5 @@ Blocked by: None (can start immediately)
 - 驗證：`cargo xtask check` 通過（cargo test 1032 passed；e2e 238 passed、2 skipped）。
 - code-review 未處理：新 e2e 拿 `data-rerank-unchanged` 當結果回來的訊號，網頁之後若另記「延後套用」要跟著改（已在測試註解寫明）；`rerank.spec` 收尾幾行和上一條 raise-last 測試相似，兩處不抽。
 - 順帶看到、沒改（不影響本票）：翻頁中收到的結果在網頁記成 `unchanged`（核心回同一個 `generation`），debug 面板因此顯示「名次沒變」，其實是延後套用；回到第一頁套用後快照的 `generation` 變了，網頁會再要求一次重排，路徑相同、名次相同，只是多算一次。
+
+Session 紀錄：翻頁 e2e 的競態是測試的問題（重排翻頁中回來照 plan 延到第一頁）：兩個翻頁測試關掉重排，補翻頁中途回來的 e2e

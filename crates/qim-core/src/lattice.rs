@@ -1,4 +1,4 @@
-//! 連打的 lattice（plan §2.2、§2.3）：位置是輸入碼的字母邊界，邊是碼表的字與詞庫的詞，
+//! 連打的 lattice（plan〈資料流〉〈排序：同一把尺〉）：位置是輸入碼的字母邊界，邊是碼表的字與詞庫的詞，
 //! Viterbi + beam 逐鍵往右補一個位置。做法參考 libime（`docs/research/libime-lattice.md`）。
 
 use std::collections::{BTreeMap, HashSet};
@@ -27,7 +27,7 @@ pub(crate) struct Lattice {
     spans: Vec<Option<Vec<Spanned>>>,
 }
 
-/// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（plan §2.3）。
+/// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（plan〈排序：同一把尺〉）。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Preceding {
     /// 前一個字：開頭的字接它的字級 bigram；`None` 是用 unigram。
@@ -63,10 +63,10 @@ pub(crate) struct CandidateSpan {
     pub text: String,
     pub len: usize,
     /// 組成它的各段（碼與字詞），依輸入碼的順序、碼接起來是它蓋住的輸入碼、字詞接起來是
-    /// `text`；選定與上屏時用（plan §2.4）。
+    /// `text`；選定與上屏時用（plan〈學習與排位〉）。
     pub segments: Vec<Segment>,
     pub kind: SpanKind,
-    /// 排定它位置的排位規則（1–5，plan §2.4）；沒有是 `None`。第 2 位起由規則排定的候選，停鍵重排的
+    /// 排定它位置的排位規則（1–5，plan〈學習與排位〉）；沒有是 `None`。第 2 位起由規則排定的候選，停鍵重排的
     /// 路徑排在它們後面（M3 票 11c）；debug 面板也顯示它。
     pub rule: Option<u8>,
 }
@@ -81,9 +81,9 @@ pub(crate) enum SpanKind {
     English,
     /// 整串輸入碼剛好是英文使用者詞（排位規則 4，詞典沒有、打過兩次的）。
     EnglishUserWord,
-    /// 接在字詞後面的 emoji（plan §2.4）。
+    /// 接在字詞後面的 emoji（plan〈學習與排位〉）。
     Emoji,
-    /// 英文使用者詞的前綴補完（排位規則 5，plan §2.4）。
+    /// 英文使用者詞的前綴補完（排位規則 5，plan〈學習與排位〉）。
     EnglishCompletion,
 }
 
@@ -117,7 +117,7 @@ pub(crate) struct Listing {
     /// 英文使用者詞（M4 票 14）：整串輸入碼剛好是它（排位規則 4）或是它的開頭（排位規則 5）時加上它；
     /// 目前分段的候選列沒有。
     pub english_user_words: bool,
-    /// 碼表標成簡體字的字排到同一段的其他字詞之後（brief §4.1）：繁體模式、
+    /// 碼表標成簡體字的字排到同一段的其他字詞之後（brief〈字集與字形〉）：繁體模式、
     /// [`crate::Options::simplified_after_traditional`] 開著時。
     pub simplified_last: bool,
 }
@@ -358,7 +358,7 @@ impl Lattice {
     }
 }
 
-/// 候選列（plan §2.3）：
+/// 候選列（plan〈排序：同一把尺〉）：
 /// 1. 蓋滿整串輸入碼的：碼表的字、詞庫的詞，與分數最高的幾條多段路徑（方案的
 ///    `ranking.sentences`），依分數排；簡體字排後（[`Listing::simplified_last`]）時簡體字排在它們之後；
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
@@ -461,7 +461,7 @@ pub(crate) fn candidates(
     if listing.emoji_candidates {
         list = with_emoji(engine, list, input, &mut seen);
     }
-    // 沒有中文候選時不出英文：它不搶首選（brief §4.3）。
+    // 沒有中文候選時不出英文：它不搶首選（brief〈桌面鍵盤操作〉）。
     let english = listing
         .english_candidates
         .then(|| engine.english_candidate(input))
@@ -549,7 +549,7 @@ fn completions<'a>(
         .flatten()
 }
 
-/// 蓋滿整串的字詞後面接上它的 emoji（rime-emoji 的做法，plan §2.4），依候選列的順序、整列最多
+/// 蓋滿整串的字詞後面接上它的 emoji（rime-emoji 的做法，plan〈學習與排位〉），依候選列的順序、整列最多
 /// [`EMOJI_LIMIT`] 個，和前面的候選文字重複的不接。查的是繁體原文，簡體模式也一樣。在排位規則
 /// 之前接上，所以規則排定的位置（英文候選的第 2 位）照舊；emoji 不在 lattice、沒有學習計數，
 /// 規則不會移動它。
@@ -583,7 +583,7 @@ fn with_emoji(
     out
 }
 
-/// 排位規則（plan §2.4），依序套用；前面的規則排定的位置後面的規則不動。
+/// 排位規則（plan〈學習與排位〉），依序套用；前面的規則排定的位置後面的規則不動。
 const RULES: [fn(&mut Ranked); 5] = [
     triggered_first,
     chosen_twice_first,
@@ -607,7 +607,7 @@ struct Ranked<'a> {
     before: &'a Preceding,
     /// 查碼表、詞庫與觸發詞的碼：`input` 去掉結尾的分隔記號。
     lookup_code: &'a str,
-    /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（plan §2.4）。
+    /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（plan〈學習與排位〉）。
     user_code: String,
     /// 還沒排定的候選，依原本的順序。
     free: Vec<CandidateSpan>,
@@ -719,7 +719,7 @@ fn chosen_twice_first(ranked: &mut Ranked) {
     }
 }
 
-/// 「選兩次才成首選」（brief §4.5）：學過一次的個人分常勝過靜態機率很低的詞與句子；排第一的
+/// 「選兩次才成首選」（brief〈學習與排位〉）：學過一次的個人分常勝過靜態機率很低的詞與句子；排第一的
 /// 候選整串上屏不到 2 次、靠學到的分排第一，而不學習時的首選不是它，就改回不學習時的首選。
 /// 靠學到的分：整串上屏剛好 1 次；或 0 次但它只有一段（就是單打這串碼）、這段有學習計數或接在
 /// 前一個字詞後的個人 bigram，也就是只在句中用過（句中用過的只在連打裡加分，M3 票 12）。多段的
@@ -781,7 +781,7 @@ fn used_word_second(ranked: &mut Ranked) {
     }
 }
 
-/// 規則 4：英文候選（詞典的詞或打過兩次的英文使用者詞）排第 2 位（brief §4.3）；第 2 位已由前面的規則
+/// 規則 4：英文候選（詞典的詞或打過兩次的英文使用者詞）排第 2 位（brief〈桌面鍵盤操作〉）；第 2 位已由前面的規則
 /// 排定時排在它後面最前的空位。
 fn english_second(ranked: &mut Ranked) {
     if let Some(i) = ranked

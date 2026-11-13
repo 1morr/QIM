@@ -1,4 +1,4 @@
-//! 字級 bigram 的訓練（plan §4.3）：小語料上手算 interpolated Kneser-Ney 與剪枝後的值。
+//! 字級 bigram 的訓練（plan〈字級 bigram 與詞級 trigram〉）：小語料上手算 interpolated Kneser-Ney 與剪枝後的值。
 //!
 //! 語料「甲乙、甲乙、甲丙、乙丙」，連打字集 4 字（甲乙丙丁）：
 //! - 字次數 甲 3、乙 3、丙 2，共 8；bigram 甲乙 2、甲丙 1、乙丙 1，n1 = 2、n2 = 1，D = 0.5。
@@ -72,7 +72,7 @@ fn interpolated_kneser_ney_without_pruning() {
     assert_close(model.log_prob(None, '丁'), 1.0 / 12.0, EXACT);
 }
 
-/// 句首當前一字（plan §2.3）：每句的第一字接在它後面，同樣用 Kneser-Ney，接續機率用句內的。
+/// 句首當前一字（plan〈排序：同一把尺〉）：每句的第一字接在它後面，同樣用 Kneser-Ney，接續機率用句內的。
 #[test]
 fn clause_start_is_a_context_trained_from_the_first_character_of_each_clause() {
     let (lm, _) = model(1);

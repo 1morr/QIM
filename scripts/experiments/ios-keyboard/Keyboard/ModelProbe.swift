@@ -4,7 +4,7 @@ import FoundationModels
 /// 在鍵盤擴充裡試 Foundation Models（M2 票 10）：可用性、首次與之後每次回應的延遲、擴充的 footprint。
 @MainActor
 enum ModelProbe {
-    /// plan §7.8 的提示格式：上下文 + 輸入碼 + 前 10 個候選，只回序號。正解是 3（門口）。
+    /// roadmap〈M3 的模型階梯實驗〉 的提示格式：上下文 + 輸入碼 + 前 10 個候選，只回序號。正解是 3（門口）。
     static let instructions = "你是中文輸入法的候選排序器。根據上下文，從候選中選出最可能接在上下文後面的一個，只回答它的序號（阿拉伯數字），不要其他文字。"
     static let prompt = """
         上下文：我已經到咗你屋企樓下，喺

@@ -1,6 +1,6 @@
 # M4 輸入增強
 
-由 plan §7.5 細化（2026-11-12）。拆票後以票為準；票與本檔衝突時改票或改本檔，並在 progress〈偏差與決定〉記一行。
+由 roadmap〈M4 輸入增強〉 細化（2026-11-12）。拆票後以票為準；票與本檔衝突時改票或改本檔，並在 progress〈偏差與決定〉記一行。
 
 ## 目標
 
@@ -39,7 +39,7 @@
 第二期：
 
 - 開頭先做 Gboard 英文鍵盤的黑箱實測（自動修正的時機、退格還原、連按兩下空白、句首大寫、成對符號；`orca emulator-android`），寫到 `docs/research/`；譯詞的來源與授權另一張票查。
-- 英文模式（brief §4.7；〈細節〉〈英文模式〉）：寫 ADR 定新的組字狀態、`Snapshot` 的 `delete_before`（先查證 iOS `deleteBackward()`、Android `deleteSurroundingText`、macOS IMK `replacementRange`，寫進 brief §12.3）、英文的切詞（`@`、`.`）、「預測」含不含下一個詞。單字預測與英文建議列（英文使用者詞與詞典的前綴補完）、Shift 與句首大寫、自動修正（退格可還原、還原時不學修正字、照 AOSP 不自動修的條件）；自動修正與句首大寫各有開關、預設關。
+- 英文模式（brief §4.7；〈細節〉〈英文模式〉）：寫 ADR 定新的組字狀態、`Snapshot` 的 `delete_before`（先查證 iOS `deleteBackward()`、Android `deleteSurroundingText`、macOS IMK `replacementRange`，寫進 `docs/research/facts-platforms.md`）、英文的切詞（`@`、`.`）、「預測」含不含下一個詞。單字預測與英文建議列（英文使用者詞與詞典的前綴補完）、Shift 與句首大寫、自動修正（退格可還原、還原時不學修正字、照 AOSP 不自動修的條件）；自動修正與句首大寫各有開關、預設關。
 - 英文資料包改用 aosp-dictionaries 的 experimental 詞典（CC BY 4.0），取代 `scowl-en-us`，也給規則 4；`bench` 確認第 2 位不會被多搶；`z` 只在中文組字的比對時濾掉。
 - 觸控的中英鍵與英文鍵盤（QWERTY 字母頁）：做成佈局的頁面與按鍵動作，預設觸控佈局加上；英文狀態的建議列沿用現在的候選列（M5 重做）。
 - 欄位類型：email、網址預設英文模式並關自動修正，數字欄開數字頁。
@@ -51,7 +51,7 @@
 
 ### 不做
 
-- 空白鍵滑動移游標、英文滑動輸入、中文滑動評估：M5（plan §7.9）。
+- 空白鍵滑動移游標、英文滑動輸入、中文滑動評估：M5（roadmap〈M5 觸控鍵盤與設定〉）。
 - 撤銷學習與譯詞上屏的觸控手勢、候選列與英文建議列的重做：M5；長按候選維持字根提示（brief §4.4）。
 - 同步的傳輸層（iCloud、自架、同步資料夾）：第一個平台殼（brief §7）；M4 只定格式與合併規則。
 - 永久屏蔽候選（CyIME 的做法被評為偏離預期，`docs/research/cyime.md` §4）。
@@ -112,9 +112,9 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 - 程序：懲罰與空間模型、鄰鍵先驗的參數只在 dev 切分（`dev-typo.tsv`、`dev-touch.tsv` 與 dev 的一般題）調；test 與個人集在設定定案後只跑一次，門檻只看那一次。
 - 可以改門檻的條件：期中檢查（票 18）試用後使用者覺得改錯太多或幫不上忙，由使用者決定；錯誤模型依真實打字資料修正後重新產生集合（門檻的增量與上限不變）；brief §4.8 改了。不因某張票沒過而放寬。
 
-## 細節（由 plan §7.5 搬來）
+## 細節（由 roadmap〈M4 輸入增強〉 搬來）
 
-2026-11-12 拆票時由 plan §7.5 原樣搬來，範圍與票以上面各節與票為準；本節沒寫文件名的 § 指 plan。
+2026-11-12 拆票時由 roadmap〈M4 輸入增強〉 原樣搬來，範圍與票以上面各節與票為準；本節沒寫文件名的 § 指 plan。
 
 分兩期（使用者 2026-11-12 決定，M4 檢視；審查與成熟做法見 `docs/research/learning-forgetting-sync.md`、`docs/research/spatial-correction-swipe.md`）：第一期中文容錯與學習資料，做完有期中檢查（`bench`、每鍵延遲、使用者試用）；第二期英文與譯詞。空白鍵移游標、英文滑動輸入、中文滑動評估已移到 M5（§7.9）。
 
@@ -143,7 +143,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 
 - 開頭先做 Gboard 英文鍵盤的黑箱實測（自動修正的時機、退格還原、連按兩下空白、句首大寫、成對符號），寫到 `docs/research/`；譯詞的來源與授權一起查。
 - 英文模式（brief §4.7）：單字預測、自動修正（退格可還原）、Shift 與句首大寫；自動修正與句首自動大寫各有開關、預設關，容錯也有開關、預設開（brief §7），都放進 `Options`。自動修正對原樣讀得通的要保守，照 AOSP 不自動修的條件（含數字、全大寫、email 字元等）；退格還原時不學修正字。核心的英文直通把鍵交還宿主，英文模式要核心自己組字、出建議，是新的組字狀態，寫一份 ADR，一起定：
-  - `Snapshot` 加「先刪游標前 N 字再上屏」（例如 `delete_before`），給自動修正還原、連按兩下空白、成對符號用；殼照做，不自己判斷（§1.3）。先查證 iOS `deleteBackward()`、Android `deleteSurroundingText`、macOS IMK `replacementRange` 的行為，寫進 brief §12.3。
+  - `Snapshot` 加「先刪游標前 N 字再上屏」（例如 `delete_before`），給自動修正還原、連按兩下空白、成對符號用；殼照做，不自己判斷（§1.3）。先查證 iOS `deleteBackward()`、Android `deleteSurroundingText`、macOS IMK `replacementRange` 的行為，寫進 `docs/research/facts-platforms.md`。
   - 英文的切詞：`@`、`.` 這類字元算不算詞內（email 要整串是一個詞，LatinIME 以 `.` 分隔）。
   - 英文資料包改用 aosp-dictionaries 的 experimental 詞典（CC BY 4.0，逐詞頻率與 bigram、含 `z` 開頭的詞，`docs/research/spatial-correction-swipe.md` §6），取代 `scowl-en-us`，同一份也給規則 4；用 `bench` 確認第 2 位不會被多搶；`z` 只在中文組字的比對時濾掉（§4.4）。「預測」包不包括下一個詞由 ADR 定。
 - 觸控的中英切換鍵與英文鍵盤（QWERTY 字母頁）：預設觸控佈局加中英鍵（brief §4.4 現在沒有，只有接實體鍵盤才進得了英文）。英文頁與中英鍵做成佈局的頁面與按鍵動作，自訂佈局才能自己決定放不放；英文狀態的建議列只做最小版，沿用現在的候選列，M5 重做候選列時再改。
@@ -176,8 +176,13 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
   - 開 debug 面板讀得到前文與重排的要求、結果。
 - 兩個瀏覽器設定檔各選一次同一個候選，互相同步（各自匯出快照、匯入時合併）後它成首選；一個新使用者詞與一筆刪除同步後讀回一致。
 - 匯出 v3 再匯入等價；v1、v2 的檔仍匯入得了；合併的交換律、結合律、冪等有性質測試。
-- 句中英文混輸與聯想補強的結論寫回 brief 或 plan；譯詞的來源與授權寫進 brief §12。
+- 句中英文混輸與聯想補強的結論寫回 brief 或 plan；譯詞的來源與授權寫進 brief〈事實索引〉。
 - `cargo xtask check` 全套綠燈；progress.md 依〈寫法與封存〉封存 M4、M5 標為進行中之前，以上全部成立。
+
+### 使用者試
+
+- 第一期：期中檢查時在電腦瀏覽器試用，已通過（`docs/decisions.md` 2026-11-13 那一條）。
+- 第二期：收尾票封存前，在電腦與手機瀏覽器試用範圍內第二期的功能，回覆同意後才封存。啟動方式在 `docs/development.md`〈網頁〉。
 
 ## 票序
 

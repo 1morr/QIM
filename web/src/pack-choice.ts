@@ -1,4 +1,4 @@
-// 資料包的清單與每種用哪份（plan §4.6）：內建的加上匯入的，設定頁列出、切換。純邏輯，不碰瀏覽器
+// 資料包的清單與每種用哪份（plan〈資料包 manifest〉）：內建的加上匯入的，設定頁列出、切換。純邏輯，不碰瀏覽器
 // 的儲存與核心；manifest 的核對在核心（`Pack.verify`、交給 `Session` 時）。
 
 /** 不交給 `Session`、由 `RadicalHints` 另外載入的種類。 */
@@ -69,7 +69,7 @@ export function parseManifest(json: string, origin: PackOrigin): PackEntry {
 /**
  * 列出的資料包：內建的照原順序，同種的匯入的接在那種後面。和內建同 id 的匯入取代內建那份（刪掉後回到
  * 內建的）；線上更新下載的只在版本比內建的高（`newer(下載的, 內建的)`）時取代，同版或較舊時用內建的、
- * 下載的不列（不刪，plan §4.7）。
+ * 下載的不列（不刪，plan〈線上更新〉）。
  */
 export function listPacks(
 	builtin: readonly PackEntry[],

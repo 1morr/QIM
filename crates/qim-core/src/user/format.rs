@@ -1,5 +1,5 @@
-//! 學習資料的匯出格式 `# qim-userdict v3`（plan §2.4〈匯出格式〉）：對外的檔案格式，改了要升版本
-//! （brief §5.3）；v1、v2 的檔一直要收。殼存檔、換機、備份與跨裝置同步都用它（ADR 0007）。
+//! 學習資料的匯出格式 `# qim-userdict v3`（plan〈學習與排位〉〈匯出格式〉）：對外的檔案格式，改了要升版本
+//! （brief〈版本與更新〉）；v1、v2 的檔一直要收。殼存檔、換機、備份與跨裝置同步都用它（ADR 0007）。
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -13,7 +13,7 @@ use super::{
 use crate::Date;
 use crate::english_user::{self, ENGLISH_COMPLETION_AFTER, EnglishUserWord, EnglishUserWords};
 
-/// 匯出檔的第一行（plan §2.4）；格式改了要升版本（brief §5.3）。v3 每列開頭是種類、帶各台的次數、墓碑與
+/// 匯出檔的第一行（plan〈學習與排位〉）；格式改了要升版本（brief〈版本與更新〉）。v3 每列開頭是種類、帶各台的次數、墓碑與
 /// 最後使用的日期，檔頭有裝置 id；M4 收尾前還沒定稿，M4 的票可以往裡加種類與欄位（M4 spec〈共同規則〉）。
 const HEADER: &str = "# qim-userdict v3";
 /// M3 定稿的第一行：沒有種類欄，列的種類由空的欄分辨；詞欄有跳脫、可以有常用語，沒有日期。
@@ -89,7 +89,7 @@ enum Shape {
 }
 
 impl UserModel {
-    /// 匯出成 `# qim-userdict v3` 的 TSV（plan §2.4），給殼存檔、換機、備份或同步到別台。每列開頭是種類：
+    /// 匯出成 `# qim-userdict v3` 的 TSV（plan〈學習與排位〉），給殼存檔、換機、備份或同步到別台。每列開頭是種類：
     /// 每個（方案, 輸入碼, 詞）一列 `entry`，依方案、輸入碼、詞的順序；接著個人 bigram 一列一組
     /// `bigram`，依前一個字詞、這一段的順序；再來英文使用者詞 `english`，依小寫的順序。刪掉的條目只剩各台的
     /// 次數與墓碑（ADR 0007）。殼沒給過日期時學到的日期留空（不寫假日期）。詞欄與前一個字詞經 [`escape`]。

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// brief §4.3 的鍵位表，每一列一項，實打網頁讀回輸入框、組字與候選（M1 票 23）。
+// brief〈桌面鍵盤操作〉 的鍵位表，每一列一項，實打網頁讀回輸入框、組字與候選（M1 票 23）。
 // 細節的變化（翻頁找字、連打分段）另見 keys、composition-keys、edit-segments 各檔。
 
 function ui(page: Page) {

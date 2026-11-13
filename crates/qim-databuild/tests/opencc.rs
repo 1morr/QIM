@@ -1,4 +1,4 @@
-//! OpenCC 字典的讀法、反轉與 `hk2s` 的組法（plan §4.4）。
+//! OpenCC 字典的讀法、反轉與 `hk2s` 的組法（plan〈英文、簡繁與 emoji〉）。
 
 use qim_databuild::opencc::{self, Dictionary};
 

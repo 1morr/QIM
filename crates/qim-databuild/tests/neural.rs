@@ -1,4 +1,4 @@
-//! 停鍵層的模型（plan §2.7、§4.6）：`train.py` 訓練好的模型核對 PyTorch 的分數後量化、匯入
+//! 停鍵層的模型（plan〈模型分層〉〈資料包 manifest〉）：`train.py` 訓練好的模型核對 PyTorch 的分數後量化、匯入
 //! `data/neural-rerank/`，再由它建模型資料包。用 `qim-neural` 的極小測試模型。
 
 use std::path::{Path, PathBuf};

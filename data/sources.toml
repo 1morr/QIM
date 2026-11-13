@@ -1,8 +1,8 @@
-# 資料來源（plan §4）：每個來源釘版本（git 來源填 commit）與每個檔的 sha256。
+# 資料來源（plan〈碼表與資料管線〉）：每個來源釘版本（git 來源填 commit）與每個檔的 sha256。
 # qim-databuild 下載到 repo 外的快取（docs/development.md〈資料建置〉），sha256 不符就失敗；換版本時改 version、url 與 sha256。
 # 資料進資料包的來源要寫 license_text，三選一：statement（照抄上游檔裡的聲明）、upstream_file（上游釘住的授權檔整份）、
 # repo_file（repo 裡存的全文）。
-# license 寫 SPDX 識別碼，SPDX 沒有的用 LicenseRef-<名>；資料包 manifest 的 license 由它接成（plan §4.6）。
+# license 寫 SPDX 識別碼，SPDX 沒有的用 LicenseRef-<名>；資料包 manifest 的 license 由它接成（plan〈資料包 manifest〉）。
 
 [source.libcangjie]
 repository = "https://gitlab.freedesktop.org/cangjie/libcangjie"
@@ -24,8 +24,8 @@ path = "data/README.table.md"
 url = "https://gitlab.freedesktop.org/cangjie/libcangjie/-/raw/346026b8ccf4ffdfbe424400edb6a588c0c5ba8e/data/README.table.md"
 sha256 = "5962758f991e9119dddf78391202443731264332ea6b1f013791ba599fcb1b5d"
 
-# kGradeLevel 給速成碼表排字序、kHKGlyph 給簡體字的判定（plan §4.1），進資料包；kCangjie 只用來交叉比對
-# libcangjie 的倉頡三代碼（plan §4.5）。三欄都在 zip 裡的 Unihan_DictionaryLikeData.txt，
+# kGradeLevel 給速成碼表排字序、kHKGlyph 給簡體字的判定（plan〈速成碼表〉），進資料包；kCangjie 只用來交叉比對
+# libcangjie 的倉頡三代碼（plan〈驗證〉）。三欄都在 zip 裡的 Unihan_DictionaryLikeData.txt，
 # 檔頭指向 https://www.unicode.org/terms_of_use.html，其中 Data Files 適用 Unicode License V3。
 [source.unihan]
 repository = "https://www.unicode.org/Public/18.0.0/ucd/"
@@ -40,16 +40,16 @@ path = "Unihan.zip"
 url = "https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip"
 sha256 = "4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e"
 
-# 粵語維基（plan §4.3）：首選字基準的 bench/corpus/yue-wiki.tsv 與 bigram、字頻的訓練語料；只有字頻進詞庫資料包。
+# 粵語維基（plan〈字級 bigram 與詞級 trigram〉）：首選字基準的 bench/corpus/yue-wiki.tsv 與 bigram、字頻的訓練語料；只有字頻進詞庫資料包。
 # 用 pages-articles 自己抽內文：CirrusSearch 內容 dump 已搬到 other/cirrus_search_index/、
 # 只留最近約 5 週，釘了會很快下載不到；pages-articles 的舊版仍可下載（20240101 回 200，2026-11-04 查）。
 # 取用：主名字空間（ns 0）、非重定向頁面最新版的 wikitext，抽內文的規則在 crates/qim-databuild/src/wikitext.rs。
-# 前處理（plan §4.3，四份語料的設定在 crates/qim-databuild/src/corpora.rs 的 conversion）：原文已是繁體，只經 OpenCC t2hk
+# 前處理（plan〈字級 bigram 與詞級 trigram〉，四份語料的設定在 crates/qim-databuild/src/corpora.rs 的 conversion）：原文已是繁體，只經 OpenCC t2hk
 # 換香港寫法，再照字形對照表換回常見寫法（「説→說」「揾→搵」，crates/qim-databuild/src/common_forms.rs）；s2hk 會把繁體裡也是簡體的字再轉一次（晒→曬、吓→嚇、布→佈），這份換錯約 6.8 萬字（票 17b）。
 # sha256 自己算；Wikimedia 公告的 sha1 是 8bbf1efcda7c2ae2800d9406fb1892a8feb84d9c（dumpstatus.json），兩者都核對過。
 # 期限：小站的舊 dump 目前幾乎全留，但 XML dump 預告 2027-01 停用，archive.org 也沒有 zh_yuewiki 2026 的存檔；
-# 停用前要換成能長期下載的取法並重釘（plan §8）。
-# 各語料 train 切分的字頻進詞庫資料包（plan §4.2），所以四份語料都要寫授權。Creative Commons 的
+# 停用前要換成能長期下載的取法並重釘（plan〈風險與回寫點〉）。
+# 各語料 train 切分的字頻進詞庫資料包（plan〈詞庫〉），所以四份語料都要寫授權。Creative Commons 的
 # 法律文本存在 repo：它不是資料來源、沒有可釘的 commit；全文取自 creativecommons.org 各授權的
 # legalcode.txt（2026-11-04）。
 [source.yue_wiki]
@@ -63,7 +63,7 @@ path = "zh_yuewiki-20261101-pages-articles.xml.bz2"
 url = "https://dumps.wikimedia.org/zh_yuewiki/20261101/zh_yuewiki-20261101-pages-articles.xml.bz2"
 sha256 = "e493dce7899884e250de0dcb208e560f6dff1e8b7970e7abdd015dc61da83126"
 
-# 中文維基（plan §4.3）：bench/corpus/zh-wiki.tsv 與 bigram、字頻的訓練語料；只有字頻進詞庫資料包。
+# 中文維基（plan〈字級 bigram 與詞級 trigram〉）：bench/corpus/zh-wiki.tsv 與 bigram、字頻的訓練語料；只有字頻進詞庫資料包。
 # 取自 Internet Archive 的長期存檔，不用 dumps.wikimedia.org：官方站對 zhwiki 這種大站實測只留約 7 個月
 # （2026-11-04 只列 20260401–20261101，20240101 回 404），小站 zh_yuewiki 卻幾乎全留；保留期數沒有官方明文。
 # 鏡像站（your.org、accum.se）保留得更短。XML dump 另預告 2027-01 停用（dumps.wikimedia.org 首頁）。
@@ -71,7 +71,7 @@ sha256 = "e493dce7899884e250de0dcb208e560f6dff1e8b7970e7abdd015dc61da83126"
 # 這是能長期下載到同一個檔的最近一期；換期要整個來源重釘（網址、日期、sha256），不能只改日期。
 # 抽樣：只取第一個分片 pages-articles1（page id 1–187712，約 204 MB），分片內每篇條目都用，不再抽。
 # 篇數由分片決定、依 dump 順序，同一個檔永遠抽出同一批；其餘分片不下載。取用與抽內文的規則同 yue_wiki。
-# 前處理：混有簡體，經 OpenCC s2hk 轉香港繁體，再照字形對照表換回常見寫法（「羣→群」「温→溫」；使用者決定字形用常見寫法，brief §4.1、票 17b）。
+# 前處理：混有簡體，經 OpenCC s2hk 轉香港繁體，再照字形對照表換回常見寫法（「羣→群」「温→溫」；使用者決定字形用常見寫法，brief〈字集與字形〉、票 17b）。
 # sha256 自己算；archive.org 公布的 sha1 是 a53ef937244e2c1af8fb9513bc17f1ea009554ac（item 的 _files.xml），兩者都核對過。
 [source.zh_wiki]
 repository = "https://archive.org/details/zhwiki-20220501"
@@ -84,8 +84,8 @@ path = "zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"
 url = "https://archive.org/download/zhwiki-20220501/zhwiki-20220501-pages-articles1.xml-p1p187712.bz2"
 sha256 = "c7e1b65a7a36092ac35c2f2f2eaa2c12babf07caa223b46217f8ab6db7fea0aa"
 
-# HKCanCor（香港粵語語料庫，plan §4.3 的口語語料）：bench/colloquial/hkcancor.tsv 與訓練語料；字頻與 train 切分裡的詞
-# （已分詞，plan §4.2，M3 票 18）進詞庫資料包。
+# HKCanCor（香港粵語語料庫，plan〈字級 bigram 與詞級 trigram〉 的口語語料）：bench/colloquial/hkcancor.tsv 與訓練語料；字頻與 train 切分裡的詞
+# （已分詞，plan〈詞庫〉，M3 票 18）進詞庫資料包。
 # 原始 repo 的 README 與 data/LICENSE 聲明 CC BY 4.0，引用 Luke & Wong (2015)；PyCantonese 內建的版本有改動，不用。
 # zip 裡 utf8/ 下 58 個轉寫檔：一個話輪一個 <sent>，<sent_tag> 裡一行一詞「詞/詞性/粵拼/」。
 # 抽法：只取詞、照原順序接成話輪（標點也是詞，留給切句），規則在 crates/qim-databuild/src/hkcancor.rs。
@@ -102,9 +102,9 @@ path = "data/hkcancor-utf8.zip"
 url = "https://raw.githubusercontent.com/fcbond/hkcancor/39aeadf920e0b5ca93d0ad7792c59e740e7bdd65/data/hkcancor-utf8.zip"
 sha256 = "09223963b8756254e15353cad843f8a4b0cbc4b9223dc8a8fa27fb1cf846057e"
 
-# Common Voice 的粵語句子（plan §4.3 的口語語料）：bench/colloquial/common-voice-yue.tsv 與訓練語料；只有字頻進詞庫資料包。
+# Common Voice 的粵語句子（plan〈字級 bigram 與詞級 trigram〉 的口語語料）：bench/colloquial/common-voice-yue.tsv 與訓練語料；只有字頻進詞庫資料包。
 # 取 GitHub 上 Sentence Collector 的句子檔，不取 Mozilla Data Collective 的資料集：後者要登入同意條款、
-# 條款禁止 re-host，建置下載不了也不能放進 repo；repo 的 README 與 server/data/LICENSE 聲明句子是 CC0 1.0（brief §12.1）。
+# 條款禁止 re-host，建置下載不了也不能放進 repo；repo 的 README 與 server/data/LICENSE 聲明句子是 CC0 1.0（`docs/research/facts-tables.md`）。
 # yue 與 zh-HK 兩個檔都是粵語口語句子（只重疊 69 句），一行一句，都用；兩個檔 2022 年後沒改過。
 # 前處理同 yue_wiki：原文是繁體，只經 t2hk、換回常見寫法（s2hk 會把「搵」「晒」「吓」「涌」換掉，票 17b）。
 [source.common_voice]
@@ -126,7 +126,7 @@ sha256 = "0c537e9d65c1f1de10d70a1e0989d929b557628d975bf480d8b3b6fcc6291f26"
 # Tatoeba 的粵語句子沒有加（票 03 的 Comments）：per_language 下載檔每週覆蓋、沒有版本化網址與存檔快照，
 # 釘了 sha256 一週後乾淨建置就失敗；授權 CC BY 2.0 FR 要逐句列作者。
 
-# rime-essay（八股文，plan §4.2）：詞與詞頻，進詞庫資料包 quick-lexicon。essay.txt 一行「詞<TAB>詞頻」，442,688 列。
+# rime-essay（八股文，plan〈詞庫〉）：詞與詞頻，進詞庫資料包 quick-lexicon。essay.txt 一行「詞<TAB>詞頻」，442,688 列。
 # 取用：兩字以上、詞頻 ≥ 100、字都在連打字集的詞，規則在 crates/qim-databuild/src/lexicon.rs。
 # essay 是 OpenCC 標準寫法（羣組、觀衆）：每個詞經 OpenCC t2hk 再換成常見寫法（common_forms.rs），和粵語語料同一套；
 # 並存寫法（TWO_WAY_FORMS，裏／裡這類）的詞兩種寫法都收，詞頻相同；「着」的詞另收「著」的寫法（ONE_WAY_FORMS，單向）。
@@ -147,7 +147,7 @@ path = "LICENSE"
 url = "https://raw.githubusercontent.com/rime/rime-essay/054920de4f54c9e5994276a96a4fc2a35cb51aa3/LICENSE"
 sha256 = "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
 
-# OpenCC（plan §4.4）：簡繁資料包 opencc-hk2s 的轉換表，照 OpenCC 的 data/config/hk2s.json（香港繁體 → 簡體）組成：
+# OpenCC（plan〈英文、簡繁與 emoji〉）：簡繁資料包 opencc-hk2s 的轉換表，照 OpenCC 的 data/config/hk2s.json（香港繁體 → 簡體）組成：
 # 正規化 CJK_Compatibility_Ideographs → 用 TSPhrases 分段 → HKVariantsRevPhrases、HKVariantsRev 一組 → TSPhrases、TSCharacters 一組。
 # HKVariantsRev 由 HKVariants 反轉產生（照 data/scripts/reverse.py，含 `# @reverse-prefer:` 的偏好）。
 # TSCharacters 裡 `# @tofu-risk:` 標記的罕用簡體字（TSCharactersExt）不用，保留原字：多數字型顯示不出，
@@ -175,7 +175,7 @@ path = "data/dictionary/TSCharacters.txt"
 url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/TSCharacters.txt"
 sha256 = "9ff46a7d30e5765375eb13d33f2b03a34d298913caf2b120380679f33ae1642d"
 
-# STCharacters 不進簡繁資料包，只給速成碼表判定繁體模式排在後面的簡體字（plan §4.1，crates/qim-databuild/src/simplified.rs）。
+# STCharacters 不進簡繁資料包，只給速成碼表判定繁體模式排在後面的簡體字（plan〈速成碼表〉，crates/qim-databuild/src/simplified.rs）。
 [[source.opencc.files]]
 path = "data/dictionary/STCharacters.txt"
 url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/data/dictionary/STCharacters.txt"
@@ -196,7 +196,7 @@ path = "LICENSE"
 url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/LICENSE"
 sha256 = "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308"
 
-# ESDB（English Speller Database，舊名 SCOWL，plan §4.4）：英文資料包 scowl-en-us 的詞表，中文狀態的英文候選用。
+# ESDB（English Speller Database，舊名 SCOWL，plan〈英文、簡繁與 emoji〉）：英文資料包 scowl-en-us 的詞表，中文狀態的英文候選用。
 # 取 en-wl/wordlist release rel-2026.02.25 的 hunspell-en_US zip：官方的 size 60、美式、預設變體詞表
 # （zip 裡 README_en_US.txt 的「Wordlist Command: mk-list --accents=strip en_US 60」，由 commit 7e99eda 建出）。
 # 不從 repo 的 data/ 自己組：要跑 ESDB 自己的 Python + SQLite 工具（combine.py 合併十幾份來源檔），
@@ -223,7 +223,7 @@ path = "Copyright"
 url = "https://raw.githubusercontent.com/en-wl/wordlist/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/Copyright"
 sha256 = "090575a131b4260926c7a6b30a90aca0f5db5fbb5c46778e0c5855227bf6ebc3"
 
-# emoji 資料包（plan §4.4，M3 票 16）：CLDR 的粵語與繁中標註給「字詞 → emoji」。release-49 是 2026-11-11 最新的
+# emoji 資料包（plan〈英文、簡繁與 emoji〉，M3 票 16）：CLDR 的粵語與繁中標註給「字詞 → emoji」。release-49 是 2026-11-11 最新的
 # stable（lightweight tag，指向下面的 commit；release-49-beta*、-m* 是預發布）。標註檔頭是 SPDX Unicode-3.0；
 # 頂層 LICENSE 第一段講 UTS #35 規格本身，其餘內容（含資料檔）是 Unicode License V3，整份照抄進資料包的 LICENSE。
 # 取用：common/annotations/ 的關鍵字（` | ` 分隔）與短名（type="tts"）；annotationsDerived/（膚色與組合序列）不用，
@@ -264,16 +264,16 @@ path = "emoji-test.txt"
 url = "https://www.unicode.org/Public/18.0.0/emoji/emoji-test.txt"
 sha256 = "8f3735cda1f92a779d78af67cf86066bb1f07143dc22f2ac29394d9bc57ab21a"
 
-# 粵典（words.hk）的詞頭表與詞頻（plan §4.2，M3 票 24）：只進可選的詞庫資料包 quick-lexicon-words-hk，不進預設詞庫。
+# 粵典（words.hk）的詞頭表與詞頻（plan〈詞庫〉，M3 票 24）：只進可選的詞庫資料包 quick-lexicon-words-hk，不進預設詞庫。
 # 「細數據」頁（https://words.hk/faiman/analysis/）的 wordslist（全部詞頭與讀音）與 existingwordcount（詞在粵文庫的出現次數）
 # 標「Data License: public domain」，但詞典本體是《非商業開放資料授權協議 1.0》、兩者關係沒說明，
-# 所以照較嚴的非商業條款處理（使用者 2026-11-11 決定，brief §12.1）：資料包的 LICENSE 附英文版權告示、免責聲明、
+# 所以照較嚴的非商業條款處理（使用者 2026-11-11 決定，`docs/research/facts-tables.md`）：資料包的 LICENSE 附英文版權告示、免責聲明、
 # 特別鳴謝名單與官網連結。授權頁沒有版本化的網址、每年改版權年份，全文同 Unicode 存在 repo。
 # 取用：wordslist 每行第一欄的詞頭（去掉結尾的「*」，那是含異體字的記號），兩字以上；existingwordcount 的次數給詞頻。
 # 規則在 crates/qim-databuild/src/words_hk.rs 與 lexicon.rs。CSV 是 CRLF、沒有引號，首行是「Source,<頁面網址>」。
 # 釘版本：網址沒有版本、內容隨詞典更新，version 填下載日期，sha256 釘住那天的內容（頁面標的更新日：wordslist 2026-10-08、
 # existingwordcount 2026-03-30）。上游更新後乾淨建置報 sha256 不符：重新下載、核對後改 version 與兩個 sha256，
-# 重跑 bench 再更新 plan §4.2 的詞數。對不上（或下載失敗）時只略過粵典詞庫，其他資料包照建、結束碼仍是 0，
+# 重跑 bench 再更新 plan〈詞庫〉 的詞數。對不上（或下載失敗）時只略過粵典詞庫，其他資料包照建、結束碼仍是 0，
 # 警告印在 stderr（crates/qim-databuild/src/pipeline.rs 的 load_headwords）。CI 不建資料包，不受影響。
 [source.words_hk]
 repository = "https://words.hk/faiman/analysis/"

@@ -71,7 +71,7 @@ test("分段選字上屏後重新整理網頁，學到的詞仍在第 2 位", as
 		path: testInfo.outputPath("auto-phrase-reload.png"),
 	});
 
-	// 再選一次成首選（brief §4.5）。
+	// 再選一次成首選（brief〈學習與排位〉）。
 	await pick(page, "雲口");
 	await page.keyboard.type("mir");
 	await expect(items.first()).toHaveText("1雲口");

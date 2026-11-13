@@ -726,7 +726,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     assert!(license.contains(STATEMENT), "{license}");
     assert!(license.contains("Unicode-3.0"), "{license}");
     assert!(license.contains(UNICODE_LICENSE), "{license}");
-    // OpenCC 判定簡體字（plan §4.1）。
+    // OpenCC 判定簡體字（plan〈速成碼表〉）。
     assert!(license.contains(APACHE.trim_end()), "{license}");
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
     assert!(
@@ -742,7 +742,7 @@ fn builds_pack_with_license_and_notice_and_verifies_it() {
     assert_eq!((report.continuous, report.extension), (34, 1));
 }
 
-/// 每份資料包旁有 manifest（plan §4.6）：描述旁邊的資料包檔，授權是各來源的 SPDX 識別碼以 AND 接起、
+/// 每份資料包旁有 manifest（plan〈資料包 manifest〉）：描述旁邊的資料包檔，授權是各來源的 SPDX 識別碼以 AND 接起、
 /// 不重複；`--verify` 讀回來核對。
 #[test]
 fn every_pack_has_a_manifest_next_to_it() {
@@ -779,7 +779,7 @@ fn every_pack_has_a_manifest_next_to_it() {
     ] {
         manifest_of(name);
     }
-    // 停鍵層的模型由 data/neural-rerank/ 包起來，授權是訓練語料的（brief §11）。
+    // 停鍵層的模型由 data/neural-rerank/ 包起來，授權是訓練語料的（brief〈待決〉）。
     let (model, bytes) = manifest_of("停鍵層模型");
     assert_eq!(model.kind, PackKind::Model);
     assert_eq!(model.id, "zh-hant-neural-rerank");
@@ -1029,7 +1029,7 @@ fn builds_language_model_pack_named_by_the_scheme_with_its_own_license_and_notic
     assert!(notice.contains("zh-wiki 1, hkcancor 64"), "{notice}");
 }
 
-/// 詞級 trigram（plan §4.3）：預算版與放寬版都建，方案指名的那份在前；授權含切詞用的詞庫來源。
+/// 詞級 trigram（plan〈字級 bigram 與詞級 trigram〉）：預算版與放寬版都建，方案指名的那份在前；授權含切詞用的詞庫來源。
 #[test]
 fn builds_both_word_trigram_packs_with_the_named_one_first() {
     let root = tempfile::tempdir().unwrap();
@@ -1738,7 +1738,7 @@ fn personal_userdb_is_transcoded_next_to_it_and_removed_with_it() {
     assert!(!root.path().join("bench/personal/rime-userdb.tsv").exists());
 }
 
-/// 粵典的詞另建一份可選的詞庫資料包（M3 票 24，plan §4.2）：預設詞庫的詞全在、再補粵典的詞頭；
+/// 粵典的詞另建一份可選的詞庫資料包（M3 票 24，plan〈詞庫〉）：預設詞庫的詞全在、再補粵典的詞頭；
 /// 預設詞庫沒有粵典的詞。授權照非商業條款，`LICENSE`、`NOTICE` 附版權告示、鳴謝與官網，寫明不得再授權、
 /// 不得商業使用。
 #[test]

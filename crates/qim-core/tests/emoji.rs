@@ -1,4 +1,4 @@
-//! emoji 候選（M3 票 16，plan §2.4）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它
+//! emoji 候選（M3 票 16，plan〈學習與排位〉）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它
 //! 後面（rime-emoji 的做法），整列最多 [`EMOJI_LIMIT`] 個；選了原樣上屏、不學。
 
 mod common;

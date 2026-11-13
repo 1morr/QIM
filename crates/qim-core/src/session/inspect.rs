@@ -1,4 +1,4 @@
-//! 網頁 debug 面板的查詢（plan §3.1，M4 票 01）：核心為什麼這樣排。只給網頁用、不進 [`Snapshot`]，
+//! 網頁 debug 面板的查詢（plan〈網頁 prototype〉，M4 票 01）：核心為什麼這樣排。只給網頁用、不進 [`Snapshot`]，
 //! 殼只在面板開著時呼叫，所以每鍵不多花時間；平台殼與 `qim-ffi` 不用。
 //!
 //! [`Snapshot`]: super::Snapshot
@@ -10,9 +10,9 @@ use crate::{CLAUSE_START, Engine, Segment, UserModel, Weights};
 /// [`Session::inspect`] 的結果。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inspection {
-    /// 核心記著的前文（plan §2.1〈上下文〉）。
+    /// 核心記著的前文（plan〈介面〉〈上下文〉）。
     pub context: ContextState,
-    /// 沒選定的輸入碼開頭的字接的前一字（字級 bigram，plan §2.3）。
+    /// 沒選定的輸入碼開頭的字接的前一字（字級 bigram，plan〈排序：同一把尺〉）。
     pub preceding_char: PrecedingChar,
     /// 開頭的一段接的前一個字詞（個人 bigram）；沒有是 `None`。
     pub preceding_word: Option<String>,
@@ -22,7 +22,7 @@ pub struct Inspection {
     pub candidates: Vec<InspectedCandidate>,
     /// 最近一個鍵是 [`crate::Key::Weighted`]（觸控或實體鍵盤的字母鍵）時，它的各字母機率（M4 票 06、07）；其他鍵是 `None`。
     pub key_weights: Option<Weights>,
-    /// 候選列的停鍵重排來自快取（plan §2.7，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
+    /// 候選列的停鍵重排來自快取（plan〈模型分層〉，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
     pub rerank_cached: bool,
 }
 
@@ -33,7 +33,7 @@ pub enum ContextState {
     Known(String),
     /// 不知道前文：殼沒給、也還沒上屏過，或交還宿主的鍵、換欄位讓它作廢。
     Unknown,
-    /// 無痕：不讀前文（brief §8）。
+    /// 無痕：不讀前文（brief〈隱私與安全〉）。
     Incognito,
 }
 
@@ -45,11 +45,11 @@ pub struct InspectedCandidate {
     pub kind: CandidateKind,
     /// 字詞的各段（碼、字詞、來源）；英文、emoji、英文使用者詞與聯想沒有。
     pub segments: Vec<InspectedSegment>,
-    /// 路徑分（plan §2.3）：各段接前一段的分數總和，含學習加分；不在 lattice 裡的候選是 `None`。
+    /// 路徑分（plan〈排序：同一把尺〉）：各段接前一段的分數總和，含學習加分；不在 lattice 裡的候選是 `None`。
     pub score: Option<f64>,
     /// 路徑分裡學到的加分（各段 `personal` 的和）；沒有路徑分時是 `None`。
     pub learning: Option<f64>,
-    /// 排定它位置的排位規則（1–5，plan §2.4）。
+    /// 排定它位置的排位規則（1–5，plan〈學習與排位〉）。
     pub rule: Option<u8>,
     /// 停鍵重排放到這裡的。
     pub rerank: Option<Reranked>,
@@ -102,7 +102,7 @@ pub struct InspectedSegment {
     pub learned: bool,
     /// 有它接在前一個字詞後面的個人 bigram。
     pub personal_bigram: bool,
-    /// 碼有萬用鍵（brief §1.5）時它實際對到的碼（不含分隔記號，同學習記的碼）；沒有萬用鍵是 `None`。
+    /// 碼有萬用鍵（brief〈功能分級〉）時它實際對到的碼（不含分隔記號，同學習記的碼）；沒有萬用鍵是 `None`。
     pub matched_code: Option<String>,
 }
 
@@ -118,7 +118,7 @@ pub enum SegmentSource {
 }
 
 impl Session {
-    /// 給網頁 debug 面板看的排序原因（plan §3.1）。不改組字；殼只在面板開著時呼叫。
+    /// 給網頁 debug 面板看的排序原因（plan〈網頁 prototype〉）。不改組字；殼只在面板開著時呼叫。
     pub fn inspect(&self, engine: &Engine, user: &UserModel) -> Inspection {
         let context = match (&self.context, self.options.incognito) {
             (_, true) => ContextState::Incognito,

@@ -1,4 +1,4 @@
-//! 網頁 debug 面板的查詢（plan §3.1，M4 票 01）：`Session::inspect` 說明核心為什麼這樣排——殼給的
+//! 網頁 debug 面板的查詢（plan〈網頁 prototype〉，M4 票 01）：`Session::inspect` 說明核心為什麼這樣排——殼給的
 //! 前文、組字接在什麼後面、各候選的來源、路徑分與學習加分、排位規則與重排。只給網頁用，不進
 //! `Snapshot`。
 

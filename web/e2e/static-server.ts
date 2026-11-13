@@ -1,4 +1,4 @@
-// e2e 扮演 GitHub release 的本機靜態伺服器（plan §4.7）：`node e2e/static-server.ts <目錄> <埠>`，
+// e2e 扮演 GitHub release 的本機靜態伺服器（plan〈線上更新〉）：`node e2e/static-server.ts <目錄> <埠>`，
 // 把目錄裡的檔照檔名送出，其他一律 404。Playwright 設定把它當第二個 webServer 起，Vite 開發伺服器的
 // `/pack-updates/` 轉發到這裡（`QIM_PACK_UPDATE_URL`）。
 

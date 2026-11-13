@@ -1,6 +1,6 @@
-// 上下文（plan §2.1）：把輸入框游標前的文字交給核心（`Session.setContext`），候選照前文排、數字後半形
+// 上下文（plan〈介面〉）：把輸入框游標前的文字交給核心（`Session.setContext`），候選照前文排、數字後半形
 // 看前文。聚焦、移動游標（點擊、方向鍵、選取）、輸入框內容改了（上屏、宿主打的字、刪字）之後都給，
-// 失焦時叫核心忘掉；無痕時不給（brief §8）。
+// 失焦時叫核心忘掉；無痕時不給（brief〈隱私與安全〉）。
 
 import type { Session } from "./wasm/qim_wasm.js";
 
@@ -38,7 +38,7 @@ export function mountContext(
 		}
 	};
 	text.addEventListener("focus", sync);
-	// 失焦等於換欄位：核心忘掉前文，回來時 focus 重給（plan §2.1）。
+	// 失焦等於換欄位：核心忘掉前文，回來時 focus 重給（plan〈介面〉）。
 	text.addEventListener("blur", () => {
 		session.clearContext();
 		afterLeave();

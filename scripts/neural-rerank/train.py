@@ -79,7 +79,7 @@ def prepare(args: argparse.Namespace) -> None:
         kept = [l for l in raw if l and l not in exclude]
         lines[name] = kept
         dropped[name] = len(raw) - len(kept)
-    # 字表依字次數排；口語乘上權重（同 bigram 的語料權重，plan §4.3），口語常用字不會掉出字表。
+    # 字表依字次數排；口語乘上權重（同 bigram 的語料權重，plan〈字級 bigram 與詞級 trigram〉），口語常用字不會掉出字表。
     counts: Counter[str] = Counter()
     for name, ls in lines.items():
         w = args.colloquial_weight if name in COLLOQUIAL else 1

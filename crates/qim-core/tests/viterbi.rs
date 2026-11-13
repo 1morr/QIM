@@ -1,4 +1,4 @@
-//! Viterbi + beam 的獨立對照（plan §2.3）：小輸入上窮舉每一種切法，照 plan 的式子算分，
+//! Viterbi + beam 的獨立對照（plan〈排序：同一把尺〉）：小輸入上窮舉每一種切法，照 plan 的式子算分，
 //! 核心的首選要是最高分的路徑之一。bigram 讓下一段的分數看前一段的最後一個字，beam 窄時
 //! 可能剪掉之後會勝出的部分路徑，所以這裡給夠寬的 beam（大於可能的部分路徑數）。
 
@@ -128,7 +128,7 @@ fn engine(data: &Data) -> Engine {
     .unwrap()
 }
 
-/// 一段可用的字詞：碼、文字、不看前文的分數（plan §2.3）。字 −γ；詞 β − γ 加上
+/// 一段可用的字詞：碼、文字、不看前文的分數（plan〈排序：同一把尺〉）。字 −γ；詞 β − γ 加上
 /// `ln(詞頻 ÷ 詞頻總和) − ln P_unigram(第一字)`，詞頻總和每個詞算一次。
 fn pieces(data: &Data) -> Vec<(String, String, f64)> {
     let r = data.ranking;
@@ -210,7 +210,7 @@ fn every_path(
 }
 
 proptest! {
-    /// 有前文時開頭的字接前文最後一字的 bigram；前文的最後一字沒有統計時照沒有前文（plan §2.3）。
+    /// 有前文時開頭的字接前文最後一字的 bigram；前文的最後一字沒有統計時照沒有前文（plan〈排序：同一把尺〉）。
     #[test]
     fn top_candidate_is_a_highest_scoring_path_over_every_segmentation(
         data in data(),
@@ -247,7 +247,7 @@ proptest! {
 
 proptest! {
     /// 選了只蓋住開頭的候選後，剩下輸入碼的首選是接在選定分段最後一字後面的最高分路徑
-    /// （plan §2.3），不是從組字開頭用 unigram 算的。
+    /// （plan〈排序：同一把尺〉），不是從組字開頭用 unigram 算的。
     #[test]
     fn after_selecting_a_leading_segment_the_top_follows_its_last_character(
         data in data(),

@@ -1,4 +1,4 @@
-//! 線上更新的 release 目錄（plan §4.7）：`build/packs/<id>/` 的四個檔改名成 `<id>.pack`、
+//! 線上更新的 release 目錄（plan〈線上更新〉）：`build/packs/<id>/` 的四個檔改名成 `<id>.pack`、
 //! `<id>.manifest.json`、`<id>.LICENSE`、`<id>.NOTICE`（release asset 的名字不能重複，每份資料包的
 //! `LICENSE` 會撞名），加一份列出全部的 `index.json`。入口是 `cargo xtask pack-release`。
 

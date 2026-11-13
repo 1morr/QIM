@@ -1,4 +1,4 @@
-// 網頁的 `localStorage`（plan §3.1）：學習資料、設定、每種資料包用哪份都經這裡存。瀏覽器封鎖網站資料
+// 網頁的 `localStorage`（plan〈網頁 prototype〉）：學習資料、設定、每種資料包用哪份都經這裡存。瀏覽器封鎖網站資料
 // （讀 `window.localStorage` 就丟 `SecurityError`）或存不下（`QuotaExceededError`）時不丟錯：第一次出錯
 // 之後寫入只留在記憶體、讀先看記憶體，這次不會存，網頁照樣能打字；`storage.watch` 讓網頁在狀態列說明。
 

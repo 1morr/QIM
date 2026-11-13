@@ -28,3 +28,5 @@ Blocked by: 02
 - 2026-11-12 實際亂按（桌面）：700 下隨機按鍵（字母、退格、Esc、空白、數字、←→、翻頁、Tab、分隔記號、逗號）夾雜切四種重排模式、開關無痕、隨機停頓；沒有 pageerror，重排關著時面板從沒讀到用快取。截圖 `.scratch/m4/evidence/03-rerank-cache-panel.png`、`03-rerank-cache.png`、`03-monkey.png`。
 - 2026-11-12 code-review 沒處理的（判斷題）：`RerankKey` 與 `RerankRequest` 欄位重疊（Data Clumps；`RerankRequest` 是對外型別、多一個 `generation`，不合併）；重排識別是字串、神經模型帶整份 manifest（核心只比相等，不另立型別）；e2e 的 `ui()` 照各 spec 慣例各寫一份。已知剩下的縫：同一個 `generation` 被要求兩次、中間前文變了時，先回來的結果會記到後來的鍵下；網頁的排程每個 `generation` 只要求一次，碰不到。
 - 2026-11-12 合併 main（票 07、15）後補 `tests/backspace_undo.rs` 的 `the_rerank_cache_follows_learning_and_its_undo`（協調者要求）：上屏學到了，同一串碼同樣的前文不用上屏前的結果；上屏後退格撤銷，學習資料逐字回到上屏前，用快取（排法就是模型對同一份輸入會給的）。讓快取忽略路徑分時這條會紅。plan §2.7 補一句。
+
+Session 紀錄：停鍵結果快取放核心：鍵是重排要求、上限 32；殼給 `set_reranker_id`，漏給只是沒快取；退格回算過的碼不等停鍵

@@ -1,9 +1,9 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-// 組字中修改（M1 票 21）：移到中間的分段改選，其餘沒選定的分段重算（plan §2.1）。
+// 組字中修改（M1 票 21）：移到中間的分段改選，其餘沒選定的分段重算（plan〈介面〉）。
 // 組字裡選定的分段顯示字詞，沒選定的顯示字根。
 // `anrkbof` 的首選路徑是「門口｜有｜無」三段，中間一段 `kb` 有別的字可選；
-// 改選中間一段後，最後一段 `of` 接在改選的字後面重算（plan §2.3，M3 票 04）：改選「冇」時
+// 改選中間一段後，最後一段 `of` 接在改選的字後面重算（plan〈排序：同一把尺〉，M3 票 04）：改選「冇」時
 // 首選是「冇你」的「你」，不是單打 `of` 的「係」（M1 票 17b 換掉 `anrkboa`：資料包改了之後
 // 它的首選路徑變成「門｜口布｜會」）。
 const INPUT = "anrkbof";
@@ -39,7 +39,7 @@ async function recomputedTop(page: Page, single: string): Promise<string> {
 /**
 /**
  * 不知道前文時（無痕不給前文，M3 票 05）的候選：`read` 在打開無痕時做，做完關掉。目前分段的候選
- * 和不知道前文時單打那個碼相同，不接前一段（plan §2.1）；空的輸入框有前文（句首），單打的名次不同。
+ * 和不知道前文時單打那個碼相同，不接前一段（plan〈介面〉）；空的輸入框有前文（句首），單打的名次不同。
  */
 async function withoutContext<T>(
 	page: Page,
@@ -55,7 +55,7 @@ async function withoutContext<T>(
 }
 
 /**
- * 單打時接在字詞後面的 emoji 只給剩下的整串，目前分段的候選列沒有（plan §2.4），和分段的候選列
+ * 單打時接在字詞後面的 emoji 只給剩下的整串，目前分段的候選列沒有（plan〈學習與排位〉），和分段的候選列
  * 比較前去掉。
  */
 function withoutEmoji(texts: string[]): string[] {

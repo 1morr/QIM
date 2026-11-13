@@ -1,4 +1,4 @@
-# 跑什麼、為什麼不跑 e2e 與 bench --check：docs/development.md〈全部檢查〉、plan §6。
+# 跑什麼、為什麼不跑 e2e 與 bench --check：docs/development.md〈全部檢查〉、plan〈開發環境與閘門〉。
 name: CI
 
 on:

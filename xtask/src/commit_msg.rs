@@ -1,4 +1,4 @@
-//! `cargo xtask commit-msg <訊息檔>`：commit message 的 subject 照 Conventional Commits（plan §6）。
+//! `cargo xtask commit-msg <訊息檔>`：commit message 的 subject 照 Conventional Commits（plan〈開發環境與閘門〉）。
 //!
 //! `.githooks/commit-msg` 呼叫它；規則說明見 `docs/development.md`〈Commit message〉。
 

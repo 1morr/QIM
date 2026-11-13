@@ -138,7 +138,7 @@ test("切數字列時鎖定的大寫與目前頁留著", async ({ page }) => {
 	await expect(shift).toHaveAttribute("data-shift", "locked");
 });
 
-// Shift（brief §4.4，照 Gboard 速成實測，M1 票 27）。
+// Shift（brief〈手機觸控鍵盤〉，照 Gboard 速成實測，M1 票 27）。
 test("點一下 Shift：字母鍵換成大寫，點「日」上屏 A，打完自動回到字根", async ({
 	page,
 }, testInfo) => {
@@ -335,7 +335,7 @@ test("符號頁：打兩個符號仍在符號頁，按「返回」回字母頁",
 	await expect(page.getByTestId("key-a")).toHaveCount(0);
 	await tapKeys(page, ["1", "@"]);
 	await expect(text).toHaveValue("1@");
-	// 打完不跳回（brief §4.4）。
+	// 打完不跳回（brief〈手機觸控鍵盤〉）。
 	await expect(page.getByTestId("key-to-letters")).toHaveText("返回");
 	await expect(page.getByTestId("key-？")).toBeVisible();
 	await page.screenshot({ path: testInfo.outputPath("symbols.png") });

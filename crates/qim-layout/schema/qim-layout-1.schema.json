@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "qim-layout/1",
-  "description": "QIM 的觸控佈局：一張畫布，每個按鍵各自記位置、大小、旋轉、形狀與上下層順序（docs/plan.md §2.6、ADR 0004）。型別在 crates/qim-layout/src/model.rs，兩邊同時改。",
+  "description": "QIM 的觸控佈局：一張畫布，每個按鍵各自記位置、大小、旋轉、形狀與上下層順序（docs/plan〈佈局：畫布模型〉、ADR 0004）。型別在 crates/qim-layout/src/model.rs，兩邊同時改。",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "variants"],

@@ -53,3 +53,5 @@ Blocked by: None (can start immediately)
 - 2026-11-12 code-review（`1cf2f1c` 起，Standards 與 Spec 兩軸）。已處理：綁定裡解讀 `CLAUSE_START` 的邏輯搬回核心（`PrecedingChar`）；名詞表補「debug 面板」；TS 的種類改字面值聯集、表頭與 `free()` 抽 helper；「選了哪條」改在結果回來當下記下（之後翻頁、打字不消失，e2e 守），`unchanged` 註明意思、名次欄改名「模型名次」；「關著時不問」的測試名稱與註解照實寫守的範圍。沒處理（判斷）：`rule` 用 1–5 的數字不另立列舉（plan §2.4 本來就以編號稱規則，呼叫處有註解）；`inspect_path` 與 `Lattice::push` 的逐段前後文平行一份（抽共用要動每鍵路徑，現由路徑分相同的測試守）；`ScoredSegment` 與 `InspectedSegment` 欄位重疊（前者是 `pub(crate)` 的計算結果，後者是對外的形狀）。
 - 2026-11-12 留給之後的票（不在本票範圍）：`web/e2e/learning.spec.ts:153` 每次跑 e2e 都改寫已完成里程碑的 `.scratch/m3/evidence/23-personal-bigram.png`，工作樹因此出現不屬於本票的改動；本票沒有 commit 它。
 - 2026-11-12 驗證：`cargo xtask check` 全綠（e2e 229 passed、2 skipped、`check 通過`）；`npm test` 51 passed。新 worktree 先 `cargo xtask data`、`npm ci --prefix web`。
+
+Session 紀錄：debug 面板：核心 `Session::inspect`（不進 Snapshot）、網頁面板與重排模型總分；bench、--learning 前後逐行相同，延遲高負載下交替量在雜訊內

@@ -9,7 +9,7 @@ use qim_layout::{
 };
 
 /// 打出輸入碼裡的字元 `c` 要按的鍵（實體鍵盤）：小寫字母是同位置實體鍵的按鍵機率（中文模式整個當美式
-/// 鍵盤，字母照實體鍵位，brief §4.8），分隔記號是 `Punct`，其餘同 `Key::for_input`。
+/// 鍵盤，字母照實體鍵位，brief〈容錯〉），分隔記號是 `Punct`，其餘同 `Key::for_input`。
 pub fn physical_key(c: char) -> Key {
     if !c.is_ascii_lowercase() {
         return Key::for_input(c);

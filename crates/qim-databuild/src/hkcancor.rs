@@ -1,11 +1,11 @@
-//! HKCanCor（香港粵語語料庫）的轉寫檔 → 話輪文字（plan §4.3 的口語語料）。
+//! HKCanCor（香港粵語語料庫）的轉寫檔 → 話輪文字（plan〈字級 bigram 與詞級 trigram〉 的口語語料）。
 //!
 //! 取 fcbond/hkcancor 的 `data/hkcancor-utf8.zip`：`utf8/` 下每個檔是一段錄音的轉寫，
 //! 一個話輪一個 `<sent>`，`<sent_tag>` 裡一行一詞，寫成 `詞/詞性/粵拼/`。只取詞，
 //! 照原順序接成一個話輪；標點也是詞（`，/w/VQ2/`），留給切句當分隔。夾英文詞或粵拼的話輪
 //! 在切句後轉碼失敗、整句丟掉，同其他語料。
 //!
-//! 語料已分詞，詞庫另收 train 切分裡的詞（[`TrainWords`]，plan §4.2）。
+//! 語料已分詞，詞庫另收 train 切分裡的詞（[`TrainWords`]，plan〈詞庫〉）。
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -73,7 +73,7 @@ impl WordCounts {
     }
 }
 
-/// 數 train 切分裡每個兩字以上的詞出現幾次（plan §4.2）。
+/// 數 train 切分裡每個兩字以上的詞出現幾次（plan〈詞庫〉）。
 ///
 /// 切句（[`clauses`]）、切分與丟句同語料管線（`corpus::Builder`），看轉換後的話輪，所以 dev、test
 /// 的句子（首選字基準的題目）裡的詞不數；詞照轉換後的寫法數。轉換改了字數的話輪對不上詞的位置，

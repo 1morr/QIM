@@ -1,4 +1,4 @@
-//! 詞級 trigram 的訓練（plan §4.3，M3 票 11b；做法與數字在 `scripts/experiments/model-ladder/`
+//! 詞級 trigram 的訓練（plan〈字級 bigram 與詞級 trigram〉，M3 票 11b；做法與數字在 `scripts/experiments/model-ladder/`
 //! README〈同步層〉，票 08 量過）：各語料 train 切分的句子 → 用現行打分切成段 → 段的 bigram 與
 //! trigram，各語料各算折扣的 interpolated Kneser-Ney → 依次數剪枝 → [`WordTrigram`]。
 //!
@@ -45,7 +45,7 @@ pub const LARGE: Pruning = Pruning {
 };
 
 /// 建出的一份詞級 trigram：id、種類名與剪枝門檻。方案 `[packs]` 指名其中一份當預設，兩份都建，
-/// 設定頁可以切換（plan §4.6）。
+/// 設定頁可以切換（plan〈資料包 manifest〉）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Variant {
     pub id: &'static str,
@@ -75,7 +75,7 @@ pub const BUDGET_ID: &str = VARIANTS[0].id;
 #[derive(Debug, Clone)]
 pub struct CurrentScoring<'a> {
     base: &'a LanguageModel,
-    /// 詞庫的詞 → 第一字之後的 ln 機率（plan §2.3：`ln P_詞頻 − ln P_unigram(第一字)`）。
+    /// 詞庫的詞 → 第一字之後的 ln 機率（plan〈排序：同一把尺〉：`ln P_詞頻 − ln P_unigram(第一字)`）。
     rest: FxHashMap<Box<str>, f64>,
     /// 最長的詞幾個字。
     longest: usize,

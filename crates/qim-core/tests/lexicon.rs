@@ -149,7 +149,7 @@ fn characters_without_a_frequency_keep_the_code_table_order() {
 
 #[test]
 fn extension_characters_follow_everything_covering_the_whole_input() {
-    // 擴展區的字頻再高也不進 lattice、不和整串的候選比分數（plan §2.3）。
+    // 擴展區的字頻再高也不進 lattice、不和整串的候選比分數（plan〈排序：同一把尺〉）。
     assert_eq!(
         texts(&type_input(&engine(&[('𠀀', 1000)]), "ar")),
         ["問", "日口", "曰口", "旦口", "𠀀", "日", "曰", "旦"]
@@ -169,7 +169,7 @@ fn space_commits_a_word() {
     assert_eq!(snapshot.composition.input, "");
 }
 
-/// 方案指名的是預設的詞庫；殼可以換成另一份（設定頁的切換，plan §4.6），但方案要詞庫時不能不給、
+/// 方案指名的是預設的詞庫；殼可以換成另一份（設定頁的切換，plan〈資料包 manifest〉），但方案要詞庫時不能不給、
 /// 不要詞庫時不能給。
 #[test]
 fn scheme_names_the_default_lexicon_and_another_one_can_replace_it() {

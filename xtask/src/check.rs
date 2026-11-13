@@ -22,9 +22,9 @@ pub enum Action {
     Cargo(&'static [&'static str]),
     /// 在 `web/` 跑 `npm run <script>`。
     NpmScript(&'static str),
-    /// 依賴規則（plan §1.3），見 [`crate::deps`]。
+    /// 依賴規則（plan〈依賴規則〉），見 [`crate::deps`]。
     Deps,
-    /// progress 與里程碑 spec 的規則（plan §6），見 [`crate::docs`]。
+    /// progress 與里程碑 spec 的規則（plan〈開發環境與閘門〉），見 [`crate::docs`]。
     Docs,
     /// 產生網頁的 WebAssembly 綁定，`tsc` 要讀它的型別；見 [`crate::web::wasm_bindings`]。
     WasmBindings,

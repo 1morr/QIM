@@ -1,19 +1,19 @@
-# 速成輸入方案。欄位見 docs/plan.md §2.5；由 qim-databuild 編進資料包，qim-core 不讀 TOML。
+# 速成輸入方案。欄位見 docs/plan〈輸入方案〉；由 qim-databuild 編進資料包，qim-core 不讀 TOML。
 
 id = "quick"
 name = "速成"
 version = "1"
 alphabet = "abcdefghijklmnopqrstuvwxy"
 max_code_length = 2
-wildcard = "z" # 萬用鍵（plan §2.5）：代替任一碼，速成只用 a–y；macOS 倉頡也用 Z
+wildcard = "z" # 萬用鍵（plan〈輸入方案〉）：代替任一碼，速成只用 a–y；macOS 倉頡也用 Z
 
 [packs] # 另外的資料包的 id，由 qim-databuild 建到 build/packs/<id>/
 lexicon = "quick-lexicon"
-language_model = "zh-hant-bigram" # 字級 bigram（plan §4.3）
-word_trigram = "zh-hant-word-trigram" # 詞級 trigram 預算版（plan §4.3）；放寬版 zh-hant-word-trigram-large 也會建
+language_model = "zh-hant-bigram" # 字級 bigram（plan〈字級 bigram 與詞級 trigram〉）
+word_trigram = "zh-hant-word-trigram" # 詞級 trigram 預算版（plan〈字級 bigram 與詞級 trigram〉）；放寬版 zh-hant-word-trigram-large 也會建
 radical_hint = "cangjie-hint"     # 字根提示用的倉頡三代 / 五代碼，不進 lattice（ADR 0003）
 
-[ranking] # 連打的打分（plan §2.3）；M1 票 12 在 dev 切分上格點搜尋，個人集只當守門，過程在票 12 的 Comments
+[ranking] # 連打的打分（plan〈排序：同一把尺〉）；M1 票 12 在 dev 切分上格點搜尋，個人集只當守門，過程在票 12 的 Comments
 word_bonus = 1.0      # β：每個詞庫的段加的分；再低 dev 會好，但個人集（多是兩字詞）答錯變多
 segment_penalty = 1.0 # γ：每一段扣的分；β − γ 是詞比拆成單字多拿的分
 beam = 20             # 每個位置保留的部分路徑數（libime 預設）；放寬到 40 dev 只差 1 題

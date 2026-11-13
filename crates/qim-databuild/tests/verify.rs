@@ -13,7 +13,7 @@ use qim_databuild::transcode::Transcoder;
 use qim_databuild::verify::{self, CheckId, Report};
 use qim_databuild::{bigram, build_scheme_pack, lexicon, radical_hint, scheme, word_trigram};
 
-/// 取自 libcangjie `346026b`，涵蓋 plan §4.5 的抽查字與「門口」，加一個擴展區的字；
+/// 取自 libcangjie `346026b`，涵蓋 plan〈驗證〉 的抽查字與「門口」，加一個擴展區的字；
 /// 廿、竹、水讓 `the` 打得出中文（英文候選的抽查）；笑（`hk`）給 emoji 候選的抽查；门（HKSCS 收的簡體字）
 /// 與蚱同是 `ls`。
 const TABLE: &str = "\
@@ -789,7 +789,7 @@ fn word_trigram_that_pushes_the_budget_over_the_limit_fails_its_size_check() {
     assert_eq!(failed(&report), [CheckId::WordTrigramSize]);
 }
 
-/// 建出的預設詞級 trigram 要是方案指名的那份（核心接受別份，所以由建置端擋，plan §4.5）。
+/// 建出的預設詞級 trigram 要是方案指名的那份（核心接受別份，所以由建置端擋，plan〈驗證〉）。
 #[test]
 fn word_trigram_other_than_the_named_one_fails_decoding() {
     let mut packs = all_packs();

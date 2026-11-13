@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 22
-讀: brief §4.7、§12.1；plan §2.3、§5.2；spec〈細節〉（句中英文混輸）；票 22；spec〈共同規則〉
+讀: brief §4.7、`docs/research/facts-tables.md`；plan §2.3、§5.2；spec〈細節〉（句中英文混輸）；票 22；spec〈共同規則〉
 
 ## What to build
 

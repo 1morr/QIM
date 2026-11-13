@@ -1,4 +1,4 @@
-// 候選展開面板（plan §3.1）：候選列右側的展開鍵，一次列全部候選（brief §4.4）。
+// 候選展開面板（plan〈網頁 prototype〉）：候選列右側的展開鍵，一次列全部候選（brief〈手機觸控鍵盤〉）。
 
 import { element } from "./dom.ts";
 

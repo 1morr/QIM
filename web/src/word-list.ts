@@ -1,4 +1,4 @@
-// 匯入詞庫（plan §2.4、§3.1，M3 票 17）：選一份詞表，先在頁面上列出會加幾個詞、略過哪些列，
+// 匯入詞庫（plan〈學習與排位〉〈網頁 prototype〉，M3 票 17）：選一份詞表，先在頁面上列出會加幾個詞、略過哪些列，
 // 使用者確認後加進使用者詞。同匯入學習資料的流程，不用瀏覽器原生的對話框；格式與規則在核心。
 
 import { element, message } from "./dom.ts";
@@ -45,7 +45,7 @@ export function mountWordList(
 	const confirmText = element<HTMLElement>("#confirm-word-list-text");
 	const ok = element<HTMLButtonElement>("#confirm-word-list-ok");
 	const shortcuts = element<HTMLElement>("#word-list-shortcuts");
-	// Gboard 的快捷鍵是在別的鍵盤設的，在速成多半撞到別的碼：預設不設成觸發詞（plan §2.4）。
+	// Gboard 的快捷鍵是在別的鍵盤設的，在速成多半撞到別的碼：預設不設成觸發詞（plan〈學習與排位〉）。
 	const asTriggers = element<HTMLInputElement>("#word-list-as-triggers");
 	const shortcutsText = element<HTMLElement>("#word-list-shortcuts-text");
 	const triggerList = element<HTMLUListElement>("#word-list-triggers");

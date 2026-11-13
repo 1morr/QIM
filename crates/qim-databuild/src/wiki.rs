@@ -1,4 +1,4 @@
-//! 維基百科 dump → 內文（plan §4.3）：bzip2 解壓、讀 XML、抽 wikitext 的內文。
+//! 維基百科 dump → 內文（plan〈字級 bigram 與詞級 trigram〉）：bzip2 解壓、讀 XML、抽 wikitext 的內文。
 
 use std::io::{BufReader, Read};
 

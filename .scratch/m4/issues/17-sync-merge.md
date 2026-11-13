@@ -47,3 +47,5 @@ Blocked by: 13, 14, 15, 16
 - 截圖：`.scratch/m4/evidence/17-synced-top.png`、`17-synced-deletion.png`、`17-synced-clear.png`、`17-restore-confirm.png`、`17-merge-confirm.png`。
 - `bench --check`：12 個集合答錯、修正都等於 baseline，沒有翻盤，固定題 84/84。`bench --learning` 與票 16 逐項相同（yue-wiki 3239／3216、zh-wiki 3493／3578、common-voice-yue 3249／3108、hkcancor 2148／1719、yue-wiki·前文 1738／1715、zh-wiki·前文 1729／1764、common-voice-yue·前文 594／550、hkcancor·前文 1512／1179）。
 - 每鍵 p95（原生）：第一次量在負載 15–30 時學過的第 20 碼起到 1.05 ms，所以和 7ad01da 交替量兩輪（負載 5–8）：7ad01da 空白 80.8／86.1 µs／1.37 ms、78.0／83.5 µs／1.35 ms，學過 181／261 µs／2.19 ms、170／234 µs／2.06 ms；這張票 空白 79.9／85.2 µs／1.35 ms、88.3／93.3 µs／1.44 ms，學過 170／263 µs／2.02 ms、171／250 µs／1.99 ms（全部／第 20 碼起／選開頭一段），在雜訊內，都在上限內。
+
+Session 紀錄：跨裝置合併：各台次數相加、墓碑只存雜湊、版本取大、tick 對齊、清空也同步；匯入改合併，網頁說明合併幾筆；ADR 0007；收 7ad01da 草稿

@@ -1,11 +1,11 @@
-//! 網頁 e2e 用的小詞庫（plan §4.6、§4.7）：檔案進 git，這裡比對它們和現在的資料包、manifest 與
+//! 網頁 e2e 用的小詞庫（plan〈資料包 manifest〉〈線上更新〉）：檔案進 git，這裡比對它們和現在的資料包、manifest 與
 //! 更新索引的格式一致，格式改了會紅。`QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test
 //! web_fixture` 重產。
 //!
 //! - `e2e-lexicon/`：從檔案匯入的詞庫。
 //! - `e2e-update-lexicon/`：線上更新前先匯入的舊版（1.0.0）。
 //! - `quick-lexicon-1.0.1/`、`quick-lexicon-1.0.2/`：和內建詞庫同 id 的兩版，e2e 攔請求換上，驗下載版與
-//!   內建版取版本較高的那份（plan §4.7）。
+//!   內建版取版本較高的那份（plan〈線上更新〉）。
 //!
 //! 扮演 GitHub release 的 `pack-release/` 由 `qim-databuild` 的 `tests/release.rs` 照 `cargo xtask
 //! pack-release` 的路寫出。

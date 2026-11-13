@@ -1,4 +1,4 @@
-//! 個人集：把使用者 Rime 的學習資料（brief §12.2 的 `.userdb.txt`）轉成首選字基準的題目（plan §5.2）。
+//! 個人集：把使用者 Rime 的學習資料（`docs/research/facts-rime.md` 的 `.userdb.txt`）轉成首選字基準的題目（plan〈首選字基準〉）。
 //!
 //! 輸入碼由 [`Transcoder`] 從詞轉出，不用 Rime 記下的碼：那是詞典的倉頡全碼，不是使用者按的鍵。
 //! 內容只在本機；錯誤訊息只帶行號，不帶內容。
@@ -11,7 +11,7 @@ use crate::transcode::Transcoder;
 pub const USERDB: &str = "bench/personal/rime-userdb.txt";
 /// 轉出的題目，`qim-bench` 讀它：第一行 [`SOURCE_HEADER`] 接 [`USERDB`] 的 sha256，
 /// 之後一行「逐字速成碼（空格分隔）<TAB>詞<TAB>上屏次數」。
-/// 路徑與檔頭在 `qim_bench` 有同樣的常數（plan §1.3 不讓 `qim-bench` 依賴本 crate），`xtask` 的
+/// 路徑與檔頭在 `qim_bench` 有同樣的常數（plan〈依賴規則〉 不讓 `qim-bench` 依賴本 crate），`xtask` 的
 /// `shared_paths` 測試比對兩邊。
 pub const ITEMS: &str = "bench/personal/rime-userdb.tsv";
 pub const SOURCE_HEADER: &str = "# rime-userdb.txt sha256 ";

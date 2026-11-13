@@ -27,7 +27,7 @@ async function expectTop(
 	await expect(text).toHaveValue(top);
 }
 
-// 字形用常見寫法、不用香港寫法（brief §4.1，M1 票 17b 使用者決定）：語料換回常見寫法後，
+// 字形用常見寫法、不用香港寫法（brief〈字集與字形〉，M1 票 17b 使用者決定）：語料換回常見寫法後，
 // 同碼的「溫／温」「群／羣」由常見寫法當首選（香港寫法仍在碼表裡，字頻是 0）。
 for (const { code, radicals, common, replaced } of [
 	{ code: "et", radicals: "水廿", common: "溫", replaced: "温" },

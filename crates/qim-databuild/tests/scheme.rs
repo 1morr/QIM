@@ -137,7 +137,7 @@ fn alphabet_is_ascii_letters() {
     assert!(scheme::parse(&digit).is_err());
 }
 
-/// 萬用鍵（brief §1.5、plan §2.5）：選填，一個不在 alphabet 的 ASCII 小寫字母，不是分隔記號；
+/// 萬用鍵（brief〈功能分級〉、plan〈輸入方案〉）：選填，一個不在 alphabet 的 ASCII 小寫字母，不是分隔記號；
 /// 可以有字根（組字顯示用），沒有也行。
 #[test]
 fn wildcard_is_an_optional_lowercase_letter_outside_the_alphabet() {

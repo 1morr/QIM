@@ -44,7 +44,7 @@ textarea {
 	gap: 0.25rem;
 }
 
-/* 分段之間留空隙、加底線，看得出段落；目前分段反白（brief §4.3 的 ← / →）。 */
+/* 分段之間留空隙、加底線，看得出段落；目前分段反白（brief〈桌面鍵盤操作〉 的 ← / →）。 */
 #composition .segment {
 	border-bottom: 1px solid currentColor;
 	cursor: pointer;
@@ -55,7 +55,7 @@ textarea {
 	color: #fff;
 }
 
-/* 候選列：左邊中英狀態，右邊展開鍵（brief §4.4）。 */
+/* 候選列：左邊中英狀態，右邊展開鍵（brief〈手機觸控鍵盤〉）。 */
 .candidate-bar {
 	/* grid 的子項預設不縮；不設的話候選撐寬頁面，手機上整頁被縮小。 */
 	min-width: 0;
@@ -85,7 +85,7 @@ textarea {
 	padding: 0;
 	list-style: none;
 	font-size: 1.5rem;
-	/* 單列、放不下時左右滑（brief §4.4）。 */
+	/* 單列、放不下時左右滑（brief〈手機觸控鍵盤〉）。 */
 	overflow-x: auto;
 }
 
@@ -259,7 +259,7 @@ textarea {
 	font-size: 1rem;
 }
 
-/* 候選展開面板：一次列全部候選（brief §4.4），太多時面板內上下捲。 */
+/* 候選展開面板：一次列全部候選（brief〈手機觸控鍵盤〉），太多時面板內上下捲。 */
 #panel {
 	display: flex;
 	flex-wrap: wrap;
@@ -289,7 +289,7 @@ textarea {
 	transform: translateX(-50%);
 	/* 寬度以畫面寬為上限，高度不超過畫面高的 45%（--aspect 是佈局版本畫布的寬高比，touch.ts 設）。 */
 	width: min(100%, calc(45vh * var(--aspect, 1.8)));
-	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（plan §2.6）；照 Gboard 實測（M1 票 27）。 */
+	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（plan〈佈局：畫布模型〉）；照 Gboard 實測（M1 票 27）。 */
 	background: light-dark(#ededf6, #17191f);
 	touch-action: none;
 	user-select: none;
@@ -393,7 +393,7 @@ body:has(#keyboard:not([hidden])) {
 	font-size: 0.875rem;
 }
 
-/* 匯入前的確認（plan §2.4：匯入取代整份），用頁面上的區塊，不用瀏覽器原生對話框。 */
+/* 匯入前的確認（plan〈學習與排位〉：匯入取代整份），用頁面上的區塊，不用瀏覽器原生對話框。 */
 #confirm-import {
 	margin: 0;
 	padding: 0.5rem;

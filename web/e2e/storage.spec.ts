@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
 
-// 儲存打不開時照樣能打字（M4 票 02，plan §3.1）：IndexedDB（匯入、下載的資料包）或 `localStorage`
+// 儲存打不開時照樣能打字（M4 票 02，plan〈網頁 prototype〉）：IndexedDB（匯入、下載的資料包）或 `localStorage`
 // （學習資料、設定、每種資料包用哪份）打不開，網頁只用內建的資料包、存不了的留在記憶體，狀態列說明。
 // 瀏覽器封鎖網站資料時（例如 Chrome 封鎖所有 Cookie）`indexedDB.open` 與讀 `window.localStorage` 都丟
 // `SecurityError`；這裡在網頁的程式跑之前換掉它們。

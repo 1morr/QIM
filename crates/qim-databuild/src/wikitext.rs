@@ -1,4 +1,4 @@
-//! 從 MediaWiki 的 wikitext 抽出內文（plan §4.3；CirrusSearch dump 不可用時的退路，見 progress）。
+//! 從 MediaWiki 的 wikitext 抽出內文（plan〈字級 bigram 與詞級 trigram〉；CirrusSearch dump 不可用時的退路，見 progress）。
 //!
 //! 只求留下的內文是真的句子，不求完整：模板、表格、註腳、檔案與分類連結整個丟掉，
 //! 標題、列表、縮排行也丟掉；留下的殘餘標記由切句當分隔或讓句子被丟掉（`corpus`）。

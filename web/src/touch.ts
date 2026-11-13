@@ -65,7 +65,7 @@ function themed(light: string | undefined, dark: string | undefined) {
 
 /**
  * 觸控鍵盤：照 `qim-layout` 給的按鍵畫在 `container` 裡，點擊位置換算成設計尺寸的座標交給
- * `Layout.hit` 判定，網頁自己不判定按到哪個鍵（plan §3.1）。長按與預覽的狀態在這裡；
+ * `Layout.hit` 判定，網頁自己不判定按到哪個鍵（plan〈網頁 prototype〉）。長按與預覽的狀態在這裡；
  * 目前頁記在綁定的 `Layout`，動作由綁定照佈局做。
  *
  * `onSnapshot` 收到核心吃下的結果；沒吃下時 `onUnhandled` 收到同一份結果，照它的 `action`

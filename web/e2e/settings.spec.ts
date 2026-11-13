@@ -9,7 +9,7 @@ async function ready(page: Page) {
 	return { text, settings: page.getByRole("region", { name: "設定" }) };
 }
 
-test("設定區列出改核心選項的開關，預設值照 brief §7", async ({
+test("設定區列出改核心選項的開關，預設值照 brief〈設定與同步〉", async ({
 	page,
 }, testInfo) => {
 	const { settings } = await ready(page);

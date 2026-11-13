@@ -1,4 +1,4 @@
-//! 字級 bigram（plan §2.3、§4.3）：建置端訓練好 interpolated Kneser-Ney 並剪枝，核心只查表。
+//! 字級 bigram（plan〈排序：同一把尺〉〈字級 bigram 與詞級 trigram〉）：建置端訓練好 interpolated Kneser-Ney 並剪枝，核心只查表。
 //!
 //! 形式同 ARPA 的退回式：留下的 bigram 存 `ln P(c | prev)`；沒留下的用
 //! `ln α(prev) + ln P_cont(c)`。沒有前一字（組字的開頭）時用字頻的 unigram `start`。
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// 誤差最多半級（約 0.04），比 β、γ 的量級小得多。
 pub const LOG_PROB_STEP: f64 = 1.0 / 12.0;
 
-/// 句首記號（plan §2.3、§4.3）：當前一字時，`P(c | 句首)` 是 c 當一句第一字的機率。
+/// 句首記號（plan〈排序：同一把尺〉〈字級 bigram 與詞級 trigram〉）：當前一字時，`P(c | 句首)` 是 c 當一句第一字的機率。
 /// 訓練時每句的第一字接在它後面；它不是打得出的字，連打的路徑裡不會有它。
 pub const CLAUSE_START: char = '\u{2}';
 
@@ -129,7 +129,7 @@ impl LanguageModel {
     }
 
     /// 留下的 bigram 裡接在 `prev` 後面的字與 `ln P(c | prev)`，依碼位；沒留下的（退回式算的）不列。
-    /// 聯想（plan §2.3）用它找下一個字。
+    /// 聯想（plan〈排序：同一把尺〉）用它找下一個字。
     pub fn following(&self, prev: char) -> impl Iterator<Item = (char, f64)> + '_ {
         let range = self
             .index(prev)

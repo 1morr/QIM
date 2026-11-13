@@ -1,4 +1,4 @@
-// 停鍵層的神經模型（plan §2.7、§3.1，M3 票 11e）：主執行緒這邊的介面，推論在 Web Worker
+// 停鍵層的神經模型（plan〈模型分層〉〈網頁 prototype〉，M3 票 11e）：主執行緒這邊的介面，推論在 Web Worker
 // （`rerank-worker.ts`）。換資料包時先在主執行緒核對模型資料包（核心不收就丟錯，同其他資料包），再把
 // manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗要不要報都在這裡管。
 // 不在執行期 import WebAssembly 綁定：Worker 與核對由殼給，單元測試換成假的（不必先跑 `cargo xtask web`）。

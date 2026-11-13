@@ -1,4 +1,4 @@
-//! 詞表匯入（plan §2.4，M3 票 17）：把別的輸入法匯出、或使用者自己整理的詞表加進使用者詞。
+//! 詞表匯入（plan〈學習與排位〉，M3 票 17）：把別的輸入法匯出、或使用者自己整理的詞表加進使用者詞。
 //!
 //! 收三種格式，照各自產品的慣例讀：Rime 碼表（`.dict.yaml`：YAML 檔頭，`...` 之後是 Tab 分隔的
 //! 列，欄位依 `columns:`、沒寫時第一欄是字詞）、Gboard 個人字典匯出的 `dictionary.txt`（第一行
@@ -185,7 +185,7 @@ enum Row<'a> {
 const GBOARD_HEADER: &str = "# Gboard Dictionary";
 
 impl UserModel {
-    /// 把詞表 `text` 的詞加進目前方案的使用者詞（plan §2.4）：碼照 [`UserModel::add_word`] 由字
+    /// 把詞表 `text` 的詞加進目前方案的使用者詞（plan〈學習與排位〉）：碼照 [`UserModel::add_word`] 由字
     /// 推出，來源是 `manual`；Gboard 的快捷鍵照 `shortcuts` 決定設不設成觸發詞。壞列、重複、已有的
     /// 略過並記在結果裡；整份讀不了時回傳錯誤、什麼都不加。要先看會加幾個，在複本上呼叫。
     pub fn import_word_list(

@@ -49,3 +49,5 @@ Blocked by: 12
   - `longest_word_code` 算進停用的詞，只是讓 lattice 往回找的上限寬一點。
 - 合併 main（票 04 簡體前文、票 01 debug 面板）：衝突只在 `engine.rs` 的 import 與 `lattice.rs` 規則 2、3 的 `pin_at_most`（票 01 加了規則編號參數），照兩邊各留。debug 面板的路徑分走 `Engine::inspect_path`，取分經 `for_scheme`（帶今天的視圖）與 `bigrams_after`，所以停用的條目學習加分是 0、不標「學過」「個人 bigram」，和排序一致；`tests/inspect.rs` 補兩例：一年沒用的不顯示加分、日期改回來又顯示；同一個前一個字詞下一組停用時，其他組的加分和從沒接過它一樣（分母與分子的過濾各有變異驗證）。
 - 合併後全套：`cargo test --workspace` 91 個測試檔 1017 passed、0 failed；`cargo xtask bench --check` 通過（13 個集合沒有翻盤、固定題 84/84，學過的原生 p95 全部 178.83 µs、第 20 碼起 321.54 µs、選開頭一段 2065.29 µs）；`cargo xtask check` 第一輪 e2e 有一例 `pack-update.spec.ts`「下載的檔案 sha256 不符時拒絕，保留舊版」紅（重新整理後首選還是舊版詞庫），單獨重跑 3 輪 24 例全過、全套重跑通過（235 passed、2 skipped），和學習資料無關，記為線上更新 e2e 的偶發競態，留給收尾票看。
+
+Session 紀錄：一年時限（整串上屏另記日期、規則 2、3 只看一年內、一年沒用的停用不刪）、條目上限 2 萬列／3 萬組（LatinIME 1.2 倍）；v3 entry 12 欄

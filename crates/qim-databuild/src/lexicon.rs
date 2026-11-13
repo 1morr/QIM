@@ -1,4 +1,4 @@
-//! 詞庫資料包的內容（plan §4.2）：rime-essay、粵語口語詞表與 HKCanCor train 切分的多字詞（可選詞庫
+//! 詞庫資料包的內容（plan〈詞庫〉）：rime-essay、粵語口語詞表與 HKCanCor train 切分的多字詞（可選詞庫
 //! 另加粵典的詞頭）展開成速成碼索引，加上語料的字頻。
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -20,11 +20,11 @@ pub const MAX_COMBINATIONS: usize = 8;
 pub const CORPUS_MIN_COUNT: u64 = 2;
 
 /// 語料的詞每出現一次算多少詞頻（rime-essay 的尺度）：兩邊都有的詞，詞頻比次數的下四分位，
-/// 怎麼定見 plan §4.2 與 M3 票 18 Comments。
+/// 怎麼定見 plan〈詞庫〉 與 M3 票 18 Comments。
 pub const CORPUS_WORD_FREQUENCY: u64 = 300;
 
 /// 粵典的詞頭在粵文庫每出現一次算多少詞頻（rime-essay 的尺度）；換算後低於 [`MIN_FREQUENCY`]
-/// 的（含沒見過的）用門檻。怎麼定見 plan §4.2 與 M3 票 24 Comments。
+/// 的（含沒見過的）用門檻。怎麼定見 plan〈詞庫〉 與 M3 票 24 Comments。
 pub const HEADWORD_FREQUENCY: u64 = 50;
 
 /// 建一次詞庫的統計，給 `--verify` 的報告。
@@ -60,7 +60,7 @@ pub struct Counts {
     pub spellings: usize,
 }
 
-/// 詞的寫法（brief §4.1、plan §4.2）。
+/// 詞的寫法（brief〈字集與字形〉、plan〈詞庫〉）。
 pub struct Forms<'a> {
     /// 把詞換成語料的寫法：`t2hk` 再換回常見寫法、並存寫法換成代表寫法，和
     /// `corpora::Converter`（`Conversion::T2hk`）同一套。
@@ -76,7 +76,7 @@ impl Forms<'_> {
     }
 }
 
-/// 粵語口語詞表在 repo 裡的位置（plan §4.2、brief §5.2）：QIM 自行整理，CC0。
+/// 粵語口語詞表在 repo 裡的位置（plan〈詞庫〉、brief〈來源〉）：QIM 自行整理，CC0。
 pub const COLLOQUIAL_PATH: &str = "data/lexicon/yue-colloquial.tsv";
 
 /// 詞庫的詞從哪來。
@@ -357,7 +357,7 @@ fn combinations(per_char: &[&[&str]]) -> (BTreeSet<String>, bool) {
 }
 
 /// 各語料 train 切分的字頻（`build/corpus/<名>/chars.tsv`，一行「字<TAB>次數」）乘上語料的
-/// 權重再相加；權重和 bigram 的次數用同一個（`corpora.rs` 的 `weight`，plan §4.3）。
+/// 權重再相加；權重和 bigram 的次數用同一個（`corpora.rs` 的 `weight`，plan〈字級 bigram 與詞級 trigram〉）。
 pub fn char_frequency(tables: &[(&str, u64)]) -> Result<BTreeMap<char, u64>, Error> {
     let mut total = BTreeMap::new();
     for &(table, weight) in tables {

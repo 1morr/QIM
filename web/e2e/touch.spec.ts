@@ -86,7 +86,7 @@ test("組字與候選出現、上屏後，鍵盤的位置不動", async ({ page 
 	expect(await keyboard.boundingBox()).toEqual(before);
 });
 
-test("手機寬度下候選列是單列：「門口」橫排不折行（brief §4.4）", async ({
+test("手機寬度下候選列是單列：「門口」橫排不折行（brief〈手機觸控鍵盤〉）", async ({
 	page,
 }) => {
 	for (const id of ["a", "n", "r"]) {

@@ -42,3 +42,5 @@ Blocked by: 18
 - 票外的取捨：(a) 方案沒有萬用鍵時 `bench` 整個失敗（同〈每鍵延遲〉「量不了是錯誤」），所以 `tests/run.rs` 的小方案加了 `z`；之後的方案沒有萬用鍵時再改成跳過並註明。(b) 組字途中殼改了學習資料（網頁的 `mergeUserDict`、`addWord` 這類）又沒呼叫 `refresh` 時，開頭各段照舊到退格到更短或組字結束，和 lattice 早已留著的欄一樣；改前開頭各段每鍵重查會跟上。現在的殼都是一個 `Session` 配一份 `UserModel`，沒有別的 `Session` 在組字中途學習；要完全照舊得在 `UserModel` 的二十幾個寫入方法加版本號，不做。
 - code-review（`main` 起，Standards 與 Spec 兩軸）已處理：`setPacks` 後開頭各段照舊資料包（上面 (3)）；`Inputs` 改名 `InputBatch`、報告欄「輸入碼」改「批次」（輸入碼是名詞表的詞）；`report::latency` 的注釋補兩批輸入；`tests/run.rs` 假計時器注釋和 `.all` 對不上；`candidates` 直接讀 `spans` 欄改成 `Lattice::cached_spans`；小方案加 `z` 的原因寫在 fixture。沒處理：`Latency` 四個平攤的欄位（審查建議 2×2 的結構，四欄有名字、`runs()` 收在一處，不改）；commit `198759e` 的 subject 一次寫了 core 與 bench（已在合併之前，不改寫歷史）；比對程式沒進 repo（一次性的，做法寫在上面）。
 - 給之後的票（不在本票範圍）：`Session::refresh` 換了資料包時沒重建 lattice 的欄，多段路徑仍是舊資料包算的（改前就這樣；網頁組字中途換詞庫時可見，例如 `日口` 留著已拿掉的「日」）。要修就讓 `refresh` 從頭建 lattice（像撤銷學習那樣，目前分段對不上時回整串）；建議由動到資料包切換的票或 M4 收尾票（31）決定去處。
+
+Session 紀錄：含萬用鍵的輸入每鍵延遲：候選列重用開頭各段的 span、字頻排序只查一次，空白全部 p95 961→237 µs；`bench --check` 加這批輸入、同一組上限

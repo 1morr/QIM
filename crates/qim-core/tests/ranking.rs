@@ -1,4 +1,4 @@
-//! 打分參數的驗證（plan §2.3）：方案檔、`bench --set` 與 `Engine::new` 共用 `Ranking::check`。
+//! 打分參數的驗證（plan〈排序：同一把尺〉）：方案檔、`bench --set` 與 `Engine::new` 共用 `Ranking::check`。
 
 use qim_core::{CodeTable, Engine, Packs, Ranking, RankingError, Scheme, SchemePack};
 

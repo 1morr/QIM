@@ -38,3 +38,4 @@ Blocked by: None (can start immediately)
 - 2026-11-12 code-review 已處理：功能鍵改用新的 `key()` 建構，不再先做成字母 `x` 再改；檔頭 doc 補上「點中字母鍵時」與鍵外平手；格子的 `8.5`、縮排註明照 `letters_page`；第二個種子也進固定測試。
 - 2026-11-12 code-review 沒處理：改用 `prop_assume!`（理由見上）；測試格子與真實 `gboard.rs` 的尺寸差（unit 39 對 38.6、排高 54 對 56、沒有 padding、圓角 6 對 5.5）不改，`qim-layout` 的測試照依賴規則不能用 `qim-databuild`，Spec 軸已在真實直向幾何上確認結論不變。
 
+Session 紀錄：平手點都在鍵外（點擊判定照直線距離、Gaussian 各軸 σ 不同），照設計提到平手；測試格子補 Shift、刪除，種子進 repo 並加固定測試，產品沒改

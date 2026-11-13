@@ -1,8 +1,8 @@
-// 資料包線上更新（plan §4.7、brief §5.3）：讀更新索引、問核心哪些裝著的資料包有新版、下載、交給
-// `PackLibrary.install` 核對後換上。在背景跑，失敗或斷網時照用現有的（brief §8：打字不依賴網路）。
+// 資料包線上更新（plan〈線上更新〉、brief〈版本與更新〉）：讀更新索引、問核心哪些裝著的資料包有新版、下載、交給
+// `PackLibrary.install` 核對後換上。在背景跑，失敗或斷網時照用現有的（brief〈隱私與安全〉：打字不依賴網路）。
 //
 // 更新來源是 GitHub Releases，但 release 的檔案不帶 CORS 標頭，瀏覽器讀不了，所以網頁一律向自己的
-// `/pack-updates/` 要，由 Vite 開發伺服器轉發（`vite.config.ts`，同雲端 API 的做法，plan §3.1）。
+// `/pack-updates/` 要，由 Vite 開發伺服器轉發（`vite.config.ts`，同雲端 API 的做法，plan〈網頁 prototype〉）。
 
 import { message } from "./dom.ts";
 import type { PackLibrary } from "./packs.ts";
@@ -15,7 +15,7 @@ const INDEX_URL = "/pack-updates/index.json";
 const INDEX_TIMEOUT_MS = 15_000;
 /** 下載一份資料包的逾時；最大的詞庫約 5 MB。 */
 const PACK_TIMEOUT_MS = 120_000;
-/** 線上更新的開關，存 `localStorage`；關掉時存 `"off"`，預設開（brief §5.3）。 */
+/** 線上更新的開關，存 `localStorage`；關掉時存 `"off"`，預設開（brief〈版本與更新〉）。 */
 const SWITCH_KEY = "qim.packs.update";
 
 export function updatesEnabled(): boolean {

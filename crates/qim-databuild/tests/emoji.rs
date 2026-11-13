@@ -1,4 +1,4 @@
-//! CLDR 標註建 emoji 對照表（M3 票 16，plan §4.4）。
+//! CLDR 標註建 emoji 對照表（M3 票 16，plan〈英文、簡繁與 emoji〉）。
 
 use qim_databuild::emoji::{self, Annotations};
 

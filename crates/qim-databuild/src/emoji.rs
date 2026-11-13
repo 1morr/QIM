@@ -1,4 +1,4 @@
-//! emoji 資料包（plan §4.4）：CLDR 的粵語、繁中標註建「字詞 → emoji」的對照表。
+//! emoji 資料包（plan〈英文、簡繁與 emoji〉）：CLDR 的粵語、繁中標註建「字詞 → emoji」的對照表。
 //!
 //! 每個字詞的 emoji 依序是：短名（`type="tts"`）剛好是它的，再來是關鍵字有它的；兩種之內
 //! 依標註檔的順序（粵語在前），檔內依檔裡的順序。CLDR 的 `cp` 去掉了 U+FE0F，照 Unicode 的
@@ -21,7 +21,7 @@ pub const MAX_KEYWORD_EMOJI: usize = 6;
 
 /// `sources.toml` 的 `[source.cldr]`。
 pub const CLDR: &str = "cldr";
-/// CLDR 的標註檔（名字、`[source.cldr]` 裡的路徑），依優先順序：粵語在前（brief §1.3 粵語字序以
+/// CLDR 的標註檔（名字、`[source.cldr]` 裡的路徑），依優先順序：粵語在前（brief〈參考的成熟產品與採用的慣例〉 粵語字序以
 /// iOS 為準）。
 pub const CLDR_ANNOTATIONS: [(&str, &str); 2] = [
     ("yue", "common/annotations/yue.xml"),

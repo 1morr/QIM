@@ -1,4 +1,4 @@
-//! 個人集：Rime 的 `.userdb.txt`（brief §12.2）轉成基準的題目（plan §5.2）。
+//! 個人集：Rime 的 `.userdb.txt`（`docs/research/facts-rime.md`）轉成基準的題目（plan〈首選字基準〉）。
 
 use qim_databuild::libcangjie;
 use qim_databuild::personal::{Counts, from_userdb};

@@ -47,7 +47,7 @@ enum Probe {
 
     /// 主 App 寫、擴充讀的檔案。
     static let appFile = "from-app.txt"
-    /// 擴充試寫的檔案；沒有完整取用權限時應該寫不進去（brief §12.3）。
+    /// 擴充試寫的檔案；沒有完整取用權限時應該寫不進去（`docs/research/facts-platforms.md`）。
     static let keyboardFile = "from-keyboard.txt"
 
     static var groupID: String {

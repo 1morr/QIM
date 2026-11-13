@@ -1,4 +1,4 @@
-//! 詞級 trigram 的訓練（`qim_databuild::word_trigram`，plan §4.3）：剪枝後機率加總仍為 1、α 夾在 1
+//! 詞級 trigram 的訓練（`qim_databuild::word_trigram`，plan〈字級 bigram 與詞級 trigram〉）：剪枝後機率加總仍為 1、α 夾在 1
 //! 以下、各語料各算折扣、用現行打分切段、句首也是一段。
 
 use std::io::BufRead;

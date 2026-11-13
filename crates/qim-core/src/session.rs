@@ -1,4 +1,4 @@
-//! 殼與核心之間的介面（plan §2.1）：殼把按鍵交給 [`Session`]，拿回一份完整的 [`Snapshot`]。
+//! 殼與核心之間的介面（plan〈介面〉）：殼把按鍵交給 [`Session`]，拿回一份完整的 [`Snapshot`]。
 
 use std::collections::HashSet;
 
@@ -21,20 +21,20 @@ pub use inspect::{
 pub use rerank_cache::RERANK_CACHE_LIMIT;
 use rerank_cache::{RerankCache, RerankKey};
 
-/// 候選每頁的個數，對應數字鍵 1–9（brief §4.3）。
+/// 候選每頁的個數，對應數字鍵 1–9（brief〈桌面鍵盤操作〉）。
 pub const PAGE_SIZE: usize = 9;
 
-/// 核心留著的游標前文字最多幾個字（[`Session::set_context`]）：送雲端的上限（brief §8），bigram
+/// 核心留著的游標前文字最多幾個字（[`Session::set_context`]）：送雲端的上限（brief〈隱私與安全〉），bigram
 /// 只看最後一字。殼可以給更長的，核心只留最後這麼多。
 pub const CONTEXT_LIMIT: usize = 200;
 
-/// 重排要求最多帶幾條整句路徑（plan §2.1，M3 票 07、11）：lattice 的前 9 條，候選列沒有的也排得上來。
+/// 重排要求最多帶幾條整句路徑（plan〈介面〉，M3 票 07、11）：lattice 的前 9 條，候選列沒有的也排得上來。
 pub const RERANK_PATHS: usize = 9;
 
-/// 重排要求的前文最多幾個字（brief §8）：M3 模型階梯量過 200 字不比 50 字好。
+/// 重排要求的前文最多幾個字（brief〈隱私與安全〉）：M3 模型階梯量過 200 字不比 50 字好。
 pub const RERANK_CONTEXT: usize = 50;
 
-/// 給背景模型的重排要求（[`Session::rerank_request`]，plan §2.1、§2.7）。
+/// 給背景模型的重排要求（[`Session::rerank_request`]，plan〈介面〉〈模型分層〉）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct RerankRequest {
     /// 結果交回 [`Session::apply_rerank`] 時帶著它；不是目前的就丟掉。
@@ -53,7 +53,7 @@ pub struct ScoredPath {
     pub text: String,
     /// 各段的字詞（繁體原文），接起來是 `text`。
     pub segments: Vec<String>,
-    /// 同步層的路徑分（plan §2.3），只在同一串輸入碼內可比。
+    /// 同步層的路徑分（plan〈排序：同一把尺〉），只在同一串輸入碼內可比。
     pub score: f64,
 }
 
@@ -66,7 +66,7 @@ struct LastWord {
     shown: String,
 }
 
-/// 聯想（plan §2.1，M3 票 13）在接什麼：候選列是聯想時才有。
+/// 聯想（plan〈介面〉，M3 票 13）在接什麼：候選列是聯想時才有。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Association {
     /// 剛上屏的各段（繁體原文）：這次組字上屏的分段，接著選過的聯想，最多留到蓋住最後
@@ -76,38 +76,38 @@ struct Association {
     shown: String,
 }
 
-/// 殼給的選項（plan §2.1），由 [`Session::set_options`] 換。
+/// 殼給的選項（plan〈介面〉），由 [`Session::set_options`] 換。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
-    /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體（plan §2.2 的後處理）；
+    /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體（plan〈資料流〉 的後處理）；
     /// 引擎要掛上簡繁資料包（[`Engine::with_simplifier`]）。
     pub simplified: bool,
-    /// 無痕模式：不寫任何學習資料、不用前文（plan §2.4、brief §8）。
+    /// 無痕模式：不寫任何學習資料、不用前文（plan〈學習與排位〉、brief〈隱私與安全〉）。
     pub incognito: bool,
-    /// 學習（brief §4.5、§7）：關掉時不寫任何學習資料，已學的照用、前文照用（和無痕不同）。
+    /// 學習（brief〈學習與排位〉〈設定與同步〉）：關掉時不寫任何學習資料，已學的照用、前文照用（和無痕不同）。
     /// 預設開。
     pub learning: bool,
-    /// 中文狀態的英文候選（排位規則 4，plan §2.4）：整串輸入碼剛好是英文單字時排第 2 位；
-    /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief §7）。
+    /// 中文狀態的英文候選（排位規則 4，plan〈學習與排位〉）：整串輸入碼剛好是英文單字時排第 2 位；
+    /// 引擎要掛上英文資料包（[`Engine::with_english`]）。預設開（brief〈設定與同步〉）。
     pub english_candidates: bool,
-    /// 數字後的 `.` `:` 用半形（brief §4.7）：前文以半形數字結尾時直接上屏半形（[`Session::set_context`]），同 librime
-    /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief §7）。
+    /// 數字後的 `.` `:` 用半形（brief〈英文模式與欄位類型〉）：前文以半形數字結尾時直接上屏半形（[`Session::set_context`]），同 librime
+    /// `digit_separators` 預設加 `digit_separator_action: commit`；逗號照舊全形。預設開（brief〈設定與同步〉）。
     pub digit_separators: bool,
-    /// emoji 候選（plan §2.4）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面；
-    /// 引擎要掛上 emoji 資料包（[`Engine::with_emoji`]）。預設開（brief §7，同 rime-emoji）。
+    /// emoji 候選（plan〈學習與排位〉）：整串的候選是 emoji 資料包裡的詞時，它的 emoji 接在它後面；
+    /// 引擎要掛上 emoji 資料包（[`Engine::with_emoji`]）。預設開（brief〈設定與同步〉，同 rime-emoji）。
     pub emoji_candidates: bool,
-    /// 組字中單按左、右 Shift 怎麼處理（brief §4.3）；預設照 Rime。
+    /// 組字中單按左、右 Shift 怎麼處理（brief〈桌面鍵盤操作〉）；預設照 Rime。
     pub shift_switch: ShiftSwitch,
-    /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief §4.1，M3 票 19）：同 macOS
-    /// 速成，預設開（brief §7）；關掉時照分數混排。簡體模式不管它。
+    /// 繁體模式把碼表標成簡體字的字排在同碼的其他候選之後（brief〈字集與字形〉，M3 票 19）：同 macOS
+    /// 速成，預設開（brief〈設定與同步〉）；關掉時照分數混排。簡體模式不管它。
     pub simplified_after_traditional: bool,
-    /// 英文使用者詞（plan §2.4，M4 票 14）：學經核心送出去的英文串（4 字元起），英文詞典沒有、打過 2 次
+    /// 英文使用者詞（plan〈學習與排位〉，M4 票 14）：學經核心送出去的英文串（4 字元起），英文詞典沒有、打過 2 次
     /// 的在中文組字打完整串時排第 2（排位規則 4），打過 3 次又是最常用的 20 條之一時打它開頭的字母
     /// （長過一個字的最長碼）也給（排位規則 5）。關掉時不學也不給；無痕、學習關掉時不學、已學的照給。
-    /// 預設開（brief §7）。
+    /// 預設開（brief〈設定與同步〉）。
     pub english_user_words: bool,
-    /// 聯想（brief §7，M3 票 13）：上屏組字或選了聯想之後、還沒打下一個字時，候選列給接下來可能要
-    /// 打的字詞（[`Session::select`] 或數字鍵選）。預設開（brief §7）。
+    /// 聯想（brief〈設定與同步〉，M3 票 13）：上屏組字或選了聯想之後、還沒打下一個字時，候選列給接下來可能要
+    /// 打的字詞（[`Session::select`] 或數字鍵選）。預設開（brief〈設定與同步〉）。
     pub association: bool,
 }
 
@@ -206,12 +206,12 @@ pub enum Key {
     PageDown,
     Left,
     Right,
-    /// 單按 Shift（切中英，brief §4.3）；單按的判定在殼。
+    /// 單按 Shift（切中英，brief〈桌面鍵盤操作〉）；單按的判定在殼。
     ToggleAscii(ShiftKey),
     /// 殼不轉成上面各種的鍵（Tab、Delete、↑ ↓、Home、End…）：組字中吃下，免得宿主拿它改輸入框。
     Other,
     /// 只改鍵盤狀態、不送字元的鍵：單按 Ctrl、Alt、Cmd、CapsLock 這類修飾鍵，觸控鍵盤的切頁、⇧、
-    /// 換鍵盤。組字中同 `Other` 吃下；沒有組字時交還宿主，但不結束數字（brief §4.7，同 librime
+    /// 換鍵盤。組字中同 `Other` 吃下；沒有組字時交還宿主，但不結束數字（brief〈英文模式與欄位類型〉，同 librime
     /// 不記沒有字元的鍵）。
     Modifier,
     /// 觸控點一下字母鍵：各字母的機率，由殼經 `qim-layout` 依點擊位置與按鍵幾何算出（M4 票 06）。
@@ -322,7 +322,7 @@ impl Composition {
         &self.input[selected..]
     }
 
-    /// 還沒選定的輸入碼的字根，如 `anr` 的「日弓口」；殼在選定的字詞後面顯示它（brief §4.3）。
+    /// 還沒選定的輸入碼的字根，如 `anr` 的「日弓口」；殼在選定的字詞後面顯示它（brief〈桌面鍵盤操作〉）。
     pub fn unselected_radicals(&self) -> String {
         self.segments
             .iter()
@@ -448,22 +448,22 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
-    /// 前文（plan §2.1，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
+    /// 前文（plan〈介面〉，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
     /// 接上之後核心送出去的字（上屏的、交還宿主打的可見字元與空白）。殼沒給過時只有核心送出去的，
     /// 同 librime 的 commit history。`None` 是不知道：沒給過也還沒送出過字、交還宿主的鍵改了游標前的
     /// 字或移走游標（[`Session::passed_to_host`]）、殼換了欄位（[`Session::clear_context`]），或在
-    /// 無痕中：無痕時一個字都不記，關掉後也不會冒出無痕期間的字（brief §8）。
+    /// 無痕中：無痕時一個字都不記，關掉後也不會冒出無痕期間的字（brief〈隱私與安全〉）。
     context: Option<String>,
     /// 上一次上屏的組字的最後一段。前文以它結尾時，它是下一次組字的前一個字詞
     /// （[`Session::context_word`]）。
     last_word: Option<LastWord>,
     /// 這次組字開頭時前文給的前一個字詞（[`Session::context_word`]）；學個人 bigram 用，和打分時
-    /// 接的相同：組字中再給的前文留到下一次組字（plan §2.1）。
+    /// 接的相同：組字中再給的前文留到下一次組字（plan〈介面〉）。
     composition_word: Option<String>,
-    /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief §4.7）。和前文同時更新，但只記
+    /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief〈英文模式與欄位類型〉）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
-    /// 正在打的一串字（英文使用者詞，plan §2.1）：送出去的字的結尾連續的串字元。遇到其他字元、
+    /// 正在打的一串字（英文使用者詞，plan〈介面〉）：送出去的字的結尾連續的串字元。遇到其他字元、
     /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，學成英文使用者詞
     /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
     typed: TypedRun,
@@ -486,7 +486,7 @@ pub struct Session {
     /// 最近一個鍵是 [`Key::Weighted`]（觸控或實體鍵盤的字母鍵）時它的各字母機率，給 debug 面板（[`Session::inspect`]）；
     /// 其他鍵與 [`Session::text`] 清掉。
     key_weights: Option<Weights>,
-    /// 停鍵結果快取（plan §2.7，M4 票 03）：重排要求 → 模型給的名次，都是 `reranker` 排的。
+    /// 停鍵結果快取（plan〈模型分層〉，M4 票 03）：重排要求 → 模型給的名次，都是 `reranker` 排的。
     rerank_cache: RerankCache,
     /// 殼正在用的停鍵層模型的識別（[`Session::set_reranker_id`]）；`None` 時不留快取。
     reranker_id: Option<String>,
@@ -502,7 +502,7 @@ impl Session {
     /// `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選再處理；重列前
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
-        // 無痕不讀上下文（brief §8）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
+        // 無痕不讀上下文（brief〈隱私與安全〉）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
         if options.incognito && !self.options.incognito {
             self.forget_context();
         }
@@ -513,12 +513,12 @@ impl Session {
         self.options = options;
     }
 
-    /// 輸入框游標前的文字（plan §2.1），取代核心記著的；只留最後 [`CONTEXT_LIMIT`] 字。組字開頭的
+    /// 輸入框游標前的文字（plan〈介面〉），取代核心記著的；只留最後 [`CONTEXT_LIMIT`] 字。組字開頭的
     /// 字接它最後一字的 bigram，以標點、空白、符號結尾或是空的時接句首，最後一字在語言模型裡沒有
-    /// 統計時用 unigram（plan §2.3、[`Engine::context_char`]）；數字後半形看它的最後一字。殼在聚焦、
+    /// 統計時用 unigram（plan〈排序：同一把尺〉、[`Engine::context_char`]）；數字後半形看它的最後一字。殼在聚焦、
     /// 移動游標、上屏之後給；組字中給的由下一次從頭建組字時用（新的組字、選定的分段都退回去時）。
     /// 之後上屏的字與交還宿主打的字元接在後面，殼不給時也知道游標前是什麼（同 librime 的 commit
-    /// history）。無痕模式殼不給，給了也不收（brief §8）。
+    /// history）。無痕模式殼不給，給了也不收（brief〈隱私與安全〉）。
     pub fn set_context(&mut self, before: &str) {
         if self.options.incognito {
             return;
@@ -538,15 +538,15 @@ impl Session {
 
     /// 忘掉前文（不知道游標前是什麼）：殼換到別的欄位、輸入框失焦，又沒有前文可給時呼叫，上一個
     /// 欄位上屏的字就不會被當成前文。有前文可給時直接 [`Session::set_context`]，同樣整份取代。
-    /// 離開欄位也是打完了一串字：正在打的串學成英文使用者詞（plan §2.4）。
+    /// 離開欄位也是打完了一串字：正在打的串學成英文使用者詞（plan〈學習與排位〉）。
     pub fn clear_context(&mut self, user: &mut UserModel) {
         self.leave_text(user);
         // 換了欄位，之後的退格不在剛上屏的字後面，前一個動作與這裡學到的都不撤銷。
         self.expire_undo(user);
     }
 
-    /// 退格撤銷（plan §2.4）的時限到了：這個 Session 上一個動作學到的不能再撤銷，之後的退格只刪字。
-    /// 核心不讀時間，由殼計時：照 librime 的 3 秒（`RevertRecentTransaction`，brief §12.2），殼在核心
+    /// 退格撤銷（plan〈學習與排位〉）的時限到了：這個 Session 上一個動作學到的不能再撤銷，之後的退格只刪字。
+    /// 核心不讀時間，由殼計時：照 librime 的 3 秒（`RevertRecentTransaction`，`docs/research/facts-rime.md`），殼在核心
     /// 可能學到東西的動作（上屏、交還宿主的空白與標點這類讓英文串打完的鍵）之後重新計時，3 秒到了就
     /// 呼叫。換欄位時殼呼叫的 [`Session::clear_context`] 也讓它失效。別的 Session 的紀錄不動。
     pub fn expire_undo(&mut self, user: &mut UserModel) {
@@ -624,12 +624,12 @@ impl Session {
         self.finish(engine, user, snapshot)
     }
 
-    /// 撤銷學習（plan §2.4，M4 票 16）：清掉全部候選（不只目前頁）的第 `index` 個學到的，候選列跟著
+    /// 撤銷學習（plan〈學習與排位〉，M4 票 16）：清掉全部候選（不只目前頁）的第 `index` 個學到的，候選列跟著
     /// 重排，詞庫原有的詞回到不學習時的位置、自動造詞不再出；再選可以重新學。字詞清的是候選那一列的
     /// 計數與自動造詞、接在任何字詞後面是它的個人 bigram（[`UserModel::forget`]）；英文候選、英文使用者詞
     /// 與前綴補完清那個英文使用者詞；emoji 沒有學習。無痕、學習關掉時也清得掉：這是刪除，不是學習。
     /// 桌面殼在組字中按 Shift+Delete 或 Ctrl+Delete 時清目前頁的第一個（librime 綁 Ctrl+Delete、Shift 當 Ctrl
-    /// 的退路，作用在高亮的、預設是首選，翻頁後是新頁的第一個，brief §12.2），觸控的手勢跟 M5 一起定。
+    /// 的退路，作用在高亮的、預設是首選，翻頁後是新頁的第一個，`docs/research/facts-rime.md`），觸控的手勢跟 M5 一起定。
     ///
     /// 沒有組字時不動作、`handled` 為假（鍵交還宿主）；臨時英文、序號超出範圍時不動作。
     pub fn forget(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
@@ -684,7 +684,7 @@ impl Session {
     }
 
     /// 目前分段換成第 `segment` 段，候選改列那一段的字詞；`segment` 是分段數時回到沒有
-    /// 目前分段（候選列剩下的整串）。超出範圍時不動作。觸控點組字的某一段用它（brief §4.4）。
+    /// 目前分段（候選列剩下的整串）。超出範圍時不動作。觸控點組字的某一段用它（brief〈手機觸控鍵盤〉）。
     pub fn focus_segment(
         &mut self,
         engine: &Engine,
@@ -703,7 +703,7 @@ impl Session {
         with_radicals(engine, self.snapshot(engine, true, None))
     }
 
-    /// 全部候選，不分頁、經過後處理，依目前的順序；候選展開面板用（brief §4.4，librime 的
+    /// 全部候選，不分頁、經過後處理，依目前的順序；候選展開面板用（brief〈手機觸控鍵盤〉，librime 的
     /// `RimeCandidateListBegin`、fcitx5 的 `BulkCandidateList`）。選字照位置呼叫 [`Session::select`]。
     /// 換了選項還沒重列時是空的：`select` 會先依新選項重列，舊列表的位置會選錯字。
     pub fn all_candidates(&self) -> Vec<Candidate> {
@@ -717,18 +717,18 @@ impl Session {
     }
 
     /// lattice 蓋滿沒選定的輸入碼的前 `limit` 條路徑與分數，依分數由高到低，最多方案的 beam 條
-    /// （plan §2.3）。和候選列不同：多段路徑不受方案的 `sentences` 限制，也不套排位規則。模型階梯
+    /// （plan〈排序：同一把尺〉）。和候選列不同：多段路徑不受方案的 `sentences` 限制，也不套排位規則。模型階梯
     /// 實驗讀它看重排模型能從幾條路徑裡挑（M3 票 07）；沒有組字時是空的。
     pub fn paths(&self, limit: usize) -> Vec<ScoredPath> {
         self.lattice.whole_paths(limit)
     }
 
-    /// 給背景模型的重排要求（plan §2.1、§2.7）：目前的 `generation`、前文與 lattice 的前
+    /// 給背景模型的重排要求（plan〈介面〉〈模型分層〉）：目前的 `generation`、前文與 lattice 的前
     /// [`RERANK_PATHS`] 條整句路徑。沒有組字（聯想不重排）、臨時英文、移到某一段改字（候選是那一段
     /// 單打的字詞，整句插不進去）、沒有蓋滿的路徑，或換了選項還沒重列（候選列馬上會換）時是 `None`。
     /// 簡體模式下殼給的前文是簡體字，逐字轉回繁體（停鍵層模型的字表是繁體，M3 票 11e）。
     ///
-    /// 給出的要求記著（停鍵結果快取，plan §2.7），所以要 `&mut`；快取裡已有這份要求的結果時已經排好了
+    /// 給出的要求記著（停鍵結果快取，plan〈模型分層〉），所以要 `&mut`；快取裡已有這份要求的結果時已經排好了
     /// （`refresh_candidates`），是 `None`。
     pub fn rerank_request(&mut self, engine: &Engine) -> Option<RerankRequest> {
         let key = self.rerank_key(engine)?;
@@ -764,7 +764,7 @@ impl Session {
         })
     }
 
-    /// 殼正在用的停鍵層模型（plan §2.7，M4 票 03）：模式加上模型資料包的識別，殼在開始、換重排模式或
+    /// 殼正在用的停鍵層模型（plan〈模型分層〉，M4 票 03）：模式加上模型資料包的識別，殼在開始、換重排模式或
     /// 模型資料包時給；`None` 是關掉重排或沒有模型。和上次不同時清掉停鍵結果快取，舊模型排的名次不再
     /// 套用；是 `None` 時不留快取，結果照常套用。殼沒給過就是 `None`：漏給只是沒有快取，不會套用別的
     /// 模型排的名次。
@@ -777,9 +777,9 @@ impl Session {
         }
     }
 
-    /// 套用背景模型的重排結果（plan §2.1、§2.7、ADR 0005）：`order` 是 [`RerankRequest::paths`]
+    /// 套用背景模型的重排結果（plan〈介面〉〈模型分層〉、ADR 0005）：`order` 是 [`RerankRequest::paths`]
     /// 的序號，好的在前。取第一條和首選文字不同的路徑（超出範圍的序號不算）放到第 2 位：排位規則
-    /// 排在第 2 位起的候選不讓位，它排在那些後面（plan §2.4）。候選列有同樣文字的就移上來，沒有就
+    /// 排在第 2 位起的候選不讓位，它排在那些後面（plan〈學習與排位〉）。候選列有同樣文字的就移上來，沒有就
     /// 插入那條路徑，其餘照原順序往後接；首選不動。
     ///
     /// `generation` 不是目前的、這個 `generation` 沒給過要求或之後換了模型（[`Session::set_reranker_id`]）、
@@ -898,7 +898,7 @@ impl Session {
         self.finish(engine, user, snapshot)
     }
 
-    /// 一個動作（按鍵、點候選、點分段、打文字）開始（退格撤銷，plan §2.4）：收起前一個動作的撤銷紀錄，
+    /// 一個動作（按鍵、點候選、點分段、打文字）開始（退格撤銷，plan〈學習與排位〉）：收起前一個動作的撤銷紀錄，
     /// 記下正在打的串。動作結束時呼叫端撤銷紀錄（退格）、放回去（不算夾在中間的鍵）或交給
     /// [`Session::end_action`]。
     fn begin_action(&mut self, user: &mut UserModel) -> Action {
@@ -1052,7 +1052,7 @@ impl Session {
         }
         // 組字中每個鍵都吃下：交還宿主的話宿主照打那個字元，組字卻還留著。
         match key {
-            // 分隔記號（brief §4.3）：接在剩下的輸入碼後面，像字母一樣回到整串；已經以它結尾時不再加。
+            // 分隔記號（brief〈桌面鍵盤操作〉）：接在剩下的輸入碼後面，像字母一樣回到整串；已經以它結尾時不再加。
             Key::Punct(SEPARATOR) => {
                 if !self.lattice.input().ends_with(SEPARATOR) {
                     self.focus = None;
@@ -1077,7 +1077,7 @@ impl Session {
                 self.clear();
                 self.snapshot(engine, true, None)
             }
-            // 空白一律選全部候選的第一個，與目前在第幾頁無關（brief §4.3）；
+            // 空白一律選全部候選的第一個，與目前在第幾頁無關（brief〈桌面鍵盤操作〉）；
             // 有目前分段時上屏整個組字（照顯示的分段，剩下的逐次取首選）。
             Key::Space if self.focus.is_some() => {
                 self.commit_all_then(engine, user, Commit::plain(String::new()))
@@ -1130,10 +1130,10 @@ impl Session {
         }
     }
 
-    /// 聯想顯示中的鍵（plan §2.1），照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
+    /// 聯想顯示中的鍵（plan〈介面〉），照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
     /// 不送字元的修飾鍵不動它。其他鍵收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，
     /// 退格、空白、Enter、方向鍵、沒有那個聯想的數字交還宿主，標點照常上屏。退格為什麼不像
-    /// librime-predict 只收起，見 plan §2.1。
+    /// librime-predict 只收起，見 plan〈介面〉。
     fn handle_association(
         &mut self,
         engine: &Engine,
@@ -1199,7 +1199,7 @@ impl Session {
     }
 
     /// 上屏 `commit`、清空組字，接著給接在 `segments`（剛上屏的各段，原文）後面的聯想。聯想關掉、
-    /// 切到英文直通或無痕時不給：剛上屏的字是下一個字的前文，無痕不讀前文（brief §8）。
+    /// 切到英文直通或無痕時不給：剛上屏的字是下一個字的前文，無痕不讀前文（brief〈隱私與安全〉）。
     fn commit_and_associate(
         &mut self,
         engine: &Engine,
@@ -1259,7 +1259,7 @@ impl Session {
         }
     }
 
-    /// 切中英（單按 Shift，brief §4.3），照 Rime `ascii_composer`：沒有組字時只切換；組字中
+    /// 切中英（單按 Shift，brief〈桌面鍵盤操作〉），照 Rime `ascii_composer`：沒有組字時只切換；組字中
     /// 依 [`ShiftSwitch`] 先上屏整個組字（`commit_text`）或留碼接英文（`inline_ascii`）。
     /// 臨時英文中按留碼的 Shift 照 librime 1.17.0：英文整串當中文的輸入碼重新
     /// 組字；英文含方案字母與分隔記號以外的字元時中文組字裝不下，和另一邊一樣上屏英文。兩種都回中文。
@@ -1397,7 +1397,7 @@ impl Session {
         }
     }
 
-    /// 直接輸入一段文字，不經組字（觸控鍵盤的 `text` 動作，plan §2.6）：沒有組字時上屏 `text`；
+    /// 直接輸入一段文字，不經組字（觸控鍵盤的 `text` 動作，plan〈佈局：畫布模型〉）：沒有組字時上屏 `text`；
     /// 組字中和標點相同，先上屏整個組字再接 `text`；臨時英文中和實體鍵盤的可見字元一樣接在英文後
     /// （M1 票 27b）。文字照原樣、不轉全形，也不套數字後半形；簡體模式轉成簡體，原文留繁體（M1 票 23）。
     pub fn text(&mut self, engine: &Engine, user: &mut UserModel, text: &str) -> Snapshot {
@@ -1471,12 +1471,12 @@ impl Session {
         self.commit(engine, commit)
     }
 
-    /// 這次上屏要不要寫學習資料：無痕或學習關掉時不寫（plan §2.4）。
+    /// 這次上屏要不要寫學習資料：無痕或學習關掉時不寫（plan〈學習與排位〉）。
     fn writes_learning(&self) -> bool {
         self.options.learning && !self.options.incognito
     }
 
-    /// 學一次上屏（plan §2.4）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
+    /// 學一次上屏（plan〈學習與排位〉）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
     /// `mi` → 歹、`r` → 口與整串 `mir` → 歹口，同 Rime 使用者詞典的碼不含分隔符。有萬用鍵的碼換成
     /// 字詞實際的碼（[`Engine::learned_code`]），換不了時整次不學。個人 bigram 的第一段接組字開頭時
     /// 前文給的字詞（[`Session::composition_word`]）。
@@ -1541,7 +1541,7 @@ impl Session {
         }
     }
 
-    /// 字詞經過後處理（plan §2.2）要顯示、上屏的樣子：簡體模式轉成簡體。
+    /// 字詞經過後處理（plan〈資料流〉）要顯示、上屏的樣子：簡體模式轉成簡體。
     fn output(&self, engine: &Engine, text: &str) -> String {
         if self.options.simplified {
             engine.simplify(text)
@@ -1575,7 +1575,7 @@ impl Session {
             return self.snapshot(engine, true, None);
         };
         // 英文候選、emoji 與英文使用者詞蓋住剩下的整串（分段的候選列沒有它們）：和 Enter 一樣，選定的分段
-        // 上屏字詞、其餘上屏它，整次不學也不造詞（plan §2.4）。
+        // 上屏字詞、其餘上屏它，整次不學也不造詞（plan〈學習與排位〉）。
         if choice.kind.is_literal() {
             let mut commit = self.selected_commit(engine);
             commit.text.push_str(&choice.text);
@@ -1598,7 +1598,7 @@ impl Session {
             ),
         };
         // 這次之前已選定分段，或改選的是第 2 段以後：整個組字是分兩次以上選定的，整串上屏時
-        // 自動造詞（plan §2.4）。
+        // 自動造詞（plan〈學習與排位〉）。
         let auto_phrase = at > 0 || !self.selected.is_empty();
         let mut fixed: Vec<Segment> = segments[..at]
             .iter()
@@ -1641,7 +1641,7 @@ impl Session {
         self.lattice = Lattice::from_input(engine, user, before, input);
     }
 
-    /// 沒選定的輸入碼前面是什麼（plan §2.3）：最後選定的分段（它的最後一字與它）；沒有選定的
+    /// 沒選定的輸入碼前面是什麼（plan〈排序：同一把尺〉）：最後選定的分段（它的最後一字與它）；沒有選定的
     /// 分段時看前文（[`Engine::context_char`]、[`Session::context_word`]），不知道前文或無痕時沒有。
     fn before_unselected(&self, engine: &Engine) -> Preceding {
         match (self.selected.last(), &self.context) {
@@ -1657,7 +1657,7 @@ impl Session {
         }
     }
 
-    /// 前文給的前一個字詞（個人 bigram，plan §2.3）：前文以上一次上屏的組字的最後一段結尾時是
+    /// 前文給的前一個字詞（個人 bigram，plan〈排序：同一把尺〉）：前文以上一次上屏的組字的最後一段結尾時是
     /// 那一段（原文；簡體模式下前文是顯示的字，也認），否則是前文的最後一字（字母或數字才算，
     /// 標點、空白之後沒有；簡體模式轉回繁體，個人 bigram 記的是原文）。不知道前文或無痕時沒有。
     /// 前文由 `Session` 接上上屏的字（[`Session::context`]），所以剛上屏的那段接在前文結尾。
@@ -1674,9 +1674,9 @@ impl Session {
             .map(String::from)
     }
 
-    /// 前文 `context` 的最後一字，換成繁體原文（plan §2.3）：前文以上一次上屏的那一段結尾時是
+    /// 前文 `context` 的最後一字，換成繁體原文（plan〈排序：同一把尺〉）：前文以上一次上屏的那一段結尾時是
     /// 那段原文的最後一字（簡體模式下一對多的字照實際打的，「幹」顯示「干」仍接「幹」）；否則
-    /// 簡體模式下逐字轉回繁體（[`Engine::traditional_char`]，同停鍵層的前文，plan §2.7）。空的
+    /// 簡體模式下逐字轉回繁體（[`Engine::traditional_char`]，同停鍵層的前文，plan〈模型分層〉）。空的
     /// 前文是 `None`。
     fn context_last_char(&self, engine: &Engine, context: &str) -> Option<char> {
         if let Some(c) = self
@@ -1715,7 +1715,7 @@ impl Session {
     }
 
     /// 輸入碼、目前分段或選項變了：重列候選、回到第一頁。目前分段的候選從頭建，和單打它的碼
-    /// 相同，但沒有英文候選：它只給剩下的整串輸入碼。後處理（plan §2.2）在排序之後：簡體模式
+    /// 相同，但沒有英文候選：它只給剩下的整串輸入碼。後處理（plan〈資料流〉）在排序之後：簡體模式
     /// 轉成簡體，轉換後文字重複的只留第一個。
     fn refresh_candidates(&mut self, engine: &Engine, user: &UserModel) {
         let spans = match self.focus {
@@ -1740,7 +1740,7 @@ impl Session {
         self.apply_cached_rerank(engine);
     }
 
-    /// 這份候選列的重排要求已經算過：照快取裡的名次排（plan §2.7，M4 票 03），不等停鍵、不再要求。
+    /// 這份候選列的重排要求已經算過：照快取裡的名次排（plan〈模型分層〉，M4 票 03），不等停鍵、不再要求。
     /// 快取是空的時不算鍵，每鍵不多花時間。
     fn apply_cached_rerank(&mut self, engine: &Engine) {
         if self.rerank_cache.is_empty() {
@@ -1756,7 +1756,7 @@ impl Session {
         self.cached_at = Some(self.generation);
     }
 
-    /// 候選經過後處理（plan §2.2）：簡體模式轉成簡體，轉換後文字重複的只留第一個。排序時已去掉
+    /// 候選經過後處理（plan〈資料流〉）：簡體模式轉成簡體，轉換後文字重複的只留第一個。排序時已去掉
     /// 原文重複的，沒轉換的不必再比。
     fn shown_candidates(&self, engine: &Engine, spans: Vec<CandidateSpan>) -> Vec<ShownCandidate> {
         let mut seen = HashSet::new();
@@ -1871,7 +1871,7 @@ fn sent_to_host(key: &Key) -> Option<String> {
     }
 }
 
-/// 學習記的分段（plan §2.4）：碼去掉分隔記號，有萬用鍵的換成字詞實際的碼
+/// 學習記的分段（plan〈學習與排位〉）：碼去掉分隔記號，有萬用鍵的換成字詞實際的碼
 /// （[`Engine::learned_code`]）；有一段換不了時是 `None`。
 fn learned_segments(
     engine: &Engine,

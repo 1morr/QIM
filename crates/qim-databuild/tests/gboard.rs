@@ -1,4 +1,4 @@
-//! 預設 Gboard 速成佈局（plan §2.6）：由排列算出，經 `qim-layout` 讀回與點擊。
+//! 預設 Gboard 速成佈局（plan〈佈局：畫布模型〉）：由排列算出，經 `qim-layout` 讀回與點擊。
 
 use qim_databuild::gboard;
 use qim_layout::{
@@ -28,7 +28,7 @@ fn key<'a>(page: &'a Page, id: &str) -> &'a qim_layout::Key {
     page.keys.iter().find(|k| k.id == id).unwrap()
 }
 
-/// 內建佈局的嚴格檢查（plan §5.3）：含有直向與橫向的版本、每個鍵都有淺色與深色。
+/// 內建佈局的嚴格檢查（plan〈佈局〉）：含有直向與橫向的版本、每個鍵都有淺色與深色。
 #[test]
 fn passes_the_strict_check_for_builtin_layouts_including_portrait_and_landscape() {
     assert_eq!(check_builtin(&gboard::layout().to_json()), []);
@@ -163,7 +163,7 @@ fn letter_keys_carry_the_letter_as_hint_and_leave_the_label_to_the_scheme() {
 
 #[test]
 fn long_press_on_a_letter_types_only_the_english_letter() {
-    // brief §4.4：長按字母鍵只彈出英文字母（直接輸入，不經組字）；數字改由數字列（M1 票 27）。
+    // brief〈手機觸控鍵盤〉：長按字母鍵只彈出英文字母（直接輸入，不經組字）；數字改由數字列（M1 票 27）。
     let text = |s: &str| Action::Text(s.into());
     for variant in &layout().variants {
         let page = page(variant, gboard::LETTERS);
@@ -304,7 +304,7 @@ fn symbol_pages_match_gboard_quick_and_switch_between_each_other() {
             assert_eq!(back.label.as_deref(), Some("返回"));
             assert_eq!(back.tap, switch(gboard::LETTERS));
         }
-        // 打完不切頁，留在符號頁（brief §4.4）。符號照鍵上的字輸出（M1 票 27b）：Gboard 實測打全形的
+        // 打完不切頁，留在符號頁（brief〈手機觸控鍵盤〉）。符號照鍵上的字輸出（M1 票 27b）：Gboard 實測打全形的
         // `：；！？（）` 標成全形，底排的 `, .` 與其他 ASCII 標點半形。
         for id in ["1", "0", "_", "、", "@", "？", "！", "（", ",", "."] {
             assert_eq!(key(symbols, id).tap, Action::Text(id.into()), "{id}");
@@ -365,7 +365,7 @@ fn tapping_the_gap_between_two_keys_hits_one_of_them() {
     assert_eq!(hit, Some("a"));
 }
 
-/// 標籤是符號的刪除、Enter 給文字的無障礙標籤，讀屏不會唸「⌫」「↵」（plan §2.6，M1 票 24）。
+/// 標籤是符號的刪除、Enter 給文字的無障礙標籤，讀屏不會唸「⌫」「↵」（plan〈佈局：畫布模型〉，M1 票 24）。
 #[test]
 fn glyph_labelled_edit_keys_have_spoken_accessibility_labels_on_every_page() {
     for variant in &layout().variants {
@@ -386,7 +386,7 @@ fn glyph_labelled_edit_keys_have_spoken_accessibility_labels_on_every_page() {
     assert_eq!(key(letters, "a").a11y_label, None);
 }
 
-/// 數字列（brief §4.4、§7，同 Gboard 的 Number row）：另一份佈局，字母頁上方多一排數字，
+/// 數字列（brief〈手機觸控鍵盤〉〈設定與同步〉，同 Gboard 的 Number row）：另一份佈局，字母頁上方多一排數字，
 /// 點一下直接輸入數字；其他排不變（M1 票 27）。
 #[test]
 fn number_row_layout_adds_a_row_of_digits_above_the_letters() {

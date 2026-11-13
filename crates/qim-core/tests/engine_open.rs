@@ -1,4 +1,4 @@
-//! `Engine::open`：殼交一組 manifest 與資料包檔，核心依各自的種類組起來（plan §4.6）。
+//! `Engine::open`：殼交一組 manifest 與資料包檔，核心依各自的種類組起來（plan〈資料包 manifest〉）。
 
 use std::collections::BTreeMap;
 
@@ -117,7 +117,7 @@ fn radical_hints_are_not_for_the_engine() {
 
 #[test]
 fn model_packs_are_not_for_the_engine() {
-    // 停鍵層的模型由殼交給 qim-neural（plan §2.7），不經 Engine。
+    // 停鍵層的模型由殼交給 qim-neural（plan〈模型分層〉），不經 Engine。
     let model = ModelPack {
         id: "zh-hant-neural-rerank".into(),
         vocab: vec!['我'],

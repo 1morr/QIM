@@ -34,7 +34,7 @@ pub struct LayoutVariant {
 }
 
 impl Layout {
-    /// 選佈局版本（plan §2.6）：裝置與方向都符合的；其次方向符合的；再其次第一個版本，
+    /// 選佈局版本（plan〈佈局：畫布模型〉）：裝置與方向都符合的；其次方向符合的；再其次第一個版本，
     /// 等比例縮放並給警告。回傳版本在 `variants` 的位置。
     pub fn select(&self, wanted: When) -> (usize, Option<Warning>) {
         let find = |matches: &dyn Fn(&When) -> bool| {
@@ -60,7 +60,7 @@ impl LayoutVariant {
         }
     }
 
-    /// 換到這個版本時要顯示的頁：有 `id` 這頁就是它，否則是一開始的頁（轉向時留在同一頁，plan §2.6）。
+    /// 換到這個版本時要顯示的頁：有 `id` 這頁就是它，否則是一開始的頁（轉向時留在同一頁，plan〈佈局：畫布模型〉）。
     pub fn page_index_or_initial(&self, id: Option<&str>) -> Option<usize> {
         id.and_then(|id| self.page_index(id))
             .or_else(|| self.initial_page_index())
@@ -149,7 +149,7 @@ pub struct Size {
     pub height: f64,
 }
 
-/// 編輯器的格線：畫布分成幾欄幾列，`snap` 為真時拖動吸附到格線（brief §4.6）。
+/// 編輯器的格線：畫布分成幾欄幾列，`snap` 為真時拖動吸附到格線（brief〈佈局與編輯器〉）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Grid {
@@ -222,7 +222,7 @@ fn is_zero(value: &f64) -> bool {
 /// `.scratch/m1/evidence/27-letters.png`），字根同大時 Gboard 的大寫 A 字高 24 px，QIM 同字級只有 13 px。
 const SHIFTED_LETTER_SCALE: f64 = 1.85;
 
-/// Shift 鍵的狀態（brief §4.4，照 Gboard 速成）：殼記著，按鍵依它換標籤與動作。
+/// Shift 鍵的狀態（brief〈手機觸控鍵盤〉，照 Gboard 速成）：殼記著，按鍵依它換標籤與動作。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Shift {
     #[default]
@@ -337,7 +337,7 @@ impl Key {
         }
     }
 
-    /// 按住時要不要顯示放大預覽（brief §4.4）：點一下會輸入字的鍵（字母、文字）才要，功能鍵不要。
+    /// 按住時要不要顯示放大預覽（brief〈手機觸控鍵盤〉）：點一下會輸入字的鍵（字母、文字）才要，功能鍵不要。
     pub fn shows_preview(&self, state: KeyState) -> bool {
         matches!(
             self.tap_action(state),

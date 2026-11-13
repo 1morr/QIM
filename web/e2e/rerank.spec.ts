@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// 重排的假實作（plan §3.1、ADR 0005，M1 票 23、M3 票 11c）：延遲後回傳 lattice 路徑的名次，核心
+// 重排的假實作（plan〈網頁 prototype〉、ADR 0005，M1 票 23、M3 票 11c）：延遲後回傳 lattice 路徑的名次，核心
 // 把排出的路徑放到第 2 位，候選列沒有就插入。過期的結果丟掉由核心測試驗（`crates/qim-core/tests/rerank.rs`）。
 
 function ui(page: Page) {
@@ -77,7 +77,7 @@ test("把最後一條路徑排最前：候選列沒有它，插到第 2 位，�
 	await expect(text).toHaveValue(inserted);
 });
 
-// 翻到後面的頁時結果才回來（plan §2.1 的重排）：看得到的那頁不變，回到第一頁才插入（M4 票 05c）。
+// 翻到後面的頁時結果才回來（plan〈介面〉 的重排）：看得到的那頁不變，回到第一頁才插入（M4 票 05c）。
 // 網址的 `rerank-delay` 讓結果晚 1 秒套用，確定翻頁後才回來，不靠機器負載。
 test("翻頁中途重排回來：那頁不變，回到第一頁才插入", async ({
 	page,

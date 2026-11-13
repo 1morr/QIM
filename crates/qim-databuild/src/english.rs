@@ -1,4 +1,4 @@
-//! ESDB（SCOWL）的 Hunspell 字典 → 英文資料包的詞表（plan §4.4）。
+//! ESDB（SCOWL）的 Hunspell 字典 → 英文資料包的詞表（plan〈英文、簡繁與 emoji〉）。
 //!
 //! 取 `en-wl/wordlist` release 的 `hunspell-en_US-<版本>.zip`：官方的 size 60、美式、預設變體
 //! 詞表（README 的 `mk-list --accents=strip en_US 60`）。`en_US.dic` 一行一個詞幹與旗標，

@@ -1,4 +1,4 @@
-// 設定區（plan §3.1）：改候選與組字行為的開關（核心選項與重排）。新開關在 `ROWS` 加一列，畫面與套用都由這裡做；
+// 設定區（plan〈網頁 prototype〉）：改候選與組字行為的開關（核心選項與重排）。新開關在 `ROWS` 加一列，畫面與套用都由這裡做；
 // 之後的設定（常用語、詞庫匯入、資料包）在 `index.html` 的設定區各加一段。
 
 import { shiftSwitch } from "./keys.ts";
@@ -46,7 +46,7 @@ const RERANK: Select = {
 	apply: () => undefined,
 };
 
-/** 開關照這個順序排；預設值照 brief §7。 */
+/** 開關照這個順序排；預設值照 brief〈設定與同步〉。 */
 const ROWS: readonly Row[] = [
 	{
 		kind: "checkbox",
@@ -59,7 +59,7 @@ const ROWS: readonly Row[] = [
 		},
 	},
 	{
-		// 關掉時不寫學習資料，已學的照用；和無痕不同，前文照用（brief §4.5）。
+		// 關掉時不寫學習資料，已學的照用；和無痕不同，前文照用（brief〈學習與排位〉）。
 		kind: "checkbox",
 		id: "learning",
 		label: "學習",

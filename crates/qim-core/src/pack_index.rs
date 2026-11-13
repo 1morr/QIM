@@ -1,4 +1,4 @@
-//! 更新索引（plan §4.7）：線上更新的來源（GitHub Releases）上的 `index.json`，列出每份資料包的
+//! 更新索引（plan〈線上更新〉）：線上更新的來源（GitHub Releases）上的 `index.json`，列出每份資料包的
 //! manifest 與下載位置。殼拿它和裝著的資料包比出要下載的（[`PackIndex::updates`]），下載後照樣經
 //! [`crate::Pack::open`] 核對；建置端拿上一版比出內容改了卻沒加版本的（[`PackIndex::check_successor`]）。
 

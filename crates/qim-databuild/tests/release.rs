@@ -1,4 +1,4 @@
-//! 線上更新的 release 目錄（plan §4.7）：把 `build/packs/` 的每份資料包改名成不撞名的檔，加一份
+//! 線上更新的 release 目錄（plan〈線上更新〉）：把 `build/packs/` 的每份資料包改名成不撞名的檔，加一份
 //! `index.json`；給了上一版索引時，內容改了卻沒加版本的資料包讓它失敗。
 
 use std::path::Path;
@@ -204,7 +204,7 @@ fn pack_without_license_fails() {
     assert!(error.contains("LICENSE"), "{error}");
 }
 
-/// e2e 扮演 GitHub release 的 `web/e2e/fixtures/pack-release/`（plan §4.7）：照 `cargo xtask pack-release`
+/// e2e 扮演 GitHub release 的 `web/e2e/fixtures/pack-release/`（plan〈線上更新〉）：照 `cargo xtask pack-release`
 /// 的路寫出 `e2e-update-lexicon` 1.1.0（`anr` 是「新版詞庫」；舊版 1.0.0 在
 /// `crates/qim-core/tests/web_fixture.rs`）。檔案進 git，格式改了會紅；
 /// `QIM_UPDATE_FIXTURES=1 cargo test -p qim-databuild --test release` 重產。

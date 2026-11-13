@@ -1,4 +1,4 @@
-//! 停鍵層的模型（plan §2.7、§4.6）：把 `scripts/neural-rerank/train.py` 訓練好的模型匯入
+//! 停鍵層的模型（plan〈模型分層〉〈資料包 manifest〉）：把 `scripts/neural-rerank/train.py` 訓練好的模型匯入
 //! [`NEURAL_DIR`]（`cargo xtask neural-import`），`cargo xtask data` 再由它建模型資料包。
 //!
 //! 訓練不是決定性的，重訓的模型分數會變，所以採用的那份放進 git，不在 `cargo xtask data` 裡訓練。

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// 數字後的句點、冒號用半形（M1 票 26，brief §4.7）：前一個上屏的字是半形數字時直接上屏半形，
+// 數字後的句點、冒號用半形（M1 票 26，brief〈英文模式與欄位類型〉）：前一個上屏的字是半形數字時直接上屏半形，
 // 不待定、不出候選；逗號照舊全形（使用者決定）。開關預設開。
 
 async function ready(page: Page) {
@@ -52,7 +52,7 @@ test("留碼接英文時數字與標點照原樣接在英文後", async ({ page 
 	const { text } = await ready(page);
 	await text.focus();
 	await page.keyboard.type("anr");
-	// Playwright 的 `ShiftLeft` 是左 Shift，預設留碼接英文（brief §4.3）。
+	// Playwright 的 `ShiftLeft` 是左 Shift，預設留碼接英文（brief〈桌面鍵盤操作〉）。
 	await page.keyboard.press("ShiftLeft");
 	// 空白也接進英文（票 25b）。
 	await page.keyboard.type("3.5,0 1:2.");

@@ -30,3 +30,5 @@ Blocked by: 05, 08
 - 和票面不同的量法：「原樣正確卻被改錯」沒用 `SetResult::typo_stats` 的 `literal_correct`（容錯是 `Engine` 的設定，`literal_options` 改不到，那欄會等於容錯開的結果），改成另開一個容錯關的 `Engine` 打同一題比，定義同票 08。延遲只量實體鍵（觸控的機率分布更寬只會更慢）；個人集這個工作區沒有，沒跑；空間模型的 σ、加成與鄰鍵先驗的參數沒調（只掃了懲罰，鄰鍵替換的懲罰吃掉了 `hit_probability` 的位移）。
 - 前後對照：`cargo xtask bench --check` 在機制預設關時（load 22）與刪掉之後（load 16 → 5）都通過、各集合沒有翻盤；原生 p95 刪掉後空白 72 / 76 / 1292 µs、學過 169 / 244 / 2038 µs。核心沒變，`model-ladder` 的 `neural --split test` 與 `compare` 不用重跑。
 - code-review（`b3a1a7b` 起）已處理：plan §2.1、§2.6 與 qim-layout 的「容錯的票再調」改成現況；progress 偏差改寫成最後的狀態並補結論那條；低負載重跑延遲；研究文件補各修正的判定表、「任何組合都過不了」的推論、個人集與觸控延遲的範圍。沒處理：117252a 用 `Tolerance` 而非 plan §0 的 `Correction`（核心已刪，重評時照 plan §0）；實驗裡 `mcnemar` 與 model-ladder 重複、`Typo::label()` 字串當 map 的鍵（一次性的實驗程式，不改）；`literal_options` 留著（spec〈驗收〉還要報改錯）；brief §7 的容錯開關審查認為只該叫英文自動修正，但票 21、25 引它當英文的容錯開關，維持並註明。
+
+Session 紀錄：容錯實驗：四種修正合起來沒過〈容錯採用門檻〉（修正次數、改錯、沒打錯退步、延遲），速成不做、票 10 wontfix；機制量完刪掉

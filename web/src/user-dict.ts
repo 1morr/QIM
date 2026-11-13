@@ -1,4 +1,4 @@
-// 使用者詞與學習資料（plan §2.4、§3.1）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
+// 使用者詞與學習資料（plan〈學習與排位〉〈網頁 prototype〉）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
 // 匯入是合併（M4 票 17）：兩個瀏覽器設定檔的同步就是各自匯出、匯入對方的檔。
 
 import { element, message } from "./dom.ts";
@@ -9,7 +9,7 @@ import type { Merged, Session } from "./wasm/qim_wasm.js";
 const USER_DICT_KEY = "qim.userdict";
 /** 載入時匯入失敗的資料搬到這裡，免得下次上屏被空白資料蓋掉。 */
 const BROKEN_KEY = "qim.userdict.broken";
-/** 這台裝置的 id 在 `localStorage` 的鍵：第一次載入時產生，匯出檔頭帶著它（plan §2.4）。 */
+/** 這台裝置的 id 在 `localStorage` 的鍵：第一次載入時產生，匯出檔頭帶著它（plan〈學習與排位〉）。 */
 const DEVICE_KEY = "qim.device";
 /** 匯出檔名；副檔名照內容是 TSV。 */
 const EXPORT_NAME = "qim-userdict.tsv";
@@ -121,7 +121,7 @@ export function mountUserDict(
 		},
 	);
 
-	// 匯入是合併（plan §2.4〈跨裝置合併〉）：先在複本上合併，在頁面上說明會新增、更新、刪除幾筆，請使用者
+	// 匯入是合併（plan〈學習與排位〉〈跨裝置合併〉）：先在複本上合併，在頁面上說明會新增、更新、刪除幾筆，請使用者
 	// 確認，不用瀏覽器原生的對話框。從備份還原另一個鍵：取代目前的、留清空記號（同步到別台也換成備份）。
 	const confirm = element<HTMLElement>("#confirm-import");
 	const confirmText = element<HTMLElement>("#confirm-import-text");

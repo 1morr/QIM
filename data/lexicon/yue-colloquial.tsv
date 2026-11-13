@@ -1,4 +1,4 @@
-# 粵語口語詞表（plan §4.2、brief §5.2）：QIM 自行整理，CC0 1.0；不從 rime-cantonese、粵典或其他有授權的詞表複製。
+# 粵語口語詞表（plan〈詞庫〉、brief〈來源〉）：QIM 自行整理，CC0 1.0；不從 rime-cantonese、粵典或其他有授權的詞表複製。
 # 只收 rime-essay 沒有、或詞頻低於詞庫門檻的兩字以上口語詞（essay 已收的詞列進來會讓建置失敗）；
 # 單字的字序由字頻決定，不在這裡。
 # 一行「詞<TAB>詞頻」，與 rime-essay 的 essay.txt 同格式、同尺度。

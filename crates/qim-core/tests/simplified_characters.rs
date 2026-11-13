@@ -1,4 +1,4 @@
-//! 繁體模式的簡體字（M3 票 19、brief §4.1）：碼表標成簡體字的字（HKSCS 收的「门」這類）排在
+//! 繁體模式的簡體字（M3 票 19、brief〈字集與字形〉）：碼表標成簡體字的字（HKSCS 收的「门」這類）排在
 //! 同碼的繁體字之後、擴展區之前，不過濾，選過照常學；簡體模式不管這個標記。
 
 mod common;
@@ -168,7 +168,7 @@ fn a_simplified_character_covering_the_first_segment_follows_the_traditional_one
     assert_eq!(singles, ["甲", "申", "门"], "{shown:?}");
 }
 
-/// 不過濾、照常學：選一次不成首選（brief §4.5），選兩次成首選（排位規則 2）。
+/// 不過濾、照常學：選一次不成首選（brief〈學習與排位〉），選兩次成首選（排位規則 2）。
 #[test]
 fn choosing_a_simplified_character_twice_makes_it_the_top() {
     let mut ime = Ime::new(false);

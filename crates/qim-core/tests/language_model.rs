@@ -1,4 +1,4 @@
-//! 字級 bigram 資料包經公開介面的行為（plan §2.3、§4.3）：三份資料包位元組 → `Engine` →
+//! 字級 bigram 資料包經公開介面的行為（plan〈排序：同一把尺〉〈字級 bigram 與詞級 trigram〉）：三份資料包位元組 → `Engine` →
 //! `Session::handle` → `Snapshot`。
 
 use std::collections::BTreeMap;
@@ -134,7 +134,7 @@ fn other_kinds_of_pack_are_not_language_model_packs() {
     );
 }
 
-/// 方案指名的是預設的語言模型，可以換成另一份（plan §4.6）；方案要時不能不給、不要時不能給。
+/// 方案指名的是預設的語言模型，可以換成另一份（plan〈資料包 manifest〉）；方案要時不能不給、不要時不能給。
 #[test]
 fn engine_takes_any_language_model_but_only_when_the_scheme_wants_one() {
     let lexicon = lexicon().to_bytes().unwrap();

@@ -1,4 +1,4 @@
-//! 資料包 manifest（plan §4.6）：載入時核對最低核心版本、大小、sha256、種類與 id。
+//! 資料包 manifest（plan〈資料包 manifest〉）：載入時核對最低核心版本、大小、sha256、種類與 id。
 
 use qim_core::{
     CORE_VERSION, EmojiPack, EmojiTable, Lexicon, LexiconPack, MANIFEST_VERSION, Manifest,

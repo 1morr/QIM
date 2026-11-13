@@ -1,4 +1,4 @@
-//! 佈局檔的格式（plan §2.6）：讀檔、存檔與動作的寫法。
+//! 佈局檔的格式（plan〈佈局：畫布模型〉）：讀檔、存檔與動作的寫法。
 
 use qim_layout::{Action, Device, Layout, Orientation, Shape};
 

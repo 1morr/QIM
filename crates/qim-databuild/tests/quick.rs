@@ -97,7 +97,7 @@ fn lower_grade_comes_first_and_same_grade_falls_back_to_big5_order() {
 }
 
 /// 簡體字（`qim_databuild::simplified`）只標在連打字集的字上，建置端的字序不變：繁體模式
-/// 排在後面是核心的事（plan §2.3）。
+/// 排在後面是核心的事（plan〈排序：同一把尺〉）。
 #[test]
 fn simplified_characters_are_marked_in_the_continuous_set_only() {
     let rows = libcangjie::parse(TABLE).unwrap();

@@ -1,4 +1,4 @@
-//! 打錯碼的基準集合（plan §5.2，M4 票 08）：把基準題的輸入碼照錯誤模型改成「實際按的鍵」，量容錯有沒有用、
+//! 打錯碼的基準集合（plan〈首選字基準〉，M4 票 08）：把基準題的輸入碼照錯誤模型改成「實際按的鍵」，量容錯有沒有用、
 //! 會不會把對的改錯。兩種：
 //!
 //! - 「含打錯碼」（[`typo_items`]，實體鍵盤）：每一鍵以固定機率出錯，四種錯誤（鄰鍵替換、漏碼、多碼、兩碼對調）。
@@ -20,7 +20,7 @@ use rand_chacha::rand_core::{Rng, SeedableRng};
 use sha2::{Digest, Sha256};
 
 /// 觸控模擬的佈局檔：預設 Gboard 速成佈局（[`crate::gboard::FILE`]），基準讀它把點擊轉成機率；
-/// `qim_bench::TOUCH_LAYOUT` 是同一個路徑（plan §1.3 不讓 `qim-bench` 依賴本 crate），`shared_paths` 比對。
+/// `qim_bench::TOUCH_LAYOUT` 是同一個路徑（plan〈依賴規則〉 不讓 `qim-bench` 依賴本 crate），`shared_paths` 比對。
 pub const TOUCH_LAYOUT: &str = "build/layouts/gboard-quick.json";
 
 /// 觸控模擬假設的畫布尺寸：一單位是 1/160 吋，同網頁（`web/src/touch.ts` 的 `MM_PER_CSS_PX`：手機的 CSS px

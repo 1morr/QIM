@@ -1,4 +1,4 @@
-// 候選列（plan §3.1）：左邊中英狀態、目前頁的候選與字根提示；點候選選字，長按叫出字根提示。
+// 候選列（plan〈網頁 prototype〉）：左邊中英狀態、目前頁的候選與字根提示；點候選選字，長按叫出字根提示。
 
 import { element } from "./dom.ts";
 import type { RadicalHints } from "./wasm/qim_wasm.js";
@@ -30,7 +30,7 @@ function hintText(
 export interface CandidateBar {
 	/**
 	 * 換成目前頁的候選；`originals` 是繁體原文，字根提示用：簡體模式下要提示的是打得出的繁體字。
-	 * `chinese` 是中文組字中（臨時英文不算）：不是時收起字根提示（brief §4.3）。
+	 * `chinese` 是中文組字中（臨時英文不算）：不是時收起字根提示（brief〈桌面鍵盤操作〉）。
 	 */
 	show(candidates: string[], originals: string[], chinese: boolean): void;
 	/** 中英狀態。 */
@@ -89,7 +89,7 @@ export function mountCandidateBar(
 	};
 	hintVersion.addEventListener("change", render);
 
-	// 點候選選字，長按叫出字根提示（brief §4.4）：放開時還沒到長按的門檻才選字。
+	// 點候選選字，長按叫出字根提示（brief〈手機觸控鍵盤〉）：放開時還沒到長按的門檻才選字。
 	let pressTimer: number | undefined;
 	/** 按下的候選在目前頁的位置；長按觸發或取消後是 `undefined`。 */
 	let pressed: number | undefined;

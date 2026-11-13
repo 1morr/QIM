@@ -1,4 +1,4 @@
-//! 更新索引（plan §4.7）：release 上的 `index.json` 列出各資料包的 manifest 與下載位置；殼拿它和
+//! 更新索引（plan〈線上更新〉）：release 上的 `index.json` 列出各資料包的 manifest 與下載位置；殼拿它和
 //! 裝著的比出要下載的，建置端拿上一版比出內容改了卻沒加版本的資料包。
 
 use qim_core::{IndexEntry, Manifest, PackError, PackIndex, PackKind};

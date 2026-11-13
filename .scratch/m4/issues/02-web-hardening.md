@@ -34,3 +34,5 @@ Blocked by: 01
 - 2026-11-12 實際亂按（桌面 1280 寬）：組字中夾退格、Esc、單按 Shift、數字選字、翻頁、↑↓、Tab、Enter、快速連按、debug 面板、重排四種模式、換詞庫再換回；IndexedDB 與 `localStorage` 都封鎖時打字、回報、切開關（簡體、無痕等）。沒有 pageerror、沒找到新問題；console 只有 favicon 與線上更新索引的 404（開工前就有）。截圖 `.scratch/m4/evidence/02-monkey.png`、`02-storage-blocked.png`。
 - 2026-11-12 沒動核心、排序與資料包，不附 bench 與延遲。
 - 2026-11-12 code-review 沒處理的（判斷題）：`checkModelPack` 放 `packs.ts` 而不是和 `NeuralReranker` 一起（留著：`neural-rerank.ts` 要保持不 import 綁定）；`PackLibrary` 的 `store`、`storeError` 可收成一個聯合型別（兩欄位已夠清楚，不改）；IndexedDB 打不開時匯入，`qim.packs.active` 照樣記了一份重新整理後不在的資料包，重新整理退回內建的、不影響打字，不改。
+
+Session 紀錄：換模型競態與模型載入搬進 `NeuralReranker`、`snapshot.free()` 收一處；IndexedDB 或 `localStorage` 打不開照樣能打字（只留記憶體、狀態列說明）

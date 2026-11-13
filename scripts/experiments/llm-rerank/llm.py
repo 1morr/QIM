@@ -56,7 +56,7 @@ STYLES = {
 }
 
 # 每百萬 token 的人民幣價，高峰時段（spec〈採用門檻〉照高峰價）。DeepSeek 2026-08-16 起的價格，
-# https://api-docs.deepseek.com/zh-cn/quick_start/pricing ，2026-11-11 查（brief §12.4）。
+# https://api-docs.deepseek.com/zh-cn/quick_start/pricing ，2026-11-11 查（`docs/research/facts-products.md`）。
 PRICES = {
     "deepseek-flash": {"hit": 0.04, "miss": 2.0, "out": 8.0},
     "deepseek-v4-pro": {"hit": 0.30, "miss": 9.0, "out": 27.0},
@@ -173,7 +173,7 @@ def cost_per_thousand(usages, model):
 
 
 def check_personal(rows, allow):
-    """個人集不送雲端，除非使用者這次同意（plan §5.2）。"""
+    """個人集不送雲端，除非使用者這次同意（plan〈首選字基準〉）。"""
     if not allow and any(r["set"] == PERSONAL for r in rows):
         sys.exit("提示裡有個人集：要送雲端得先問使用者，同意後加 --allow-personal")
 

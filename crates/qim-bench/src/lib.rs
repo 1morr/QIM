@@ -1,9 +1,9 @@
-//! 首選字基準（plan §5.2）：用核心實際打 `bench/` 的每一題，量首選正確率並擋退步。
+//! 首選字基準（plan〈首選字基準〉）：用核心實際打 `bench/` 的每一題，量首選正確率並擋退步。
 //!
-//! 只透過 `qim-core` 的公開介面打字；讀檔在這裡做，核心不碰 I/O（plan §1.3）。
+//! 只透過 `qim-core` 的公開介面打字；讀檔在這裡做，核心不碰 I/O（plan〈依賴規則〉）。
 //!
 //! `qim-databuild` 寫、這裡讀的路徑與檔頭（[`CORPUS_DIRS`]、[`dev_items`]、個人集的 [`PERSONAL`]、
-//! [`PERSONAL_USERDB`]、[`PERSONAL_SOURCE_HEADER`]）在兩個 crate 各有一份（plan §1.3 不讓本 crate
+//! [`PERSONAL_USERDB`]、[`PERSONAL_SOURCE_HEADER`]）在兩個 crate 各有一份（plan〈依賴規則〉 不讓本 crate
 //! 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
 
 mod baseline;
@@ -45,23 +45,23 @@ pub use score::{
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const QUICK_PACK: &str = "build/packs/quick/quick.pack";
 pub const PACKS: &str = "build/packs";
-/// 英文資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著英文候選，基準照網頁掛上。
+/// 英文資料包：不由方案指名、各方案共用（plan〈英文、簡繁與 emoji〉）；預設選項開著英文候選，基準照網頁掛上。
 /// WebAssembly 的延遲腳本依檔頭魔數分辨各資料包，不靠參數的位置。
 pub const ENGLISH_PACK: &str = "build/packs/scowl-en-us/scowl-en-us.pack";
-/// emoji 資料包：不由方案指名、各方案共用（plan §4.4）；預設選項開著 emoji 候選，基準照網頁掛上，
+/// emoji 資料包：不由方案指名、各方案共用（plan〈英文、簡繁與 emoji〉）；預設選項開著 emoji 候選，基準照網頁掛上，
 /// 量得到 emoji 把正解擠到下一頁的修正次數。
 pub const EMOJI_PACK: &str = "build/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack";
 pub const FIXED: &str = "bench/fixed.tsv";
 /// 語料目錄，依序跑：每個 `<名>.tsv` 是一個集合，集合名在所有目錄間不能重複。
-/// 維基防退步，口語是品質判斷的主要依據（brief §9）；目錄不存在就當沒有集合。
+/// 維基防退步，口語是品質判斷的主要依據（brief〈效能與品質指標〉）；目錄不存在就當沒有集合。
 pub const CORPUS_DIRS: [&str; 2] = ["bench/corpus", "bench/colloquial"];
 pub const BASELINE: &str = "bench/baseline.json";
-/// 「有前文」的題目目錄（plan §5.2），依序跑：每個 `<名>.tsv` 是一批題，集合名在這些目錄間不能重複。
+/// 「有前文」的題目目錄（plan〈首選字基準〉），依序跑：每個 `<名>.tsv` 是一批題，集合名在這些目錄間不能重複。
 pub const CONTEXT_DIRS: [&str; 2] = ["bench/corpus/context", "bench/colloquial/context"];
 /// 「有前文」的一批題 `<名>` 打兩次，集合名是 `<名>` 接這些字尾：給前文、不給前文。
 /// 學習模式只打給前文的。
 pub const CONTEXT_SUFFIXES: [&str; 2] = ["·前文", "·前文·不給"];
-/// 「含打錯碼」的題目目錄（M4 票 08，plan §5.2），每個 `<名>.tsv` 是一批題，集合名是 `<名>` 接
+/// 「含打錯碼」的題目目錄（M4 票 08，plan〈首選字基準〉），每個 `<名>.tsv` 是一批題，集合名是 `<名>` 接
 /// [`TYPO_SUFFIX`]。只有口語（維基的長句每句都有好幾處錯，量不出容錯的差別）。
 pub const TYPO_DIRS: [&str; 1] = ["bench/colloquial/typo"];
 pub const TYPO_SUFFIX: &str = "·打錯";
@@ -115,7 +115,7 @@ pub fn dev_dialogue_items(name: &str) -> String {
 pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];
 /// [`SHORT_INPUTS`] 的詞最長幾個字：個人集幾乎都在 4 字以內。
 pub const SHORT_WORD_CHARS: usize = 4;
-/// 個人集的題目，由 `cargo xtask data` 從 [`PERSONAL_USERDB`] 轉出；只在本機（plan §5.2）。
+/// 個人集的題目，由 `cargo xtask data` 從 [`PERSONAL_USERDB`] 轉出；只在本機（plan〈首選字基準〉）。
 pub const PERSONAL: &str = "bench/personal/rime-userdb.tsv";
 /// 使用者放的 Rime 學習資料；基準不直接讀它，只在題目還沒轉出時提示。
 pub const PERSONAL_USERDB: &str = "bench/personal/rime-userdb.txt";
@@ -330,7 +330,7 @@ pub fn run(
     })
 }
 
-/// dev 模式的結果：調參用（plan §2.3、§5.2），只報、不比 baseline，不跑個人集與每鍵延遲。
+/// dev 模式的結果：調參用（plan〈排序：同一把尺〉〈首選字基準〉），只報、不比 baseline，不跑個人集與每鍵延遲。
 #[derive(Debug)]
 pub struct DevOutcome {
     pub packs: Vec<LoadedPack>,
@@ -624,7 +624,7 @@ fn load_sets(
     Ok(sets)
 }
 
-/// 學習模式（`--learning`，plan §5.2）的結果。
+/// 學習模式（`--learning`，plan〈首選字基準〉）的結果。
 #[derive(Debug)]
 pub struct Learning {
     pub packs: Vec<LoadedPack>,

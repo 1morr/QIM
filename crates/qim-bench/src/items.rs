@@ -178,7 +178,7 @@ fn parse_typed(
 }
 
 /// 個人集：`<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 Rime 學習資料轉出；
-/// `#` 開頭的行（記來源 sha256 的檔頭）略過。錯誤訊息只指出行號，不帶內容（plan §5.2）。
+/// `#` 開頭的行（記來源 sha256 的檔頭）略過。錯誤訊息只指出行號，不帶內容（plan〈首選字基準〉）。
 pub fn parse_personal(text: &str) -> Result<Vec<Item>, String> {
     let mut items = Vec::new();
     for (number, line) in numbered_lines(text).filter(|(_, line)| !line.starts_with('#')) {

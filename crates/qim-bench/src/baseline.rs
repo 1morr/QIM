@@ -1,5 +1,5 @@
 //! `bench/baseline.json` 與 `bench/personal/baseline.json`：各集合的答錯數、修正次數與答錯的題號，
-//! `--check` 拿它擋退步，翻盤清單拿它比（plan §5.2）。
+//! `--check` 拿它擋退步，翻盤清單拿它比（plan〈首選字基準〉）。
 
 use std::collections::{BTreeMap, BTreeSet};
 

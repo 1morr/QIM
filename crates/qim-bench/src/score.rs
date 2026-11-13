@@ -1,6 +1,6 @@
-//! 用核心實際打每一題、算分數：只經 `Session::handle`，不重寫排序（plan §1.3）。
+//! 用核心實際打每一題、算分數：只經 `Session::handle`，不重寫排序（plan〈依賴規則〉）。
 //!
-//! 每題打兩次，都用新的 `Session` 與空白的 `UserModel`，題與題互不影響（plan §5.2；
+//! 每題打兩次，都用新的 `Session` 與空白的 `UserModel`，題與題互不影響（plan〈首選字基準〉；
 //! 學習模式 [`learning`] 例外）；有前文的題先給前文（`Session::set_context`）：
 //! - 逐鍵打完輸入碼不選字：最後的首選算正確率，途中的首選算跳動。
 //! - 模擬使用者選字打出整題：算修正次數與每字按鍵數（[`simulate`]）。
@@ -81,7 +81,7 @@ impl TypoStats {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetResult {
     pub name: String,
-    /// 個人集：輸出只有數字與行號，baseline 在本機的另一個檔（plan §5.2）。
+    /// 個人集：輸出只有數字與行號，baseline 在本機的另一個檔（plan〈首選字基準〉）。
     pub private: bool,
     pub items: Vec<ItemResult>,
     /// 答錯的題：題目與實際的首選。
@@ -123,7 +123,7 @@ pub struct Metrics {
     pub jitter: f64,
 }
 
-/// 依長度分組的上界（含）與標籤：目標字數 1、2、3–4、5–8、9 以上（plan §5.2）。
+/// 依長度分組的上界（含）與標籤：目標字數 1、2、3–4、5–8、9 以上（plan〈首選字基準〉）。
 pub const LENGTH_GROUPS: [(usize, &str); 5] = [
     (1, "1 字"),
     (2, "2 字"),
@@ -290,7 +290,7 @@ pub fn score(engine: &Engine, name: &str, items: &[Item], private: bool) -> SetR
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LearningSet {
     pub name: String,
-    /// 個人集：輸出只有數字（plan §5.2）。
+    /// 個人集：輸出只有數字（plan〈首選字基準〉）。
     pub private: bool,
     pub total: usize,
     /// 每題用空白的 `UserModel`，不學。
@@ -299,7 +299,7 @@ pub struct LearningSet {
     pub corrections_on: usize,
 }
 
-/// 學習模式（plan §5.2）：照 `items` 的順序各模擬一次，學習關與學習開；有前文的題給前文。
+/// 學習模式（plan〈首選字基準〉）：照 `items` 的順序各模擬一次，學習關與學習開；有前文的題給前文。
 pub fn learning(engine: &Engine, name: &str, items: &[Item], private: bool) -> LearningSet {
     let mut learned = UserModel::default();
     let (mut off, mut on) = (0, 0);
@@ -391,7 +391,7 @@ struct Typing {
     finished: bool,
 }
 
-/// 修正次數的模擬（plan §5.2）：打完整題的輸入碼（有 [`Item::typed`] 時第一次按它，M4 票 08），接著反覆
+/// 修正次數的模擬（plan〈首選字基準〉）：打完整題的輸入碼（有 [`Item::typed`] 時第一次按它，M4 票 08），接著反覆
 /// 1. 第一頁的首選接得上還沒打出的文字（已選定的分段之後）就按空白；
 /// 2. 否則選這頁接得上的最長候選（數字鍵）；
 /// 3. 這頁都接不上就翻頁。
@@ -410,7 +410,7 @@ struct Typing {
 /// 給游標前的文字。
 ///
 /// 有 `learning` 時上屏的字詞照常學進它；沒有時用空白的 `UserModel`，每次上屏後換回空白的，
-/// 題內也不學（核心只在上屏時學）。不用無痕：無痕連前文也不用（brief §8）。
+/// 題內也不學（核心只在上屏時學）。不用無痕：無痕連前文也不用（brief〈隱私與安全〉）。
 fn simulate(
     engine: &Engine,
     learning: Option<&mut UserModel>,

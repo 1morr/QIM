@@ -1,4 +1,4 @@
-//! 每鍵延遲的百分位數（plan §5.2）：nearest-rank，取排序後第 ⌈p/100 × n⌉ 個。
+//! 每鍵延遲的百分位數（plan〈首選字基準〉）：nearest-rank，取排序後第 ⌈p/100 × n⌉ 個。
 
 use qim_bench::percentile;
 

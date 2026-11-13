@@ -1,4 +1,4 @@
-// 組字區：一段一個 `<span>`，點一段就移到那段（brief §4.4）。
+// 組字區：一段一個 `<span>`，點一段就移到那段（brief〈手機觸控鍵盤〉）。
 
 import { element } from "./dom.ts";
 import type { Snapshot } from "./wasm/qim_wasm.js";
@@ -22,7 +22,7 @@ export function mountComposition(focus: (index: number) => void): Composition {
 	});
 	return {
 		/**
-		 * 選定的顯示字詞，沒選定的顯示字根（brief §4.3），臨時英文顯示英文；目前分段標
+		 * 選定的顯示字詞，沒選定的顯示字根（brief〈桌面鍵盤操作〉），臨時英文顯示英文；目前分段標
 		 * `aria-current`。
 		 */
 		show(snapshot) {

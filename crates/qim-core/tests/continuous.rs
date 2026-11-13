@@ -1,4 +1,4 @@
-//! 連打（plan §2.2、§2.3）經公開介面的行為：輸入碼切成字與詞的 lattice，用同一把尺打分。
+//! 連打（plan〈資料流〉〈排序：同一把尺〉）經公開介面的行為：輸入碼切成字與詞的 lattice，用同一把尺打分。
 
 mod common;
 
@@ -143,7 +143,7 @@ fn letters_with_no_character_of_their_own_compose_one_character_each() {
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("日月"));
 }
 
-/// `anr`（日弓口）的小資料：「問」的速成碼是 `ar`、字頻高；「門口」是詞（brief §12.2 的案例 2）。
+/// `anr`（日弓口）的小資料：「問」的速成碼是 `ar`、字頻高；「門口」是詞（`docs/research/facts-rime.md` 的案例 2）。
 fn men_kou() -> Data<'static> {
     Data {
         table: vec![
@@ -334,7 +334,7 @@ fn input_no_path_can_cover_is_one_unselected_segment_without_text() {
     assert!(selected.candidates.is_empty());
 }
 
-// 組字中的其他鍵（brief §4.3）：都吃下，組字不留給宿主。
+// 組字中的其他鍵（brief〈桌面鍵盤操作〉）：都吃下，組字不留給宿主。
 
 #[test]
 fn enter_commits_the_input_code_as_typed() {
@@ -462,7 +462,7 @@ fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_
     }
 }
 
-// 組字中修改（plan §2.1、brief §4.3 的 ← / →、§4.4 點組字的某一段）。
+// 組字中修改（plan〈介面〉、brief〈桌面鍵盤操作〉 的 ← / →、§4.4 點組字的某一段）。
 
 /// `abcd`：「日朋水」勝過「日月林」；單打 `cd` 時「林」勝過「木水」。
 fn peng() -> Data<'static> {
@@ -652,7 +652,7 @@ fn without_composition_focus_segment_and_select_do_nothing() {
     assert!(!ime.session.select(&ime.engine, &mut ime.user, 0).handled);
 }
 
-// 組字中單按 Shift（brief §4.3）：預設照 Rime，左 Shift 留碼接英文（`inline_ascii`）、
+// 組字中單按 Shift（brief〈桌面鍵盤操作〉）：預設照 Rime，左 Shift 留碼接英文（`inline_ascii`）、
 // 右 Shift 先上屏組字（`commit_text`）。
 
 #[test]
@@ -765,7 +765,7 @@ fn shift_again_restores_the_chinese_composition_when_the_english_is_unchanged() 
 }
 
 // 再按留碼的 Shift 照 librime 1.17.0：目前的英文整串當中文輸入碼重新組字，
-// 不看打過字或退格過（brief §12.2）。
+// 不看打過字或退格過（`docs/research/facts-rime.md`）。
 
 #[test]
 fn shift_again_recomposes_the_edited_english_as_chinese_input() {

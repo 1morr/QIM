@@ -1,9 +1,9 @@
 /**
- * 停鍵層的重排（plan §2.7、§3.1、ADR 0005）：停鍵 `STOP_MS` 後把核心的 `rerankRequest` 交給模型，
+ * 停鍵層的重排（plan〈模型分層〉〈網頁 prototype〉、ADR 0005）：停鍵 `STOP_MS` 後把核心的 `rerankRequest` 交給模型，
  * 回來的路徑名次經 `applyRerank` 套用；過期的由核心丟掉，打字不等它。模型是 Web Worker 裡的神經模型
  * （`neural-rerank.ts`，M3 票 11e），或測試用的假實作：延遲一段時間後回傳固定的名次。
  *
- * 重排會改候選位置，所以有開關（brief §7 的停鍵重排，預設開）。
+ * 重排會改候選位置，所以有開關（brief〈設定與同步〉 的停鍵重排，預設開）。
  */
 
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
@@ -22,7 +22,7 @@ const MODES: readonly string[] = [
 	"raise-last",
 ] satisfies RerankMode[];
 
-/** 停鍵多久才要求重排：照青簡在 macOS 的 80 ms（brief §12.4）；這段時間內再按鍵就重新計時。 */
+/** 停鍵多久才要求重排：照青簡在 macOS 的 80 ms（`docs/research/facts-products.md`）；這段時間內再按鍵就重新計時。 */
 export const STOP_MS = 80;
 
 /** 假的模型多久回來；這段時間內再按鍵，結果就過期、被核心丟掉。 */
@@ -34,7 +34,7 @@ export function rerankMode(value: string): RerankMode {
 }
 
 /**
- * 告訴核心的停鍵層模型識別（`Session.setRerankerId`，plan §2.7）：模式，神經模型再加上模型資料包的
+ * 告訴核心的停鍵層模型識別（`Session.setRerankerId`，plan〈模型分層〉）：模式，神經模型再加上模型資料包的
  * manifest。核心在識別變了時清掉停鍵結果快取、給舊模型的要求作廢，`undefined`（關掉、沒有模型）時不留快取。
  */
 export function rerankerId(

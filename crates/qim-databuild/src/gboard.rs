@@ -1,4 +1,4 @@
-//! 預設 Gboard 速成佈局：由按鍵排列算出畫布上每個鍵的位置（plan §2.6、ADR 0004）。
+//! 預設 Gboard 速成佈局：由按鍵排列算出畫布上每個鍵的位置（plan〈佈局：畫布模型〉、ADR 0004）。
 //!
 //! 排列以「鍵寬」為單位，一排十個鍵寬；每個鍵占一格，四周留縫，點在縫上由點擊判定取最近的鍵。
 //! 手機直向與橫向兩個佈局版本用同一份排列，只有畫布、排高與縫不同；數字列打開時是另一份佈局
@@ -40,7 +40,7 @@ struct Geometry {
     radius: f64,
 }
 
-/// 直向：畫布寬是 iPhone 直向的點數寬（plan §2.6 的例子）；其餘照 Gboard 在 411 dp 寬的實測
+/// 直向：畫布寬是 iPhone 直向的點數寬（plan〈佈局：畫布模型〉 的例子）；其餘照 Gboard 在 411 dp 寬的實測
 /// 等比例縮成 390（排距 58.9 dp、鍵距 40.8 dp、縫 5.3 × 11.8 dp、左右多留 2 dp、圓角 6 dp）。
 const PORTRAIT: Geometry = Geometry {
     orientation: Orientation::Portrait,
@@ -181,7 +181,7 @@ impl Cell {
     }
 }
 
-/// 字母鍵：角標是字母，長按只出英文字母（brief §4.4）。標籤省略時用方案的字根；
+/// 字母鍵：角標是字母，長按只出英文字母（brief〈手機觸控鍵盤〉）。標籤省略時用方案的字根；
 /// 方案沒有字根的鍵（`z`）照 Gboard 寫死。
 fn letter(c: char) -> Cell {
     let label = (c == 'z').then_some("重");
@@ -370,7 +370,7 @@ fn symbol_page(rows: [&str; 2], other: Cell, third: &str, [left, right]: [&str; 
     ]
 }
 
-/// 符號頁（?123）：照 Gboard；打完留在符號頁（brief §4.4），「返回」回字母頁，「=\<」切到更多符號。
+/// 符號頁（?123）：照 Gboard；打完留在符號頁（brief〈手機觸控鍵盤〉），「返回」回字母頁，「=\<」切到更多符號。
 /// 鍵上的字就是打出的字（M1 票 27b）：Gboard 實測打全形的 `：；！？（）` 標成全形，
 /// 底排 `, .` 與其他 ASCII 標點半形，同 Gboard。
 fn symbols_page() -> Vec<Row> {
@@ -445,7 +445,7 @@ fn numbers_page() -> Vec<Placed> {
     placed
 }
 
-/// 自訂頁面的示範（brief §4.4「一個自訂頁面」）：表情與粵語常用語，示範 `switchPage` 與多字的
+/// 自訂頁面的示範（brief〈手機觸控鍵盤〉「一個自訂頁面」）：表情與粵語常用語，示範 `switchPage` 與多字的
 /// `text`；由字母頁長按逗號鍵進來，「ABC」回字母頁。
 fn phrases_page() -> Vec<Row> {
     let mut third = vec![switch(SYMBOLS, "?123").units(1.5)];
@@ -549,7 +549,7 @@ fn page(id: &str, placed: Vec<Placed>, rows: f64, geometry: &Geometry, height: f
     }
 }
 
-/// 字母頁上方要不要多一排數字（brief §4.4 的數字列，同 Gboard 的 Number row）。
+/// 字母頁上方要不要多一排數字（brief〈手機觸控鍵盤〉 的數字列，同 Gboard 的 Number row）。
 #[derive(Clone, Copy, PartialEq)]
 enum NumberRow {
     Off,

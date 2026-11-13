@@ -13,7 +13,7 @@ import {
 } from "../src/rerank.ts";
 import type { Session, Snapshot } from "../src/wasm/qim_wasm.js";
 
-// 核心的停鍵結果快取認這個識別（plan §2.7，M4 票 03）：變了就清掉，`undefined` 不留快取。
+// 核心的停鍵結果快取認這個識別（plan〈模型分層〉，M4 票 03）：變了就清掉，`undefined` 不留快取。
 test("重排識別：關掉與沒有模型是 undefined，神經模型帶 manifest，假實作是模式", () => {
 	assert.equal(rerankerId("off", "A"), undefined);
 	assert.equal(rerankerId("neural", undefined), undefined);

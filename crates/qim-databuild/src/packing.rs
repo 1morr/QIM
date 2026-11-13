@@ -1,4 +1,4 @@
-//! 資料包的 `LICENSE` 與 `NOTICE`（plan §4）：每個資料包只寫它用到的來源。
+//! 資料包的 `LICENSE` 與 `NOTICE`（plan〈碼表與資料管線〉）：每個資料包只寫它用到的來源。
 
 use std::path::Path;
 
@@ -26,7 +26,7 @@ pub(crate) struct UpstreamSource {
     pub used: &'static str,
 }
 
-/// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序，OpenCC 判定簡體字（plan §4.1）。
+/// 速成資料包：libcangjie 給碼，Unihan 的 `kGradeLevel` 給字序，OpenCC 判定簡體字（plan〈速成碼表〉）。
 pub(crate) const QUICK: [PackSource; 3] = [
     PackSource::Upstream(UpstreamSource {
         name: "libcangjie",
@@ -46,7 +46,7 @@ pub(crate) const QUICK: [PackSource; 3] = [
     }),
 ];
 
-/// 簡繁資料包：OpenCC 的字典（plan §4.4）。
+/// 簡繁資料包：OpenCC 的字典（plan〈英文、簡繁與 emoji〉）。
 pub(crate) const SIMPLIFIER: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "OpenCC",
     source_id: OPENCC,
@@ -54,7 +54,7 @@ pub(crate) const SIMPLIFIER: [PackSource; 1] = [PackSource::Upstream(UpstreamSou
            HKVariants.txt and HKVariantsRevPhrases.txt: the dictionaries of the hk2s configuration",
 })];
 
-/// 英文資料包：ESDB（SCOWL）的 Hunspell en_US 字典（plan §4.4）。
+/// 英文資料包：ESDB（SCOWL）的 Hunspell en_US 字典（plan〈英文、簡繁與 emoji〉）。
 pub(crate) const ENGLISH: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "ESDB (SCOWL)",
     source_id: SCOWL,
@@ -62,7 +62,7 @@ pub(crate) const ENGLISH: [PackSource; 1] = [PackSource::Upstream(UpstreamSource
            American English speller dictionary",
 })];
 
-/// emoji 資料包：CLDR 的標註給字詞與 emoji，emoji-test.txt 給 emoji 的完整寫法（plan §4.4）。
+/// emoji 資料包：CLDR 的標註給字詞與 emoji，emoji-test.txt 給 emoji 的完整寫法（plan〈英文、簡繁與 emoji〉）。
 pub(crate) const EMOJI: [PackSource; 2] = [
     PackSource::Upstream(UpstreamSource {
         name: "Unicode CLDR",
@@ -76,7 +76,7 @@ pub(crate) const EMOJI: [PackSource; 2] = [
     }),
 ];
 
-/// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan §4.1 步驟 5）。
+/// 字根提示資料包：libcangjie 給倉頡三代 / 五代碼（plan〈速成碼表〉 步驟 5）。
 pub(crate) const RADICAL_HINT: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
     name: "libcangjie",
     source_id: LIBCANGJIE,
@@ -91,7 +91,7 @@ const ESSAY: UpstreamSource = UpstreamSource {
 };
 
 /// 詞庫資料包的來源：rime-essay 給詞與詞頻，每份語料的 train 切分給字頻（已分詞的 HKCanCor
-/// 另給詞），最後是粵語口語詞表（plan §4.2）。
+/// 另給詞），最後是粵語口語詞表（plan〈詞庫〉）。
 pub(crate) fn lexicon_sources() -> Vec<PackSource> {
     std::iter::once(ESSAY)
         .chain(CORPORA.iter().map(|corpus| UpstreamSource {
@@ -109,7 +109,7 @@ pub(crate) fn lexicon_sources() -> Vec<PackSource> {
         .collect()
 }
 
-/// 可選的粵典詞庫資料包：預設詞庫的來源，再加粵典的詞頭表與詞頻（plan §4.2，M3 票 24）。
+/// 可選的粵典詞庫資料包：預設詞庫的來源，再加粵典的詞頭表與詞頻（plan〈詞庫〉，M3 票 24）。
 pub(crate) fn words_hk_lexicon_sources() -> Vec<PackSource> {
     let mut sources = lexicon_sources();
     sources.push(PackSource::Upstream(UpstreamSource {
@@ -135,7 +135,7 @@ pub(crate) struct RepoData {
     pub used: &'static str,
 }
 
-/// 詞庫資料包的粵語口語詞表（plan §4.2、brief §5.2）。
+/// 詞庫資料包的粵語口語詞表（plan〈詞庫〉、brief〈來源〉）。
 const COLLOQUIAL: RepoData = RepoData {
     name: "QIM Cantonese colloquial word list",
     path: lexicon::COLLOQUIAL_PATH,
@@ -144,7 +144,7 @@ const COLLOQUIAL: RepoData = RepoData {
     used: "Cantonese colloquial words and their frequencies, compiled by QIM",
 };
 
-/// 語言模型資料包的來源：每份語料的 train 切分（plan §4.3）。
+/// 語言模型資料包的來源：每份語料的 train 切分（plan〈字級 bigram 與詞級 trigram〉）。
 pub(crate) fn language_model_sources() -> Vec<PackSource> {
     CORPORA
         .iter()
@@ -158,7 +158,7 @@ pub(crate) fn language_model_sources() -> Vec<PackSource> {
         .collect()
 }
 
-/// 停鍵層模型資料包的來源（plan §2.7）：每份語料 train 切分的文字，訓練神經模型用。
+/// 停鍵層模型資料包的來源（plan〈模型分層〉）：每份語料 train 切分的文字，訓練神經模型用。
 pub(crate) fn neural_sources() -> Vec<PackSource> {
     CORPORA
         .iter()
@@ -173,7 +173,7 @@ pub(crate) fn neural_sources() -> Vec<PackSource> {
         .collect()
 }
 
-/// 詞級 trigram 資料包的來源（plan §4.3）：每份語料的 train 切分給段的次數；切段用預設詞庫的詞與
+/// 詞級 trigram 資料包的來源（plan〈字級 bigram 與詞級 trigram〉）：每份語料的 train 切分給段的次數；切段用預設詞庫的詞與
 /// 詞頻（rime-essay、HKCanCor 補的詞、粵語口語詞表）與字級 bigram，所以詞庫的來源也列進來。
 pub(crate) fn word_trigram_sources() -> Vec<PackSource> {
     let words = UpstreamSource {
@@ -339,7 +339,7 @@ fn check_statement(source: &Source, file: &str, quote: &str, upstream: &str) -> 
     }
 }
 
-/// manifest 的 `license`（plan §4.6）：各來源的 SPDX 識別碼依來源順序以 ` AND ` 接起，重複的只寫一次。
+/// manifest 的 `license`（plan〈資料包 manifest〉）：各來源的 SPDX 識別碼依來源順序以 ` AND ` 接起，重複的只寫一次。
 pub(crate) fn license_expression(packed: &[Packed]) -> String {
     let mut ids: Vec<&str> = Vec::new();
     for p in packed {

@@ -1,5 +1,5 @@
-//! 使用者詞庫的匯出格式 `# qim-userdict v3`（plan §2.4）：對外的檔案格式，改了要升版本
-//! （brief §5.3）；v1、v2 的檔一直要收。v3 在 M4 收尾前還沒定稿（M4 spec〈共同規則〉）。
+//! 使用者詞庫的匯出格式 `# qim-userdict v3`（plan〈學習與排位〉）：對外的檔案格式，改了要升版本
+//! （brief〈版本與更新〉）；v1、v2 的檔一直要收。v3 在 M4 收尾前還沒定稿（M4 spec〈共同規則〉）。
 
 use std::collections::BTreeMap;
 
@@ -324,7 +324,7 @@ fn replacing_the_learning_keeps_today_and_this_device() {
 }
 
 /// 殼沒給過日期時學到的條目沒有日期：日期欄留空，不寫假日期（例如 1970-01-01），之後的一年時限
-/// 才不會把它們當成很久沒用（plan §2.4 殼的日期契約）。空的日期欄讀回來也是不知道。
+/// 才不會把它們當成很久沒用（plan〈學習與排位〉 殼的日期契約）。空的日期欄讀回來也是不知道。
 #[test]
 fn learning_before_the_shell_gives_a_date_writes_no_date() {
     let engine = engine();

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
 
-// 資料包管理（M3 票 20，plan §4.6）：設定區列出資料包，從檔案匯入、切換、刪除，每步讀回候選。
+// 資料包管理（M3 票 20，plan〈資料包 manifest〉）：設定區列出資料包，從檔案匯入、切換、刪除，每步讀回候選。
 // 匯入的是 `e2e/fixtures/e2e-lexicon/`：`anr` 只有「測試詞庫」一個詞（由
 // `crates/qim-core/tests/web_fixture.rs` 產生）。
 

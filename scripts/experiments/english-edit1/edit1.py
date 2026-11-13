@@ -1,7 +1,7 @@
 """Random quick-code strings vs. English words: exact hits and one-edit hits.
 
 Answers how often a Chinese-mode English candidate would appear if it
-tolerated one typo (brief §4.7, §12.1). Run: python3 -I edit1.py
+tolerated one typo (brief〈英文模式與欄位類型〉, §12.1). Run: python3 -I edit1.py
 Uses macOS /usr/share/dict/words; random letters do not follow the real
 quick-code distribution, so read the numbers as an order of magnitude.
 """

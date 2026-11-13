@@ -1,4 +1,4 @@
-//! 聯想（plan §2.1、§2.3，M3 票 13）：上屏之後、還沒打下一個字時，候選列出現接下來可能要打的
+//! 聯想（plan〈介面〉〈排序：同一把尺〉，M3 票 13）：上屏之後、還沒打下一個字時，候選列出現接下來可能要打的
 //! 字詞；選了就上屏，接著出下一輪。按鍵照 macOS 速成：數字鍵或點選選、空白不選、Esc 收起，
 //! 打字母直接開始新的組字。
 
@@ -206,7 +206,7 @@ fn escape_only_closes_the_association() {
     assert!(!typing.key(Key::Escape).handled);
 }
 
-/// 有聯想時退格交還宿主刪字、聯想同時收起（plan §2.1）。
+/// 有聯想時退格交還宿主刪字、聯想同時收起（plan〈介面〉）。
 #[test]
 fn backspace_closes_the_association_and_passes_to_the_host() {
     let mut typing = Typing::new();
@@ -339,7 +339,7 @@ fn nothing_is_learned_from_associations_when_learning_is_off() {
 
 #[test]
 fn incognito_gives_no_association() {
-    // 剛上屏的字是下一個字的前文，無痕不讀前文（brief §8）。
+    // 剛上屏的字是下一個字的前文，無痕不讀前文（brief〈隱私與安全〉）。
     let mut typing = Typing::with_options(|o| o.incognito = true);
     let committed = typing.commit("an");
     assert_eq!(committed.commit.as_deref(), Some("門"));

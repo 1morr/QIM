@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{PackError, RadicalHintPack, Scheme};
 
-/// 字根提示用哪一代倉頡碼；預設五代，可改三代（brief §4.2）。
+/// 字根提示用哪一代倉頡碼；預設五代，可改三代（brief〈取碼〉）。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CangjieVersion {
     Cangjie3,
@@ -57,7 +57,7 @@ impl RadicalHints {
     }
 
     /// 取出字根提示資料包的提示；方案要指名字根提示（[`crate::Packs::radical_hint`]），指名的是預設
-    /// 的那份，殼可以換成另一份（plan §4.6）。
+    /// 的那份，殼可以換成另一份（plan〈資料包 manifest〉）。
     pub fn for_scheme(pack: RadicalHintPack, scheme: &Scheme) -> Result<Self, PackError> {
         let expected = scheme.packs.radical_hint.clone();
         if expected.is_none() {

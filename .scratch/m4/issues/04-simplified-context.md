@@ -54,3 +54,5 @@ Blocked by: None (can start immediately)
 - e2e 的 `place`（把文字放進輸入框）有三份：`context.spec.ts`、`learning.spec.ts` 的 `placeBefore`、這張票的 `simplified.spec.ts`。`web/e2e/` 還沒有共用 helper 檔，留給之後整理 e2e 的票。
 - `LastWord.shown` 是那一段單獨轉換的結果。整次上屏用 TSPhrases 跨段轉、結果和單段轉不同時，`last_word_ending` 對不上，會退回逐字轉，一對多的字取 unigram 最高的。這是原本就有的行為，沒改。
 - 詞級 trigram 在「前文以剛上屏的多字詞結尾」（上屏「頭髮」顯示「头发」）沒有直接的核心測試；`Preceding::segment` 沒改，`character` 與 `word` 都取那段原文，所以前一段是整個詞。
+
+Session 紀錄：簡體模式的前文轉回繁體再接字級 bigram、詞級 trigram 與個人 bigram（剛上屏那段取原文）；bench 與 --learning 前後相同

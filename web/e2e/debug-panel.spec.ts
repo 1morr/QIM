@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// debug 面板（plan §3.1，M4 票 01）：預設關；開著時讀得到殼給的前文（有前文、不知道前文、無痕不讀）、
+// debug 面板（plan〈網頁 prototype〉，M4 票 01）：預設關；開著時讀得到殼給的前文（有前文、不知道前文、無痕不讀）、
 // 輸入碼的切段、首選的路徑分與學習加分、每個候選的來源，與停鍵重排的要求和結果。關著時網頁不問核心
 // （`data-inspect-count` 不動）。
 

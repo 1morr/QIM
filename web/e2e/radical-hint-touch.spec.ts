@@ -1,6 +1,6 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-// 觸控叫出字根提示（M1 票 22，brief §4.4）：行動裝置 viewport 下長按候選。
+// 觸控叫出字根提示（M1 票 22，brief〈手機觸控鍵盤〉）：行動裝置 viewport 下長按候選。
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 test.use(pixel);
 

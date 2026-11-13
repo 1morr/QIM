@@ -1,5 +1,5 @@
-//! 佈局檔的兩級驗證（plan §2.6、brief §4.6）：錯誤不能存檔，警告可以；
-//! 內建佈局另加嚴格檢查（plan §5.3）。
+//! 佈局檔的兩級驗證（plan〈佈局：畫布模型〉、brief〈佈局與編輯器〉）：錯誤不能存檔，警告可以；
+//! 內建佈局另加嚴格檢查（plan〈佈局〉）。
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -464,7 +464,7 @@ fn warnings(layout: &Layout) -> Vec<Warning> {
     warnings
 }
 
-/// 內建佈局的嚴格檢查（plan §5.3）不通過的地方。
+/// 內建佈局的嚴格檢查（plan〈佈局〉）不通過的地方。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StrictIssue {
     Error(LayoutError),

@@ -1,4 +1,4 @@
-//! 性質測試（plan §5.1）：隨機的碼表、詞庫與按鍵序列。
+//! 性質測試（plan〈核心〉）：隨機的碼表、詞庫與按鍵序列。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -326,7 +326,7 @@ proptest! {
     }
 
     /// 改選某一段後，沒選定的分段等於以選定的分段為前文、把剩下的輸入碼從頭打一次的分段
-    /// （plan §2.1 的重算、§2.3 接選定分段的最後一字）；各分段的碼接起來是整串輸入碼，
+    /// （plan〈介面〉 的重算、§2.3 接選定分段的最後一字）；各分段的碼接起來是整串輸入碼，
     /// 選定的都在沒選定的前面。
     #[test]
     fn unselected_segments_equal_those_of_typing_the_unselected_input_afresh(
@@ -362,7 +362,7 @@ proptest! {
         }
     }
 
-    /// 無痕模式下怎麼打、選、上屏都不寫學習資料（plan §5.1），之前學過的也不動。
+    /// 無痕模式下怎麼打、選、上屏都不寫學習資料（plan〈核心〉），之前學過的也不動。
     #[test]
     fn incognito_leaves_the_user_model_unchanged(
         table in random_table(),
@@ -384,7 +384,7 @@ proptest! {
         }
     }
 
-    /// 學習關掉時怎麼打、選、上屏都不寫學習資料（brief §4.5），之前學過的也不動。
+    /// 學習關掉時怎麼打、選、上屏都不寫學習資料（brief〈學習與排位〉），之前學過的也不動。
     #[test]
     fn learning_off_leaves_the_user_model_unchanged(
         table in random_table(),
@@ -407,7 +407,7 @@ proptest! {
     }
 
     /// 同一個 `UserModel` 交替用在兩個同碼不同字的方案：一個方案的上屏不寫另一個方案的學習計數與
-    /// 使用者詞，候選也不讀它們（plan §2.4）。個人 bigram 只看文字、各方案共用，不在此列。
+    /// 使用者詞，候選也不讀它們（plan〈學習與排位〉）。個人 bigram 只看文字、各方案共用，不在此列。
     #[test]
     fn one_scheme_neither_writes_nor_reads_the_other_schemes_learning(
         table in random_table(),
@@ -448,7 +448,7 @@ proptest! {
         }
     }
 
-    /// 匯出後匯入等價（plan §5.1）：學過的計數、個人 bigram、自動造詞、手動加的詞與觸發詞、常用語都還在，
+    /// 匯出後匯入等價（plan〈核心〉）：學過的計數、個人 bigram、自動造詞、手動加的詞與觸發詞、常用語都還在，
     /// 每個條目最後使用的日期（打字中途換日）與裝置 id 也是。
     #[test]
     fn exporting_then_importing_gives_an_equal_user_model(
@@ -611,7 +611,7 @@ fn run_devices(engine: &Engine, steps: Vec<Step>) -> [UserModel; 3] {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
-    /// 跨裝置合併（plan §2.4〈跨裝置合併〉，ADR 0007）和順序無關、重複合併不變：交換律、結合律、冪等。
+    /// 跨裝置合併（plan〈學習與排位〉〈跨裝置合併〉，ADR 0007）和順序無關、重複合併不變：交換律、結合律、冪等。
     /// 三台各自學習、撤銷學習、存刪常用語與英文使用者詞、清空，中間互相同步過，最後兩兩、三台合併比學習資料。
     #[test]
     fn merging_is_commutative_associative_and_idempotent(
@@ -635,7 +635,7 @@ proptest! {
         prop_assert_eq!(again, ab);
     }
 
-    /// 刪除後再用會復活（plan §2.4〈跨裝置合併〉）：三台有各自的歷史，第一台選一個候選再撤銷學習、同步給
+    /// 刪除後再用會復活（plan〈學習與排位〉〈跨裝置合併〉）：三台有各自的歷史，第一台選一個候選再撤銷學習、同步給
     /// 第二台，第二台再選一次；之後不論怎麼合併，那一列都在、有學到的值。
     #[test]
     fn a_deleted_entry_used_again_is_alive_in_every_merge(

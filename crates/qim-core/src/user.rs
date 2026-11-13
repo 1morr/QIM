@@ -1,4 +1,4 @@
-//! 個人模型（plan §2.4）：使用者詞與學習計數。
+//! 個人模型（plan〈學習與排位〉）：使用者詞與學習計數。
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,24 +15,24 @@ pub use sync::Merged;
 pub(crate) use sync::{Tally, Versioned};
 pub(crate) use undo::{Undo, UndoOwner};
 
-/// 衰減的時間常數，以上屏次數計（librime `formula_d`，brief §12.2）。
+/// 衰減的時間常數，以上屏次數計（librime `formula_d`，`docs/research/facts-rime.md`）。
 const DECAY_STEP: f64 = 200.0;
 
-/// 個人機率在 `personal` 裡的權重 w（plan §2.3，libime `UserLanguageModel` 的式子）。libime 用
+/// 個人機率在 `personal` 裡的權重 w（plan〈排序：同一把尺〉，libime `UserLanguageModel` 的式子）。libime 用
 /// 0.2；M1 票 12 換上口語權重與新的 β、γ 後，0.2 讓口語集學習開反而多修正，dev 切分上 0.05
 /// 對口語與維基都最好。
 const PERSONAL_WEIGHT: f64 = 0.05;
 
-/// 個人機率裡個人 bigram 的權重 λ（plan §2.3）：`P_personal = P_unigram + (1 − P_unigram)·λ·P_bigram`。
+/// 個人機率裡個人 bigram 的權重 λ（plan〈排序：同一把尺〉）：`P_personal = P_unigram + (1 − P_unigram)·λ·P_bigram`。
 /// libime `HistoryBigram` 是 `(1 − λ)·P_unigram + λ·P_bigram`、λ = 0.8
 /// （`docs/research/libime-user-model.md` §2），沒有前一個字詞時學過的段只剩兩成的個人分；
 /// 這裡 bigram 只往上加，學習計數的分照舊。dev 切分的學習模式掃 0–1，0.8 修正次數最少（M3 票 12）。
 const BIGRAM_WEIGHT: f64 = 0.8;
 
-/// 排位規則 2 的期限：距最後上屏不超過這麼多次上屏（plan §2.4 的初值）。
+/// 排位規則 2 的期限：距最後上屏不超過這麼多次上屏（plan〈學習與排位〉 的初值）。
 pub(crate) const RECENT_COMMITS: u64 = 10_000;
 
-/// 學習的時限（plan §2.4，M4 票 13）：最後使用的日期距今天超過這麼多天就算一年沒用。整串上屏隔了
+/// 學習的時限（plan〈學習與排位〉，M4 票 13）：最後使用的日期距今天超過這麼多天就算一年沒用。整串上屏隔了
 /// 這麼久從 1 重算、規則 2、3 不再用它，一年沒用的條目停用（不刪，[`SchemeUser`]）。產品決定（使用者 2026-11-12），不由基準調；
 /// LatinIME 是 300 天。
 const EXPIRY_DAYS: i32 = 365;
@@ -42,7 +42,7 @@ pub(crate) fn expired(last: Option<Date>, today: Option<Date>) -> bool {
     matches!((last, today), (Some(last), Some(today)) if today.days_after(last) > EXPIRY_DAYS)
 }
 
-/// 學習資料的條目上限（plan §2.4，M4 票 13），照 LatinIME 的結構：條目數到上限的 1.2 倍才清到上限，
+/// 學習資料的條目上限（plan〈學習與排位〉，M4 票 13），照 LatinIME 的結構：條目數到上限的 1.2 倍才清到上限，
 /// 不必每次學習都淘汰。LatinIME 分 unigram（1 萬）與 bigram（3 萬）兩個上限，這裡也分兩個。
 /// LatinIME 的上限可由字典檔頭覆寫（`MAX_UNIGRAM_ENTRY_COUNT`），這裡由殼用 [`UserModel::set_limits`] 改。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,16 +75,16 @@ const ENTRY_LIMIT: usize = 20_000;
 /// [`Limits::bigrams`] 的預設值：同上約 2.8 萬組；LatinIME 的 bigram 上限也是 3 萬。
 const BIGRAM_LIMIT: usize = 30_000;
 
-/// 使用者詞與學習計數；殼負責保存（plan §2.1）。各輸入方案分開記，互不影響（plan §2.4）。
+/// 使用者詞與學習計數；殼負責保存（plan〈介面〉）。各輸入方案分開記，互不影響（plan〈學習與排位〉）。
 #[derive(Debug, Clone, Default)]
 pub struct UserModel {
     schemes: BTreeMap<String, SchemeModel>,
-    /// 個人 bigram：只看文字，各方案共用（plan §2.4）。
+    /// 個人 bigram：只看文字，各方案共用（plan〈學習與排位〉）。
     bigrams: Bigrams,
-    /// 英文使用者詞（plan §2.4，M4 票 14）：各方案共用，有自己的 tick。
+    /// 英文使用者詞（plan〈學習與排位〉，M4 票 14）：各方案共用，有自己的 tick。
     english: EnglishUserWords,
     /// 殼交給核心的今天（[`UserModel::set_today`]）：學到或改到的條目記成最後使用的日期。核心不讀
-    /// 系統時間（plan §1.3）；殼還沒給時是 `None`，這時學到的條目沒有日期。
+    /// 系統時間（plan〈依賴規則〉）；殼還沒給時是 `None`，這時學到的條目沒有日期。
     today: Option<Date>,
     /// 這台裝置的 id（[`UserModel::set_device`]），匯出時寫進檔頭；跨裝置合併時分辨各台（M4 票 17）。
     device: Option<String>,
@@ -132,7 +132,7 @@ impl PartialEq for UserModel {
     }
 }
 
-/// 個人 bigram（plan §2.3）：上屏時記「前一個字詞 → 這一段」的衰減值，算分時給這一段接在
+/// 個人 bigram（plan〈排序：同一把尺〉）：上屏時記「前一個字詞 → 這一段」的衰減值，算分時給這一段接在
 /// 那個字詞後面的條件機率。
 #[derive(Debug, Clone, Default, PartialEq)]
 struct Bigrams {
@@ -234,7 +234,7 @@ impl Following<'_> {
 /// 所以查詢與學習的方法不必逐一帶方案。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct SchemeModel {
-    /// 這個方案學習過的上屏次數；學習計數的時間（plan §2.4），不讀系統時間。
+    /// 這個方案學習過的上屏次數；學習計數的時間（plan〈學習與排位〉），不讀系統時間。
     tick: u64,
     /// 輸入碼 → 候選文字 → 計數。
     entries: BTreeMap<String, BTreeMap<String, Count>>,
@@ -246,7 +246,7 @@ pub(crate) struct SchemeModel {
     graveyard: BTreeMap<String, Tally>,
 }
 
-/// 一個使用者詞（plan §2.4）：像詞庫的詞一樣進 lattice。
+/// 一個使用者詞（plan〈學習與排位〉）：像詞庫的詞一樣進 lattice。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct UserWord {
     source: WordSource,
@@ -304,7 +304,7 @@ const SOURCE_NAMES: [(Option<WordSource>, &str); 4] = [
     (Some(WordSource::Phrase), "phrase"),
 ];
 
-/// 一個（輸入碼, 候選文字）在這台學到的值；方案由所在的 [`SchemeModel`] 決定。兩種上屏分開記（plan §2.4）：
+/// 一個（輸入碼, 候選文字）在這台學到的值；方案由所在的 [`SchemeModel`] 決定。兩種上屏分開記（plan〈學習與排位〉）：
 /// - 整串上屏：整串輸入碼就是這個碼、上屏的就是這個候選；次數各台分開記在這列的 [`Tally`]，給排位規則 2 用。
 /// - 句中各段的上屏也算進衰減值，給 `personal` 用。
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -407,7 +407,7 @@ impl UserModel {
         }
     }
 
-    /// 學一次上屏（plan §2.4）：方案 `scheme` 的學習計數（[`SchemeModel::learn`]），加上個人
+    /// 學一次上屏（plan〈學習與排位〉）：方案 `scheme` 的學習計數（[`SchemeModel::learn`]），加上個人
     /// bigram。`previous` 是組字前面的一個字詞（前文給的，見 [`crate::Session::set_context`]），
     /// 沒有時第一段不記；`segments` 同 [`SchemeModel::learn`]，空的不記。
     pub(crate) fn learn(&mut self, scheme: &str, previous: Option<&str>, segments: &[Segment]) {
@@ -428,7 +428,7 @@ impl UserModel {
         self.device.clone().unwrap_or_default()
     }
 
-    /// 選了一個聯想（plan §2.4）：只記個人 bigram「`previous` → `text`」。聯想沒有輸入碼，
+    /// 選了一個聯想（plan〈學習與排位〉）：只記個人 bigram「`previous` → `text`」。聯想沒有輸入碼，
     /// 不記學習計數。
     pub(crate) fn learn_association(&mut self, previous: &str, text: &str) {
         let device = self.own_device();
@@ -442,7 +442,7 @@ impl UserModel {
         self.enforce_limits();
     }
 
-    /// 退格撤銷（plan §2.4）：`owner` 開始一個動作，收起最近一個動作的撤銷紀錄交給它（不是它寫的時
+    /// 退格撤銷（plan〈學習與排位〉）：`owner` 開始一個動作，收起最近一個動作的撤銷紀錄交給它（不是它寫的時
     /// 是空的），之後學到的記進新的一份。[`crate::Session`] 在每個動作（按鍵、點候選、打文字）開頭
     /// 呼叫，動作結束時決定撤銷它（[`UserModel::revert`]）、留著給下一個動作（[`UserModel::keep_undo`]）
     /// 或丟掉。手動加詞、常用語、刪英文使用者詞、匯入這類使用者明確的操作會丟掉紀錄，撤銷不會蓋掉
@@ -531,7 +531,7 @@ impl UserModel {
         self.english.forget(text, self.today)
     }
 
-    /// 撤銷學習（plan §2.4，M4 票 16）：清掉方案 `scheme` 裡（`code`, `text`）學到的，經
+    /// 撤銷學習（plan〈學習與排位〉，M4 票 16）：清掉方案 `scheme` 裡（`code`, `text`）學到的，經
     /// [`crate::Session::forget`] 呼叫。刪學習資料從嚴（協調者 2026-11-12 決定）：清這一列的計數（整串上屏
     /// 次數、衰減值）與這一列的自動造詞；個人 bigram 只清「`previous` → `text`」那一組（`previous` 是候選列
     /// 現在接的前一個字詞，沒有時不清），其他前一個字詞後面學到的不動，免得清一個常用字抹掉它在所有前文
@@ -592,7 +592,7 @@ impl UserModel {
     }
 
     /// 殼交給核心今天的日期（使用者當地的日曆日）；之後學到或改到的條目記成最後使用的日期。核心不讀
-    /// 系統時間（plan §1.3）。殼的契約（plan §2.4）：在第一次學習前、之後每次使用者操作前給，換日後
+    /// 系統時間（plan〈依賴規則〉）。殼的契約（plan〈學習與排位〉）：在第一次學習前、之後每次使用者操作前給，換日後
     /// 才不會記成前一天。沒給過時學到的條目沒有日期（不寫假日期），一年的時限跳過它們。
     ///
     /// 距今超過一年沒用的條目停用（不再影響排序）但不刪：殼的時鐘可能錯（重開機後亂掉、被改到幾年後），
@@ -606,7 +606,7 @@ impl UserModel {
         self.limits = limits;
     }
 
-    /// 條目數到上限的 1.2 倍時清到上限（plan §2.4，LatinIME 的 `truncateEntries`）。（方案, 輸入碼, 詞）的列
+    /// 條目數到上限的 1.2 倍時清到上限（plan〈學習與排位〉，LatinIME 的 `truncateEntries`）。（方案, 輸入碼, 詞）的列
     /// 與英文使用者詞算同一個上限（LatinIME 的 unigram 也不分來源）。淘汰順序：先刪沒到出現門檻的
     /// （[`Threshold`]：只有英文使用者詞會沒到），再刪最後使用的日期最舊的（沒有日期的當作最新，同時限
     /// 跳過它們）、同一天的刪衰減值小的（最近用得少的），再依鍵的順序。手動加詞與常用語不算、不刪。
@@ -773,7 +773,7 @@ impl UserModel {
         };
     }
 
-    /// 自動造詞（plan §2.4）：把方案 `scheme` 的（`code`, `text`）記成使用者詞；已經是使用者詞的不動。
+    /// 自動造詞（plan〈學習與排位〉）：把方案 `scheme` 的（`code`, `text`）記成使用者詞；已經是使用者詞的不動。
     /// 上屏次數由同一次上屏的 [`UserModel::learn`] 記。
     pub(crate) fn add_auto_phrase(&mut self, scheme: &str, code: &str, text: &str) {
         let today = self.today;
@@ -795,7 +795,7 @@ impl UserModel {
         self.schemes.entry(scheme.to_string()).or_default()
     }
 
-    /// 手動加一個使用者詞（brief §4.5）。輸入碼是各字的碼接起來，所以連打裡也打得出；有字沒有
+    /// 手動加一個使用者詞（brief〈學習與排位〉）。輸入碼是各字的碼接起來，所以連打裡也打得出；有字沒有
     /// 碼（英文、數字…）時改用觸發詞當輸入碼。`trigger` 是打它就讓它成首選的自訂輸入碼（排位
     /// 規則 1），只能用方案的鍵。已有同碼同字的使用者詞時改成手動加的、換上這個觸發詞。
     pub fn add_word(
@@ -826,7 +826,7 @@ impl UserModel {
         model.stamp(code, text, today);
     }
 
-    /// 存一條常用語（plan §2.4）：可以長、可以含換行與 Tab；`trigger` 是打它就讓它成首選的
+    /// 存一條常用語（plan〈學習與排位〉）：可以長、可以含換行與 Tab；`trigger` 是打它就讓它成首選的
     /// 輸入碼，只能用方案的鍵，沒有時只能從清單選。同一個方案裡同樣的文字只存一條：再存一次
     /// 換上新的觸發詞，舊觸發詞學到的計數一起刪掉。
     pub fn add_phrase(
@@ -898,7 +898,7 @@ pub struct Phrase {
     pub trigger: Option<String>,
 }
 
-/// 手動加的詞的輸入碼（plan §2.4）：各字的碼接起來；有字沒有碼時用觸發詞，都沒有時是 `None`。
+/// 手動加的詞的輸入碼（plan〈學習與排位〉）：各字的碼接起來；有字沒有碼時用觸發詞，都沒有時是 `None`。
 pub(crate) fn manual_word_code(
     engine: &Engine,
     text: &str,
@@ -1183,7 +1183,7 @@ impl SchemeModel {
     }
 
     /// 一次上屏：整串輸入碼和每一段的衰減值各記一次，（碼, 字詞）相同的只記一次；整串另記一次
-    /// 整串上屏（plan §2.4）。`segments` 依輸入碼的順序、接起來是整串，只看碼與字詞，不是空的。次數記在
+    /// 整串上屏（plan〈學習與排位〉）。`segments` 依輸入碼的順序、接起來是整串，只看碼與字詞，不是空的。次數記在
     /// `device` 自己那格。
     fn learn(
         &mut self,
@@ -1276,7 +1276,7 @@ impl SchemeModel {
 }
 
 /// 一個輸入方案的個人模型，照殼給的今天看（[`UserModel::for_scheme`]）：查詢都經它，最後使用的日期距今
-/// 超過一年的條目當作沒有（停用，plan §2.4〈學習的時限〉），但留在資料裡，時鐘改回來就恢復作用。
+/// 超過一年的條目當作沒有（停用，plan〈學習與排位〉〈學習的時限〉），但留在資料裡，時鐘改回來就恢復作用。
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SchemeUser<'a> {
     model: &'a SchemeModel,
@@ -1359,7 +1359,7 @@ impl<'a> SchemeUser<'a> {
             .map_or(0, |tally| tally.commits_on(self.today))
     }
 
-    /// 排位規則 3（plan §2.4）：（`code`, `text`）是使用者詞且一年內整串上屏過時，回傳最後一次整串
+    /// 排位規則 3（plan〈學習與排位〉）：（`code`, `text`）是使用者詞且一年內整串上屏過時，回傳最後一次整串
     /// 上屏的 tick，越大越近；否則是 `None`（一年沒上屏的回到一般排序）。
     pub(crate) fn last_tick_if_used_word(&self, code: &str, text: &str) -> Option<u64> {
         if !self.is_word(code, text) {
@@ -1374,7 +1374,7 @@ impl<'a> SchemeUser<'a> {
         self.count(code, text).is_some()
     }
 
-    /// 排位規則 2（plan §2.4）：一年內整串上屏 ≥ 2 次（各台相加，[`SchemeUser::whole_commits`]），且距最後
+    /// 排位規則 2（plan〈學習與排位〉）：一年內整串上屏 ≥ 2 次（各台相加，[`SchemeUser::whole_commits`]），且距最後
     /// 一次整串上屏不超過 [`RECENT_COMMITS`] 次上屏時，回傳那次的 tick，越大越近；否則是 `None`。句中各段的
     /// 上屏不算。
     pub(crate) fn last_tick_if_chosen_twice(&self, code: &str, text: &str) -> Option<u64> {
@@ -1383,7 +1383,7 @@ impl<'a> SchemeUser<'a> {
             .then_some(tick)
     }
 
-    /// 個人機率（plan §2.3）：衰減值衰減到現在，除以它的上限；沒學過或停用時是 0。
+    /// 個人機率（plan〈排序：同一把尺〉）：衰減值衰減到現在，除以它的上限；沒學過或停用時是 0。
     pub(crate) fn personal_probability(&self, code: &str, text: &str) -> f64 {
         self.count(code, text).map_or(0.0, |count| {
             count.decayed * decay(self.model.tick - count.last_tick) / max_decayed()
@@ -1461,7 +1461,7 @@ fn remove_in<V>(
     removed
 }
 
-/// `personal`（plan §2.3）：個人機率在一段原本的 ln 機率 `log_static` 上加的分，只加不減。個人機率
+/// `personal`（plan〈排序：同一把尺〉）：個人機率在一段原本的 ln 機率 `log_static` 上加的分，只加不減。個人機率
 /// 由這一段的學習計數 `unigram`（[`SchemeModel::personal_probability`]）與它接在前一個字詞後面的
 /// 個人 bigram `bigram`（[`Following::probability`]）內插；兩者都是 0（沒學過）時是 0。
 pub(crate) fn personal_bonus(log_static: f64, unigram: f64, bigram: f64) -> f64 {

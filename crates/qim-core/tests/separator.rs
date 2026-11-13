@@ -1,4 +1,4 @@
-//! 手動分隔鍵（brief §4.3、plan §2.3）：組字中按 `'` 在目前位置插入分隔記號，這裡一定要斷字：
+//! 手動分隔鍵（brief〈桌面鍵盤操作〉、plan〈排序：同一把尺〉）：組字中按 `'` 在目前位置插入分隔記號，這裡一定要斷字：
 //! 單字的碼不跨過它，詞庫的詞只在它落在詞內兩字的碼之間時跨過它（照 Rime 速成，M1 票 28b）。
 
 mod common;
@@ -235,7 +235,7 @@ fn backspace_after_a_word_across_a_separator_deletes_the_letters_then_the_separa
     assert_eq!(shown.composition.input, "vi");
 }
 
-/// 跨過分隔記號的詞記的碼不含分隔記號，同其他分段（plan §2.4）。
+/// 跨過分隔記號的詞記的碼不含分隔記號，同其他分段（plan〈學習與排位〉）。
 #[test]
 fn learning_a_word_across_a_separator_records_its_code_without_it() {
     let mut ime = Ime::new();

@@ -1,5 +1,5 @@
-//! Unihan 的兩個用途：`kGradeLevel` 給速成碼表排字序（plan §4.1）；`kCangjie` 與
-//! libcangjie 倉頡三代碼交叉比對（plan §4.5），只出報表，不擋建置。
+//! Unihan 的兩個用途：`kGradeLevel` 給速成碼表排字序（plan〈速成碼表〉）；`kCangjie` 與
+//! libcangjie 倉頡三代碼交叉比對（plan〈驗證〉），只出報表，不擋建置。
 //!
 //! 研究顯示 `kCangjie` 對應三代（`docs/research/data-sources.md`），所以只和第 12 欄比。
 

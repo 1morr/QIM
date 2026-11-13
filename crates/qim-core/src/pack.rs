@@ -24,7 +24,7 @@ pub trait Pack: Serialize + DeserializeOwned {
     fn id(&self) -> &str;
 
     /// 殼載入資料包的入口：照 `manifest` 核對最低核心版本、種類、大小與 sha256，解開後再核對 id
-    /// （plan §4.6）。[`Pack::from_bytes`] 不核對，給建置端與測試讀剛建好的資料包。
+    /// （plan〈資料包 manifest〉）。[`Pack::from_bytes`] 不核對，給建置端與測試讀剛建好的資料包。
     fn open(manifest: &Manifest, bytes: &[u8]) -> Result<Self, PackError> {
         manifest.check::<Self>(bytes)?;
         let pack = Self::from_bytes(bytes)?;
@@ -73,21 +73,21 @@ pub struct SchemePack {
     pub code_table: CodeTable,
 }
 
-/// 詞庫資料包：詞、詞頻與字頻（plan §4.2）。方案用 [`crate::Packs::lexicon`] 指名它的 `id`。
+/// 詞庫資料包：詞、詞頻與字頻（plan〈詞庫〉）。方案用 [`crate::Packs::lexicon`] 指名它的 `id`。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LexiconPack {
     pub id: String,
     pub lexicon: Lexicon,
 }
 
-/// 語言模型資料包：字級 bigram（plan §4.3）。方案用 [`crate::Packs::language_model`] 指名它的 `id`。
+/// 語言模型資料包：字級 bigram（plan〈字級 bigram 與詞級 trigram〉）。方案用 [`crate::Packs::language_model`] 指名它的 `id`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LanguageModelPack {
     pub id: String,
     pub model: LanguageModel,
 }
 
-/// 詞級 trigram 資料包：同步層的語言模型（plan §2.3、§4.3）。方案用 [`crate::Packs::word_trigram`]
+/// 詞級 trigram 資料包：同步層的語言模型（plan〈排序：同一把尺〉〈字級 bigram 與詞級 trigram〉）。方案用 [`crate::Packs::word_trigram`]
 /// 指名它的 `id`，由 [`crate::Engine::with_word_trigram`] 掛上。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WordTrigramPack {
@@ -95,7 +95,7 @@ pub struct WordTrigramPack {
     pub model: WordTrigram,
 }
 
-/// 簡繁資料包：OpenCC 的轉換表（plan §4.4），由 [`crate::Engine::with_simplifier`] 掛上，
+/// 簡繁資料包：OpenCC 的轉換表（plan〈英文、簡繁與 emoji〉），由 [`crate::Engine::with_simplifier`] 掛上，
 /// 不由方案指名：各方案都輸出繁體，簡體模式共用同一份。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SimplifierPack {
@@ -103,7 +103,7 @@ pub struct SimplifierPack {
     pub simplifier: Simplifier,
 }
 
-/// 字根提示資料包：字 → 倉頡三代 / 五代碼（plan §4.1 步驟 5）。方案用
+/// 字根提示資料包：字 → 倉頡三代 / 五代碼（plan〈速成碼表〉 步驟 5）。方案用
 /// [`crate::Packs::radical_hint`] 指名它的 `id`，殼用 [`RadicalHints::for_scheme`] 取出。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RadicalHintPack {
@@ -111,7 +111,7 @@ pub struct RadicalHintPack {
     pub hints: RadicalHints,
 }
 
-/// 英文資料包：中文狀態的英文候選用的詞表（plan §4.4），由 [`crate::Engine::with_english`]
+/// 英文資料包：中文狀態的英文候選用的詞表（plan〈英文、簡繁與 emoji〉），由 [`crate::Engine::with_english`]
 /// 掛上，不由方案指名，各方案共用。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnglishPack {
@@ -119,7 +119,7 @@ pub struct EnglishPack {
     pub words: EnglishWords,
 }
 
-/// emoji 資料包：字詞 → emoji（plan §4.4），由 [`crate::Engine::with_emoji`] 掛上，不由方案指名，
+/// emoji 資料包：字詞 → emoji（plan〈英文、簡繁與 emoji〉），由 [`crate::Engine::with_emoji`] 掛上，不由方案指名，
 /// 各方案共用。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EmojiPack {
@@ -127,7 +127,7 @@ pub struct EmojiPack {
     pub emoji: EmojiTable,
 }
 
-/// 停鍵層的模型資料包（plan §2.7、§4.6）：神經重排的權重與字表。核心只核對與解開，不跑模型：
+/// 停鍵層的模型資料包（plan〈模型分層〉〈資料包 manifest〉）：神經重排的權重與字表。核心只核對與解開，不跑模型：
 /// 殼把欄位交給 `qim-neural`（`Reranker::new`），在背景執行緒或 Web Worker 推論。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelPack {

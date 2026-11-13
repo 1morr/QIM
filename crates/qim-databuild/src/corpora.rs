@@ -1,4 +1,4 @@
-//! 語料清單（plan §4.3）：每份語料用哪個來源的哪些檔、怎麼讀出文字、基準放哪個目錄、怎麼署名。
+//! 語料清單（plan〈字級 bigram 與詞級 trigram〉）：每份語料用哪個來源的哪些檔、怎麼讀出文字、基準放哪個目錄、怎麼署名。
 //! 來源的版本、網址與 sha256 在 `data/sources.toml`。
 
 use std::fs::File;
@@ -14,7 +14,7 @@ use crate::sources::Source;
 use crate::transcode::Transcoder;
 use crate::{Error, hkcancor, wiki};
 
-/// 基準檔放哪個目錄（plan §5.2）：維基防退步，口語是品質判斷的主要依據（brief §9）。
+/// 基準檔放哪個目錄（plan〈首選字基準〉）：維基防退步，口語是品質判斷的主要依據（brief〈效能與品質指標〉）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     Wiki,
@@ -32,7 +32,7 @@ impl Group {
         }
     }
 
-    /// 「有前文」的基準題（plan §5.2）：`<目錄>/context/<名>.tsv`，授權同 [`Group::dir`]。
+    /// 「有前文」的基準題（plan〈首選字基準〉）：`<目錄>/context/<名>.tsv`，授權同 [`Group::dir`]。
     pub fn context_dir(self) -> &'static str {
         match self {
             Group::Wiki => "bench/corpus/context",
@@ -40,8 +40,8 @@ impl Group {
         }
     }
 
-    /// 「含打錯碼」的基準題（plan §5.2，M4 票 08）：`<目錄>/typo/<名>.tsv`，授權同 [`Group::dir`]。只有口語：
-    /// 品質判斷以口語為主（brief §9），維基的長句每句都有好幾處錯、整句首選幾乎全錯，量不出容錯的差別；
+    /// 「含打錯碼」的基準題（plan〈首選字基準〉，M4 票 08）：`<目錄>/typo/<名>.tsv`，授權同 [`Group::dir`]。只有口語：
+    /// 品質判斷以口語為主（brief〈效能與品質指標〉），維基的長句每句都有好幾處錯、整句首選幾乎全錯，量不出容錯的差別；
     /// 維基集照舊守「沒打錯的不退步」。
     pub fn typo_dir(self) -> Option<&'static str> {
         match self {
@@ -73,7 +73,7 @@ impl Group {
     }
 }
 
-/// 前處理的字形轉換（plan §4.3）：都轉成香港繁體，轉完再照 [`CommonForms`] 換回常見寫法。
+/// 前處理的字形轉換（plan〈字級 bigram 與詞級 trigram〉）：都轉成香港繁體，轉完再照 [`CommonForms`] 換回常見寫法。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Conversion {
     /// 原文混有簡體（中文維基）：OpenCC `s2hk`。
@@ -145,7 +145,7 @@ pub struct Corpus {
     /// `sources.toml` 的 `[source.<id>]`。
     pub source_id: &'static str,
     pub group: Group,
-    /// bigram 與詞庫字頻的次數乘上的權重（plan §4.3）。口語語料只有維基的約 1/127 句，
+    /// bigram 與詞庫字頻的次數乘上的權重（plan〈字級 bigram 與詞級 trigram〉）。口語語料只有維基的約 1/127 句，
     /// M1 票 12 在 dev 切分上掃 1–256 定為 64：口語集修正次數少約三成，維基集答錯多約 2%；
     /// 再往上口語只再好一點、維基退得更多（票 12 Comments）。
     pub weight: u64,
@@ -265,7 +265,7 @@ impl Corpus {
     }
 
     /// 已分詞的語料（HKCanCor）train 切分裡兩字以上的詞與次數（[`hkcancor::TrainWords`]）；
-    /// 沒分詞的語料是空的。詞庫用它補詞（plan §4.2）。
+    /// 沒分詞的語料是空的。詞庫用它補詞（plan〈詞庫〉）。
     pub fn train_words(
         &self,
         paths: &[PathBuf],
@@ -382,7 +382,7 @@ pub fn build_dir(root: &Path, name: &str) -> PathBuf {
 }
 
 /// 語料 `name` 的 dev 調參題（`build/corpus/<名>/dev.tsv`）；`qim_bench::dev_items` 讀同一個路徑
-/// （plan §1.3 不讓 `qim-bench` 依賴本 crate），`xtask` 的 `shared_paths` 測試比對兩邊。
+/// （plan〈依賴規則〉 不讓 `qim-bench` 依賴本 crate），`xtask` 的 `shared_paths` 測試比對兩邊。
 pub fn dev_items_path(root: &Path, name: &str) -> PathBuf {
     build_dir(root, name).join("dev.tsv")
 }

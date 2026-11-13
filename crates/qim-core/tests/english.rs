@@ -1,4 +1,4 @@
-//! 中文狀態的英文候選（M1 票 15、排位規則 4，plan §2.4、brief §4.3、§4.7）：整串輸入碼剛好是
+//! 中文狀態的英文候選（M1 票 15、排位規則 4，plan〈學習與排位〉、brief〈桌面鍵盤操作〉〈英文模式與欄位類型〉）：整串輸入碼剛好是
 //! 完整英文單字、又長過一個字的最長碼時，那個字排第 2 位；不容錯、不補全、不搶首選。
 
 mod common;
@@ -442,7 +442,7 @@ fn the_expanded_list_is_empty_until_relisted_with_the_new_option() {
     assert!(!all.contains(&"the".to_string()), "{all:?}");
 }
 
-/// 萬用鍵在中文組字是比對模式、不當字母（plan §4.4）：輸入碼有它時不出英文候選，即使英文詞表
+/// 萬用鍵在中文組字是比對模式、不當字母（plan〈英文、簡繁與 emoji〉）：輸入碼有它時不出英文候選，即使英文詞表
 /// 有拼法相同的字（之後換成有 `z` 的英文詞典也一樣）。
 #[test]
 fn no_english_candidate_when_the_input_has_the_wildcard() {

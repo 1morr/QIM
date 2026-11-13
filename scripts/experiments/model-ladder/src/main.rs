@@ -157,7 +157,7 @@ fn export(args: &[String]) -> Result<(), String> {
         .join("requests");
     std::fs::create_dir_all(&dir).map_err(|e| format!("建不了 {}：{e}", dir.display()))?;
     for set in load_sets(&root, split)? {
-        // 個人集的內容只在本機，也不送雲端（plan §5.2）：要明說才匯出。
+        // 個人集的內容只在本機，也不送雲端（plan〈首選字基準〉）：要明說才匯出。
         if set.private && !f.include_personal {
             continue;
         }

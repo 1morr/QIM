@@ -10,7 +10,7 @@ use std::process::Command;
 
 /// `wasm-bindgen` 產生的 JS 與 `.wasm`，`web/src/` 直接 import；不進 git。
 pub const BINDINGS_DIR: &str = "web/src/wasm";
-/// 網頁的資料包與佈局，Vite 原樣提供；不進 git（plan §1.2）。
+/// 網頁的資料包與佈局，Vite 原樣提供；不進 git（plan〈目錄結構〉）。
 const PACKS_DIR: &str = "web/public/packs";
 const LAYOUTS_DIR: &str = "web/public/layouts";
 /// `cargo xtask data` 的產物目錄 → 網頁的位置。

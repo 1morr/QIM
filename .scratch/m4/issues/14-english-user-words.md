@@ -44,3 +44,5 @@ Blocked by: 12
   - 票 11 的萬用鍵在新名詞下照樣成立：前綴補完比對時略過 `z`（`lattice.rs` 的 `completions`）；含 `z` 的輸入不出整串的英文使用者詞（`typed_as` 要整串是方案字母）。票 11 加在舊 `remembered_strings.rs` 的測試搬到 `english_user_words.rs`，另補規則 4 一條；拿掉略過 `z` 的過濾時前一條會紅（試過）。plan §2.5 萬用鍵段改用新名詞。
   - 資料包格式升到 8（票 11），跑 e2e、bench 前要先 `cargo xtask data`。
   - 驗證：`cargo test --workspace` 1067 passed；`cargo xtask check` 通過（e2e 244 passed、2 skipped）。`bench --check` 通過，12 個集合的答錯、修正都等於 baseline，沒有翻盤，固定題 84/84。原生 p95：空白 74.1 µs／80.0 µs／1.31 ms，學過 150 µs／228 µs／1.89 ms。`--learning` 和合併前逐項相同。
+
+Session 紀錄：英文使用者詞取代記住的字串：4 字元起都學、門檻 2／3 次、規則 4、5 改寫、v3 種類 `english`；bench 不變

@@ -1,8 +1,8 @@
-//! 字級 bigram 的訓練（plan §4.3）：各語料 train 切分的句子 → interpolated Kneser-Ney →
+//! 字級 bigram 的訓練（plan〈字級 bigram 與詞級 trigram〉）：各語料 train 切分的句子 → interpolated Kneser-Ney →
 //! 依次數剪枝 → [`LanguageModel`]。
 //!
 //! - 一行一句，bigram 只數句內相鄰的兩字，不跨句、不加句尾記號。句首另算一列：每句的第一字
-//!   接在 [`CLAUSE_START`] 後面，前文以標點結尾時組字開頭的字用它（plan §2.3）；它的次數不算進
+//!   接在 [`CLAUSE_START`] 後面，前文以標點結尾時組字開頭的字用它（plan〈排序：同一把尺〉）；它的次數不算進
 //!   字次數、`N1+(•w)` 與 `D`，所以其他字的機率和沒有它時相同。不知道前文時組字開頭的字用
 //!   unigram（[`CharModel::start`]）：使用者的組字多半不在句首。
 //! - `P(w | v) = max(c(v,w) − D, 0) ÷ c(v) + D × N1+(v•) ÷ c(v) × P_cont(w)`，
@@ -11,7 +11,7 @@
 //!   `V` 是連打字集的字數；加一讓沒出現過的字也有機率。
 //! - 剪枝：只留 `c(v,w) ≥` [`MIN_COUNT`] 的 bigram，`α(v)` 重算成讓 `Σ_w P(w | v) = 1`。
 //! - 並存寫法（`common_forms::BothForms`）：次數歸到代表寫法再訓練，訓練完把代表寫法的 unigram 與
-//!   含它的 bigram 照抄給另一種寫法，兩種寫法的機率相同（brief §4.1）。
+//!   含它的 bigram 照抄給另一種寫法，兩種寫法的機率相同（brief〈字集與字形〉）。
 //!
 //! 浮點運算都依字的順序做，同樣的語料算出位元組相同的資料包。
 
@@ -23,10 +23,10 @@ use qim_core::{CLAUSE_START, CharModel, LanguageModel};
 
 use crate::common_forms::BothForms;
 
-/// 剪枝門檻：bigram 出現至少這麼多次才留下（plan §4.3：資料包 ≤ [`MAX_BYTES`]）。
+/// 剪枝門檻：bigram 出現至少這麼多次才留下（plan〈字級 bigram 與詞級 trigram〉：資料包 ≤ [`MAX_BYTES`]）。
 pub const MIN_COUNT: u64 = 2;
 
-/// 資料包大小上限（plan §4.3，Gboard 文獻的 5–10 MB 預算）；`--verify` 檢查。
+/// 資料包大小上限（plan〈字級 bigram 與詞級 trigram〉，Gboard 文獻的 5–10 MB 預算）；`--verify` 檢查。
 pub const MAX_BYTES: usize = 8_000_000;
 
 /// 各語料的字與相鄰字的次數，已乘上語料權重。

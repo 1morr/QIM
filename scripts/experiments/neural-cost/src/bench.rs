@@ -22,7 +22,7 @@ fn env_or(name: &str, default: usize) -> usize {
         .filter(|&n| n > 0)
         .unwrap_or(default)
 }
-/// 上下文字數（plan §7.8）。
+/// 上下文字數（roadmap〈M3 的模型階梯實驗〉）。
 pub const CONTEXTS: [usize; 3] = [0, 50, 200];
 /// 每個上下文長度先跑幾次不計。
 pub const WARMUP: usize = 3;

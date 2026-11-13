@@ -75,7 +75,7 @@ fn main() -> ExitCode {
     }
 }
 
-/// 學習模式（plan §5.2）：只報不擋。
+/// 學習模式（plan〈首選字基準〉）：只報不擋。
 fn learning() -> ExitCode {
     match qim_bench::run_learning(Path::new(".")) {
         Ok(learning) => {
@@ -91,7 +91,7 @@ fn learning() -> ExitCode {
     }
 }
 
-/// dev 模式：`--set <鍵>=<值>` 可重複，暫時蓋掉方案檔 `[ranking]` 的值（調參用，plan §2.3）。
+/// dev 模式：`--set <鍵>=<值>` 可重複，暫時蓋掉方案檔 `[ranking]` 的值（調參用，plan〈排序：同一把尺〉）。
 fn dev(args: &[String], lexicon: Option<&str>) -> ExitCode {
     let mut overrides = Vec::new();
     let mut rest = args.iter();

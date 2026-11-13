@@ -1,6 +1,6 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-// 候選展開面板（brief §4.4，M1 票 23）：候選列右側的展開鍵一次列全部候選，點了照常選字上屏。
+// 候選展開面板（brief〈手機觸控鍵盤〉，M1 票 23）：候選列右側的展開鍵一次列全部候選，點了照常選字上屏。
 // 桌面組字中按 ↓ 打開、↑ 收起。`ar` 有好幾頁候選。
 
 function ui(page: Page) {

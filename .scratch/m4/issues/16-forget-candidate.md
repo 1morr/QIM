@@ -39,3 +39,5 @@ Blocked by: 12
 - 截圖：`.scratch/m4/evidence/16-forget-before.png`、`16-forget-after.png`。
 - `bench --check`（中途的版本，bigram 改從嚴與目前分段修正之前；基準不呼叫 `forget`，兩項改動都只在 `forget` 裡）：12 個集合答錯、修正都等於 baseline（yue-wiki 941／3239、zh-wiki 979／3493、common-voice-yue 892／3249、hkcancor 572／2148），沒有翻盤，固定題 84/84。每鍵 p95（原生）：空白 71.2 µs／76.3 µs／1.28 ms，學過 162 µs／226 µs／1.99 ms，都在上限內。
 - `bench --learning`：學習關／開 yue-wiki 3239／3216、zh-wiki 3493／3578、common-voice-yue 3249／3108、hkcancor 2148／1719、yue-wiki·前文 1738／1715、zh-wiki·前文 1729／1764、common-voice-yue·前文 594／550、hkcancor·前文 1512／1179，和票 15 記的逐項相同。
+
+Session 紀錄：撤銷學習：核心 `Session::forget`、網頁組字中 Shift+Delete／Ctrl+Delete 清目前頁第一個；個人 bigram 只清現在前文那組；第 2 位的自動造詞桌面清不到，留給 M5

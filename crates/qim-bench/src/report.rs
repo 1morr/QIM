@@ -1,5 +1,5 @@
 //! 印給人看、也直接貼進票做前後對照的結果：指標表、依長度分組表、翻盤清單。
-//! 個人集只印數字與題號（plan §5.2）。
+//! 個人集只印數字與題號（plan〈首選字基準〉）。
 
 use crate::baseline::SetBaseline;
 use crate::latency::p95_limits_ms;
@@ -9,7 +9,7 @@ use crate::{
     PERSONAL_USERDB, Personal, SHORT_INPUTS, Timing, WASM_BINDINGS,
 };
 
-/// 「有前文」的每批題給前文與不給前文並列（plan §5.2）；沒有這種集合時是空字串。
+/// 「有前文」的每批題給前文與不給前文並列（plan〈首選字基準〉）；沒有這種集合時是空字串。
 fn context_pairs(sets: &[SetResult]) -> String {
     let [given, not_given] = CONTEXT_SUFFIXES;
     let pairs: Vec<(&str, &SetResult, &SetResult)> = sets

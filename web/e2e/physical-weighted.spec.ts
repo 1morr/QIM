@@ -198,7 +198,7 @@ test("英文直通照配列：Dvorak 與 AZERTY 的鍵交還瀏覽器照 key 打
 test("臨時英文照配列：Dvorak 的實體 W 鍵接上逗號，不是 w", async ({ page }) => {
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	await page.keyboard.type("a");
-	// 組字中單按左 Shift：留碼接英文（brief §4.3）。
+	// 組字中單按左 Shift：留碼接英文（brief〈桌面鍵盤操作〉）。
 	await page.keyboard.press("ShiftLeft");
 	await dispatch(page, "KeyW", ",");
 	await dispatch(page, "KeyF", "u");

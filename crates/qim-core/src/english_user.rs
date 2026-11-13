@@ -1,4 +1,4 @@
-//! 英文使用者詞（plan §2.1、§2.4，M4 票 14，取代 M3 的記住的字串）：核心看得到送出去的英文串都學
+//! 英文使用者詞（plan〈介面〉〈學習與排位〉，M4 票 14，取代 M3 的記住的字串）：核心看得到送出去的英文串都學
 //! （照 LatinIME 上屏都學，不另認 email），之後出在中文組字（排位規則 4、5）。這裡是正在打的一串
 //! （[`TypedRun`]）、什麼串要學（[`to_learn`]）與學到的詞（[`EnglishUserWords`]）；記在
 //! [`crate::UserModel`]，由 [`crate::Session`] 從送出去的字裡認出來。
@@ -34,7 +34,7 @@ fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '%' | '+' | '-' | '@' | '\'')
 }
 
-/// 正在打的一串（plan §2.1〈英文使用者詞〉）：送出去的字的結尾連續的串字元（[`is_word_char`]），
+/// 正在打的一串（plan〈介面〉〈英文使用者詞〉）：送出去的字的結尾連續的串字元（[`is_word_char`]），
 /// 遇到其他字元就是打完了。開頭不是使用者經 QIM 打的（接在輸入框原有的串字元後面、退格刪到它前面、
 /// 有一段是無痕或學習關掉時打的、長過上限）時是 `partial`：打完也不學，到下一個分隔的字元重新開始。
 #[derive(Debug, Clone, Default)]
@@ -130,7 +130,7 @@ pub(crate) struct EnglishUserWords {
 }
 
 /// 一個英文使用者詞在這台學到的值；打過的次數各台分開記在 [`EnglishUserWords::tallies`]（不衰減，出現門檻
-/// 用；各台最後一次距今超過一年時那台的當作 0、下一次從 1 重算，同中文的整串上屏次數，plan §2.4〈學習的時限〉）。
+/// 用；各台最後一次距今超過一年時那台的當作 0、下一次從 1 重算，同中文的整串上屏次數，plan〈學習與排位〉〈學習的時限〉）。
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EnglishUserWord {
     /// 最後打的寫法。

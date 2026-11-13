@@ -85,7 +85,7 @@ fn context_items(texts: &[String]) -> Vec<String> {
     finished.context_bench.lines().map(String::from).collect()
 }
 
-/// 「有前文」的題（plan §5.2）：test 切分的句子，前文是同一段文字裡它前面的兩句與中間的標點，
+/// 「有前文」的題（plan〈首選字基準〉）：test 切分的句子，前文是同一段文字裡它前面的兩句與中間的標點，
 /// 原樣保留（含字集外的字）。
 #[test]
 fn a_test_clause_takes_the_two_clauses_before_it_as_context() {
@@ -126,7 +126,7 @@ fn dev_clauses(n: usize) -> Vec<String> {
         .collect()
 }
 
-/// dev 切分也取「有前文」的題（調參用，plan §5.2），取法與格式同 test 的，兩邊不混。
+/// dev 切分也取「有前文」的題（調參用，plan〈首選字基準〉），取法與格式同 test 的，兩邊不混。
 #[test]
 fn dev_clauses_get_context_items_of_their_own() {
     let [dev] = dev_clauses(1).try_into().unwrap();

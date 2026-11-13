@@ -40,3 +40,5 @@ Blocked by: None (can start immediately)
   - `native_timing_with` 又從 crate 根匯出，等於推翻票 05 code-review 的決定。原因是 `main.rs` 要把它交給 `Timers`，而 `latency` 是私有模組。審查建議改成 `Timers::real(root)`，但 `node_wasm_timer(root)` 回傳的是借用 `root` 的 closure，`Timers` 存的是 `&dyn`，建構子沒辦法把區域變數的 closure 借出去；要做就得把 `Timers` 改成擁有 `Box<dyn Fn>`，為了收回一個匯出不划算。`NativeTimer` 為了和 `WasmTimer` 成對，一起匯出。
   - `fake_timing` 和 `native_timing_with` 都有「逐鍵打、看分段數」的迴圈。假的那份在測試裡，刻意不重用產品的那份，所以 `the_real_…` 才能拿兩者互相核對。
 - 2026-11-12 與本票無關的發現（留給協調者插修復票，或交給票 07 / 收尾票）：`crates/qim-layout/tests/spatial.rs` 的 proptest `on_a_gboard_grid_the_most_likely_letter_is_the_hit_key`（票 06）偶爾抽到失效點，紅在第二個斷言 `w[0].1 > w[1].1`：`(376.8759717002673, 146.41283071299227)` 時 `[('l', 0.5), ('m', 0.5)]`，另一次縮到 `(366.0247247808735, 138.6298953419659)`。抽中後 proptest 會寫 `spatial.proptest-regressions`，之後每次都紅。本 session 的 `cargo xtask check` 五次裡紅一次；regression 檔沒 commit，兩個種子：`cc bfd391913d686817b95a7ad7ef167cf94fd7e9f6f2f2a9ec78f057d2931aef5c`、`cc 36099777f516688467458ef0caa4416f343fb0ee31cd511e6b5ea1db6e572fbd`，放進該檔就能重現。
+
+Session 紀錄：`qim_bench::run` 收 `Timers`，`run.rs` 改用數字固定的假原生計時器，load 61 下連跑三次都綠；補 `--check` 延遲接線與真實計時形狀的測試

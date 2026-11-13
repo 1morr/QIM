@@ -1,5 +1,5 @@
 // 網頁的組裝：載入資料包（`packs.ts`）、建核心，接上各區的模組與輸入框的鍵盤事件。畫面與互動各在自己的模組，
-// 核心的排序與組字一律經綁定（plan §1.3）。
+// 核心的排序與組字一律經綁定（plan〈依賴規則〉）。
 
 import { mountCandidateBar } from "./candidate-bar.ts";
 import { mountComposition } from "./composition.ts";
@@ -36,9 +36,9 @@ import init, {
 } from "./wasm/qim_wasm.js";
 import { mountWordList } from "./word-list.ts";
 
-/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan §2.6）。 */
+/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan〈佈局：畫布模型〉）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
-/** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief §4.4）。 */
+/** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief〈手機觸控鍵盤〉）。 */
 const NUMBER_ROW_LAYOUT_URL = "/layouts/gboard-quick-number-row.json";
 
 const text = element<HTMLTextAreaElement>("#text");
@@ -71,7 +71,7 @@ function composingChinese(): boolean {
 	return shown.composing && !shown.inlineAscii;
 }
 
-/** 撤銷學習的鍵：Delete 加上 Shift 或 Ctrl 其中一個，沒有別的修飾鍵（plan §2.4）。 */
+/** 撤銷學習的鍵：Delete 加上 Shift 或 Ctrl 其中一個，沒有別的修飾鍵（plan〈學習與排位〉）。 */
 function isForgetKey(event: KeyboardEvent): boolean {
 	return (
 		event.key === "Delete" &&
@@ -143,7 +143,7 @@ async function start(): Promise<void> {
 		},
 	});
 	neural.load(library.modelPack());
-	// 告訴核心正在用哪個停鍵層模型（plan §2.7）：換模式或模型資料包後都要給，舊模型排的快取才不會套用。
+	// 告訴核心正在用哪個停鍵層模型（plan〈模型分層〉）：換模式或模型資料包後都要給，舊模型排的快取才不會套用。
 	const syncReranker = (): void =>
 		session.setRerankerId(rerankerId(settings.rerank(), neural.manifest));
 	syncReranker();
@@ -160,7 +160,7 @@ async function start(): Promise<void> {
 	let phrases: Phrases | undefined;
 	/** 英文使用者詞的清單；同上比 `userDict` 晚掛上。 */
 	let englishUserWords: EnglishUserWords | undefined;
-	// 殼的日期契約（plan §2.4）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
+	// 殼的日期契約（plan〈學習與排位〉）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
 	// 今天，過了午夜才不會記成前一天。按鍵、點擊、觸控都從 keydown 或 pointerdown 開始；失焦時核心
 	// 會把正在打的串學成英文使用者詞，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
 	// 給（blur 不冒泡，但捕獲階段照樣經過 window），比任何處理器早。
@@ -175,7 +175,7 @@ async function start(): Promise<void> {
 		englishUserWords?.refresh();
 		focusText();
 	});
-	// 退格撤銷的時限（plan §2.4）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
+	// 退格撤銷的時限（plan〈學習與排位〉）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
 	const undoTimer = undoWindow(() => session.expireUndo());
 	// 點輸入框會移游標：之後的退格不在剛上屏的字旁邊，不撤銷。
 	text.addEventListener("pointerdown", () => session.expireUndo());
@@ -198,7 +198,7 @@ async function start(): Promise<void> {
 		}
 	};
 	const reportPanel = mountReportPanel(status, focusText);
-	// debug 面板（plan §3.1）：開著時每次重畫後問核心為什麼這樣排，關著時不問。
+	// debug 面板（plan〈網頁 prototype〉）：開著時每次重畫後問核心為什麼這樣排，關著時不問。
 	const debugPanel = mountDebugPanel(
 		element("#debug"),
 		element("#debug-toggle"),
@@ -352,7 +352,7 @@ async function start(): Promise<void> {
 	);
 	mountTheme();
 
-	// 單按 Shift 切中英（brief §4.3）：Shift 自己不交給核心，放開時才判定；左右由
+	// 單按 Shift 切中英（brief〈桌面鍵盤操作〉）：Shift 自己不交給核心，放開時才判定；左右由
 	// `KeyboardEvent.code` 分辨。
 	const loneShift = new LoneShift();
 	text.addEventListener("keyup", (event) => {
@@ -367,7 +367,7 @@ async function start(): Promise<void> {
 		if (event.key === "Shift") {
 			return;
 		}
-		// 組字中 ↓ 打開展開面板、↑ 收起（plan §3.1）；核心本來就吃下不動作，不必轉給它。
+		// 組字中 ↓ 打開展開面板、↑ 收起（plan〈網頁 prototype〉）；核心本來就吃下不動作，不必轉給它。
 		if (
 			plain &&
 			composingChinese() &&
@@ -393,14 +393,14 @@ async function start(): Promise<void> {
 		const key = toKey(remapped.event, shown.composing, shown.inlineAscii);
 		if (!key) {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
-			// 無痕時（不給前文）數字後半形才不會看錯（brief §4.7）。沒有組字時核心不吃、不動作，但也收起
+			// 無痕時（不給前文）數字後半形才不會看錯（brief〈英文模式與欄位類型〉）。沒有組字時核心不吃、不動作，但也收起
 			// 了聯想。
 			if (!shown.composing) {
 				withSnapshot(session.press("other"), render);
 			}
 			return;
 		}
-		// 組字中按 Tab 切換字根提示（brief §4.3）；核心本來就吃下不動作，不必轉給它。
+		// 組字中按 Tab 切換字根提示（brief〈桌面鍵盤操作〉）；核心本來就吃下不動作，不必轉給它。
 		if (event.key === "Tab" && composingChinese()) {
 			event.preventDefault();
 			candidateBar.toggleHints();

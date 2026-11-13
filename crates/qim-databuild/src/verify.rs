@@ -1,4 +1,4 @@
-//! `cargo xtask data --verify` 的檢查（plan §4.5）。Unihan 交叉比對不是檢查、不影響通過與否，
+//! `cargo xtask data --verify` 的檢查（plan〈驗證〉）。Unihan 交叉比對不是檢查、不影響通過與否，
 //! 由 `pipeline` 算好放進 [`Report::unihan`]，比對本身在 `unihan` 模組。
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -34,9 +34,9 @@ pub enum CheckId {
     WenHasAr,
     /// 「丟」同時有三代的 `hi` 與五代的 `mi`。
     DiuHasHiAndMi,
-    /// `a` 的首選是「日」（字序依字頻、Unihan `kGradeLevel`，plan §4.1）。
+    /// `a` 的首選是「日」（字序依字頻、Unihan `kGradeLevel`，plan〈速成碼表〉）。
     RiIsTopForA,
-    /// 詞庫的每個碼都由詞裡每個字的一個速成碼接成（plan §4.5）。
+    /// 詞庫的每個碼都由詞裡每個字的一個速成碼接成（plan〈驗證〉）。
     WordCodesFromCharacters,
     /// 詞庫的 `anr` 有「門口」；連打用「門」+「口」也拼得出，所以直接查詞庫，首選由 `bench/fixed.tsv` 擋。
     MenKouForAnr,
@@ -48,21 +48,21 @@ pub enum CheckId {
     SimplifiedMenKou,
     /// 中文狀態打 `the`，第 2 個候選是 `the`：英文資料包接得上核心（排位規則 4）。
     EnglishThe,
-    /// 繁簡同形與本身是正規繁體字的字（[`NOT_SIMPLIFIED`]）沒有標成簡體字（brief §4.1，M3 票 19）。
+    /// 繁簡同形與本身是正規繁體字的字（[`NOT_SIMPLIFIED`]）沒有標成簡體字（brief〈字集與字形〉，M3 票 19）。
     NotSimplified,
     /// 繁體模式 `ls` 的「门」排在同碼的所有繁體字之後（M3 票 19）。
     MenAfterTraditional,
-    /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan §4.3）。
+    /// 語言模型資料包不超過 [`bigram::MAX_BYTES`]（plan〈字級 bigram 與詞級 trigram〉）。
     LanguageModelSize,
     /// 詞級 trigram 預算版加上字級 bigram 不超過 [`bigram::MAX_BYTES`]（spec〈採用門檻〉的預算版）。
     WordTrigramSize,
     /// 同樣的來源建兩次，每份資料包的 sha256 都相同、清單一樣。
     Deterministic,
-    /// 每份資料包旁的 manifest 讀得回，核心照它載入得了資料包（plan §4.6）。
+    /// 每份資料包旁的 manifest 讀得回，核心照它載入得了資料包（plan〈資料包 manifest〉）。
     Manifests,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
-    /// 基準句沒有一句原樣出現在任何語料的 train（plan §5.2 的防洩漏；bigram 用所有 train 訓練）。
+    /// 基準句沒有一句原樣出現在任何語料的 train（plan〈首選字基準〉 的防洩漏；bigram 用所有 train 訓練）。
     CorpusNoLeak,
     /// 同樣的來源建兩次，基準句、訓練切分與字頻的 sha256 相同。
     CorpusDeterministic,
@@ -71,15 +71,15 @@ pub enum CheckId {
     /// 前處理保留的粵語用字（`corpora::CANTONESE_KEPT`）在 train 的字頻都大於 0（M1 票 17b）。
     KeptCharacters,
     /// 字形對照表（`common_forms`）換掉的香港寫法、並存寫法的另一種寫法在 train 的字頻都是 0
-    /// （M1 票 17b、17c，brief §4.1）。
+    /// （M1 票 17b、17c，brief〈字集與字形〉）。
     CommonForms,
     /// 詞庫沒有對照表換掉的寫法與反向的錯字；並存寫法的詞每種寫法都收（`verify::lexicon_forms`，
     /// M1 票 17c）。
     LexiconForms,
-    /// 粵典詞庫收了預設詞庫的每個詞條（同碼、同詞頻），也多了詞（M3 票 24，plan §4.2）。
+    /// 粵典詞庫收了預設詞庫的每個詞條（同碼、同詞頻），也多了詞（M3 票 24，plan〈詞庫〉）。
     WordsHkLexicon,
     /// 停鍵層的模型資料包交給 `qim-neural` 載入得了，同分的路徑裡把沒有錯字的排第一
-    /// （M3 票 11d，plan §2.7）。
+    /// （M3 票 11d，plan〈模型分層〉）。
     NeuralRerank,
 }
 
@@ -261,7 +261,7 @@ impl fmt::Display for LexiconSummary {
     }
 }
 
-/// 來源出問題（sha256 不符、下載失敗）而沒建的可選資料包；其他資料包照建（plan §4.2）。
+/// 來源出問題（sha256 不符、下載失敗）而沒建的可選資料包；其他資料包照建（plan〈詞庫〉）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skipped {
     pub id: String,
@@ -485,7 +485,7 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
     let language_model = built::decode::<LanguageModelPack>(packs)?;
     let radical_hint = built::decode::<RadicalHintPack>(packs)?;
     let word_trigram = built::decode::<WordTrigramPack>(packs)?;
-    // 核心接受方案指名以外的同種資料包（殼的切換，plan §4.6），建出的預設那份要剛好是指名的。
+    // 核心接受方案指名以外的同種資料包（殼的切換，plan〈資料包 manifest〉），建出的預設那份要剛好是指名的。
     let named = &pack.scheme.packs;
     for (what, expected, found) in [
         ("詞庫", &named.lexicon, &lexicon.id),
@@ -519,7 +519,7 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
     })
 }
 
-/// 解得開之後的各項檢查，依 plan §4.5 的順序加進 `report`。
+/// 解得開之後的各項檢查，依 plan〈驗證〉 的順序加進 `report`。
 fn pack_checks(
     report: &mut Report,
     rows: &[Row],
@@ -992,7 +992,7 @@ pub fn common_forms(frequency: &BTreeMap<char, u64>, forms: &CommonForms) -> Che
     }
 }
 
-/// 停鍵層的模型資料包交給 `qim-neural` 載入得了，三條同分的路徑裡把沒有錯字的排第一（plan §2.7）。
+/// 停鍵層的模型資料包交給 `qim-neural` 載入得了，三條同分的路徑裡把沒有錯字的排第一（plan〈模型分層〉）。
 pub fn neural_rerank(packs: &[BuiltPack]) -> Check {
     let result = built::decode::<ModelPack>(packs).and_then(|pack| {
         let reranker =
@@ -1028,7 +1028,7 @@ pub fn neural_rerank(packs: &[BuiltPack]) -> Check {
 }
 
 /// 粵典詞庫 `words_hk` 收了預設詞庫 `default` 的每個詞條（同碼、同詞頻），並多了詞：它只是預設詞庫
-/// 再補詞，拿掉它就回到預設詞庫（plan §4.2）。
+/// 再補詞，拿掉它就回到預設詞庫（plan〈詞庫〉）。
 pub fn words_hk_lexicon(default: &Lexicon, words_hk: &Lexicon) -> Check {
     let mut missing = Vec::new();
     for (code, words) in default.iter() {
@@ -1213,7 +1213,7 @@ fn spot(id: CheckId, passed: bool) -> Check {
 }
 
 /// 寫出的每份資料包：`(manifest.json 的內容, 資料包檔的位元組)`，照殼的路經
-/// [`Manifest::verify`] 載入一次（plan §4.6）。
+/// [`Manifest::verify`] 載入一次（plan〈資料包 manifest〉）。
 pub fn manifests(packs: &[(String, Vec<u8>)]) -> Check {
     let failures: Vec<String> = packs
         .iter()

@@ -288,7 +288,7 @@ fn only_a_change_of_candidates_changes_the_generation() {
     assert_ne!(ime.press(Key::Backspace).generation, typed);
 }
 
-/// 單按 Shift（`ToggleAscii`）切英文直通（brief §4.3）：英文狀態下鍵都交還宿主，再按一次回中文。
+/// 單按 Shift（`ToggleAscii`）切英文直通（brief〈桌面鍵盤操作〉）：英文狀態下鍵都交還宿主，再按一次回中文。
 #[test]
 fn toggle_ascii_passes_keys_to_the_host_until_toggled_back() {
     let mut ime = Ime::new();
@@ -327,7 +327,7 @@ fn toggle_ascii_while_composing_commits_the_composition_first() {
     assert!(toggled.candidates.is_empty());
 }
 
-/// 候選展開面板（brief §4.4）一次列全部候選，不分頁；選字用全部候選的位置。
+/// 候選展開面板（brief〈手機觸控鍵盤〉）一次列全部候選，不分頁；選字用全部候選的位置。
 #[test]
 fn all_candidates_lists_every_page_and_select_takes_its_position() {
     let mut ime = Ime::new();

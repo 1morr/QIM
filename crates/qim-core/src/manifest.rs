@@ -1,4 +1,4 @@
-//! 資料包 manifest（plan §4.6）：資料包檔旁的 `manifest.json`，說明它是哪一份、要多新的核心、
+//! 資料包 manifest（plan〈資料包 manifest〉）：資料包檔旁的 `manifest.json`，說明它是哪一份、要多新的核心、
 //! 檔案的大小與 sha256、授權。殼匯入或載入資料包時經 [`crate::Pack::open`] 核對。
 
 use std::fmt;
@@ -59,7 +59,7 @@ impl fmt::Display for PackKind {
     }
 }
 
-/// 一份資料包的 manifest。欄位見 plan §4.6；不認得的欄位略過，給之後加欄位的舊核心讀。
+/// 一份資料包的 manifest。欄位見 plan〈資料包 manifest〉；不認得的欄位略過，給之後加欄位的舊核心讀。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     /// [`MANIFEST_VERSION`]。
@@ -117,7 +117,7 @@ impl Manifest {
     }
 
     /// 版本（semver）比 `other` 的大；同版或任一邊讀不懂時不算。更新索引挑新版（[`crate::PackIndex`]）、
-    /// 殼在同一個 id 的內建版與下載版之間挑一份（plan §4.7）都照它。
+    /// 殼在同一個 id 的內建版與下載版之間挑一份（plan〈線上更新〉）都照它。
     pub fn is_newer_than(&self, other: &Manifest) -> bool {
         match (
             semver::Version::parse(&self.version),

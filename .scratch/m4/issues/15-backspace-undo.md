@@ -36,3 +36,5 @@ Blocked by: 13, 14
   - 沒改：`UndoOwner` 的 `Default` 每次拿新號碼。審查建議改成 `UndoOwner::next()`，但 `Session` 用 `#[derive(Default)]`，欄位型別要有 `Default`；改成手寫 `Session::default` 要列出 20 多個欄位，代價比收穫大，所以在型別的文件註明了這個行為。
 - 驗證：`cargo xtask check` 通過（`cargo test --workspace` 1084 passed；web 單元 56 passed；e2e 251 passed、2 skipped，含 `backspace-undo.spec.ts` 7 個）。
 - 合併 main（票 02、07）後：progress.md 的 union 合併抄出重複的〈偏差與決定〉段，已併回一段。補了 e2e：`localStorage` 打不開時（學習資料只在記憶體，票 02）撤銷照樣成立，附對照（再選一次就成首選）；用實體鍵位換字打的上屏（AZERTY 的實體 A 鍵，key `q`、code `KeyA`，票 07）緊接退格照樣撤銷。重驗：`cargo xtask data`；`cargo xtask check` 通過（cargo test 1090 passed、web 單元 78 passed、e2e 267 passed、2 skipped）；`cargo test --workspace` 1090 passed；`bench --check` 第一次在 load 約 12 時「空白・選開頭一段」p95 5168 µs 超過上限，load 約 4 時單獨重跑通過（空白 65.7 µs／69.8 µs／1.24 ms，學過 147 µs／249 µs／1.87 ms），12 個集合答錯、修正同 baseline，沒有翻盤，固定題 84/84。
+
+Session 紀錄：退格撤銷：撤銷紀錄 `Undo` 以動作為單位，中英共用；照 librime 的 3 秒由殼計時（`expire_undo`）；Session 分開、無痕不撤銷；bench 不變

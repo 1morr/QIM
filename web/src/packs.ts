@@ -1,4 +1,4 @@
-// 資料包庫（plan §4.6）：內建的從 `/packs/<id>/` fetch，匯入的存在 IndexedDB；每種用哪份存
+// 資料包庫（plan〈資料包 manifest〉）：內建的從 `/packs/<id>/` fetch，匯入的存在 IndexedDB；每種用哪份存
 // `localStorage`。交給核心的都是 manifest 加位元組（`Pack`），由核心核對。
 
 import { createStore, del, entries, set, type UseStore } from "idb-keyval";
@@ -19,7 +19,7 @@ import { manifestIsNewer, Pack, Reranker } from "./wasm/qim_wasm.js";
 
 /**
  * 隨網頁發佈的資料包，由 `cargo xtask web` 放到 `web/public/packs/<id>/`。同種的第一份是預設：
- * 粵典詞庫（非商業條款，plan §4.2）要排在預設詞庫之後、詞級 trigram 放寬版排在方案指名的預算版之後，
+ * 粵典詞庫（非商業條款，plan〈詞庫〉）要排在預設詞庫之後、詞級 trigram 放寬版排在方案指名的預算版之後，
  * 使用者切換才用。停鍵層模型不交給 `Session`，交給 Web Worker（`modelPack`）。
  */
 const BUILTIN_IDS = [
@@ -37,7 +37,7 @@ const BUILTIN_IDS = [
 ] as const;
 /**
  * 可以缺的內建資料包：粵典的來源和釘的 sha256 對不上時，`cargo xtask data` 只略過粵典詞庫、不建它
- * （plan §4.2），網頁照樣用其他的。沒有停鍵層模型時不重排，打字與候選照常（M3 票 11e）。
+ * （plan〈詞庫〉），網頁照樣用其他的。沒有停鍵層模型時不重排，打字與候選照常（M3 票 11e）。
  */
 const OPTIONAL_IDS: ReadonlySet<string> = new Set([
 	"quick-lexicon-words-hk",
@@ -308,7 +308,7 @@ export class PackLibrary {
 	}
 
 	/**
-	 * 裝一份資料包（匯入與線上更新共用，brief §5.3）：經核心核對 manifest 與位元組，和已有的同 id 就取代
+	 * 裝一份資料包（匯入與線上更新共用，brief〈版本與更新〉）：經核心核對 manifest 與位元組，和已有的同 id 就取代
 	 * 它，`choose` 改每種用哪份；`apply` 交給核心收下了才存進 IndexedDB。任一步不過時丟錯，什麼都不動。
 	 */
 	private async install(
