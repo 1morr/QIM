@@ -65,3 +65,4 @@ M4 在 2026-11-13 之前的決定，從 `docs/progress.md` 原樣搬來，當時
 - 2026-11-14 M4 票 09b（Agent 定）：test 第一次在固定題當掉（分隔記號），修好後照同一組設定重跑，三次數字逐字相同。票 09b
 - 2026-11-14 M4 票 09b（Agent 定）：審查後補單字集合與照觸控模擬點擊的延遲，設定不變。票 09b
 - 2026-11-14 M4 票 09b（Agent 定）：票外修文件檢查測試在 worktree hook 裡寫壞 index 與 core.bare（`a8cd2cc`），壞 commit 拿掉重做。票 09b
+- 2026-11-14 M4（使用者定）：採用 Gboard 式觸控鄰鍵讀法、預設開，推翻 brief 對照表「單碼不列鄰鍵的字」；實作在票 09c。`docs/research/tolerance.md`

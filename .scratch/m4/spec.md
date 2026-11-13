@@ -186,7 +186,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 
 ## 票序
 
-第一期 01–18（18 是期中檢查，18b、18c 是期中檢查插入的修復票；09b 是使用者在期中檢查後插入的實驗票），第二期 19–30，31 收尾。
+第一期 01–18（18 是期中檢查，18b、18c 是期中檢查插入的修復票；09b 是使用者在期中檢查後插入的實驗票，09c 是它採用後的實作票），第二期 19–30，31 收尾。
 
 | 票 | 被誰擋 | 交付 |
 | --- | --- | --- |
@@ -203,6 +203,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [08](issues/08-typo-bench.md) | 07 | 「含打錯碼」「觸控模擬」集合、改錯比例、不容錯的基線；〈容錯採用門檻〉經使用者確認寫進本檔 |
 | [09](issues/09-tolerance-experiment.md) | 05, 08 | 四種修正的正確率、改錯比例、延遲；過門檻的進核心 |
 | [09b](issues/09b-gboard-spatial-candidates.md) | — | 實驗票（使用者 2026-11-13 插入）：Gboard 式的觸控鄰鍵候選（只看點擊位置、原樣優先、單字也列），量完由使用者決定採不採用 |
+| [09c](issues/09c-touch-neighbor-readings.md) | 09b | 觸控鄰鍵讀法進核心（使用者 2026-11-14 決定採用、預設開）：第 2 格起最多 2 個、不搶首選，單字也列；開關、debug 面板、bench 閘門 |
 | [10](issues/10-tolerance-core.md) | 09 | wontfix（票 09 量過容錯沒過門檻）：原本是容錯邊帶懲罰進 lattice、開關；分段不變式、字根、學習、Enter、重排的決定寫回 plan |
 | [11](issues/11-wildcard.md) | 05 | 萬用鍵 `z` 的比對模式，語意用基準驗 |
 | [12](issues/12-userdict-v3-date.md) | — | 殼給日期；匯出 v3（種類欄、最後使用日期、裝置 id）；匯入收 v1、v2 |
@@ -226,4 +227,4 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [28](issues/28-inline-english-experiment.md) | 22 | 句中英文混輸實驗；純中文集不退步才採用 |
 | [29](issues/29-translation-pack.md) | 20, 18b | 譯詞資料包、候選旁顯示、修飾鍵加數字上屏 |
 | [30](issues/30-association-boost.md) | 18, 18b, 18c | emoji 聯想、句首建議、量詞聯想：評估後做 |
-| [31](issues/31-m4-close.md) | 01–30（含 09b、18b、18c） | 收尾：里程碑 code-review、乾淨 checkout 重驗、v3 定稿、使用者試用第二期、封存 |
+| [31](issues/31-m4-close.md) | 01–30（含 09b、09c、18b、18c） | 收尾：里程碑 code-review、乾淨 checkout 重驗、v3 定稿、使用者試用第二期、封存 |
