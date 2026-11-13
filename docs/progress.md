@@ -42,3 +42,4 @@
 | 2026-11-13 | M4 流程 | 對齊 project-init：roadmap、事實編號、決策紀錄、票留 Session 紀錄由合併的人寫本檔、收尾票加使用者試；文件檢查換成 `scripts/check_docs.py` | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-13 | M4 流程 | 里程碑表的狀態改成固定詞開頭（已驗收），`arch-diet` 佔一列；`scripts/check_docs.py` 換成新版：有票的目錄要列在表裡、票要有 `## 驗收` | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-14 | M4 09b | Gboard 式鄰鍵讀法：觸控修正 −12.5%，點對鍵時 +5.6–8.4%，延遲在上限內；機制已刪；另修 hook 寫壞 index；使用者決定採用（票 09c）；見票 09b | 新 session 下 `/implement .scratch/m4/issues/09c-touch-neighbor-readings.md` |
+| 2026-11-14 | M4 09c | 觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分來源）；bench 重打點觸控、兩條閘門；修正 −12.5%、第一頁 35.5% 同 09b；見票 09c | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
