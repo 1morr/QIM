@@ -24,3 +24,7 @@ Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 11, 12, 13, 14, 15, 16, 17, 18, 
 - [ ] 使用者試用第二期並回覆，progress〈偏差與決定〉記一條。
 - [ ] 各票 Comments 沒處理的發現逐條註明去處。
 - [ ] M4 封存到 `docs/archive/M4.md`，M5 進行中；`cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-13 流程對齊（使用者同意）：M4 封存後、拆 M5 的票之前，在新 session 下 `/1morr:project-init`，它會走同步模式。要對齊的有：路線圖搬到 `docs/roadmap.md`、brief〈查證過的事實〉搬進 `docs/research/` 並編號、plan 只留現況與跨模組契約、程式碼不引用章節號（現有約 700 處）、票留 `Session 紀錄：` 由合併的人寫 progress.md、驗收加使用者試。M4 進行中不動這些，免得和還沒做的票撞。

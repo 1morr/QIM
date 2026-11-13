@@ -25,6 +25,14 @@
 | `.github/` | GitHub Actions 的 CI，跑什麼見 `docs/development.md`〈全部檢查〉 |
 | `scripts/` | 腳本：停鍵層模型的訓練在 `scripts/neural-rerank/`，設計實驗在 `scripts/experiments/` |
 
+## 使用者確認
+
+- brief、plan、ADR、`GLOSSARY.md` 裡的決定：草稿先給使用者看，確認後才寫入；訪談中也一樣。
+- 做票時要推翻已定的決定（brief、plan、ADR、spec、先前的偏差）：停下來問使用者（協調者開的 session 問協調者，協調者照文件答不了的再問使用者）。同意後，同一 commit 改文件，並在 progress.md「偏差與決定」記一行。
+- 問使用者決定（對話裡，或 progress.md 的 `等使用者：`）：每題寫成沒讀過票也看得懂的話，依序是背景一句、選項、你的建議、不決定會卡住什麼；票號、函式名、章節號後面跟一句它是什麼。
+- 使用者回「照建議」，只算同意這一則訊息裡列出來的那幾題。
+- 偏差每條標**決定者**：`（使用者定）` 使用者自己定的、`（使用者同意）` agent 提議而使用者同意的、`（Agent 定）` 使用者沒看過的（協調者定的也算）。`/1morr:checkpoint` 會把 `（Agent 定）` 拿給使用者看。
+
 ## 每個 session 的流程
 
 工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由使用者在新 session 下 `/to-tickets docs/plan.md 拆 <里程碑> 的票` 產生（見〈Skills〉）。一個 session 只做一張票。
@@ -32,7 +40,7 @@
 1. 讀 `docs/progress.md` 的 session 紀錄與偏差、該里程碑的 spec，再讀票；只讀票列出的 plan / brief 章節，其他按需讀。
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾 `/code-review <開工時的 commit>`、commit。
 3. 驗證：`docs/development.md`〈全部檢查〉加 test；貼指令輸出。
-4. 實作若推翻 plan、brief 或先前的決定，同一 commit 改文件，並在 progress.md「偏差與決定」記一行。只在票內的取捨記到票的 `## Comments`；影響架構的另寫 ADR。
+4. 只在票內的取捨記到票的 `## Comments`；影響架構的另寫 ADR；要推翻已定的決定照〈使用者確認〉。
 5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；progress.md 加一列 session 紀錄（做了什麼、下一步，細節留在票裡）；收尾票多一步：照 progress.md〈寫法與封存〉封存這個里程碑；commit。
 
 完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、progress.md 已更新、已 commit。缺一就還沒完成。
