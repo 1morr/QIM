@@ -24,7 +24,7 @@
 | 分段 | `Segment` | 佈局版本 | `LayoutVariant` |
 | 個人模型 | `UserModel` | 空間模型 | `SpatialModel` |
 | 重排 | `Rerank` | 譯詞 | `Gloss` |
-| 容錯 | `Correction` | 萬用鍵 | `Wildcard` |
+| 容錯 | 四種修正沒做、沒有識別符；速成的容錯是鄰鍵讀法（下面） | 萬用鍵 | `Wildcard` |
 | 退格撤銷 / 動作 | `Undo`（`Session::expire_undo`） / `Action` | 撤銷學習 | `forget`（`Session::forget`、`UserModel::forget`） |
 | 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
 | 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
@@ -37,7 +37,8 @@
 | 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
 | 學習的時限 / 最後整串上屏的日期 | `EXPIRY_DAYS` / `last_commit_date` | 條目上限 | `Limits`（`UserModel::set_limits`） |
 | 停鍵結果快取 | `RerankCache`（`RERANK_CACHE_LIMIT`、`Inspection::rerank_cached`） | 重排識別（殼正在用的停鍵層模型） | `Session::set_reranker_id`（網頁 `rerankerId`） |
-| 按鍵機率 | `Weights`（`Key::Weighted`、`Inspection::key_weights`、`qim_layout::Output::Weighted`） | 點擊位置 | `qim_layout::Touch` |
+| 按鍵機率 | `Weights`（觸控 `Key::Weighted`、實體鍵盤 `Key::Physical`、`Inspection::key_weights`、`qim_layout::Output::Weighted`） | 點擊位置 | `qim_layout::Touch` |
+| 鄰鍵讀法 | `Options::neighbor_readings`（網頁 `setNeighborReadings`）、模組 `neighbor`、`Engine::neighbor_edges_ending`、`InspectedCandidate::neighbor` | 原樣讀法 | `Reading::Literal`（鄰鍵讀法的 lattice 是 `Reading::Neighbor`） |
 | 鄰鍵先驗 | `qim_layout::PhysicalModel` | 實體鍵位 | `KeyboardEvent.code`（網頁綁定 `Session.pressCode`） |
 | 各台的次數 | `Tally`（一台一格 `Cell`） | 墓碑 / 墓碑表 | `Tombstone` / `graveyard`（匯出種類 `deleted`） |
 | 跨裝置合併 | `UserModel::merge`（結果 `Merged`，網頁 `mergeUserDict`） | 讀回自己的存檔 | `UserModel::replace_learning`（網頁 `loadUserDict`） |

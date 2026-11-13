@@ -52,7 +52,7 @@ Blocked by: 09b
   - `physical_violations` 收 7 個參數、用集合名字尾判斷種類。
   - wasm 用三條平行陣列給鄰鍵的換碼。
   - 組字中途才把開關打開時，前面已打的碼沒有存觸控機率，從下一碼起才有（plan §2.1 已寫明）。
-- 等協調者：plan §0 的命名對照表要不要加「鄰鍵讀法 → `neighbor_readings`」一列（表上「容錯」對的是 `Correction`，已不準）。這是票面沒寫到的 plan 改動，所以沒改。
+- plan §0 的命名對照表：協調者確認要加（照使用者同意的名詞表做的對照），加「鄰鍵讀法」一列（`Options::neighbor_readings`、模組 `neighbor`、`Engine::neighbor_edges_ending`、`InspectedCandidate::neighbor`，原樣讀法是 `Reading::Literal`）；「容錯」那列原本指 `Correction`，程式裡沒有這個型別，改成「四種修正沒做、沒有識別符；速成的容錯是鄰鍵讀法」；按鍵機率那列補 `Key::Physical`。
 
 Session 紀錄：觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分來源）；bench 重打點觸控、兩條閘門；test 修正 −12.5%、第一頁 35.5% 同 09b；網頁開關與面板標記
 決定：核心分觸控與實體鍵：`Key::Weighted` 只代表觸控，實體鍵盤改送新的 `Key::Physical`，`Key::parse` 加 `physical`（Agent 定）
@@ -68,3 +68,4 @@ Session 紀錄：觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分�
 決定：原樣讀法沒有候選時鄰鍵讀法不插，code-review 後改（Agent 定）
 決定：model-ladder 不重跑（送 Letter、照實體鍵送的集合不變）；重排開著時的觸控修正次數留給收尾票 31（Agent 定）
 決定：WebAssembly 的延遲照舊照實體鍵送、只報（Agent 定）
+決定：plan §0 命名對照表加鄰鍵讀法、修容錯那列，協調者定（Agent 定）
