@@ -7,11 +7,18 @@
 import contextlib
 import importlib.util
 import io
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+# pre-commit hook 裡 git 會設 GIT_INDEX_FILE、GIT_DIR 這類變數，測試在暫存目錄跑的 git 繼承它們就改到外面那個 repo
+# 的 index（M4 票 09b 的兩個 commit 因此只剩測試的假檔案）；測試只碰自己建的暫存 repo，全部拿掉。
+for _name in [n for n in os.environ if n.startswith("GIT_")]:
+    del os.environ[_name]
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = next(p for p in (HERE.parent / "scripts" / "check_docs.py", HERE.parent / "check_docs.py") if p.is_file())
@@ -464,6 +471,22 @@ class CodeRefsTest(Repo):
         (self.root / "src/blob.bin").write_bytes(b"\0plan \xc2\xa73.2")
         subprocess.run(["git", "-C", str(self.root), "add", "src/blob.bin"], check=True, capture_output=True)
         self.clean()
+
+
+@unittest.skipUnless(shutil.which("git"), "要 git")
+class HookEnvironmentTest(unittest.TestCase):
+    """pre-commit hook 裡 git 設了 GIT_INDEX_FILE 這類變數：測試在暫存目錄跑的 git 不能寫到外面那個 repo 的 index。"""
+
+    def test_git_in_temporary_repos_ignores_the_hook_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index = Path(tmp) / "outer-index"
+            env = dict(os.environ, GIT_INDEX_FILE=str(index))
+            r = subprocess.run(
+                [sys.executable, "-m", "unittest", "-q", f"{Path(__file__).stem}.CodeRefsTest"],
+                cwd=HERE, env=env, capture_output=True, text=True,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertFalse(index.exists(), "暫存目錄的 git 寫進了 hook 的 index")
 
 
 class ScratchTest(Repo):
