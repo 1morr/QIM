@@ -1,6 +1,6 @@
 # QIM 路線圖
 
-> 里程碑的順序、狀態、開工前要讀什麼。還沒開工的里程碑在下面各有一小節；開工 session（`/to-tickets docs/roadmap.md 拆 <里程碑> 的票`）把那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連到它。
+> 里程碑的順序、狀態、開工前要讀什麼。還沒開工的里程碑在下面各有一小節；開工 session（`/to-tickets docs/roadmap.md 拆 <里程碑> 的票`）把那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連到它。不是里程碑的工作（文件瘦身、流程對齊）也在表裡佔一列，「里程碑」欄以它的目錄名開頭（`arch-diet 架構文檔瘦身` 對 `.scratch/arch-diet/`）。同時有兩批票可以做時，只有一列是「進行中」，另一列的狀態寫明排在誰之後（`未開工，排在 M4 之後`）；要先插做另一批，就把兩列的狀態對調。`python3 scripts/next_step.py` 照這些狀態算出下一步。
 
 ## 里程碑
 
@@ -18,8 +18,9 @@
 | M9 Android | InputMethodService | 開工時定 | 未開工 |
 | M10 Windows | TSF | 開工時定 | 未開工 |
 | M11 Linux | Fcitx5 或 IBus | 開工時定 | 未開工 |
-| arch-diet 架構文檔瘦身 | `docs/plan.md` 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 未開工，已拆 6 張票，flow-sync 做完後才做（M4 第二期的票還要改 plan） |
-| flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 未開工，已拆 2 張票，M4 驗收後才做 |
+| arch-diet 架構文檔瘦身 | `docs/plan.md` 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 未開工，排在 flow-sync 之後；已拆 6 張票（M4 第二期的票還要改 plan） |
+| flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 未開工，排在 gates 之後；已拆 2 張票 |
+| gates 補齊閘門 | 補密鑰掃描、依賴漏洞、依賴更新三道閘門，接進 `cargo xtask check` 與 CI | `.scratch/gates/spec.md` | 未開工，排在 M4 之後；已拆 1 張票 |
 
 狀態只寫一句，進行中的那一個以「進行中」開頭，驗收後換成 `docs/archive/<里程碑>.md` 的連結。
 

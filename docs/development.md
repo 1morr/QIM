@@ -297,6 +297,21 @@ swiftc -O -o build/ffi/bin/qim-swift main.swift build/ffi/swift/qim.swift \
 
 Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`LexiconPack`、`LanguageModelPack`、`WordTrigramPack`、`SimplifierPack`、`EnglishPack`，交給 `Engine(...)`（每份只能給一個 `Engine`），每個輸入框 `Session(engine:)` 共用同一個 `Engine`（plan §2.1）。字根提示 `RadicalHintPack` 目前只能解開、不交給 `Engine`（M2 票 09 量記憶體用）。範例：Mac 是 `scripts/experiments/ffi-swift/`（打 `anr` 讀回「門口」、量每鍵延遲），iPhone 鍵盤擴充是 `scripts/experiments/ios-keyboard/` 的〈接上核心（票 08）〉。產物都不進 git。`check` 不跑這一步：CI 是 Ubuntu，`qim-ffi` 的 Rust 測試照常在 `cargo test` 裡跑。
 
+## 閘門
+
+成熟專案都有的幾道檢查，每一列是指令或設定檔，用不到的寫「不適用：<理由>」；有指令的同時在〈全部檢查〉與 CI。
+
+| 閘門 | 指令或設定檔 | 擋什麼 |
+| --- | --- | --- |
+| 格式 | `cargo fmt --all --check`、`npm run --prefix web lint`（Biome） | 排版不一致造成的無謂 diff |
+| Lint | `cargo clippy --workspace --all-targets -- -D warnings`、`npm run --prefix web lint`（Biome） | 常見的錯誤寫法、沒人用的程式碼 |
+| 型別 | Rust 由 `clippy` 編譯時擋；`npm run --prefix web typecheck`（`tsc --noEmit`） | 型別對不上 |
+| 單元測試 | `cargo test --workspace`、`npm test --prefix web` | 行為退化 |
+| 端到端冒煙 | `npm run --prefix web e2e`（Playwright，要資料包，只在本機跑） | 各模組都過、接起來卻跑不動 |
+| 密鑰掃描 | 待定，由 gates 的票補 | token、密碼被 commit 進去 |
+| 依賴漏洞 | 待定，由 gates 的票補 | 用到有已知漏洞的 crate 或 npm 套件 |
+| 依賴更新 | 待定，由 gates 的票補 | 依賴長期沒更新 |
+
 ## 全部檢查
 
 每張票收尾時照跑，並貼輸出：

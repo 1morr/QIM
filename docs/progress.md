@@ -44,3 +44,4 @@
 | 2026-11-14 | M4 09b | Gboard 式鄰鍵讀法：觸控修正 −12.5%，點對鍵時 +5.6–8.4%，延遲在上限內；機制已刪；另修 hook 寫壞 index；使用者決定採用（票 09c）；見票 09b | 新 session 下 `/implement .scratch/m4/issues/09c-touch-neighbor-readings.md` |
 | 2026-11-14 | M4 09c | 觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分來源）；bench 重打點觸控、兩條閘門；修正 −12.5%、第一頁 35.5% 同 09b；見票 09c | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-14 | M4 流程 | 對齊 project-init：`AGENTS.md` 加〈公開 repo〉〈UI〉、合併與撞號規則，票 23 先出設計稿；票上紀錄與 CHANGELOG 排到 M4 驗收後（flow-sync） | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
+| 2026-11-15 | M4 流程 | 對齊 project-init：roadmap 狀態寫排在誰之後、加 `next_step.py`、加〈閘門〉；缺的三道開成 `.scratch/gates/`，排在 flow-sync 前 | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |

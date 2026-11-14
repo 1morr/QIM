@@ -84,3 +84,5 @@ M4 在 2026-11-13 之前的決定，從 `docs/progress.md` 原樣搬來，當時
 - 2026-11-14 M4 票 09c（Agent 定）：WebAssembly 的延遲照舊照實體鍵送、只報。票 09c
 - 2026-11-14 M4 票 09c（Agent 定）：plan §0 命名對照表加鄰鍵讀法、修容錯那列，協調者定。票 09c
 - 2026-11-14 M4 流程（使用者同意）：排法 M4 票 19–31 → flow-sync → arch-diet → checkpoint M4 → 拆 M5；arch-diet 等到 M4 之後，因為第二期票 21–24、27 還要改 plan。
+- 2026-11-15 M4 流程（使用者同意）：roadmap 的狀態寫「排在 <誰> 之後」，順序 M4 → gates → flow-sync → arch-diet；加 `scripts/next_step.py`，session 結尾跑它。
+- 2026-11-15 M4 流程（使用者同意）：`docs/development.md` 加〈閘門〉；缺的密鑰掃描、依賴漏洞、依賴更新開成 `.scratch/gates/` 一張票，排在 flow-sync 之前。

@@ -22,7 +22,7 @@
 
 ## 共同規則
 
-1. 開工時 M4 已驗收、封存（票 31 做完）；M4 還沒封存就停下來回報，不在第二期做到一半換流程。
+1. 開工時 M4 已驗收、封存（票 31 做完），`.scratch/gates/` 也做完（`docs/development.md`〈閘門〉沒有「待定」）；M4 還沒封存就停下來回報，不在第二期做到一半換流程。
 2. 指令檔與 `docs/agents/` 的段落以範本為準逐段改，QIM 自己的段落（〈目錄〉〈驗收輸入行為〉、協調者的寫法、`cargo xtask` 的閘門）原樣保留。
 3. 和 `.scratch/arch-diet/` 改同一批檔（`AGENTS.md`、`docs/agents/milestone.md`、`issue-tracker.md`、`ticket-template.md`）：後做的那張在對方的改動上接著改，不覆蓋。
 4. 一個 session 一張票；每張票收尾跑 `cargo xtask check --fast`。

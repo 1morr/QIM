@@ -9,6 +9,7 @@
 - `docs/plan.md`：架構、依賴規則、測試策略（`.scratch/arch-diet/` 做完後縮成根目錄的 `ARCHITECTURE.md`）。
 - `docs/roadmap.md`：里程碑的順序、狀態與閱讀指引；還沒開工的里程碑各有一小節，開工後縮成一行連到它的 spec；〈不排里程碑〉收沒人接的遺留。
 - `docs/progress.md`：進行中里程碑的 session 紀錄。每個 session 的起點與終點。
+- **下一步**不靠記：`python3 scripts/next_step.py` 從 roadmap、票的狀態與 progress.md 最後一列算出等使用者決定的事、現在要下的指令、後面排著什麼。使用者問接下來做什麼，就跑它。
 - `docs/decisions.md`：進行中里程碑的決策紀錄，一條一行，標決定者；驗收後跟著封存。
 - `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收（Agent 驗、使用者試）與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
 - `docs/development.md`：開發指令的單一來源；`docs/agents/`：給工程 skill 讀的票與里程碑慣例；`docs/archive/`：已驗收里程碑的紀錄。
@@ -53,7 +54,7 @@
 
 完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、Comments 有 `Session 紀錄：` 一行、已 commit。缺一就還沒完成。
 
-**所有 session 的結尾**（做票、訪談、寫架構、里程碑開工都算）：告訴使用者下一步要在新 session 下的完整指令，寫 progress.md 的人把同一句寫進那一列的「下一步」。下一張票是 `/implement <票路徑>`，里程碑做完是 `/1morr:checkpoint <剛做完的里程碑>`（回顧上一段、和使用者對齊下一段；它結束時寫 `/to-tickets docs/roadmap.md 拆 <下一個里程碑> 的票`）；要使用者先決定才能繼續時，寫 `等使用者：<要決定什麼>`。協調者開的 session 不知道下一張是哪張，只回報做完了。
+**所有 session 的結尾**（做票、訪談、寫架構、里程碑開工都算）：告訴使用者下一步要在新 session 下的完整指令，寫 progress.md 的人把同一句寫進那一列的「下一步」。下一張票是 `/implement <票路徑>`，里程碑做完是 `/1morr:checkpoint <剛做完的里程碑>`（回顧上一段、和使用者對齊下一段；它結束時寫 `/to-tickets docs/roadmap.md 拆 <下一個里程碑> 的票`）；要使用者先決定才能繼續時，寫 `等使用者：<要決定什麼>`。commit 之後跑 `python3 scripts/next_step.py`，把輸出原樣貼給使用者。協調者開的 session 只回報做完了，下一步由協調者報。
 
 ## 事實與查證
 
