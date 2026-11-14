@@ -13,6 +13,7 @@
 - `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收（Agent 驗、使用者試）與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位；狀態在票的 `Status:` 行。
 - `docs/development.md`：開發指令的單一來源；`docs/agents/`：給工程 skill 讀的票與里程碑慣例；`docs/archive/`：已驗收里程碑的紀錄。
 - 上面這些檔名與位置是固定的，別的 skill 靠它們找檔。`docs/` 第一層每多一個檔或資料夾，就在這一段加一行說明它是什麼（`scripts/check_docs.py` 擋）；不再維護的搬進 `docs/legacy/`。
+- `docs/design/`：畫面的設計稿，使用者確認過的定稿（〈UI〉）。
 - `GLOSSARY.md`、`docs/adr/`：名詞表與架構決定，由 `/grill-with-docs` 按需建立；命名一律用名詞表的詞。
 
 ## 目錄
@@ -40,22 +41,23 @@
 
 ## 每個 session 的流程
 
-工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由里程碑開工的 session 產生（見〈Skills〉）。一個 session 只做一張票。
+工作單位是**票**：`.scratch/<里程碑>/issues/NN-slug.md`，由里程碑開工的 session 產生（見〈Skills〉）。一個 session 只做一張票，在自己的分支上做。
 
 1. 讀 `docs/progress.md`、`docs/decisions.md` 裡這個里程碑的決定、該里程碑的 spec，再讀票；只讀票列出的 plan / brief 章節，其他按需讀。
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾 `/code-review <開工時的 commit>`、commit。
 3. 驗證：`docs/development.md`〈全部檢查〉加 test；貼指令輸出。
 4. 影響架構的決定另寫 ADR；要推翻已定的決定照〈使用者確認〉。
 5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；Comments 最後加一行 `Session 紀錄：<做了什麼，一句>`，做票時定的每個選擇各加一行 `決定：<一句>（<決定者>）`；commit。票的分支不改 progress.md 與 decisions.md：平行的票都改它們會互撞。
-6. 合併的人（使用者自己開的 session 是它自己，`/1morr:ticket-coordinator` 開的是協調者）合併後在主分支把那兩種行抄進去（progress.md 一列 session 紀錄含下一步、decisions.md 每個決定一條）並 commit。收尾票不會平行，自己改這兩個檔。
+6. 合併由開這個 session 的人做：使用者自己開的 session，做完在主分支 `git merge --no-ff <票分支>`（訊息 `merge: ticket NN <slug>`）；`/1morr:ticket-coordinator` 開的 session 只在自己的分支 commit，合併與 push 留給協調者。合併的人合併後在主分支把那兩種行抄進去（progress.md 一列 session 紀錄含下一步、decisions.md 每個決定一條）並 commit。收尾票不會平行，自己改這兩個檔。
+7. 事實編號這類全專案遞增的號，票在分支上先用當時的下一號；合併時撞號，合併的人把後合併的那張改成下一個空號，連同引用它的地方。
 
 完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、Comments 有 `Session 紀錄：` 一行、已 commit。缺一就還沒完成。
 
-**所有 session 的結尾**（做票、訪談、寫架構、里程碑開工都算）：告訴使用者下一步要在新 session 下的完整指令，寫 progress.md 的人把同一句寫進那一列的「下一步」。下一張票是 `/implement <票路徑>`，里程碑做完是 `/1morr:checkpoint <剛做完的里程碑>`（回顧上一段、和使用者對齊下一段；它結束時寫 `/to-tickets docs/roadmap.md 拆 <下一個里程碑> 的票`）；要使用者先決定才能繼續時，寫 `等使用者：<要決定什麼>`。
+**所有 session 的結尾**（做票、訪談、寫架構、里程碑開工都算）：告訴使用者下一步要在新 session 下的完整指令，寫 progress.md 的人把同一句寫進那一列的「下一步」。下一張票是 `/implement <票路徑>`，里程碑做完是 `/1morr:checkpoint <剛做完的里程碑>`（回顧上一段、和使用者對齊下一段；它結束時寫 `/to-tickets docs/roadmap.md 拆 <下一個里程碑> 的票`）；要使用者先決定才能繼續時，寫 `等使用者：<要決定什麼>`。協調者開的 session 不知道下一張是哪張，只回報做完了。
 
 ## 事實與查證
 
-- 平台輸入法框架（macOS InputMethodKit、Windows TSF、Linux Fcitx5 / IBus、iOS 鍵盤擴充、Android InputMethodService）、碼表的來源與授權、外部引擎（如 Rime）的行為只信兩處：`docs/research/facts-*.md` 的〈事實〉段，以及現查（context7、官方文件）。沒寫的先查再用，查到的補進對應主題的檔，給編號、附來源。
+- 平台輸入法框架（macOS InputMethodKit、Windows TSF、Linux Fcitx5 / IBus、iOS 鍵盤擴充、Android InputMethodService）、碼表的來源與授權、外部引擎（如 Rime）的行為只信兩處：`docs/research/facts-*.md` 的〈事實〉段，以及現查（context7、官方文件）。沒寫的先查再用，查到的補進對應主題的檔，給編號、附來源；新開的檔加進 brief〈事實索引〉。
 - 程式碼、測試與註解要指向文件時，引 ADR 編號、事實編號或節的標題；brief 與 plan 的章節號只寫在文件與票裡，節才能搬動（`scripts/check_docs.py` 擋）。
 - 現況以指令為準：`git log`、`git status`、測試輸出。progress.md 與 repo 不符時以 repo 為準並修 progress.md。
 
@@ -69,11 +71,28 @@
 
 輸入法的行為要在真的宿主程式裡打字並讀回畫面才算數：桌面平台用 `orca computer`，iOS 模擬器用 `orca emulator`，Android 用 `orca emulator-android`。單元測試綠燈不能取代這一步。
 
+## 公開 repo
+
+commit、文件、票、fixture、log 摘錄與截圖：
+
+- 不含個人資訊：使用者名稱、email、手機號、帳號名稱。
+- cookie、token、簽名網址、API key 的值寫成 `***`。
+- 本機路徑用代稱：`<資料目錄>`、`<暫存目錄>`、`<repo>`。
+
+## UI
+
+- **先有設計稿，再寫介面**：新增或大改的畫面（`web/` 的原型頁、觸控鍵盤、設定與面板、佈局編輯器，之後各平台殼的畫面），在那張票的第一步用 `impeccable:impeccable` 做成靜態 HTML 的設計稿，放在 `docs/design/`，使用者逐頁確認後才實作。有爭議的地方給 A／B 兩個方案。只改文案、修 bug、不動版面的票不用。
+- 設計稿要涵蓋的寬度、深淺色與設計系統寫在 brief；brief 還沒寫的，第一張出設計稿的票先問使用者再補。實作照定稿做，要偏離先問使用者。
+- 一個里程碑要出很多畫面時，開工 session 把設計稿排成里程碑開頭的票，一個畫面一張，使用者確認定稿才是 `done`。
+- 做對比版：每一版在自己的 worktree 做，只讀 brief 與設計系統，別的版本的設計稿留到使用者比較時才打開。
+- UI 改動實跑驗證，附截圖或讀回的畫面文字。
+
 ## Skills
 
 - 需求與設計訪談：`/grill-with-docs`（邊問邊寫 `GLOSSARY.md` 與 ADR），結論寫回 brief。
 - 里程碑開工（使用者在新 session 下 `/to-tickets docs/roadmap.md 拆 <里程碑> 的票`）、做收尾票 `NN-m<N>-close`：先讀 `docs/agents/milestone.md`，照它的步驟做。之後的里程碑留在 roadmap，開工時才有 spec。
 - 做票：一張票一個 session，`/implement`；整批跑票：`/1morr:ticket-coordinator`。
+- 里程碑之間：`/1morr:checkpoint`；想看懂某樣東西現在怎麼運作：`/1morr:explain`；里程碑、票、決定的總覽頁：`/1morr:dashboard`。
 - 核心（碼表查詢、候選、排序）的新功能與修 bug：`mattpocock-skills:tdd`。
 - 設計核心與各平台殼的邊界：`mattpocock-skills:codebase-design`。
 - 網頁的 UI（`web/` 的原型頁、觸控鍵盤、設定與面板、`web/editor/` 佈局編輯器）的設計、改版與打磨：`impeccable:impeccable`；觸控鍵盤要照 Gboard 的行為時，行為以 Gboard 實測為準，impeccable 管外觀與互動細節。

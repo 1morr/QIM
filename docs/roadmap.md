@@ -19,6 +19,7 @@
 | M10 Windows | TSF | 開工時定 | 未開工 |
 | M11 Linux | Fcitx5 或 IBus | 開工時定 | 未開工 |
 | arch-diet 架構文檔瘦身 | `docs/plan.md` 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 未開工，已拆 6 張票，和里程碑的票互不相擋 |
+| flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 未開工，已拆 2 張票，M4 驗收後才做 |
 
 狀態只寫一句，進行中的那一個以「進行中」開頭，驗收後換成 `docs/archive/<里程碑>.md` 的連結。
 
