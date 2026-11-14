@@ -45,3 +45,4 @@
 | 2026-11-14 | M4 09c | 觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分來源）；bench 重打點觸控、兩條閘門；修正 −12.5%、第一頁 35.5% 同 09b；見票 09c | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-14 | M4 流程 | 對齊 project-init：`AGENTS.md` 加〈公開 repo〉〈UI〉、合併與撞號規則，票 23 先出設計稿；票上紀錄與 CHANGELOG 排到 M4 驗收後（flow-sync） | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
 | 2026-11-15 | M4 流程 | 對齊 project-init：roadmap 狀態寫排在誰之後、加 `next_step.py`、加〈閘門〉；缺的三道開成 `.scratch/gates/`，排在 flow-sync 前 | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
+| 2026-11-15 | M4 19 | 在自建的 Android 模擬器上黑箱實測 Gboard 18.5.10 英文鍵盤，事實 M47、M48、P24；Gboard 不配對成對符號、email 欄不切英文，票 26、27 依據要另找；見票 19 | 新 session 下 `/implement .scratch/m4/issues/20-translation-sources.md` |

@@ -86,3 +86,8 @@ M4 在 2026-11-13 之前的決定，從 `docs/progress.md` 原樣搬來，當時
 - 2026-11-14 M4 流程（使用者同意）：排法 M4 票 19–31 → flow-sync → arch-diet → checkpoint M4 → 拆 M5；arch-diet 等到 M4 之後，因為第二期票 21–24、27 還要改 plan。
 - 2026-11-15 M4 流程（使用者同意）：roadmap 的狀態寫「排在 <誰> 之後」，順序 M4 → gates → flow-sync → arch-diet；加 `scripts/next_step.py`，session 結尾跑它。
 - 2026-11-15 M4 流程（使用者同意）：`docs/development.md` 加〈閘門〉；缺的密鑰掃描、依賴漏洞、依賴更新開成 `.scratch/gates/` 一張票，排在 flow-sync 之前。
+- 2026-11-15 M4 票 19（Agent 定）：改用本票新建的 AVD 並側載 Gboard 18.5.10，共用的 emulator-5554 量到一半被別的 session 佔用。票 19
+- 2026-11-15 M4 票 19（Agent 定）：emulator-5554 的 Gboard 資料用 `pm clear` 清掉後重設預設輸入法，照協調者指示。票 19
+- 2026-11-15 M4 票 19（Agent 定）：研究紀錄照〈文件〉凍結紀錄的檔名寫成 `gboard-english-2026-11-15.md`，不用票上的 `gboard-english.md`。票 19
+- 2026-11-15 M4 票 19（Agent 定）：測試頁與點鍵腳本留在 `scripts/experiments/gboard-english-blackbox/`，換 Gboard 版本時重量。票 19
+- 2026-11-15 M4 票 19（Agent 定）：結論摘成兩條產品事實 M47、M48，Chrome 的 `inputType` 另寫平台事實 P24。票 19
