@@ -31,6 +31,24 @@ python3 scripts/experiments/gboard-english-blackbox/events.py <暫存目錄>/eve
 
 `kb.py` 的符號：小寫字母、大寫（Shift 加字母）、空白、`,` `.`、`<` 退格、`^` Shift、`~` Enter、`#` 開 ?123 頁；`kb.py --sym "<鍵>"` 在已打開的 ?123 頁點數字與符號，`A` 回字母頁。建議列與鍵盤用 `adb exec-out screencap -p` 截圖讀。
 
+## 上次結果（2026-11-15）
+
+- 機器與系統：Mac18,5（Apple M6）上的 Android 模擬器，AVD `qim_t19_gboard`（`medium_phone`，1080×2400、420 dpi，映像 `android-37.0;google_apis_playstore;arm64-v8a`），Android 17（`CE2A.260420.051.A2`）。
+- 版本：Gboard `18.5.10.993608717-release-arm64-v8a`（預設設定、沒有帳號）、Chrome 145.0.7632.218；repo 在 `6320fe0`。
+- 量法：上面的跑法；每項用沒打過的錯字，要比對的先打對照組。
+
+| 項目 | 結果 |
+| --- | --- |
+| 自動修正的時機 | 空白、逗號、句點、Enter、點建議；打字中途不改，刪掉整個詞再上屏修正字 |
+| 不修 | 含數字、全大寫、詞裡有 `@`、欄位沒有 AUTO_CORRECT；句中首字大寫照修 |
+| 還原 | 修完的復原鈕一鍵還原、不教原字；預設退格只刪空白，點左格原字才還原並教原字；「Undo auto-correct on backspace」預設關 |
+| 學習 | 上屏一次就學，第 2 個字母起出在建議列中格 |
+| 兩下空白 | 約 1 秒內，刪一個空白、上屏「. 」；逗號、句點後不做；退格不還原 |
+| 成對符號 | 英文、粵語都不自動配對 |
+| 欄位 | email、網址：加 `@` `/` 鍵，沒有建議、不修、不大寫，粵語速成在用時不切英文；`number`、`inputmode=numeric`：數字鍵盤；`tel`：電話鍵盤；`search`：有建議不修；密碼：數字列、沒有建議 |
+
+細節與截圖在 `docs/research/gboard-english-2026-11-15.md`。
+
 ## 注意
 
 - 鍵位是 1080×2400、420 dpi 模擬器上 Gboard 18.5.10 預設設定（沒有數字列）的截圖量出來的；換裝置、開數字列或換版本要重量 `kb.py` 開頭的座標。

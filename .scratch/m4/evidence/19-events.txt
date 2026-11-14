@@ -1,0 +1,14 @@
+# 保守條件（新字，先打對照）：the knowlege / the knowlege2 / the truely / the TRUELY / the finaly / the Finaly
+   deleteContentBackward None 'The |'
+   insertText 'knowledge ' 'The knowledge |'
+   deleteContentBackward None 'The knowledge the knowlege2 the |'
+   insertText 'truly ' 'The knowledge the knowlege2 the truly |'
+   deleteContentBackward None 'The knowledge the knowlege2 the truly the TRUELY the |'
+   insertText 'finally ' 'The knowledge the knowlege2 the truly the TRUELY the finally |'
+   deleteContentBackward None 'The knowledge the knowlege2 the truly the TRUELY the finally the |'
+   insertText 'Finally ' 'The knowledge the knowlege2 the truly the TRUELY the finally the Finally |'
+FINAL 'The knowledge the knowlege2 the truly the TRUELY the finally the Finally |'
+
+# 句首大寫：ok. then really? yes use e.g. this⏎so
+   insertLineBreak None 'Ok. Then really? Yes use e.g. this\n|'
+FINAL 'Ok. Then really? Yes use e.g. this\nSo|'

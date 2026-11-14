@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Serve page/ and append every POST /log body (one JSON per line) to the log file.
+"""提供 page/ 的測試頁，把每個 POST /log 的內容（一筆一行 JSON）接到記錄檔後面。
 
-usage: server.py [port] [log-path]   (defaults: 18719, ./events.log)
+用法：server.py [埠] [記錄檔]   （預設 18719、./events.log）
 """
 import http.server
 import os

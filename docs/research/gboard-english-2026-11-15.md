@@ -19,15 +19,16 @@
 
 ### 設定（全部是預設值，逐項讀回）
 
-截圖 ev/19-settings.png。
+截圖 ev/19-settings.png（Corrections & suggestions、Preferences 兩段、Privacy）、ev/19-settings-undo.png（Auto-correction 子頁）；其餘項目用 `uiautomator dump` 讀回。
 
-- Corrections & suggestions：Auto-correction 開、Auto-capitalization 開、Spell check 開、Grammar check 開、Don't suggest offensive words 開、Suggestion strip 開、Word suggestions 開、Next-word suggestions 開、Suggest contacts 關。
+- Corrections & suggestions：Auto-correction 開（子頁：Use auto-correction 開、Undo auto-correct on backspace 關）、Auto-capitalization 開、Spell check 開、Grammar check 開、Don't suggest offensive words 開、Suggestion strip 開、Word suggestions 開、Next-word suggestions 開、Suggest contacts 關。
 - Preferences：Number row 關、Number row for passwords 開、Emoji key 開、Comma key 開、Period key 開、Suggestion strip 開、One-handed keyboard 關、Double-space period 開、Auto-space after punctuation 關、Auto-switch after apostrophes 開、Touch & hold keys for symbols 關、Flick keys to enter symbols 關、Sound 關、Keyboard vibration 開。
 - Privacy：Share usage statistics 開、Personalize for you 開、Improve for everyone 開。
+- 加了粵語之後 Preferences 多出 Language switch key（關）與 Emoji size，其餘不變。〈退格與還原〉量「Undo auto-correct on backspace」時暫時打開，量完關回預設。
 
 ### 為什麼新建 AVD、做過的清除
 
-先用的是已開著的共用模擬器 `Medium_Phone_API_37.0`：它的 Gboard 2026-11-14 才由 Play 商店更新到 18.5.10，前一天票 09b 用過，裝置登入了 Google 帳號，鍵盤開著數字列（預設是關），所以 Gboard 可能學過詞、設定被改過。照協調者指示先 `adb shell pm clear com.google.android.inputmethod.latin`、重新設為預設輸入法，讀回設定都回到預設（只是沒有 Grammar check 這一項），個人字典是空的。量到一半，另一個 session 把自己的 App 切到那台模擬器的前景，就改到本票自己的 AVD 從頭重量。下文的結果全部來自新 AVD；舊機上看到、新機重現不了的列在〈沒解開的〉。
+先用的是已開著的共用模擬器 `Medium_Phone_API_37.0`：它的 Gboard 2026-11-14 才由 Play 商店更新到 18.5.10，前一天票 09b 用過，裝置登入了 Google 帳號，鍵盤開著數字列（預設是關），所以 Gboard 可能學過詞、設定被改過。照協調者指示先 `adb shell pm clear com.google.android.inputmethod.latin`、重新設為預設輸入法，讀回設定都回到預設（只是沒有 Grammar check 這一項），個人字典是空的。量到一半，另一個 session 把自己的 App 切到那台模擬器的前景，就改到本票自己的 AVD 從頭重量。下文每一項都是在新 AVD（`emulator-5560`）上量的，舊機（`emulator-5554`）的觀察不當結論用；舊機上看到、新機重現不了的列在〈沒解開的〉。
 
 ### 量法的限制
 
@@ -55,25 +56,27 @@
 
 ### 1.2 不修的條件
 
-每條先打一次同一個錯字的小寫原形確認會修（對照），再打變體。
+每條先打一次同一個錯字的小寫原形確認會修（對照），再打變體。前三條各量兩輪、用不同的字；第二輪打在同一個欄位裡，畫面 ev/19-conservative.png，事件 ev/19-events.txt。
 
 | 條件 | 例 | 對照 | 結果 |
 | --- | --- | --- | --- |
-| 含數字 | `the definately2␣` | `definately` → definitely | 不修 |
-| 全大寫（雙按 Shift 鎖大寫） | `the INDEPENDANT␣` | `independant` → independent | 不修 |
-| 句中首字大寫 | `the Sucess␣` | `sucess` → success | **照修**成 `Success`，保留首字大寫 |
-| 詞裡有 `@` | 一般欄打 `mail jon@gmial.com␣` | — | 打到 `@` 建議列就換成工具列，整串不修（ev/19-field-strips.png 第二列） |
+| 含數字 | `the definately2␣`、`the knowlege2␣` | `definately` → definitely、`knowlege` → knowledge | 不修 |
+| 全大寫 | `the INDEPENDANT␣`（雙按 Shift 鎖大寫）、`the TRUELY␣`（每個字母各按 Shift） | `independant` → independent、`truely` → truly | 不修 |
+| 句中首字大寫 | `the Sucess␣`、`the Finaly␣` | `sucess` → success、`finaly` → finally | **照修**成 `Success`、`Finally`，保留首字大寫 |
+| 詞裡有 `@` | 一般欄打 `mail jon@gmial.com␣` | — | 打到 `@` 建議列就換成工具列，整串不修（ev/19-field-strips.png 第 3 列） |
 | 網址 | 一般欄打 `visit gogle.com␣` | `gogle` → Google | 打 `.` 時就把 `gogle` 修成 `Google.`，結果 `Google.com`：`.` 是詞界 |
-| 欄位沒有 AUTO_CORRECT 旗標 | `type=search`、`autocorrect="off"` 打 `i recieve␣`、`i acheive␣` | — | 照出建議，中格不粗體，不修（ev/19-field-strips.png 第三列） |
-| email、網址欄 | `becuase␣`、`wierd␣` | — | 不修、沒有建議（〈欄位類型〉） |
+| 欄位沒有 AUTO_CORRECT 旗標 | `type=search`、`autocorrect="off"` 打 `i recieve␣`、`i acheive␣` | — | 照出建議，中格不粗體，不修（ev/19-field-strips.png 第 4、5 列） |
+| email、網址欄 | `becuase␣`、`wierd␣` | — | 不修、沒有建議（ev/19-field-strips.png 第 1、2 列；〈欄位類型〉） |
 
 ### 1.3 退格與還原
 
-- 修完緊接著退格：只刪掉修正後的那個空白，字不會變回去；建議列換成〔原字｜修正字｜次選〕（`the adress␣` → 退格 → `The address`，建議列〔adress｜address｜addresses〕，ev/19-undo-backspace.png）。再退格就是刪修正字的最後一個字母（`The addres`）。
-- 點左格的原字才是還原：換回原字並自動補空白（`a suprise␣` → 退格 → 點 `suprise` → `A suprise␣`，ev/19-undo-revert.png）。事件是刪掉兩字不同的尾巴再上屏（刪 `rprise` 後上屏 `prise `）。
-- 還原之後緊接的第一下空白沒有任何事件（被吃掉），第二下才多一個空白。
-- 還原過的原字之後在任何欄位都不再修（`suprise␣` 再打兩次都照原樣）：還原等於教 Gboard 這個字。
+預設設定下有兩種還原，退格本身不還原；子設定「Undo auto-correct on backspace」（預設關）打開後退格才還原。
+
+- **復原鈕**：每次自動修正後，建議列右側、麥克風左邊多一顆「↶」（剛出現時帶「Undo」字樣）。點它把剛修的詞換回原字，連自動補的空白一起拿掉（`the goverment␣` → `The goverment`）；鈕變成「↷」，再點是重做（`Finaly` ↔ `Finally␣`）。復原後中格不粗體，再打空白照原樣上屏；之後同一個錯字照修（`the goverment␣` 又修成 government）：用這顆鈕還原不教 Gboard。多打一個詞、按退格、或兩下空白變句點之後，都沒有這顆鈕（ev/19-undo-button.png：修完、按了復原、多打一個詞之後）。
+- **退格（預設）**：修完緊接著退格，只刪掉修正後的那個空白，字不會變回去，復原鈕消失，建議列換成〔原字｜修正字｜次選〕（`the adress␣` → 退格 → `The address`，建議列〔adress｜address｜addresses〕，ev/19-undo-backspace.png）。再退格就是刪修正字的最後一個字母（`The addres`）。
+- **點建議列左格的原字**：換回原字並自動補空白（`a suprise␣` → 退格 → 點 `suprise` → `A suprise␣`，ev/19-undo-revert.png）。事件是刪掉兩字不同的尾巴再上屏（刪 `rprise` 後上屏 `prise `）。之後緊接的第一下空白沒有任何事件（被吃掉），第二下才多一個空白。這樣還原過的原字之後在任何欄位都不再修（`suprise␣` 再打兩次都照原樣）：等於教 Gboard 這個字。
 - 退格後不點原字、直接再打空白：留著修正字（`The library␣`），之後同一個錯字照修。
+- **打開「Undo auto-correct on backspace」**：修完緊接著退格就換回原字，連空白一起拿掉（`The address␣` → `The adress`，ev/19-undo-backspace-setting.png）；再退格才刪字母。還原後打空白照原樣上屏，之後同一個錯字不再修（`the libary␣` 照原樣）。
 
 ## 2. 學習：使用者打過的字何時出現
 
@@ -89,12 +92,12 @@
 - 兩下的間隔：0.65、0.81、0.96 秒都會變句點；1.06、1.07、1.15、1.16、1.27 秒都不會。時間窗約 1 秒。
 - 逗號後（`hello,␣␣`）、句點後（`hello.␣␣`）是兩個空白，不加句點；數字後（`123␣␣`）照樣變 `123.␣`。
 - 三下是 `Hello.␣␣`（句點後再一個空白）。
-- 變成句點後退格不還原：`Hello.␣` → 退格 `Hello.` → 再退格 `Hello`。
+- 變成句點後退格不還原：`Hello.␣` → 退格 `Hello.` → 再退格 `Hello`；建議列是工具列，也沒有復原鈕。
 - 點建議自動補的空白之後，第一下空白被吃掉（同〈退格與還原〉）。
 
 ## 4. 句首大寫
 
-- 空的欄位、`.` `?` 後接空白、換行之後，Shift 亮起，下一個字母大寫：`Ok. Then`、`Really? Yes`、`Ok⏎Then`。
+- 空的欄位、`.` `?` 後接空白、換行之後，Shift 亮起，下一個字母大寫：打 `ok. then really? yes use e.g. this⏎so` 得 `Ok. Then really? Yes use e.g. this⏎So`（ev/19-capitalization.png，事件 ev/19-events.txt）。`?` 後接空白，鍵盤自動回到字母頁。
 - 縮寫：`use e.g. this` 不大寫；`i met mr. smith` 的 `mr.` 先被修成 `Mr.`，之後的 `smith` 大寫成 `Smith`（Gboard 把它當句尾）。
 - email、網址、密碼欄 Shift 不亮，打出小寫（ev/19-field-keyboards.png）。
 - 雙按 Shift 鎖大寫；測試頁清空欄位不會解除。
@@ -109,6 +112,7 @@
 
 - 三格：左格固定是已打的原樣（是真字也一樣，打 `the` 左格是 the），中格是首選（會自動修正時是粗體），右格是次選；有 emoji 時右格換成兩個 emoji，共四格（ev/19-strip-order.png：`the`〔the｜them｜these〕、`hel`〔hel｜hello｜👋｜🤗〕）。
 - 打完空白後出下一個詞的預測（`i like␣`〔it｜the｜😍｜💗〕）；剛聚焦的空欄是工具列。
+- 剛自動修正完，麥克風左邊多一顆復原鈕（〈退格與還原〉）。
 - 點任一格換掉整個詞並補一個空白；接著打標點時先刪掉補的空白再上屏標點（點 `hello` 後打 `,` 得 `hello,`）。
 - email、網址、密碼欄與詞裡打了 `@` 之後，建議列換成工具列，沒有字詞建議。
 - 使用者打過的字：見〈學習〉。
@@ -129,6 +133,8 @@ Chrome 145 把 HTML 欄位轉成下表的 `EditorInfo.inputType`（`dumpsys inpu
 | `inputmode=numeric` | `0x4002`（NUMBER） | 同 `type=number` 的數字鍵盤 | — | — | — |
 | `type=tel` | `0x4003`（PHONE） | 電話鍵盤：數字鍵標 ABC…WXYZ，`* #`、`0 +` | — | — | — |
 
+上表是只有 English (US) 時量的。切到粵語速成再聚焦 email、網址欄，Gboard **不會**換成英文鍵盤：仍是速成字根鍵，只把逗號鍵換成 `@`（email）或 `/`（網址）、句號換成半形 `.`；回到一般欄是原本的速成（ev/19-field-sucheng.png：多行欄、email、網址、一般欄）。在 email 欄用速成打 `a␣` 上屏「日」。
+
 ## 給後續票的結論
 
 - 英文模式 ADR 與 `delete_before`（票 21）：
@@ -137,10 +143,10 @@ Chrome 145 把 HTML 欄位轉成下表的 `EditorInfo.inputType`（`dumpsys inpu
   - 預測含下一個詞：空白後建議列出下一個詞（Next-word suggestions 預設開）。
 - 自動修正（票 25）：
   - 觸發是空白、逗號、句點、Enter 與點建議；打字中途不改。
-  - 退格不會一鍵還原：第一下只刪空白、把原字放到建議列左格，點了才還原，還原的同時學會原字、之後不再修。brief 寫的「退格可還原」若要一鍵還原，是比 Gboard 多做一步，要在票裡定採誰的做法。
+  - 還原有三條路：修完時建議列的復原鈕（一鍵還原、可重做、不教原字）；預設的退格只刪空白、把原字放到左格，點了才還原並教原字；子設定「Undo auto-correct on backspace」（預設關）打開後，退格一下就還原並教原字。brief 的「退格可還原」對應的是那個預設關的子設定；QIM 的觸控英文模式要不要另做復原鈕，候選列 M5 才重做，由票定。
   - 不修：含數字、全大寫、詞裡有 `@`、欄位沒有 AUTO_CORRECT；句中首字大寫照修、保留大寫。
-  - 原樣上屏一次就學、學到的字還會當修正目標（`seperate` → `seperate2`）。QIM 的英文使用者詞有 2 次的出現門檻，打錯一次不會這樣，這點比 Gboard 保守。
-- 欄位類型（票 26）：email、網址欄是 QWERTY 加 `@` 或 `/` 鍵，沒有建議、不修、不大寫；數字欄與 `inputmode=numeric` 開數字鍵盤，`tel` 開電話鍵盤；`search` 有建議但不修；密碼欄加數字列、沒有建議。殼可以照上表從 `inputType` 的類別、變體與 AUTO_CORRECT 旗標判斷。
+  - 原樣上屏一次就學、學到的字還會當修正目標（`seperate` → `seperate2`）。spec〈英文使用者詞〉的出現門檻（詞典沒有的串打過 2 次才出在英文建議列，4 個字元起才學）讓打錯一次的串不會出現；學到的串能不能當自動修正的目標，brief 與 spec 都沒寫，由票定。
+- 欄位類型（票 26）：email、網址欄是 QWERTY 加 `@` 或 `/` 鍵，沒有建議、不修、不大寫；數字欄與 `inputmode=numeric` 開數字鍵盤，`tel` 開電話鍵盤；`search` 有建議但不修；密碼欄加數字列、沒有建議。殼可以照上表從 `inputType` 的類別、變體與 AUTO_CORRECT 旗標判斷（事實 P24）。Gboard 在 email、網址欄**不切英文**，粵語速成照用、只換 `@` `/` 鍵；brief 的「email、網址預設英文模式」比 Gboard 多做一步，依據要另找。
 - 智慧標點（票 27）：
   - Gboard 英文與粵語鍵盤都沒有成對符號自動配對，左右半邊各一顆鍵，英文引號是直引號。spec 寫的「插入一對還是左右輪流，照 Gboard 實測定」照不了 Gboard，要另找成熟產品當依據，或請使用者定。
   - 兩下空白：約 1 秒內、前一字不是標點時，刪一個空白、上屏「. 」，下一字自動大寫；數字後照做；退格不還原。

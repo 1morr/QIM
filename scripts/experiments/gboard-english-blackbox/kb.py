@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Tap Gboard keys with `adb shell input tap` (the target device comes from ANDROID_SERIAL).
+"""用 `adb shell input tap` 點 Gboard 的鍵（目標裝置照 ANDROID_SERIAL）。
 
-usage: kb.py "<keys>" [delay-seconds]       English QWERTY letter page
-       kb.py --sym "<keys>" [delay-seconds] ?123 page (must already be open)
+用法：kb.py "<鍵>" [間隔秒數]        英文 QWERTY 字母頁
+      kb.py --sym "<鍵>" [間隔秒數]  ?123 頁（要先打開）
 
-Letter page tokens: a-z, uppercase = Shift + letter, ' ' space, ',' '.', '<' backspace,
-'^' Shift, '~' Enter, '#' ?123.  ?123 page tokens: digits, @#$_&-+()/ *"':;!?,
-' ' space, ',' '.', '<' backspace, 'A' back to letters, '~' Enter.
+字母頁的符號：a-z，大寫是 Shift 加字母，' ' 空白，',' '.'，'<' 退格，'^' Shift，
+'~' Enter，'#' 開 ?123 頁。?123 頁的符號：數字、@#$_&-+()/ *"':;!?，' ' 空白，
+',' '.'，'<' 退格，'A' 回字母頁，'~' Enter。
 
-Key centres were read off screenshots of Gboard 18.5.10 on a 1080x2400, 420 dpi
-emulator with the default settings (no number row). Coordinates below are half-scale
-(540 wide) and doubled when tapping; re-read them if the layout differs.
+鍵的中心從 1080x2400、420 dpi 模擬器上 Gboard 18.5.10 預設設定（沒有數字列）的截圖
+量出；下面的座標是半比例（540 寬），點的時候乘 2。佈局不同就重量。
 """
 import subprocess
 import sys

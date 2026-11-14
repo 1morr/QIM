@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Print the input events logged by server.py: every event that is not a one-character
-insertText, then the final field value with the caret shown as '|'.
+"""印 server.py 記下的 input 事件：不是單一字元 insertText 的每一筆，最後印欄位的值，
+游標寫成 '|'。
 
-usage: events.py [log-path]   (default ./events.log)
+用法：events.py [記錄檔]   （預設 ./events.log）
 """
 import json
 import sys
