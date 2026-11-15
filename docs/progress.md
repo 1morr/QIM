@@ -48,3 +48,4 @@
 | 2026-11-15 | M4 19 | 在自建的 Android 模擬器上黑箱實測 Gboard 18.5.10 英文鍵盤，事實 M47、M48、P24；Gboard 不配對成對符號、email 欄不切英文，票 26、27 依據要另找；見票 19 | 新 session 下 `/implement .scratch/m4/issues/20-translation-sources.md` |
 | 2026-11-15 | M4 20 | 查譯詞來源授權與 LLM 生成費用，寫成研究與事實 T34–T38；使用者決定譯詞移出 M4，票 29 wontfix；見票 20 | 新 session 下 `/implement .scratch/m4/issues/21-english-mode-adr.md` |
 | 2026-11-15 | M4 21 | ADR 0008 定英文模式逐字上屏與 `delete_before`，事實 P25–P28，`Snapshot` 加欄位、網頁照做；協調者代答 7 題；見票 21 | 新 session 下 `/implement .scratch/m4/issues/22-aosp-english-pack.md` |
+| 2026-11-15 | M4 22 | 英文資料包改用 AOSP LatinIME en_US 詞表（協調者定，T39），156,636 詞帶頻率；規則 4 觸發 54→87 題、bench 不退步；見票 22 | 新 session 下 `/implement .scratch/m4/issues/28-inline-english-experiment.md` |
