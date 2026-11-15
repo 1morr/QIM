@@ -249,11 +249,14 @@ async function start(): Promise<void> {
 		},
 		extraDelayMs: rerankDelay(),
 	});
-	/** 核心吃下的鍵：有上屏就插入，再畫組字與候選。`chosen` 是這個鍵是不是選字（空白、數字鍵）。 */
+	/**
+	 * 核心吃下的鍵：有上屏或要刪字（`deleteBefore`，ADR 0008）就照做，再畫組字與候選。`chosen` 是這個鍵
+	 * 是不是選字（空白、數字鍵）。
+	 */
 	const apply = (snapshot: Snapshot, chosen: boolean): void => {
 		reportPanel.observe(snapshot, chosen);
-		if (snapshot.commit !== undefined) {
-			insert(text, snapshot.commit);
+		if (snapshot.commit !== undefined || snapshot.deleteBefore > 0) {
+			insert(text, snapshot.commit ?? "", snapshot.deleteBefore);
 			// 上屏時核心可能學到東西；每次都存，重新整理網頁後還在。
 			saveLearning();
 		}

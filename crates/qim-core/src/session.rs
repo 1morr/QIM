@@ -388,6 +388,10 @@ pub struct Snapshot {
     pub candidates: Vec<Candidate>,
     pub page: usize,
     pub has_more: bool,
+    /// 上屏 `commit` 之前，殼先刪游標前（有選取時是選取前）這麼多個字元，以 Unicode scalar（`char`）計；
+    /// 0 是不刪，也可以只刪不上屏。給英文模式的自動修正與還原、連按兩下空白、成對符號（ADR 0008）；
+    /// 殼照做，不自己判斷。核心只刪自己送出去、之後沒作廢的字，還沒有動作會送它（M4 票 24、25、27 才送）。
+    pub delete_before: usize,
     /// 這次事件要上屏的文字。
     pub commit: Option<String>,
     /// `commit` 後處理前的原文（繁體），回報用；簡體模式以外和 `commit` 相同。
@@ -1868,6 +1872,7 @@ impl Session {
                 .collect(),
             page: self.page,
             has_more: self.has_more(),
+            delete_before: 0,
             commit,
             commit_original,
             ascii: self.ascii || self.inline.is_some(),

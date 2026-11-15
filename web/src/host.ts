@@ -2,8 +2,34 @@
 
 import type { Snapshot } from "./wasm/qim_wasm.js";
 
-/** 上屏：插入輸入框游標處，取代選取的文字。 */
-export function insert(text: HTMLTextAreaElement, commit: string): void {
+/**
+ * 游標（有選取時是選取的開頭）`cursor` 前刪 `count` 個字時要刪到哪裡：UTF-16 的位置。以 Unicode
+ * scalar 計、不切開代理對，同核心 `Snapshot.delete_before` 的單位（ADR 0008）；不夠刪時刪到開頭。
+ */
+export function deleteStart(
+	value: string,
+	cursor: number,
+	count: number,
+): number {
+	const before = Array.from(value.slice(0, cursor));
+	const removed = before.slice(Math.max(0, before.length - count));
+	return cursor - removed.join("").length;
+}
+
+/**
+ * 上屏：先刪游標前 `deleteBefore` 個字（核心的 `delete_before`，ADR 0008），再把 `commit` 插入游標處、
+ * 取代選取的文字。
+ */
+export function insert(
+	text: HTMLTextAreaElement,
+	commit: string,
+	deleteBefore = 0,
+): void {
+	const start = deleteStart(text.value, text.selectionStart, deleteBefore);
+	if (start < text.selectionStart) {
+		// 選取跟著往前挪、不收起（"preserve"），接著的上屏照舊取代它。
+		text.setRangeText("", start, text.selectionStart, "preserve");
+	}
 	text.setRangeText(commit, text.selectionStart, text.selectionEnd, "end");
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
@@ -29,9 +55,7 @@ export function hostDefault(
 			const { selectionStart: start, selectionEnd: end } = text;
 			if (start === end && start > 0) {
 				// 刪游標前一個字元，不切開代理對。
-				const before = Array.from(text.value.slice(0, start));
-				const removed = before.pop()?.length ?? 0;
-				text.setRangeText("", start - removed, start, "end");
+				text.setRangeText("", deleteStart(text.value, start, 1), start, "end");
 			} else {
 				text.setRangeText("", start, end, "end");
 			}

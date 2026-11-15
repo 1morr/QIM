@@ -403,8 +403,8 @@ fn association_candidates_are_marked_and_have_no_path_score() {
 }
 
 /// debug 面板的資料只由 `inspect` 給、不進 `Snapshot`（票 01）：平台殼每鍵都收 `Snapshot`，多帶的欄位
-/// 每鍵都要算。解構不加 `..`，`Snapshot` 加了欄位這裡就編譯不過；真的要加對外的欄位時（如 M4 的
-/// `delete_before`），確認不是 debug 用的再把它加進這個清單。
+/// 每鍵都要算。解構不加 `..`，`Snapshot` 加了欄位這裡就編譯不過；真的要加對外的欄位時，確認不是
+/// debug 用的再把它加進這個清單（`delete_before` 是殼要照做的刪字，ADR 0008）。
 #[test]
 fn the_snapshot_carries_no_debug_fields() {
     let Snapshot {
@@ -413,6 +413,7 @@ fn the_snapshot_carries_no_debug_fields() {
         candidates: _,
         page: _,
         has_more: _,
+        delete_before: _,
         commit: _,
         commit_original: _,
         ascii: _,
