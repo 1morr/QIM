@@ -23,3 +23,6 @@ Blocked by: 18, 18b
 
 - 設計稿 `docs/design/23-touch-english-keyboard.html` 已出（2026-11-15），等使用者確認標籤（5.1）、英文頁數字角標（5.2）與整體；確認前不實作。
 - Gboard 的中文佈局沒有中英鍵（事實 M49），中英鍵放在 Gboard「Language switch key」的位置：逗號與空白之間，空白 5 格縮成 4 格。
+- 等使用者：設計稿確認（中英鍵標籤、英文頁數字角標、設計稿規格寫進 brief、整體確認），協調者已轉使用者。
+- 做到哪：設計稿與 Gboard 實測截圖（`.scratch/m4/evidence/23-*.png`、事實 M49）已 commit；brief、plan、佈局格式與程式都還沒改。
+- 剩什麼：使用者確認後，照設計稿加佈局格式欄位（沿用 `toggleAscii`、Trime `ascii_keyboard` 式的換頁欄位，Schema 與雙向測試）、預設佈局加中英鍵與英文三頁、網頁接上、Playwright 驗收截圖、改 brief §4.4 已知限制與 plan §2.6、`cargo xtask check`。
