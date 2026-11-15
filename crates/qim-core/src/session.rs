@@ -1204,6 +1204,10 @@ impl Session {
             return self.snapshot(engine, true, None);
         };
         let mut segments = self.association.take().expect("聯想顯示中").segments;
+        // emoji 和組字中選 emoji 一樣原樣上屏、不學；剛上屏的不是字詞了，不接下一輪（plan〈介面〉）。
+        if choice.span.kind.is_literal() {
+            return self.commit(engine, Commit::plain(choice.text().to_string()));
+        }
         let original = choice.span.text.clone();
         if self.writes_learning()
             && let Some(previous) = segments.last()
@@ -1256,15 +1260,16 @@ impl Session {
         let Some(association) = &self.association else {
             return;
         };
-        let texts = association::associations(engine, user, &association.segments);
-        if texts.is_empty() {
+        let spans = association::associations(
+            engine,
+            user,
+            &association.segments,
+            self.options.emoji_candidates,
+        );
+        if spans.is_empty() {
             self.end_association();
             return;
         }
-        let spans = texts
-            .into_iter()
-            .map(|text| CandidateSpan::single(text, ""))
-            .collect();
         self.candidates = self.shown_candidates(engine, spans);
         self.listed_with = self.options;
         self.page = 0;

@@ -12,17 +12,24 @@
 //! 新的一段的分數和連打裡的邊相同：首字 bigram 加詞內機率（詞庫的詞用詞頻換算、其他一字接一字用
 //! 字級 bigram），詞庫的詞加 β，都扣 γ。同一串字有幾種算法時取高的；每個候選都加個人 bigram 的
 //! `personal`（沒學過是 0）。
+//!
+//! 聯想的 emoji（M4 票 30）：剛上屏的字詞的 emoji（同 emoji 候選的資料包）插在前 [`EMOJI_AFTER`] 個字詞後面，
+//! 照 macOS 速成（黑箱 T8：日 → 本、期、🌞）。
 
 use std::collections::HashMap;
 
+use crate::lattice::{CandidateSpan, SpanKind};
 use crate::user::personal_bonus;
-use crate::{Engine, PAGE_SIZE, UserModel};
+use crate::{EMOJI_LIMIT, Engine, PAGE_SIZE, UserModel};
 
 /// 聯想一次最多給幾個：一頁，所以不必翻頁（librime-predict 的 `max_candidates` 也建議設成一頁）。
 pub(crate) const ASSOCIATION_LIMIT: usize = PAGE_SIZE;
 
 /// 補完詞庫的詞時最多看剛上屏的最後幾個字。
 pub(crate) const ASSOCIATION_TAIL: usize = 8;
+
+/// 聯想的 emoji 排在第幾個字詞後面：macOS 速成排第 3 位（黑箱 T8），字詞不夠時排在最後。
+pub(crate) const EMOJI_AFTER: usize = 2;
 
 /// 一個聯想的分數：排序用的分數，與 ln 靜態機率的差（不含 β、γ，`personal` 要的，同 lattice 的邊）。
 #[derive(Debug, Clone, Copy)]
@@ -31,9 +38,55 @@ struct Scored {
     log_static: f64,
 }
 
-/// 接在 `segments`（剛上屏的各段，繁體原文，依上屏的順序）後面的聯想，好的在前，最多
-/// [`ASSOCIATION_LIMIT`] 個。最後一段是個人 bigram 的前一個字詞。
-pub(crate) fn associations(engine: &Engine, user: &UserModel, segments: &[String]) -> Vec<String> {
+/// 接在 `segments`（剛上屏的各段，繁體原文，依上屏的順序）後面的聯想，最多 [`ASSOCIATION_LIMIT`] 個：
+/// 字詞好的在前，`emoji` 時剛上屏的字詞的 emoji（[`committed_emoji`]）插在前 [`EMOJI_AFTER`] 個字詞後面、
+/// 佔掉排在最後的字詞的位置。聯想沒有輸入碼，候選的碼是空的。
+pub(crate) fn associations(
+    engine: &Engine,
+    user: &UserModel,
+    segments: &[String],
+    emoji: bool,
+) -> Vec<CandidateSpan> {
+    let emoji = if emoji {
+        committed_emoji(engine, segments)
+    } else {
+        &[]
+    };
+    let mut spans: Vec<CandidateSpan> = words(engine, user, segments)
+        .into_iter()
+        .take(ASSOCIATION_LIMIT - emoji.len())
+        .map(|text| CandidateSpan::single(text, ""))
+        .collect();
+    let at = spans.len().min(EMOJI_AFTER);
+    spans.splice(
+        at..at,
+        emoji.iter().map(|e| CandidateSpan {
+            kind: SpanKind::Emoji,
+            ..CandidateSpan::single(e.clone(), "")
+        }),
+    );
+    spans
+}
+
+/// 剛上屏的字詞的 emoji，最多 [`EMOJI_LIMIT`] 個：最後幾段（分段的邊界、最多 [`ASSOCIATION_TAIL`] 字）接起來
+/// 有 emoji 的最長的那個（「日」「本」兩段給「日本」的，不給「本」的）。查的是繁體原文。
+fn committed_emoji<'a>(engine: &'a Engine, segments: &[String]) -> &'a [String] {
+    let mut found: &[String] = &[];
+    for k in 1..=segments.len() {
+        let piece = segments[segments.len() - k..].concat();
+        if piece.chars().count() > ASSOCIATION_TAIL {
+            break;
+        }
+        let emoji = engine.emoji(&piece);
+        if !emoji.is_empty() {
+            found = emoji;
+        }
+    }
+    &found[..found.len().min(EMOJI_LIMIT)]
+}
+
+/// 字詞的聯想：好的在前，最多 [`ASSOCIATION_LIMIT`] 個。
+fn words(engine: &Engine, user: &UserModel, segments: &[String]) -> Vec<String> {
     let Some(last) = segments.last().and_then(|s| s.chars().next_back()) else {
         return Vec::new();
     };
