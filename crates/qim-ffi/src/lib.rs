@@ -213,6 +213,8 @@ pub struct Snapshot {
     pub candidates: Vec<Candidate>,
     pub page: u32,
     pub has_more: bool,
+    /// 上屏 `commit` 前先刪游標前這麼多個字元（Unicode scalar），核心的 `delete_before`（ADR 0008）。
+    pub delete_before: u32,
     pub commit: Option<String>,
     pub commit_original: Option<String>,
     pub ascii: bool,
@@ -266,6 +268,7 @@ impl From<qim_core::Snapshot> for Snapshot {
                 .collect(),
             page: s.page as u32,
             has_more: s.has_more,
+            delete_before: s.delete_before as u32,
             commit: s.commit,
             commit_original: s.commit_original,
             ascii: s.ascii,

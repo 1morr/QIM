@@ -628,6 +628,10 @@ pub struct WebSnapshot {
     /// 目前頁，從 0 起。
     #[wasm_bindgen(readonly)]
     pub page: usize,
+    /// 上屏 `commit` 前先刪游標前這麼多個字（Unicode scalar，核心的 `delete_before`，ADR 0008）；
+    /// 網頁照做（`host.ts` 的 `insert`）。
+    #[wasm_bindgen(readonly, js_name = deleteBefore)]
+    pub delete_before: usize,
     #[wasm_bindgen(readonly)]
     pub commit: Option<String>,
     /// 觸控鍵盤交給核心的輸入的種類（`qim_layout::Output::kind`），長按時是選到的那個；核心沒吃下時
@@ -909,6 +913,7 @@ impl From<Snapshot> for WebSnapshot {
             candidates_original: s.candidates.iter().map(|c| c.original.clone()).collect(),
             candidates: s.candidates.into_iter().map(|c| c.text).collect(),
             page: s.page,
+            delete_before: s.delete_before,
             commit: s.commit,
             action: None,
             character: None,
