@@ -831,11 +831,32 @@ pub fn load_engine(
         })
     })
     .map_err(|e| format!("{QUICK_PACK}：{e}"))?;
+    let engine = match std::env::var(INLINE_ENGLISH_VAR) {
+        Ok(value) => engine.with_inline_english(parse_inline_english(&value)?),
+        Err(_) => engine,
+    };
     Ok(LoadedEngine {
         engine,
         packs,
         lexicon: copy,
         load_ms,
+    })
+}
+
+/// 句中英文混輸的實驗（M4 票 28，`scripts/experiments/inline-english/`）：設了這個環境變數，[`load_engine`] 建的
+/// `Engine` 打開 [`qim_core::InlineEnglish`]，值是 `<懲罰>,<最短長度>,<最低頻率>`。暫時的，量完跟著核心的機制刪。
+pub const INLINE_ENGLISH_VAR: &str = "QIM_INLINE_ENGLISH";
+
+/// [`INLINE_ENGLISH_VAR`] 的值。
+pub fn parse_inline_english(value: &str) -> Result<qim_core::InlineEnglish, String> {
+    let bad = || format!("{INLINE_ENGLISH_VAR} 要寫成 <懲罰>,<最短長度>,<最低頻率>：{value}");
+    let [penalty, min_len, min_frequency] = value.split(',').collect::<Vec<_>>()[..] else {
+        return Err(bad());
+    };
+    Ok(qim_core::InlineEnglish {
+        penalty: penalty.parse().map_err(|_| bad())?,
+        min_len: min_len.parse().map_err(|_| bad())?,
+        min_frequency: min_frequency.parse().map_err(|_| bad())?,
     })
 }
 

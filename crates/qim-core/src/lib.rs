@@ -29,7 +29,7 @@ mod word_trigram;
 pub use code_table::{CodeEntry, CodeTable};
 pub use date::{Date, ParseDateError};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
-pub use engine::Engine;
+pub use engine::{Engine, InlineEnglish};
 pub use english::EnglishWords;
 pub use english_user::{
     ENGLISH_COMPLETION_AFTER, ENGLISH_COMPLETION_LIMIT, ENGLISH_COMPLETION_POOL,
