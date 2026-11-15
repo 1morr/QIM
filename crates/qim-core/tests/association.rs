@@ -5,9 +5,10 @@
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CharModel, CodeEntry, CodeTable, ConversionTable, Engine, Key, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, Options, Packs, Ranking, Scheme, SchemePack, Session,
-    ShiftKey, ShiftSwitch, Simplifier, SimplifierPack, Snapshot, UserModel, Word,
+    CandidateKind, CharModel, CodeEntry, CodeTable, ConversionTable, EmojiPack, EmojiTable, Engine,
+    Key, LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Options, Packs, Ranking, Scheme,
+    SchemePack, Session, ShiftKey, ShiftSwitch, Simplifier, SimplifierPack, Snapshot, UserModel,
+    Word,
 };
 
 /// `an` 門、`r` 口、`ni` 外、`a` 日、`d` 本、`o` 人；詞庫有「門口」「日本」「日本人」。
@@ -461,4 +462,112 @@ fn switching_to_simplified_while_shown_converts_the_associations() {
     typing.session.set_options(options);
     let refreshed = typing.session.refresh(&typing.engine, &typing.user);
     assert_eq!(refreshed.candidates[at].text, "夲");
+}
+
+/// emoji 資料包：日 🌞、本 📖、日本 🇯🇵 🗾、人 🧑、門 🚪。
+fn with_emoji(engine: Engine) -> Engine {
+    engine.with_emoji(EmojiPack {
+        id: "emoji".into(),
+        emoji: EmojiTable::new([
+            ("日", vec!["🌞"]),
+            ("本", vec!["📖"]),
+            ("日本", vec!["🇯🇵", "🗾"]),
+            ("人", vec!["🧑"]),
+            ("門", vec!["🚪"]),
+        ]),
+    })
+}
+
+fn emoji_typing(change: impl FnOnce(&mut Options)) -> Typing {
+    let mut typing = Typing::with_options(change);
+    typing.engine = with_emoji(engine());
+    typing
+}
+
+/// 上屏「門」：先教它後面接「日」「本」（個人 bigram），聯想才有兩個以上的字詞。
+fn commit_men_after_teaching(typing: &mut Typing) -> Snapshot {
+    for code in ["a", "d"] {
+        typing.commit("an");
+        typing.commit(code);
+        typing.key(Key::Escape);
+    }
+    typing.commit("an")
+}
+
+#[test]
+fn the_emoji_of_the_committed_word_follow_the_first_two_associations() {
+    // 照 macOS 速成（黑箱 T8：日 → 本、期、🌞）：剛上屏的字詞的 emoji 排在前兩個聯想後面。
+    let words = commit_men_after_teaching(&mut Typing::new());
+    let words = texts(&words);
+    assert!(words.len() > 2, "{words:?}");
+    let mut expected = words[..2].to_vec();
+    expected.push("🚪");
+    expected.extend(&words[2..]);
+    let mut typing = emoji_typing(|_| {});
+    assert_eq!(texts(&commit_men_after_teaching(&mut typing)), expected);
+}
+
+#[test]
+fn with_fewer_than_two_associations_the_emoji_come_last() {
+    let mut typing = emoji_typing(|_| {});
+    let committed = typing.commit("ad");
+    assert_eq!(committed.commit.as_deref(), Some("日本"));
+    assert_eq!(texts(&committed), ["人", "🇯🇵", "🗾"]);
+}
+
+#[test]
+fn the_longest_committed_piece_with_emoji_gives_them() {
+    let mut typing = emoji_typing(|_| {});
+    let committed = typing.commit("a");
+    let chosen = typing.pick(&committed, "本");
+    // 剛上屏的是「日」「本」兩段：給「日本」的，不給「本」的。
+    let shown = texts(&chosen);
+    assert!(shown.contains(&"🇯🇵") && shown.contains(&"🗾"), "{shown:?}");
+    assert!(!shown.contains(&"📖"), "{shown:?}");
+}
+
+#[test]
+fn emoji_show_even_without_word_associations() {
+    // 「人」後面沒有詞庫的詞、字級 bigram 與個人 bigram 給得出的聯想。
+    let mut typing = emoji_typing(|_| {});
+    assert!(Typing::new().commit("o").candidates.is_empty());
+    assert_eq!(texts(&typing.commit("o")), ["🧑"]);
+}
+
+#[test]
+fn choosing_an_emoji_in_associations_commits_it_learns_nothing_and_ends_the_round() {
+    let mut typing = emoji_typing(|_| {});
+    let committed = typing.commit("an");
+    let before = typing.user.export();
+    let chosen = typing.pick(&committed, "🚪");
+    assert_eq!(chosen.commit.as_deref(), Some("🚪"));
+    assert_eq!(chosen.commit_original.as_deref(), Some("🚪"));
+    assert!(chosen.candidates.is_empty(), "{:?}", texts(&chosen));
+    assert_eq!(typing.user.export(), before);
+}
+
+#[test]
+fn no_emoji_in_associations_when_emoji_candidates_are_off() {
+    let mut typing = emoji_typing(|o| o.emoji_candidates = false);
+    assert_eq!(
+        texts(&typing.commit("an")),
+        texts(&Typing::new().commit("an"))
+    );
+}
+
+#[test]
+fn no_emoji_when_association_is_off() {
+    let mut typing = emoji_typing(|o| o.association = false);
+    assert!(typing.commit("o").candidates.is_empty());
+}
+
+#[test]
+fn the_debug_panel_marks_the_emoji_in_associations_as_emoji() {
+    let mut typing = emoji_typing(|_| {});
+    let committed = typing.commit("an");
+    let inspected = typing.session.inspect(&typing.engine, &typing.user);
+    let kinds: Vec<_> = inspected.candidates.iter().map(|c| c.kind).collect();
+    let at = position(&committed, "🚪").unwrap();
+    assert_eq!(kinds[at], CandidateKind::Emoji);
+    assert_eq!(kinds[0], CandidateKind::Association);
 }

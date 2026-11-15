@@ -105,7 +105,7 @@ pub enum CandidateKind {
     Word,
     /// 英文候選（排位規則 4）。
     English,
-    /// 接在字詞後面的 emoji。
+    /// 接在字詞後面的 emoji，或聯想裡剛上屏的字詞的 emoji。
     Emoji,
     /// 英文使用者詞：整串輸入碼剛好是它（排位規則 4）或它的前綴補完（排位規則 5）。
     EnglishUserWord,
@@ -184,10 +184,10 @@ fn inspect_candidate(
 ) -> InspectedCandidate {
     let span = &candidate.span;
     let kind = match span.kind {
+        SpanKind::Emoji => CandidateKind::Emoji,
         _ if association => CandidateKind::Association,
         SpanKind::Word => CandidateKind::Word,
         SpanKind::English => CandidateKind::English,
-        SpanKind::Emoji => CandidateKind::Emoji,
         SpanKind::EnglishUserWord | SpanKind::EnglishCompletion => CandidateKind::EnglishUserWord,
     };
     let mut inspected = InspectedCandidate {

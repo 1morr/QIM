@@ -2,7 +2,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 
 // 聯想（M3 票 13）：上屏之後候選列給接下來可能要打的字詞，數字鍵或點選選了就上屏、接著出下一輪；
 // 空白不選、Esc 只收起、退格刪字並收起（M4 票 18c）、打字母照常組字，設定區的「聯想」關掉時沒有
-// （plan〈介面〉）。
+// （plan〈介面〉）。剛上屏的字詞的 emoji 排在前兩個聯想後面，選了上屏、不接下一輪（M4 票 30）。
 
 function ui(page: Page) {
 	return {
@@ -16,6 +16,15 @@ function ui(page: Page) {
 async function shown(page: Page): Promise<string[]> {
 	const labels = await ui(page).items.allTextContents();
 	return labels.map((label) => label.replace(/^\d/, ""));
+}
+
+/** 打 `hk`、按「笑」的序號上屏它（`hk` 的首選不是「笑」）。 */
+async function commitLaugh(page: Page) {
+	await page.keyboard.type("hk");
+	const laugh = (await shown(page)).indexOf("笑");
+	expect(laugh).not.toBe(-1);
+	await page.keyboard.press(String(laugh + 1));
+	await expect(ui(page).text).toHaveValue("笑");
 }
 
 async function ready(page: Page) {
@@ -57,6 +66,40 @@ test.describe("實體鍵盤", () => {
 		await page.screenshot({
 			path: testInfo.outputPath("desktop-after-ren.png"),
 		});
+	});
+
+	test("上屏「笑」後第 3 個聯想是 😆，按 3 上屏、聯想收起；debug 面板標成 emoji", async ({
+		page,
+	}, testInfo) => {
+		const { text, items } = ui(page);
+		await page.getByRole("button", { name: "debug" }).click();
+		await text.focus();
+		await commitLaugh(page);
+		await expect(items.nth(2)).toHaveText("3😆");
+		const after = await shown(page);
+		expect(after.slice(3, 5), `聯想：${after.join(" ")}`).toEqual(["🤣", "😂"]);
+		const rows = page
+			.getByRole("table", { name: "候選來源" })
+			.locator("tbody tr");
+		await expect(rows.nth(2)).toHaveAttribute("data-kind", "emoji");
+		await expect(rows.nth(0)).toHaveAttribute("data-kind", "association");
+		await page.screenshot({
+			path: testInfo.outputPath("desktop-emoji-after-laugh.png"),
+		});
+
+		await page.keyboard.press("3");
+		await expect(text).toHaveValue("笑😆");
+		await expect(items).toHaveCount(0);
+	});
+
+	test("設定區關掉「emoji 候選」時聯想沒有 emoji", async ({ page }) => {
+		const { text, items } = ui(page);
+		await page.getByRole("checkbox", { name: "emoji 候選" }).uncheck();
+		await text.focus();
+		await commitLaugh(page);
+		await expect(items.first()).toBeVisible();
+		const after = await shown(page);
+		expect(after.join(" ")).not.toMatch(/😆|🤣|😂/u);
 	});
 
 	test("打字母時聯想消失、照常組字", async ({ page }) => {
@@ -176,6 +219,22 @@ test.describe("觸控", () => {
 		await items.filter({ hasText: /^\d人$/ }).tap();
 		await expect(text).toHaveValue("日本人");
 		await page.screenshot({ path: testInfo.outputPath("touch-after-ren.png") });
+	});
+
+	test("點 h、k、點「笑」上屏 → 點聯想 😆 上屏", async ({ page }, testInfo) => {
+		const { text, items } = ui(page);
+		await page.getByTestId("key-h").tap();
+		await page.getByTestId("key-k").tap();
+		await items.filter({ hasText: /^\d笑$/ }).tap();
+		await expect(text).toHaveValue("笑");
+		await expect(items.nth(2)).toHaveText("3😆");
+		await page.screenshot({
+			path: testInfo.outputPath("touch-emoji-after-laugh.png"),
+		});
+
+		await items.filter({ hasText: /^\d😆$/u }).tap();
+		await expect(text).toHaveValue("笑😆");
+		await expect(items).toHaveCount(0);
 	});
 
 	test("觸控的刪除鍵刪字並收起聯想，空白照打空格", async ({
