@@ -45,23 +45,6 @@ pub struct Engine {
     /// 詞級 trigram（[`Engine::with_word_trigram`]）：有掛上時 lattice 的靜態機率改用它，沒有統計的
     /// 地方退回字級 bigram；`None` 只用字級 bigram（plan〈排序：同一把尺〉）。
     word_trigram: Option<WordTrigram>,
-    /// 句中英文混輸的實驗（M4 票 28，[`Engine::with_inline_english`]）；`None` 是關。
-    inline_english: Option<InlineEnglish>,
-    /// 收得進 lattice 的英文詞最長幾個字母，lattice 往回找邊的上限也要到它；關著是 0。
-    inline_english_longest: usize,
-}
-
-/// 句中英文混輸的實驗設定（M4 票 28，`scripts/experiments/inline-english/`）：英文詞典裡拼對的常見詞當成 lattice
-/// 的一條邊，分數固定是 `−penalty`（不接字級 bigram，也不加 β、γ）；它後面的字照前一字沒有統計的規則接。
-/// 不容錯（鄰鍵讀法換過的碼不收）、不補全、有萬用鍵或分隔記號的碼不收。暫時進核心、預設關，量完由票決定去留。
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct InlineEnglish {
-    /// 英文邊的分數是 `−penalty`。
-    pub penalty: f64,
-    /// 至少幾個字母。
-    pub min_len: usize,
-    /// 英文資料包的頻率（AOSP 的 `f`，0–255）至少多少才算常見詞。
-    pub min_frequency: u8,
 }
 
 /// 一段前面的兩段在詞級 trigram 詞表的編號：`[前前一段, 前一段]`，沒有或不在詞表是 `None`。
@@ -86,8 +69,6 @@ pub(crate) struct Edge {
     word: Option<u32>,
     /// 碼表的字、詞庫的詞或使用者詞（debug 面板，[`Engine::inspect_path`]）。
     source: SegmentSource,
-    /// 句中英文混輸的英文邊（[`InlineEnglish`]）：分數固定是 `inner`。
-    english: bool,
 }
 
 /// 鄰鍵讀法的 lattice 的一條邊（[`Engine::neighbor_edges_ending`]）。
@@ -192,8 +173,6 @@ impl Engine {
             english: EnglishWords::default(),
             emoji: EmojiTable::default(),
             word_trigram: None,
-            inline_english: None,
-            inline_english_longest: 0,
         })
     }
 
@@ -203,47 +182,6 @@ impl Engine {
     pub fn with_word_trigram(mut self, pack: WordTrigramPack) -> Self {
         self.word_trigram = Some(pack.model);
         self
-    }
-
-    /// 打開句中英文混輸的實驗（[`InlineEnglish`]）；要掛上英文資料包（[`Engine::with_english`]）才有詞。
-    #[must_use]
-    pub fn with_inline_english(mut self, inline: InlineEnglish) -> Self {
-        self.inline_english = Some(inline);
-        self.inline_english_longest = self
-            .english
-            .iter()
-            .filter_map(|word| {
-                let code = word.to_lowercase();
-                self.inline_english_edge(&code, 0).map(|_| code.len())
-            })
-            .max()
-            .unwrap_or(0);
-        self
-    }
-
-    /// 碼 `code`（沒有萬用鍵、分隔記號）剛好是英文詞典裡的常見詞時，它的英文邊（[`InlineEnglish`]）。
-    fn inline_english_edge(&self, code: &str, start: usize) -> Option<Edge> {
-        let inline = self.inline_english?;
-        if code.len() < inline.min_len || !self.scheme.spells(code) {
-            return None;
-        }
-        if self.english.frequency(code)? < inline.min_frequency {
-            return None;
-        }
-        let text = self.english.lookup(code)?.to_string();
-        Some(Edge {
-            start,
-            first: text.chars().next()?,
-            text,
-            inner: -inline.penalty,
-            rest: 0.0,
-            personal: 0.0,
-            simplified: false,
-            word: None,
-            // 實驗不加 debug 面板的來源種類。
-            source: SegmentSource::UserWord,
-            english: true,
-        })
     }
 
     /// 有沒有掛上詞級 trigram：有才要算 [`Engine::edge_score`] 的前面兩段。
@@ -421,7 +359,6 @@ impl Engine {
             rest: 0.0,
             simplified: entry.simplified,
             source: SegmentSource::CodeTable,
-            english: false,
         }
     }
 
@@ -443,7 +380,6 @@ impl Engine {
             rest,
             simplified: false,
             source: SegmentSource::Lexicon,
-            english: false,
         }
     }
 
@@ -465,7 +401,6 @@ impl Engine {
             rest,
             simplified: false,
             source: SegmentSource::UserWord,
-            english: false,
         }
     }
 
@@ -522,9 +457,6 @@ impl Engine {
         edge: &Edge,
         bigram: f64,
     ) -> (f64, f64) {
-        if edge.english {
-            return (edge.inner, 0.0);
-        }
         let first = self.language_model.log_prob(prev, edge.first);
         let Some(model) = &self.word_trigram else {
             let learning = personal_bonus(first + edge.rest, edge.personal, bigram);
@@ -661,10 +593,7 @@ impl Engine {
             return self.wildcard_edges(user, &without_separators(input), &cuts, start, limit);
         }
         if cuts.is_empty() {
-            return self
-                .exact_code(user, input, start, limit)
-                .chain(self.inline_english_edge(input, start))
-                .collect();
+            return self.exact_code(user, input, start, limit).collect();
         }
         let code = without_separators(input);
         let words = self
@@ -880,8 +809,7 @@ impl Engine {
         let longest = self
             .longest_word_code
             .max(usize::from(self.scheme.max_code_length))
-            .max(user.longest_word_code())
-            .max(self.inline_english_longest);
+            .max(user.longest_word_code());
         let mut starts: Vec<usize> = input
             .char_indices()
             .rev()
@@ -951,12 +879,7 @@ impl Engine {
                     if !exists(&code) {
                         continue;
                     }
-                    // 英文不容錯：換過碼才查得到的英文邊不收（M4 票 28）。
-                    for mut edge in self
-                        .exact(user, &code, start, self.beam())
-                        .into_iter()
-                        .filter(|e| !e.english)
-                    {
+                    for mut edge in self.exact(user, &code, start, self.beam()) {
                         edge.inner -= penalty;
                         edges.push(NeighborEdge {
                             edge,
