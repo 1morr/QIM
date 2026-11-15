@@ -464,7 +464,7 @@ fn switching_to_simplified_while_shown_converts_the_associations() {
     assert_eq!(refreshed.candidates[at].text, "夲");
 }
 
-/// emoji 資料包：日 🌞、本 📖、日本 🇯🇵 🗾、人 🧑、門 🚪 🚪（重複的只留一個）。
+/// emoji 資料包：日 🌞、本 📖、日本 🇯🇵 🗾、人 🧑、門 🚪。
 fn with_emoji(engine: Engine) -> Engine {
     engine.with_emoji(EmojiPack {
         id: "emoji".into(),
@@ -535,7 +535,7 @@ fn emoji_show_even_without_word_associations() {
 }
 
 #[test]
-fn choosing_an_emoji_association_commits_it_learns_nothing_and_ends_the_round() {
+fn choosing_an_emoji_in_associations_commits_it_learns_nothing_and_ends_the_round() {
     let mut typing = emoji_typing(|_| {});
     let committed = typing.commit("an");
     let before = typing.user.export();
@@ -547,7 +547,7 @@ fn choosing_an_emoji_association_commits_it_learns_nothing_and_ends_the_round() 
 }
 
 #[test]
-fn no_emoji_associations_when_emoji_candidates_are_off() {
+fn no_emoji_in_associations_when_emoji_candidates_are_off() {
     let mut typing = emoji_typing(|o| o.emoji_candidates = false);
     assert_eq!(
         texts(&typing.commit("an")),
@@ -556,13 +556,13 @@ fn no_emoji_associations_when_emoji_candidates_are_off() {
 }
 
 #[test]
-fn no_emoji_associations_when_association_is_off() {
+fn no_emoji_when_association_is_off() {
     let mut typing = emoji_typing(|o| o.association = false);
     assert!(typing.commit("o").candidates.is_empty());
 }
 
 #[test]
-fn the_debug_panel_marks_emoji_associations_as_emoji() {
+fn the_debug_panel_marks_the_emoji_in_associations_as_emoji() {
     let mut typing = emoji_typing(|_| {});
     let committed = typing.commit("an");
     let inspected = typing.session.inspect(&typing.engine, &typing.user);

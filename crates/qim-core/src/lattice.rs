@@ -168,6 +168,14 @@ impl CandidateSpan {
             neighbor: None,
         }
     }
+
+    /// 一個 emoji（[`SpanKind::Emoji`]）：接在蓋住 `code` 的字詞後面，或聯想裡剛上屏的字詞的（`code` 是空的）。
+    pub(crate) fn emoji(text: String, code: &str) -> Self {
+        Self {
+            kind: SpanKind::Emoji,
+            ..Self::single(text, code)
+        }
+    }
 }
 
 /// 列候選時看的選項，由 [`crate::Options`] 算出。
@@ -783,10 +791,7 @@ fn with_emoji(
         };
         left -= emoji.len();
         out.push(span);
-        out.extend(emoji.into_iter().map(|e| CandidateSpan {
-            kind: SpanKind::Emoji,
-            ..CandidateSpan::single(e, input)
-        }));
+        out.extend(emoji.into_iter().map(|e| CandidateSpan::emoji(e, input)));
     }
     out
 }

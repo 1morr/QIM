@@ -18,7 +18,7 @@
 
 use std::collections::HashMap;
 
-use crate::lattice::{CandidateSpan, SpanKind};
+use crate::lattice::CandidateSpan;
 use crate::user::personal_bonus;
 use crate::{EMOJI_LIMIT, Engine, PAGE_SIZE, UserModel};
 
@@ -39,15 +39,15 @@ struct Scored {
 }
 
 /// 接在 `segments`（剛上屏的各段，繁體原文，依上屏的順序）後面的聯想，最多 [`ASSOCIATION_LIMIT`] 個：
-/// 字詞好的在前，`emoji` 時剛上屏的字詞的 emoji（[`committed_emoji`]）插在前 [`EMOJI_AFTER`] 個字詞後面、
+/// 字詞好的在前，`with_emoji` 時剛上屏的字詞的 emoji（[`committed_emoji`]）插在前 [`EMOJI_AFTER`] 個字詞後面、
 /// 佔掉排在最後的字詞的位置。聯想沒有輸入碼，候選的碼是空的。
 pub(crate) fn associations(
     engine: &Engine,
     user: &UserModel,
     segments: &[String],
-    emoji: bool,
+    with_emoji: bool,
 ) -> Vec<CandidateSpan> {
-    let emoji = if emoji {
+    let emoji = if with_emoji {
         committed_emoji(engine, segments)
     } else {
         &[]
@@ -60,21 +60,19 @@ pub(crate) fn associations(
     let at = spans.len().min(EMOJI_AFTER);
     spans.splice(
         at..at,
-        emoji.iter().map(|e| CandidateSpan {
-            kind: SpanKind::Emoji,
-            ..CandidateSpan::single(e.clone(), "")
-        }),
+        emoji.iter().map(|e| CandidateSpan::emoji(e.clone(), "")),
     );
     spans
 }
 
-/// 剛上屏的字詞的 emoji，最多 [`EMOJI_LIMIT`] 個：最後幾段（分段的邊界、最多 [`ASSOCIATION_TAIL`] 字）接起來
-/// 有 emoji 的最長的那個（「日」「本」兩段給「日本」的，不給「本」的）。查的是繁體原文。
+/// 剛上屏的字詞的 emoji，最多 [`EMOJI_LIMIT`] 個：最後幾段（分段的邊界、最後一段以外最多蓋 [`ASSOCIATION_TAIL`] 字）
+/// 接起來有 emoji 的最長的那個（「日」「本」兩段給「日本」的，不給「本」的）。查的是繁體原文。
 fn committed_emoji<'a>(engine: &'a Engine, segments: &[String]) -> &'a [String] {
     let mut found: &[String] = &[];
     for k in 1..=segments.len() {
         let piece = segments[segments.len() - k..].concat();
-        if piece.chars().count() > ASSOCIATION_TAIL {
+        // 最後一段一定看（同留下的段，[`crate::Session`] 的聯想）。
+        if k > 1 && piece.chars().count() > ASSOCIATION_TAIL {
             break;
         }
         let emoji = engine.emoji(&piece);
