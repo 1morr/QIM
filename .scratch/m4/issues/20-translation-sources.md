@@ -21,3 +21,4 @@ Blocked by: 18
 ## Comments
 
 - 等使用者：打中文時候選旁要顯示英文譯詞（例「發票」旁的 invoice），譯詞從哪來？(1) 用 LLM 離線生成整份詞庫（約 25 萬詞），Claude Sonnet 5.5 Batch 約 $17、Haiku 5.5 約 $1，要你提供 API 金鑰並盲評 100 詞，輸出可標 CC0；(2) 免費的 CC-CEDICT 加 CC-Canto（CC BY-SA 4.0），但前 2 萬個常用詞只有約 48% 拿得到能直接上屏的譯詞；(3) CC-CEDICT 為主、LLM 補缺，整包仍是 BY-SA。票 20 的建議是 (1) 用 Sonnet。不決定的話票 20 收不了尾（brief 要寫進採用的來源），票 29 譯詞資料包不能開工；協調者的隊列停在票 20。研究在票 20 的分支 `1morr/t20` 的 `docs/research/translation-sources.md`。
+- 決定：暫不需要譯詞，移出 M4（roadmap〈不排里程碑〉）；本票的來源研究照常合併、不花錢、brief 不寫採用的來源，票 29 wontfix（使用者定）
