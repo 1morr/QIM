@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>觸控英文鍵盤設計稿</title>
+<style>
+/* 設計稿：票 23（.scratch/m4/issues/23-touch-english-keyboard.md）。
+   鍵盤的尺寸、配色、字級照 crates/qim-databuild/src/gboard.rs 與 web/src/style.css、web/src/touch.ts，
+   和網頁現在畫出來的觸控鍵盤一樣；這頁只多畫英文頁與中英鍵。 */
+:root {
+	color-scheme: light dark;
+	--page: light-dark(#f7f7fb, #101216);
+	--ink: light-dark(#1d1f26, #e6e7ef);
+	--muted: light-dark(#5b5e6b, #a3a6b4);
+	--rule: light-dark(#d9dbe6, #2c2f39);
+	--accent: light-dark(#3d5afe, #9fb0ff);
+	--mark: light-dark(#ffe9a8, #5a4a12);
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+	margin: 0;
+	background: var(--page);
+	color: var(--ink);
+	font: 15px/1.6 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+}
+::selection { background: var(--mark); }
+main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 8px; }
+h2 { font-size: 1.2rem; margin: 48px 0 6px; padding-top: 16px; border-top: 1px solid var(--rule); }
+h3 { font-size: 1rem; margin: 0 0 4px; }
+p { margin: 0 0 10px; max-width: 72ch; }
+.lede { color: var(--muted); }
+code { font-size: 0.92em; }
+.theme-switch { display: flex; gap: 6px; margin: 12px 0 0; }
+.theme-switch button {
+	font: inherit; font-size: 0.85rem; padding: 4px 12px; border-radius: 999px;
+	border: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer;
+}
+.theme-switch button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.theme-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.flow { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 28px 24px; margin-top: 16px; }
+.wide { display: grid; gap: 28px; margin-top: 16px; }
+figure { margin: 0; }
+figcaption { margin-top: 8px; font-size: 0.9rem; color: var(--muted); max-width: 60ch; }
+figcaption b { color: var(--ink); font-weight: 600; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 24px; margin-top: 16px; }
+.option { border: 1px solid var(--rule); border-radius: 12px; padding: 16px; }
+.option h3 { display: flex; gap: 8px; align-items: baseline; }
+.tag { font-size: 0.78rem; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--page); }
+.notes { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.92rem; }
+.notes th, .notes td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+.notes th { font-weight: 600; white-space: nowrap; }
+.notes td code { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+	.notes thead { display: none; }
+	.notes tr { display: grid; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+	.notes td { border: 0; padding: 2px 0; }
+	.notes td:first-child { font-weight: 600; }
+	.notes td:last-child { color: var(--muted); font-size: 0.85rem; }
+}
+
+/* 一台「手機」：組字列、候選列、鍵盤。寬度給定，鍵盤以 cqw 縮放（同 web/src/style.css）。 */
+.device {
+	width: 100%;
+	max-width: var(--w, 390px);
+	border-radius: 14px;
+	overflow: hidden;
+	border: 1px solid var(--rule);
+	background: light-dark(#ededf6, #17191f);
+}
+.device.landscape { --w: 844px; }
+.bar {
+	display: flex; align-items: center; gap: 12px;
+	height: 40px; padding: 0 12px;
+	color: light-dark(#30323a, #e4e5f0);
+	font-size: 17px;
+}
+.bar .mode {
+	font-size: 13px; min-width: 1.6em; height: 1.6em; display: grid; place-items: center;
+	border-radius: 6px; color: light-dark(#4b5164, #b8bfd5); background: light-dark(#dce2f9, #353b4d);
+}
+.bar .cand { white-space: nowrap; }
+.bar .cand.first { font-weight: 600; }
+.bar .empty { color: light-dark(#8a8d99, #7c7f8c); font-size: 13px; }
+.kb { position: relative; width: 100%; container-type: inline-size; }
+.key {
+	position: absolute; display: flex; align-items: center; justify-content: center;
+	box-shadow: 0 1px 1px light-dark(rgb(0 0 0 / 12%), rgb(0 0 0 / 40%));
+	line-height: 1;
+}
+.key .label { white-space: pre-line; text-align: center; line-height: 1.05; }
+.key .hint { position: absolute; color: light-dark(#5d5f68, #a9aab5); line-height: 1; }
+/* 標註：設計稿裡要看的那顆鍵。 */
+.key.focus { outline: 2.5px solid var(--accent); outline-offset: 1.5px; z-index: 2; }
+.key.pressed { filter: brightness(0.92); }
+.popup {
+	position: absolute; z-index: 5; display: grid; grid-auto-rows: 1fr;
+	background: light-dark(#fff, #292c34); color: light-dark(#30323a, #e4e5f0);
+	box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
+}
+.popup span { display: flex; align-items: center; justify-content: center; padding: 0 0.2em; border-radius: inherit; }
+.popup span.sel { background: light-dark(#4c5e8b, #b5c4ff); color: light-dark(#fff, #1d2d5c); }
+.typed {
+	margin: 0 0 6px; padding: 8px 12px; min-height: 40px; border-radius: 10px;
+	border: 1px solid var(--rule); background: light-dark(#fff, #1b1d23); font-size: 17px;
+}
+.typed .caret { display: inline-block; width: 1.5px; height: 1.1em; vertical-align: -0.15em; background: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+<h1>觸控的中英鍵與英文鍵盤</h1>
+<p class="lede">票 23 的設計稿。預設觸控佈局加一顆中英鍵，點了換成 QWERTY 英文頁，再點換回速成。鍵盤的尺寸、配色、字級和現在網頁畫的速成鍵盤一樣（<code>gboard.rs</code>），只多畫這次新增的頁與鍵。藍框是這次新增或改動的鍵。</p>
+<p class="lede">第一版的英文頁接<b>英文直通</b>：字母直接上屏，候選列沒有建議；英文模式（建議、自動修正）在票 24 接上，外觀不變。</p>
+<div class="theme-switch" role="group" aria-label="淺色深色">
+	<button type="button" data-theme-choice="auto" aria-pressed="true">跟隨系統</button>
+	<button type="button" data-theme-choice="light" aria-pressed="false">淺色</button>
+	<button type="button" data-theme-choice="dark" aria-pressed="false">深色</button>
+</div>
+
+<h2>1. 中英鍵放哪裡</h2>
+<p>Gboard 的中文佈局（粵語速成、簡體拼音、繁體注音）都沒有鍵盤內的中英鍵，中英要靠地球鍵換語言。Gboard 唯一放在鍵盤裡的切換鍵，是設定「Language switch key」打開後的地球鍵：<b>放在 emoji 鍵的位置，逗號與空白之間</b>，白鍵（事實 M49，截圖 <code>.scratch/m4/evidence/23-*.png</code>）。中英鍵照這個位置放。</p>
+<p>QIM 的底排沒有 emoji 鍵（表情在長按逗號進的「常用」頁），所以這顆鍵占掉一格空白：空白鍵從 5 格寬縮成 4 格，和 Gboard 有 emoji 鍵時的空白一樣寬。字母鍵的位置不動，空間模型與觸控基準不受影響。</p>
+<div class="pair" id="position"></div>
+
+<h2>2. 一次切換的流程（直向，淺色）</h2>
+<div class="flow" id="flow"></div>
+
+<h2>3. 深色</h2>
+<div class="flow" id="dark"></div>
+
+<h2>4. 橫向</h2>
+<p>同一套排法，畫布 844 寬（現在的橫向版本）。</p>
+<div class="wide" id="landscape"></div>
+
+<h2>5. 要你選的地方</h2>
+<h3 style="margin-top:20px">5.1 中英鍵的標籤</h3>
+<p>Gboard 沒有這顆鍵可以照。兩種做法：</p>
+<div class="pair" id="label-ab"></div>
+
+<h3 style="margin-top:28px">5.2 英文頁第一排的數字</h3>
+<p>Gboard 英文鍵盤第一排有 1–0 的角標，長按打出數字；速成頁的角標是英文字母，長按只出英文字母（brief 手機觸控鍵盤一節，使用者 2026-11-05 決定）。英文頁點一下就是字母，長按再出同一個字母沒有用處。</p>
+<div class="pair" id="digits-ab"></div>
+
+<h2>6. 每顆鍵怎麼動</h2>
+<table class="notes">
+	<thead><tr><th>鍵／情境</th><th>行為</th><th>依據</th></tr></thead>
+	<tbody>
+		<tr><td>速成頁的中英鍵</td><td>切到英文頁，候選列左邊的狀態變「英」。組字中按下時和實體鍵盤的中英鍵一樣，照「組字中單按 Shift」的設定處理組字（上屏、留碼…）。</td><td>brief 手機觸控鍵盤：那個設定管「實體 Shift 與佈局裡的中英鍵」</td></tr>
+		<tr><td>英文頁的中英鍵</td><td>回速成頁，狀態變「中」。</td><td>—</td></tr>
+		<tr><td>長按中英鍵</td><td>沒有作用（Gboard 長按地球鍵出換鍵盤選單，QIM 只有一種中文）。</td><td>實測 23-jyutping-longpress-globe-key</td></tr>
+		<tr><td>實體鍵盤單按 Shift 切中英</td><td>觸控鍵盤跟著換頁：在速成頁就換到英文頁，在英文頁就換回速成頁；在符號頁不動。</td><td>Trime <code>ascii_keyboard</code></td></tr>
+		<tr><td>英文頁的字母</td><td>小寫，直接上屏（英文直通）。沒有角標的方案（5.2 選 B）長按沒有東西。</td><td>實測 23-english-letters-lowercase</td></tr>
+		<tr><td>英文頁的 ⇧</td><td>和速成頁的 ⇧ 一樣：點一下大寫一個字母、快點兩下鎖定。英文頁沒有組字，所以不會換成「'詞」分隔鍵。句首自動大寫在票 24。</td><td>brief 手機觸控鍵盤的 ⇧</td></tr>
+		<tr><td>英文頁的 <code>,</code> <code>.</code></td><td>半形。逗號長按照速成頁進「常用」頁；句號長按照 Gboard 英文的 16 個半形符號，預設 <code>,</code>，所以英文頁本身就打得出 <code>? ! : ;</code>。</td><td>實測 23-english-longpress-period</td></tr>
+		<tr><td>英文頁的 ?123</td><td>進英文的符號頁：照 Gboard 英文，括號、冒號、問號、驚嘆號都是半形，左下「ABC」回英文頁；=\&lt; 頁也照 Gboard 英文。12/34 數字鍵盤兩邊共用，左下「返回」在英文時回英文頁。</td><td>實測 23-english-sym-page1、-page2</td></tr>
+		<tr><td>空白鍵</td><td>英文頁寫「English」（Gboard 英文鍵盤的寫法）；速成頁照舊寫「速成」。</td><td>實測</td></tr>
+		<tr><td>候選列</td><td>英文直通沒有候選；左邊狀態「英」。英文模式接上後（票 24）建議放在同一列，M5 重做。</td><td>票 23</td></tr>
+		<tr><td>數字列打開時</td><td>速成頁與英文頁上方都多一排數字；英文頁第一排不再有數字角標（同 Gboard）。</td><td>—</td></tr>
+	</tbody>
+</table>
+
+<h2>7. 佈局格式（只加不改）</h2>
+<p>中英鍵沿用現有的 <code>"toggleAscii"</code> 動作，不加新動作。頁面加一個可省略的欄位，寫「切到英文時換成哪一頁」：速成字母頁寫英文頁、符號頁寫英文符號頁。點中英鍵或實體鍵盤切中英時，鍵盤照這個欄位換頁；在英文時按「返回」這類切到速成字母頁的鍵，也落到英文頁。這是 Trime 的做法（中英鍵 <code>Mode_switch</code> 切 <code>ascii_mode</code>，鍵盤的 <code>ascii_keyboard</code> 是「切到英文時自動跳到的鍵盤」）。自訂佈局不寫這個欄位，就和現在一樣只切中英、不換頁。欄位名稱與 Schema 在實作時定。</p>
+</main>
+<script>
+/* ---------- 尺寸與配色：照 gboard.rs ---------- */
+const GEOMETRY = {
+	portrait: { width: 390, rowHeight: 56, padX: 2, gapX: 2.5, gapY: 5.5, radius: 5.5 },
+	landscape: { width: 844, rowHeight: 40, padX: 4, gapX: 4, gapY: 4, radius: 5.5 },
+};
+const TONE = {
+	plain: { fill: "light-dark(#ffffff, #292c34)", label: "light-dark(#30323a, #e4e5f0)" },
+	fn: { fill: "light-dark(#dce2f9, #353b4d)", label: "light-dark(#4b5164, #b8bfd5)" },
+};
+const SIZE = { label: 15, small: 12.5, symbol: 20, icon: 24, upper: 15 * 1.85, lower: 22 };
+const HINT = { size: 11.3, right: 3.1, aboveCentre: 17.8, minTop: 1.5 };
+const RADICALS = {
+	q: "手", w: "田", e: "水", r: "口", t: "廿", y: "卜", u: "山", i: "戈", o: "人", p: "心",
+	a: "日", s: "尸", d: "木", f: "火", g: "土", h: "竹", j: "十", k: "大", l: "中",
+	z: "重", x: "難", c: "金", v: "女", b: "月", n: "弓", m: "一",
+};
+const PERIOD_EN = "& % + \" - : ' @ ; / ( ) # ! , ?".split(" ");
+
+/* ---------- 一格：照 gboard.rs 的 Cell ---------- */
+const cell = (id, label, o = {}) => ({ id, label, units: 1, tone: "plain", size: SIZE.label, ...o });
+const fn = (id, label, o = {}) => cell(id, label, { tone: "fn", size: SIZE.small, ...o });
+const sym = (t) => cell(t, t, { size: SIZE.symbol });
+const syms = (str) => str.split(" ").map(sym);
+const shift = (glyph = "⇧") => fn("shift", glyph, { units: 1.5, size: SIZE.icon, a11y: "Shift" });
+const backspace = () => fn("backspace", "⌫", { units: 1.5, size: SIZE.icon, a11y: "刪除" });
+const enter = () => fn("enter", "↵", { units: 1.5, size: SIZE.icon, pill: true, a11y: "換行" });
+const space = (units, label) => cell("space", label, { units, size: SIZE.small, a11y: "空白" });
+const row = (indent, cells) => ({ indent, cells });
+
+/* 中英鍵：label "A" 是「中/英」目前的亮、"B" 是要去的那邊（英文頁寫「中」）。白鍵，同 Gboard 的地球鍵。 */
+function toggleKey(ascii, label = "A") {
+	if (label === "A") {
+		const html = ascii
+			? '<span class="off">中</span><span class="slash">/</span><span class="on">英</span>'
+			: '<span class="on">中</span><span class="slash">/</span><span class="off">英</span>';
+		return cell("toggle", "", { html, size: SIZE.label, a11y: ascii ? "中英切換，現在英文" : "中英切換，現在中文" });
+	}
+	return cell("toggle", ascii ? "中" : "英", { size: SIZE.label, a11y: ascii ? "切到中文" : "切到英文" });
+}
+
+/* ---------- 頁面 ---------- */
+function quickLetters({ toggle = true, label = "A", shiftGlyph } = {}) {
+	const r = (s) => [...s].map((c) => cell(c, RADICALS[c], { hint: c }));
+	const comma = fn("，", "，", { size: SIZE.label, hint: "☺" });
+	const bottom = toggle
+		? [fn("to-symbols", "?123", { units: 1.5, pill: true }), comma, toggleKey(false, label), space(4, "速成"), fn("。", "。", { size: SIZE.label }), enter()]
+		: [fn("to-symbols", "?123", { units: 1.5, pill: true }), comma, space(5, "速成"), fn("。", "。", { size: SIZE.label }), enter()];
+	return [row(0, r("qwertyuiop")), row(0.5, r("asdfghjkl")), row(0, [shift(shiftGlyph), ...r("zxcvbnm"), backspace()]), row(0, bottom)];
+}
+function englishLetters({ caps = false, digits = true, label = "A", shiftGlyph } = {}) {
+	const key = (c, hint) => cell(c, caps ? c.toUpperCase() : c, { size: caps ? SIZE.upper : SIZE.lower, hint });
+	// Shift 開著時字母鍵不顯示角標（plan 佈局一節的 "shift"）。
+	const top = [..."qwertyuiop"].map((c, i) => key(c, digits && !caps ? String((i + 1) % 10) : undefined));
+	const k = (s) => [...s].map((c) => key(c));
+	const bottom = [
+		fn("to-symbols", "?123", { units: 1.5, pill: true }),
+		fn(",", ",", { size: SIZE.label, hint: "☺" }),
+		toggleKey(true, label),
+		space(4, "English"),
+		fn(".", ".", { size: SIZE.label }),
+		enter(),
+	];
+	return [row(0, top), row(0.5, k("asdfghjkl")), row(0, [shift(shiftGlyph), ...k("zxcvbnm"), backspace()]), row(0, bottom)];
+}
+const numbersKey = () => cell("to-numbers", "12\n34", { size: SIZE.small, a11y: "數字鍵盤" });
+function englishSymbols() {
+	return [
+		row(0, syms("1 2 3 4 5 6 7 8 9 0")),
+		row(0, syms("@ # $ _ & - + ( ) /")),
+		row(0, [fn("to-more", "=\\<", { units: 1.5 }), ...syms("* \" ' : ; ! ?"), backspace()]),
+		row(0, [fn("to-english", "ABC", { units: 1.5, pill: true }), fn(",", ",", { size: SIZE.label }), numbersKey(), space(4, "English"), fn(".", ".", { size: SIZE.label }), enter()]),
+	];
+}
+function englishMoreSymbols() {
+	return [
+		row(0, syms("~ ` | • √ π ÷ × § Δ")),
+		row(0, syms("£ ¢ € ¥ ^ ° = { } \\")),
+		row(0, [fn("to-symbols", "?123", { units: 1.5 }), ...syms("% © ® ™ ✓ [ ]"), backspace()]),
+		row(0, [fn("to-english", "ABC", { units: 1.5, pill: true }), fn("<", "<", { size: SIZE.label }), numbersKey(), space(4, "English"), fn(">", ">", { size: SIZE.label }), enter()]),
+	];
+}
+
+/* ---------- 畫一頁（同 web/src/touch.ts 的換算） ---------- */
+function drawKeyboard(rows, orientation, opts = {}) {
+	const g = GEOMETRY[orientation];
+	const height = 4 * g.rowHeight;
+	const unit = (g.width - 2 * g.padX) / 10;
+	const cqw = (v) => `${(v / g.width) * 100}cqw`;
+	const kb = document.createElement("div");
+	kb.className = "kb";
+	kb.style.aspectRatio = `${g.width} / ${height}`;
+	const placed = {};
+	rows.forEach((r, ri) => {
+		let left = r.indent;
+		for (const c of r.cells) {
+			const x = g.padX + left * unit + g.gapX;
+			const y = ri * g.rowHeight + g.gapY;
+			const w = c.units * unit - 2 * g.gapX;
+			const h = g.rowHeight - 2 * g.gapY;
+			left += c.units;
+			const el = document.createElement("div");
+			el.className = "key";
+			const tone = TONE[c.tone];
+			Object.assign(el.style, {
+				left: `${(x / g.width) * 100}%`, top: `${(y / height) * 100}%`,
+				width: `${(w / g.width) * 100}%`, height: `${(h / height) * 100}%`,
+				borderRadius: cqw(c.pill ? h / 2 : g.radius), background: tone.fill,
+			});
+			const label = document.createElement("span");
+			label.className = "label";
+			if (c.html) label.innerHTML = c.html;
+			else label.textContent = c.label;
+			label.style.color = tone.label;
+			label.style.fontSize = cqw(c.size);
+			el.append(label);
+			if (c.hint) {
+				const hint = document.createElement("span");
+				hint.className = "hint";
+				hint.textContent = c.hint;
+				hint.style.fontSize = cqw(HINT.size);
+				hint.style.right = cqw(HINT.right);
+				hint.style.top = cqw(Math.max(HINT.minTop, h / 2 - HINT.aboveCentre));
+				el.append(hint);
+			}
+			if (opts.focus?.includes(c.id)) el.classList.add("focus");
+			if (opts.pressed === c.id) el.classList.add("pressed");
+			el.setAttribute("role", "img");
+			el.setAttribute("aria-label", c.a11y ?? c.label);
+			placed[c.id] = { x, y, w, h };
+			kb.append(el);
+		}
+	});
+	if (opts.popup) {
+		const key = placed[opts.popup.key];
+		const items = opts.popup.items;
+		const columns = Math.min(8, items.length);
+		const rowsN = Math.ceil(items.length / columns);
+		const ph = key.h * 1.1 * rowsN;
+		const pw = unit * 0.9 * columns;
+		const right = Math.min(g.width - 2, key.x + key.w);
+		const p = document.createElement("div");
+		p.className = "popup";
+		Object.assign(p.style, {
+			left: `${((right - pw) / g.width) * 100}%`, top: `${((key.y - ph - 2) / height) * 100}%`,
+			width: `${(pw / g.width) * 100}%`, height: `${(ph / height) * 100}%`,
+			borderRadius: cqw(g.radius), gridTemplateColumns: `repeat(${columns}, 1fr)`, fontSize: cqw(key.h * 0.4),
+		});
+		items.forEach((t, i) => {
+			const s = document.createElement("span");
+			s.textContent = t;
+			if (i === (opts.popup.selected ?? 0)) s.className = "sel";
+			p.append(s);
+		});
+		kb.append(p);
+	}
+	return kb;
+}
+
+function device(rows, { orientation = "portrait", mode = "中", bar = [], typed, theme, note, ...opts } = {}) {
+	const wrap = document.createElement("div");
+	if (theme) wrap.style.colorScheme = theme;
+	if (typed !== undefined) {
+		const t = document.createElement("div");
+		t.className = "typed";
+		t.textContent = typed;
+		const caret = document.createElement("span");
+		caret.className = "caret";
+		t.append(caret);
+		wrap.append(t);
+	}
+	const d = document.createElement("div");
+	d.className = `device ${orientation}`;
+	const b = document.createElement("div");
+	b.className = "bar";
+	const m = document.createElement("span");
+	m.className = "mode";
+	m.textContent = mode;
+	m.setAttribute("aria-label", mode === "英" ? "英文" : "中文");
+	b.append(m);
+	bar.forEach((c, i) => {
+		const s = document.createElement("span");
+		s.className = `cand${i === 0 ? " first" : ""}`;
+		s.textContent = c;
+		b.append(s);
+	});
+	if (bar.length === 0 && note) {
+		const e = document.createElement("span");
+		e.className = "empty";
+		e.textContent = note;
+		b.append(e);
+	}
+	d.append(b, drawKeyboard(rows, orientation, opts));
+	wrap.append(d);
+	return wrap;
+}
+
+function figure(content, caption) {
+	const f = document.createElement("figure");
+	f.append(content);
+	const c = document.createElement("figcaption");
+	c.innerHTML = caption;
+	f.append(c);
+	return f;
+}
+function option(tag, title, figures, text) {
+	const o = document.createElement("div");
+	o.className = "option";
+	o.innerHTML = `<h3>${tag ? `<span class="tag">${tag}</span>` : ""}${title}</h3><p>${text}</p>`;
+	const grid = document.createElement("div");
+	grid.style.display = "grid";
+	grid.style.gap = "16px";
+	figures.forEach((f) => grid.append(f));
+	o.append(grid);
+	return o;
+}
+const $ = (id) => document.getElementById(id);
+
+/* ---------- 1. 位置：現在 vs 加了中英鍵 ---------- */
+$("position").append(
+	figure(device(quickLetters({ toggle: false })), "<b>現在</b>：底排 ?123、逗號、空白（5 格）、句號、Enter。"),
+	figure(device(quickLetters(), { focus: ["toggle", "space"] }), "<b>改成</b>：逗號與空白之間多一顆中英鍵（白鍵），空白縮成 4 格。"),
+);
+
+/* ---------- 2. 流程 ---------- */
+$("flow").append(
+	figure(device(quickLetters(), { theme: "light", typed: "", focus: ["toggle"], pressed: "toggle" }), "<b>① 速成頁</b>，點中英鍵。"),
+	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "", note: "英文直通：沒有建議（票 24 接英文模式）", focus: ["toggle", "space", ","] }), "<b>② 英文頁</b>：QWERTY 小寫、第一排有數字角標（5.2）、空白寫 English，狀態「英」。"),
+	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello", pressed: "o" }), "<b>③ 打 hello</b>：每個字母直接上屏。"),
+	figure(device(englishLetters({ caps: true, shiftGlyph: "⬆" }), { theme: "light", mode: "英", typed: "hello ", focus: ["shift"] }), "<b>④ 點 ⇧</b>：字母換大寫，下一個字母打大寫、打完回小寫（和速成頁的 ⇧ 一樣）。"),
+	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello", popup: { key: ".", items: PERIOD_EN, selected: 14 } }), "<b>⑤ 長按句號</b>：照 Gboard 英文的 16 個半形符號，預設 <code>,</code>；<code>? ! :</code> 在這裡就打得出來。圖上選到 <code>,</code>。"),
+	figure(device(englishSymbols(), { theme: "light", mode: "英", typed: "hello?", focus: ["to-english", "(", ")", ":", ";", "!", "?", "\"", "'"] }), "<b>⑥ ?123 進英文符號頁</b>：照 Gboard 英文，括號與 <code>: ; ! ?</code> 半形；左下 ABC 回英文頁。"),
+	figure(device(englishMoreSymbols(), { theme: "light", mode: "英", typed: "hello?", focus: ["to-english"] }), "<b>⑦ =\\&lt; 頁</b>：照 Gboard 英文的第二頁，左下 ABC 回英文頁。"),
+	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello?", focus: ["toggle"], pressed: "toggle" }), "<b>⑧ 在英文頁點中英鍵</b>……"),
+	figure(device(quickLetters(), { theme: "light", typed: "hello?", focus: ["toggle"] }), "<b>⑨ 回到速成頁</b>，狀態「中」。"),
+);
+
+/* ---------- 3. 深色 ---------- */
+$("dark").append(
+	figure(device(quickLetters(), { theme: "dark", focus: ["toggle"] }), "速成頁"),
+	figure(device(englishLetters(), { theme: "dark", mode: "英", note: "英文直通：沒有建議", focus: ["toggle"] }), "英文頁"),
+	figure(device(englishSymbols(), { theme: "dark", mode: "英" }), "英文符號頁"),
+);
+
+/* ---------- 4. 橫向 ---------- */
+$("landscape").append(
+	figure(device(quickLetters(), { orientation: "landscape", focus: ["toggle"] }), "速成頁，橫向（淺色）"),
+	figure(device(englishLetters(), { orientation: "landscape", mode: "英", note: "英文直通：沒有建議", focus: ["toggle"], theme: "dark" }), "英文頁，橫向（深色）"),
+);
+
+/* ---------- 5.1 標籤 A／B ---------- */
+$("label-ab").append(
+	option("A", "「中/英」，目前的那個字亮（建議）", [
+		figure(device(quickLetters({ label: "A" }), { focus: ["toggle"] }), "速成頁：<b>中</b>亮"),
+		figure(device(englishLetters({ label: "A" }), { mode: "英", focus: ["toggle"] }), "英文頁：<b>英</b>亮"),
+	], "兩頁同一個字樣，一看就知道是切換鍵；實體鍵盤切了中英，鍵上也跟著亮另一個字。Trime 的中英鍵也是顯示目前狀態（<code>states: [中文, 西文]</code>）。缺點：字小，兩個字擠在一格。"),
+	option("B", "寫要去的那邊：速成頁「英」、英文頁「中」", [
+		figure(device(quickLetters({ label: "B" }), { focus: ["toggle"] }), "速成頁寫「英」"),
+		figure(device(englishLetters({ label: "B" }), { mode: "英", focus: ["toggle"] }), "英文頁寫「中」"),
+	], "跟鍵盤裡其他切頁鍵一樣寫目的地（?123、ABC、返回），字大好認。缺點：英文頁一片字母裡出現一個「中」，和候選列左邊的狀態「英」相反，第一次看可能以為現在是中文。"),
+);
+/* 5.1 的字樣：A 方案的暗字。 */
+const style = document.createElement("style");
+style.textContent = ".key .label .off{opacity:.45;font-size:.8em}.key .label .on{font-weight:600}.key .label .slash{opacity:.45;font-size:.8em;margin:0 .05em}";
+document.head.append(style);
+
+/* ---------- 5.2 數字角標 A／B ---------- */
+$("digits-ab").append(
+	option("A", "照 Gboard：第一排角標 1–0，長按打數字（建議）", [
+		figure(device(englishLetters(), { mode: "英", popup: { key: "e", items: ["3"] }, focus: ["e"] }), "長按 e 出 3"),
+	], "英文打數字不必進 ?123，同 Gboard 英文鍵盤。速成頁不變，長按照舊只出英文字母。"),
+	option("B", "不加角標，長按沒有東西", [
+		figure(device(englishLetters({ digits: false }), { mode: "英" }), "沒有角標"),
+	], "畫面最乾淨；數字一律從 ?123 打。"),
+);
+
+/* ---------- 淺色深色切換 ---------- */
+for (const b of document.querySelectorAll("[data-theme-choice]")) {
+	b.addEventListener("click", () => {
+		const choice = b.dataset.themeChoice;
+		if (choice === "auto") delete document.documentElement.dataset.theme;
+		else document.documentElement.dataset.theme = choice;
+		for (const o of document.querySelectorAll("[data-theme-choice]")) o.setAttribute("aria-pressed", String(o === b));
+	});
+}
+</script>
+</body>
+</html>

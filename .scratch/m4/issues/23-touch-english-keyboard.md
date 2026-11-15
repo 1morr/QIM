@@ -18,3 +18,8 @@ Blocked by: 18, 18b
 - [ ] 內建佈局的嚴格檢查照過（plan §5.3）；格式加的東西有 Schema 與雙向測試。
 - [ ] Playwright 手機 viewport：按中英鍵切到英文頁、打 `hello` 上屏、再切回中文頁；英文頁打得出半形的 `? ! :`；截圖。
 - [ ] brief §4.4 的已知限制改寫；plan §2.6 更新；`cargo xtask check` 綠燈。
+
+## Comments
+
+- 設計稿 `docs/design/23-touch-english-keyboard.html` 已出（2026-11-15），等使用者確認標籤（5.1）、英文頁數字角標（5.2）與整體；確認前不實作。
+- Gboard 的中文佈局沒有中英鍵（事實 M49），中英鍵放在 Gboard「Language switch key」的位置：逗號與空白之間，空白 5 格縮成 4 格。
