@@ -55,7 +55,7 @@ pub const QUICK_PACK: &str = "build/packs/quick/quick.pack";
 pub const PACKS: &str = "build/packs";
 /// 英文資料包：不由方案指名、各方案共用（plan〈英文、簡繁與 emoji〉）；預設選項開著英文候選，基準照網頁掛上。
 /// WebAssembly 的延遲腳本依檔頭魔數分辨各資料包，不靠參數的位置。
-pub const ENGLISH_PACK: &str = "build/packs/scowl-en-us/scowl-en-us.pack";
+pub const ENGLISH_PACK: &str = "build/packs/aosp-en-us/aosp-en-us.pack";
 /// emoji 資料包：不由方案指名、各方案共用（plan〈英文、簡繁與 emoji〉）；預設選項開著 emoji 候選，基準照網頁掛上，
 /// 量得到 emoji 把正解擠到下一頁的修正次數。
 pub const EMOJI_PACK: &str = "build/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack";

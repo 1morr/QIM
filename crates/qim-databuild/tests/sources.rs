@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::io::Write;
 
 use qim_databuild::Error;
-use qim_databuild::sources::{self, Fetch, SourceFile};
+use qim_databuild::sources::{self, Encoding, Fetch, SourceFile};
 
 /// `printf hello | shasum -a 256`
 const HELLO_SHA256: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
@@ -51,7 +51,42 @@ fn file() -> SourceFile {
         path: "data/hello.txt".into(),
         url: "https://example.invalid/hello.txt".into(),
         sha256: HELLO_SHA256.into(),
+        encoding: None,
     }
+}
+
+/// googlesource 的 `?format=TEXT` 只給 base64：快取存解開後的內容，sha256 也釘解開後的
+/// （就是上游 blob 的 sha256）。
+#[test]
+fn a_base64_source_is_decoded_before_the_checksum_and_the_cache() {
+    let cache = tempfile::tempdir().unwrap();
+    let file = SourceFile {
+        encoding: Some(Encoding::Base64),
+        ..file()
+    };
+    // `printf hello | base64`
+    let fetch = FakeFetch::new(b"aGVsbG8=");
+    assert_eq!(
+        sources::load(cache.path(), "demo", &file, &fetch).unwrap(),
+        b"hello"
+    );
+    assert_eq!(
+        sources::load(cache.path(), "demo", &file, &Offline).unwrap(),
+        b"hello"
+    );
+}
+
+#[test]
+fn a_base64_source_that_does_not_decode_fails_and_is_not_cached() {
+    let cache = tempfile::tempdir().unwrap();
+    let file = SourceFile {
+        encoding: Some(Encoding::Base64),
+        ..file()
+    };
+    let err =
+        sources::load(cache.path(), "demo", &file, &FakeFetch::new(b"not base64!")).unwrap_err();
+    assert!(matches!(err, Error::Invalid { .. }), "{err}");
+    assert!(!sources::cache_path(cache.path(), "demo", &file).exists());
 }
 
 #[test]

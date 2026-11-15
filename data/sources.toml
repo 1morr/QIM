@@ -196,32 +196,33 @@ path = "LICENSE"
 url = "https://raw.githubusercontent.com/BYVoid/OpenCC/fae2a0a911c30764e669a7d8b0591cd8e852934a/LICENSE"
 sha256 = "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308"
 
-# ESDB（English Speller Database，舊名 SCOWL，plan〈英文、簡繁與 emoji〉）：英文資料包 scowl-en-us 的詞表，中文狀態的英文候選用。
-# 取 en-wl/wordlist release rel-2026.02.25 的 hunspell-en_US zip：官方的 size 60、美式、預設變體詞表
-# （zip 裡 README_en_US.txt 的「Wordlist Command: mk-list --accents=strip en_US 60」，由 commit 7e99eda 建出）。
-# 不從 repo 的 data/ 自己組：要跑 ESDB 自己的 Python + SQLite 工具（combine.py 合併十幾份來源檔），
-# 建置就多一種語言的依賴；release 的檔是同一份資料、釘得住 sha256。
-# 取用：en_US.dic 的詞幹照 en_US.aff 的字首、字尾規則展開成全部詞形；標 NOSUGGEST（!）的禁忌詞整個不收；
-# 只留轉成小寫後全是 a–y 的詞（z 不在速成字母表，撇號、連字號、數字也打不出）；同一個小寫拼法有幾種
-# 大小寫時取全小寫的，沒有就取字典序最前的（English、NASA）。規則在 crates/qim-databuild/src/english.rs。
-# size 只有 ≤ 60 這一級，沒有逐詞的 size：英文候選只看整串是不是完整單字，用不到常見度。
-# 授權：Copyright 檔寫官方拼字字典（非澳式）只需要 === 前那段聲明；整份照抄進資料包的 LICENSE。
-# .aff 是 Geoff Kuenning 的 BSD 授權，QIM 只用它展開詞形、不散布它，資料包的 NOTICE 註明展開方式。
-[source.scowl]
-repository = "https://github.com/en-wl/wordlist"
-version = "rel-2026.02.25"
-license = "LicenseRef-SCOWL"
-license_text = { upstream_file = "Copyright" }
+# AOSP LatinIME 的英文詞表（plan〈英文、簡繁與 emoji〉，M4 票 22）：英文資料包 aosp-en-us 的詞與頻率，中文狀態的英文候選
+# 與英文模式共用。dictionaries/en_US_wordlist.combined.gz 是 LatinIME 建 main_en_us.dict 用的文字檔（160,715 詞，
+# 檔頭 date=1414726260、version=54）：每詞一行 ` word=<詞>,f=<0–255>,…`，f 是頻率的對數，下面接 bigram 與 shortcut。
+# 不用 aosp-dictionaries（Helium314）的 experimental 詞典：它把這份詞表整個併進去、66,178 詞的 f 照抄，另加 Leipzig
+# 語料的詞頻（授權沒寫版本、沒記哪份語料），來源比標的 CC BY 4.0 雜（事實 T39，使用者 2026-11-15 決定改用這份）。
+# 取用：f ≥ 1、沒標 possibly_offensive / flags=offensive / not_a_word 的詞都收（含 z、撇號、連字號），同一個小寫拼法
+# 只留一種寫法；bigram 與 shortcut 不收（下一個詞留到 M5，ADR 0008）。規則在 crates/qim-databuild/src/english.rs。
+# 授權：dictionaries/ 沒有自己的授權檔，repo 的 NOTICE 是 Apache-2.0（Copyright (c) 2008, The Android Open Source
+# Project），整份照抄進資料包的 LICENSE。127336e 是 2026-11-15 的 main。
+# googlesource 沒有原樣下載的網址，?format=TEXT 給 base64：encoding = "base64" 下載後先解開，sha256 是解開後的（blob 本身）。
+[source.latinime]
+repository = "https://android.googlesource.com/platform/packages/inputmethods/LatinIME"
+version = "127336e9f29d69607eab55982324b210279ae8c5"
+license = "Apache-2.0"
+license_text = { upstream_file = "NOTICE" }
 
-[[source.scowl.files]]
-path = "hunspell-en_US-2026.02.25.zip"
-url = "https://github.com/en-wl/wordlist/releases/download/rel-2026.02.25/hunspell-en_US-2026.02.25.zip"
-sha256 = "ac8e73310e951d88c52c2cf2ba54ceaca34f8486a81630ac8a75dc5f931179f9"
+[[source.latinime.files]]
+path = "dictionaries/en_US_wordlist.combined.gz"
+url = "https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/127336e9f29d69607eab55982324b210279ae8c5/dictionaries/en_US_wordlist.combined.gz?format=TEXT"
+sha256 = "0f78dd455b532be169a23f233227b811fabced4b5bd7fc9c40cc05839793bcbd"
+encoding = "base64"
 
-[[source.scowl.files]]
-path = "Copyright"
-url = "https://raw.githubusercontent.com/en-wl/wordlist/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/Copyright"
-sha256 = "090575a131b4260926c7a6b30a90aca0f5db5fbb5c46778e0c5855227bf6ebc3"
+[[source.latinime.files]]
+path = "NOTICE"
+url = "https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/127336e9f29d69607eab55982324b210279ae8c5/NOTICE?format=TEXT"
+sha256 = "d04394c729fc9fda050d5733d8ee11663fb54fe54d94532de968cf85c1cc42fb"
+encoding = "base64"
 
 # emoji 資料包（plan〈英文、簡繁與 emoji〉，M3 票 16）：CLDR 的粵語與繁中標註給「字詞 → emoji」。release-49 是 2026-11-11 最新的
 # stable（lightweight tag，指向下面的 commit；release-49-beta*、-m* 是預發布）。標註檔頭是 SPDX Unicode-3.0；

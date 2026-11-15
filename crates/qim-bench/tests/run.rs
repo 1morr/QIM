@@ -90,8 +90,8 @@ const TABLE: &[(&str, &str)] = &[
 /// 英文資料包：基準照網頁掛上（預設開英文候選）。`aba` 是英文字，但沒有題目打它。
 fn english_bytes() -> Vec<u8> {
     EnglishPack {
-        id: "scowl-en-us".into(),
-        words: EnglishWords::new(["aba"]),
+        id: "aosp-en-us".into(),
+        words: EnglishWords::new([("aba", 1)]),
     }
     .to_bytes()
     .unwrap()

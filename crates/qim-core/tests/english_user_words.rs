@@ -58,7 +58,7 @@ fn engine_with(wildcard: Option<char>) -> Engine {
 fn with_dictionary(words: &[&str]) -> Engine {
     engine().with_english(EnglishPack {
         id: "english".into(),
-        words: EnglishWords::new(words.iter().copied()),
+        words: EnglishWords::new(words.iter().map(|w| (*w, 1))),
     })
 }
 
@@ -269,6 +269,20 @@ fn dictionary_words_do_not_crowd_the_email_out_of_completion() {
     assert_eq!(ime.candidates("iva")[1], EMAIL);
     assert!(!ime.offers("tha", "that"), "詞典詞不給前綴補完");
     assert_eq!(ime.candidates("that")[1], "that", "詞典詞照規則 4");
+}
+
+/// 英文詞典也收 `z`、撇號、連字號的詞（英文模式要用，M4 票 22），但中文組字的規則 4 只比方案字母，給不出它們；
+/// 「詞典有的詞不給前綴補完」只算規則 4 給得出的，所以學過的 `doesn't`、`quiz` 照樣補完。
+#[test]
+fn dictionary_words_the_scheme_cannot_type_still_get_completion() {
+    let mut ime = Ime::new();
+    ime.engine = with_dictionary(&["doesn't", "quiz", "e-mail"]);
+    for word in ["doesn't", "quiz", "e-mail"] {
+        ime.type_in_english_times(word, 3);
+    }
+    assert!(ime.offers("does", "doesn't"));
+    assert!(ime.offers("qui", "quiz"));
+    assert!(ime.offers("ema", "e-mail"));
 }
 
 /// 1–2 碼是一個字的碼，第 2 位最常用，不給（同英文候選，速成 3 碼起）；之後比的是字串的英文字母，

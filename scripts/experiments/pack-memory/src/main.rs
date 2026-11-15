@@ -206,8 +206,8 @@ fn main() {
     );
     let english = load(
         &mut rows,
-        "英文 `scowl-en-us`",
-        &pack(&build, "scowl-en-us"),
+        "英文 `aosp-en-us`",
+        &pack(&build, "aosp-en-us"),
         |b| EnglishPack::from_bytes(b).unwrap(),
     );
 

@@ -16,3 +16,8 @@ sha2 = "0.11.1"
 strsim = "0.11.1"
 # 學習資料交給 Node 的計時腳本時寫暫存檔。
 tempfile = "3.27.0"
+
+# 設計實驗（scripts/experiments/），不進基準；跟著 clippy、test 編譯，API 改了會先發現。
+[[example]]
+name = "english-rule4"
+path = "../../scripts/experiments/english-rule4/main.rs"

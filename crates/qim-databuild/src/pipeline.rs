@@ -42,10 +42,9 @@ const ESSAY: &str = "essay.txt";
 pub(crate) const OPENCC: &str = "opencc";
 /// 簡繁資料包的 id：OpenCC `hk2s`，各方案共用，不由方案指名。
 const SIMPLIFIER_ID: &str = "opencc-hk2s";
-pub(crate) const SCOWL: &str = "scowl";
-const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
-/// 英文資料包的 id：美式英文，各方案共用，不由方案指名。
-const ENGLISH_ID: &str = "scowl-en-us";
+pub(crate) const LATINIME: &str = "latinime";
+/// 英文資料包的 id：AOSP 的美式英文詞表，各方案共用，不由方案指名。
+const ENGLISH_ID: &str = "aosp-en-us";
 /// 可選的粵典詞庫資料包的 id：方案指名的詞庫加粵典的詞頭（plan〈詞庫〉，M3 票 24）。
 pub const WORDS_HK_LEXICON_ID: &str = "quick-lexicon-words-hk";
 /// 粵典的來源對不上而略過粵典詞庫時，怎麼修。
@@ -89,12 +88,13 @@ the first value of each entry is kept; the tables are stored in QIM's own format
 
 /// 英文資料包 NOTICE 最後一段：怎麼用來源。
 const ENGLISH_ABOUT: &str = "\
-scowl-en-us lists the English words that QIM offers as a candidate when the input
-code is exactly a complete English word. QIM expanded every stem in en_US.dic
-with the prefix and suffix rules in en_US.aff, dropped the stems flagged
-NOSUGGEST (taboo words), kept only the words whose lower-case form uses the
-letters a to y, and kept one spelling for each lower-case form: the lower-case
-spelling when there is one, otherwise the first in code point order.
+aosp-en-us lists English words with their frequency, for QIM to offer a word as a
+candidate when the input code is exactly that word, and to suggest words in
+English mode. QIM took the word lines of en_US_wordlist.combined.gz with their
+frequency (f); it dropped the words marked possibly_offensive, flags=offensive or
+not_a_word and the words with f=0, which LatinIME does not suggest, and the
+bigram and shortcut lines; for each lower-case form it kept one spelling: the
+lower-case spelling when there is one, otherwise the first in code point order.
 ";
 
 /// emoji 資料包 NOTICE 最後一段：怎麼用來源；`{max}` 換成 [`emoji::MAX_KEYWORD_EMOJI`]。
@@ -618,9 +618,8 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             id: SIMPLIFIER_ID.into(),
             simplifier: opencc::hk2s(|file| load_text(OPENCC, file))?,
         };
-        // 只留速成打得出的詞（a–y）。
-        let (words, english_counts) =
-            english::words(&load(SCOWL, SCOWL_ZIP)?, &quick.pack.scheme.alphabet)?;
+        // 英文模式也用，`z`、撇號都收；中文組字的比對才濾掉打不出的（plan〈英文、簡繁與 emoji〉）。
+        let (words, english_counts) = english::words(&load(LATINIME, english::WORDLIST)?)?;
         let english = EnglishPack {
             id: ENGLISH_ID.into(),
             words,

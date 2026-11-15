@@ -98,7 +98,16 @@ fn engine() -> Engine {
 fn english() -> EnglishPack {
     EnglishPack {
         id: "english".into(),
-        words: EnglishWords::new(["the", "an", "May", "may", "English", "NASA", "wee", "yes"]),
+        words: EnglishWords::new([
+            ("the", 222),
+            ("an", 186),
+            ("May", 160),
+            ("may", 170),
+            ("English", 140),
+            ("NASA", 110),
+            ("wee", 90),
+            ("yes", 170),
+        ]),
     }
 }
 
@@ -323,6 +332,16 @@ fn the_word_list_keys_by_lower_case_and_prefers_the_lower_case_spelling() {
     assert_eq!(words.len(), 7);
 }
 
+/// 英文模式的建議列照使用頻率排（票 24），資料包帶 AOSP 詞表的 `f`；同一個小寫拼法取留下的那種寫法的。
+#[test]
+fn the_word_list_keeps_the_frequency_of_the_spelling_it_keeps() {
+    let words = english().words;
+    assert_eq!(words.frequency("the"), Some(222));
+    assert_eq!(words.frequency("may"), Some(170), "May 的 160 不算");
+    assert_eq!(words.frequency("nasa"), Some(110));
+    assert_eq!(words.frequency("engl"), None);
+}
+
 #[test]
 fn a_proper_noun_shows_with_its_capitals() {
     let mut ime = Ime::new();
@@ -446,7 +465,7 @@ fn the_expanded_list_is_empty_until_relisted_with_the_new_option() {
 /// 有拼法相同的字（之後換成有 `z` 的英文詞典也一樣）。
 #[test]
 fn no_english_candidate_when_the_input_has_the_wildcard() {
-    let words = EnglishWords::new(["tze"]);
+    let words = EnglishWords::new([("tze", 1)]);
     let engine = base_engine_with(Some('z')).with_english(EnglishPack {
         id: "english".into(),
         words,

@@ -6,7 +6,7 @@ use crate::Error;
 use crate::corpora::CORPORA;
 use crate::emoji::{CLDR, EMOJI_TEST};
 use crate::lexicon;
-use crate::pipeline::{LIBCANGJIE, OPENCC, RIME_ESSAY, SCOWL, UNIHAN};
+use crate::pipeline::{LATINIME, LIBCANGJIE, OPENCC, RIME_ESSAY, UNIHAN};
 use crate::sources::{LicenseText, SOURCES, Source, Sources, sha256_hex};
 use crate::words_hk::WORDS_HK;
 
@@ -54,12 +54,12 @@ pub(crate) const SIMPLIFIER: [PackSource; 1] = [PackSource::Upstream(UpstreamSou
            HKVariants.txt and HKVariantsRevPhrases.txt: the dictionaries of the hk2s configuration",
 })];
 
-/// 英文資料包：ESDB（SCOWL）的 Hunspell en_US 字典（plan〈英文、簡繁與 emoji〉）。
+/// 英文資料包：AOSP LatinIME 的美式英文詞表（plan〈英文、簡繁與 emoji〉）。
 pub(crate) const ENGLISH: [PackSource; 1] = [PackSource::Upstream(UpstreamSource {
-    name: "ESDB (SCOWL)",
-    source_id: SCOWL,
-    used: "en_US.dic and en_US.aff in the hunspell-en_US zip: the words of the size 60 \
-           American English speller dictionary",
+    name: "AOSP LatinIME",
+    source_id: LATINIME,
+    used: "dictionaries/en_US_wordlist.combined.gz: the words and their frequencies of \
+           the American English dictionary",
 })];
 
 /// emoji 資料包：CLDR 的標註給字詞與 emoji，emoji-test.txt 給 emoji 的完整寫法（plan〈英文、簡繁與 emoji〉）。

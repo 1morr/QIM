@@ -58,7 +58,7 @@ targets:
         buildPhase: resources
       - path: ../../../build/packs/opencc-hk2s/opencc-hk2s.pack
         buildPhase: resources
-      - path: ../../../build/packs/scowl-en-us/scowl-en-us.pack
+      - path: ../../../build/packs/aosp-en-us/aosp-en-us.pack
         buildPhase: resources
       # 票 11b：詞級 trigram 預算版與放寬版，量峰值增量。
       - path: ../../../build/packs/zh-hant-word-trigram/zh-hant-word-trigram.pack

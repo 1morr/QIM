@@ -229,10 +229,12 @@ impl Engine {
             .flatten()
     }
 
-    /// `text`（不分大小寫）是英文詞典裡的詞。詞典有的英文使用者詞不進中文組字的前綴補完（排位規則 5，
-    /// plan〈學習與排位〉）。
+    /// `text`（不分大小寫）是英文詞典裡、中文組字給得出的詞：整個詞都是方案的字母，排位規則 4 才比對得到。
+    /// 這樣的英文使用者詞由規則 4 出，不進中文組字的前綴補完（排位規則 5，plan〈學習與排位〉）；詞典裡含 `z`、
+    /// 撇號、連字號的詞（留給英文模式，plan〈英文、簡繁與 emoji〉）規則 4 給不出，學過的照樣補完。
     pub(crate) fn in_english_dictionary(&self, text: &str) -> bool {
-        self.english.lookup(&text.to_lowercase()).is_some()
+        let key = text.to_lowercase();
+        self.scheme.spells(&key) && self.english.lookup(&key).is_some()
     }
 
     /// 簡體模式下輸出的文字；沒掛上簡繁資料包時照原樣。

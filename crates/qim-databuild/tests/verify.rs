@@ -202,15 +202,15 @@ fn simplifier() -> SimplifierPack {
     }
 }
 
-/// 有 `the` 的英文資料包。
+/// 有 `the` 與 `zero` 的英文資料包。
 fn english() -> EnglishPack {
-    english_with(&["the", "an"])
+    english_with(&["the", "an", "zero"])
 }
 
 fn english_with(words: &[&str]) -> EnglishPack {
     EnglishPack {
-        id: "scowl-en-us".into(),
-        words: EnglishWords::new(words.iter().copied()),
+        id: "aosp-en-us".into(),
+        words: EnglishWords::new(words.iter().map(|w| (*w, 1))),
     }
 }
 
@@ -357,6 +357,7 @@ fn report_lists_every_check_of_plan_4_5_except_unihan() {
             CheckId::RadicalHintByVersion,
             CheckId::SimplifiedMenKou,
             CheckId::EnglishThe,
+            CheckId::EnglishZ,
             CheckId::NotSimplified,
             CheckId::MenAfterTraditional,
             CheckId::EmojiAfterLaugh,
@@ -539,11 +540,27 @@ fn an_english_pack_without_the_fails_the_spot_check() {
     let model = language_model().to_bytes().unwrap();
     let hint = radical_hint().to_bytes().unwrap();
     let simplifier = simplifier().to_bytes().unwrap();
-    let english = english_with(&["then"]).to_bytes().unwrap();
+    let english = english_with(&["then", "zero"]).to_bytes().unwrap();
     let bytes = list([&quick, &lexicon, &model, &hint, &simplifier, &english]);
     assert_eq!(
         failed(&verify::run(&rows(), &bytes, &bytes)),
         [CheckId::EnglishThe]
+    );
+}
+
+/// 英文資料包把 `z` 開頭的詞濾掉了（換資料包前的英文資料包那樣）：英文模式打不出 `zero`。
+#[test]
+fn an_english_pack_without_z_words_fails_the_spot_check() {
+    let quick = pack().to_bytes().unwrap();
+    let lexicon = lexicon().to_bytes().unwrap();
+    let model = language_model().to_bytes().unwrap();
+    let hint = radical_hint().to_bytes().unwrap();
+    let simplifier = simplifier().to_bytes().unwrap();
+    let english = english_with(&["the", "an"]).to_bytes().unwrap();
+    let bytes = list([&quick, &lexicon, &model, &hint, &simplifier, &english]);
+    assert_eq!(
+        failed(&verify::run(&rows(), &bytes, &bytes)),
+        [CheckId::EnglishZ]
     );
 }
 

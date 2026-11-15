@@ -7,9 +7,9 @@ use std::io::{self, BufRead};
 use std::path::PathBuf;
 
 use qim_core::{
-    CangjieVersion, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, Key, LanguageModel,
-    LanguageModelPack, Lexicon, LexiconPack, Manifest, ModelPack, Options, RadicalHintPack,
-    RadicalHints, SchemePack, Session, SimplifierPack, UserModel, WordTrigramPack,
+    CangjieVersion, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, EnglishWords, Key,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, ModelPack, Options,
+    RadicalHintPack, RadicalHints, SchemePack, Session, SimplifierPack, UserModel, WordTrigramPack,
 };
 
 use crate::built::{self, BuiltPack};
@@ -48,6 +48,8 @@ pub enum CheckId {
     SimplifiedMenKou,
     /// 中文狀態打 `the`，第 2 個候選是 `the`：英文資料包接得上核心（排位規則 4）。
     EnglishThe,
+    /// 英文資料包有 `zero` 與它的頻率：`z` 開頭的詞留給英文模式，只在中文組字比對時濾掉（M4 票 22）。
+    EnglishZ,
     /// 繁簡同形與本身是正規繁體字的字（[`NOT_SIMPLIFIED`]）沒有標成簡體字（brief〈字集與字形〉，M3 票 19）。
     NotSimplified,
     /// 繁體模式 `ls` 的「门」排在同碼的所有繁體字之後（M3 票 19）。
@@ -99,6 +101,7 @@ impl fmt::Display for CheckId {
             Self::RadicalHintByVersion => "抽查：字根提示的三代與五代碼",
             Self::SimplifiedMenKou => "抽查：簡體模式 anr 有「门口」",
             Self::EnglishThe => "抽查：the 的第 2 個候選是 the",
+            Self::EnglishZ => "抽查：英文資料包有 zero 與頻率",
             Self::NotSimplified => "抽查：正規繁體字不是簡體字",
             Self::MenAfterTraditional => "抽查：ls 的「门」在繁體字之後",
             Self::EmojiAfterLaugh => "抽查：hk 的「笑」後面接著它的 emoji",
@@ -374,9 +377,9 @@ pub fn emoji_summary(c: &emoji::Counts) -> String {
 /// 英文詞表的統計一行；`cargo xtask data` 不驗證時也印。
 pub fn english_summary(c: &english::Counts) -> String {
     format!(
-        "英文：詞幹 {} 個，禁忌詞 {} 個不收；展開 {} 個詞形，打不出（z、撇號、重音…）{} 個不收；\
+        "英文：詞表 {} 詞，可能冒犯的 {} 個、只當 shortcut 的錯拼 {} 個、f=0 的 {} 個不收；\
          依小寫歸併後收 {} 詞",
-        c.stems, c.taboo, c.forms, c.untypable, c.words
+        c.entries, c.offensive, c.not_a_word, c.zero_frequency, c.words
     )
 }
 
@@ -398,13 +401,7 @@ pub fn run(rows: &[Row], first: &[BuiltPack], second: &[BuiltPack]) -> Report {
         corpora: Vec::new(),
     };
     match decode(first) {
-        Ok(Decoded {
-            pack,
-            lexicon,
-            engine,
-            hints,
-            emoji,
-        }) => pack_checks(&mut report, rows, &pack, &lexicon, &engine, &hints, &emoji),
+        Ok(decoded) => pack_checks(&mut report, rows, &decoded),
         Err(detail) => report.checks.push(Check {
             id: CheckId::Decodes,
             passed: false,
@@ -477,6 +474,8 @@ struct Decoded {
     hints: RadicalHints,
     /// 掛在 `engine` 上的那份，抽查 emoji 候選時比對。
     emoji: EmojiTable,
+    /// 掛在 `engine` 上的那份，抽查 `z` 開頭的詞。
+    english: EnglishWords,
 }
 
 fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
@@ -508,7 +507,7 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
         .map_err(|e| e.to_string())?
         .with_word_trigram(word_trigram)
         .with_simplifier(simplifier)
-        .with_english(english)
+        .with_english(english.clone())
         .with_emoji(emoji.clone());
     Ok(Decoded {
         pack,
@@ -516,19 +515,20 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
         engine,
         hints,
         emoji: emoji.emoji,
+        english: english.words,
     })
 }
 
 /// 解得開之後的各項檢查，依 plan〈驗證〉 的順序加進 `report`。
-fn pack_checks(
-    report: &mut Report,
-    rows: &[Row],
-    pack: &SchemePack,
-    lexicon: &Lexicon,
-    engine: &Engine,
-    hints: &RadicalHints,
-    emoji: &EmojiTable,
-) {
+fn pack_checks(report: &mut Report, rows: &[Row], decoded: &Decoded) {
+    let Decoded {
+        pack,
+        lexicon,
+        engine,
+        hints,
+        emoji,
+        english,
+    } = decoded;
     let mut continuous = BTreeSet::new();
     let mut extension = BTreeSet::new();
     for (_, entries) in pack.code_table.iter() {
@@ -609,6 +609,7 @@ fn pack_checks(
         hint_by_version(hints),
         simplified_men_kou(engine),
         english_the(engine),
+        english_z(english),
         not_simplified(&pack.code_table),
         men_after_traditional(&pack.code_table, engine),
         emoji_after_laugh(engine, emoji),
@@ -704,6 +705,16 @@ fn english_the(engine: &Engine) -> Check {
         id: CheckId::EnglishThe,
         passed: texts.get(1).map(String::as_str) == Some("the"),
         detail: format!("第一頁：{}", texts.join(" ")),
+    }
+}
+
+/// 英文資料包有 `zero`、頻率大於 0。
+fn english_z(words: &EnglishWords) -> Check {
+    let frequency = words.frequency("zero");
+    Check {
+        id: CheckId::EnglishZ,
+        passed: frequency.is_some_and(|f| f > 0),
+        detail: format!("zero 的頻率：{frequency:?}"),
     }
 }
 
