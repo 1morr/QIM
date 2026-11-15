@@ -91,3 +91,4 @@ M4 在 2026-11-13 之前的決定，從 `docs/progress.md` 原樣搬來，當時
 - 2026-11-15 M4 票 19（Agent 定）：研究紀錄照〈文件〉凍結紀錄的檔名寫成 `gboard-english-2026-11-15.md`，不用票上的 `gboard-english.md`。票 19
 - 2026-11-15 M4 票 19（Agent 定）：測試頁與點鍵腳本留在 `scripts/experiments/gboard-english-blackbox/`，換 Gboard 版本時重量。票 19
 - 2026-11-15 M4 票 19（Agent 定）：結論摘成兩條產品事實 M47、M48，Chrome 的 `inputType` 另寫平台事實 P24。票 19
+- 2026-11-15 M4 譯詞（使用者定）：暫不需要譯詞，移出 M4 放 roadmap〈不排里程碑〉；票 20 的來源研究照常合併、不花錢，票 29 wontfix，spec 刪掉譯詞的範圍與驗收。票 20、29

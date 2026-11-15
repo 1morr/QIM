@@ -1,6 +1,6 @@
 # 29: 譯詞資料包
 
-Status: ready-for-agent
+Status: wontfix
 Blocked by: 20, 18b
 讀: brief §1.5、§5；plan §2.1、§4.6（manifest）；票 20 的結論；spec〈共同規則〉
 
@@ -18,3 +18,7 @@ Blocked by: 20, 18b
 - [ ] `cargo xtask data --verify` 決定性；新 `PackKind` 有測試；`LICENSE`、`NOTICE` 只寫用到的來源。
 - [ ] Playwright：候選旁讀到譯詞；修飾鍵加數字上屏譯詞；簡體模式照樣有；刪掉資料包後不顯示；截圖。
 - [ ] plan §2.1、§4.6 更新；`cargo xtask check` 綠燈。
+
+## Comments
+
+- 2026-11-15 wontfix：使用者暫不需要譯詞，移出 M4，記在 roadmap〈不排里程碑〉；要做時照本票與 `docs/research/translation-sources.md` 重開。

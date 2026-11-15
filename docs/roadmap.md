@@ -10,7 +10,7 @@
 | M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | brief §1.5、§4、§5、§9；plan §2–§5、〈M1 網頁 prototype〉；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 已驗收，[已封存](archive/M1.md) |
 | M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | brief §9、§11、`docs/research/facts-platforms.md`；plan §1.4、§3、〈M2 平台可行性實驗〉；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 已驗收，[已封存](archive/M2.md) |
 | M3 智慧候選 | 模型階梯實驗（雲端 LLM 量過不做）；上下文、詞級 trigram、停鍵層神經重排、個人 bigram、聯想、記住常打字串、詞庫擴充、資料包 manifest 與線上更新 | brief §1.5、§7、§8、`docs/research/facts-platforms.md`；plan §2.3、§2.7、〈M3 智慧候選〉、〈M3 的模型階梯實驗〉；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 已驗收，[已封存](archive/M3.md) |
-| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、譯詞、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、〈M4 輸入增強〉、〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 進行中，已拆 31 張票（第一期 01–18、第二期 19–30、收尾 31） |
+| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、〈M4 輸入增強〉、〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 進行中，已拆 31 張票（第一期 01–18、第二期 19–30、收尾 31） |
 | M5 觸控鍵盤與設定 | 網頁觸控鍵盤做到平台樣板：Gboard 觸控功能盤點、候選列與工具列接在鍵盤頂端、鍵盤內設定頁、emoji 與文字編輯等面板、滑動輸入與空白鍵移游標（〈M5 觸控鍵盤與設定〉） | 開工時定 | 未開工 |
 | M6 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 開工時定 | 未開工 |
 | M7 macOS | 第一個平台殼，一次接上全部已完成的功能 | 開工時定 | 未開工 |
@@ -110,7 +110,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - 面板：emoji 面板（分類、最近用過、搜尋）、文字編輯面板（方向鍵、選取、全選、複製、貼上）、剪貼簿（瀏覽器讀不到系統剪貼簿歷史，開工時查限制，做得到的範圍先做）。
 - 調整鍵盤高度。
 - 從 M4 移來（使用者 2026-11-12 同意，觸控手勢放在重做鍵盤的這個里程碑）：空白鍵滑動移游標、英文滑動輸入（開工讀 FlorisBoard v0.5.2 與 AnySoftKeyboard，`docs/research/facts-products.md`）、評估中文滑動輸入（結論寫回 brief）。滑動的解碼用 `qim-layout` 的按鍵幾何，不寫死 QWERTY；和佈局裡按鍵自己的滑動動作（flick）怎麼分，開工時定，研究建議照青簡的方向扇形（`docs/research/spatial-correction-swipe.md` §5）；形碼的滑行沒有先例，先用模擬軌跡量首選率再決定做不做畫面。
-- 從 M4 來的觸控入口（使用者 2026-11-12 同意）：撤銷學習的手勢、譯詞的上屏方式，跟重做的候選列一起定；長按候選目前是字根提示（brief §4.4）。撤銷學習的手勢要能指定任一個候選（`Session::forget` 收任何位置）：桌面只清得到首選，釘在第 2 位的自動造詞要靠它（M4 票 16，§2.4）。簡體模式兩個原文轉成同一個簡體字時候選去重只留第一個，撤銷學習只清得到它（M4 票 16），重做候選列時一起定。觸控鍵盤的 `z` 鍵照 Gboard 標「重」、點了是萬用鍵，盤點 Gboard 時實測它在速成的行為，定要不要改標「＊」（M4 票 11）。
+- 從 M4 來的觸控入口（使用者 2026-11-12 同意）：撤銷學習的手勢跟重做的候選列一起定；長按候選目前是字根提示（brief §4.4）。撤銷學習的手勢要能指定任一個候選（`Session::forget` 收任何位置）：桌面只清得到首選，釘在第 2 位的自動造詞要靠它（M4 票 16，§2.4）。簡體模式兩個原文轉成同一個簡體字時候選去重只留第一個，撤銷學習只清得到它（M4 票 16），重做候選列時一起定。觸控鍵盤的 `z` 鍵照 Gboard 標「重」、點了是萬用鍵，盤點 Gboard 時實測它在速成的行為，定要不要改標「＊」（M4 票 11）。
 - 盤點時使用者勾的其他項目。平台才有的（按鍵音、震動、語音、懸浮鍵盤）只在設定頁留位置與說明。
 - 完成標準：
   - Playwright 用手機 viewport 讀回候選列在鍵盤頂端、工具列與各面板開得了、設定頁改了會生效，截圖存證，平台里程碑拿它當對照。
@@ -120,4 +120,5 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 驗收與回顧時留下、沒有排進任何里程碑的項目，每條一行、附出處。有 repro 或使用者要求再開票。
 
+- 譯詞（打中文時候選旁顯示英文、可上屏，例「發票」旁的 invoice）：使用者暫不需要，2026-11-15 移出 M4。來源、授權與 LLM 生成費用的研究在 `docs/research/translation-sources.md`；要做時重開資料包的票（原 M4 票 29）。出處：M4 票 20。
 - plan 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字）：已拆成 `.scratch/arch-diet/` 的 6 張票，隨時可以用 `/1morr:ticket-coordinator .scratch/arch-diet/issues` 跑。出處：2026-11-13 流程對齊。
