@@ -194,7 +194,7 @@ QIM（暫名）。
 | 粵語詞頭（可選詞庫） | 粵典「細數據」頁的 `wordslist`（詞頭）與 `existingwordcount`（粵文庫次數）（plan §4.2） | 照《非商業開放資料授權協議 1.0》處理（頁面另標 public domain，關係沒說明，取較嚴的；`docs/research/facts-tables.md`） | 只進可選的詞庫資料包 `quick-lexicon-words-hk`（預設詞庫加粵典的詞），預設詞庫不含；資料包附英文版權告示、免責聲明、特別鳴謝與官網連結；不得再授權、不得商業使用，商用改用預設詞庫 |
 | 口語語料 | HKCanCor（fcbond/hkcancor）、Common Voice 粵語句子（GitHub 的 Sentence Collector 句子檔，不用 Mozilla Data Collective 的資料集） | CC BY 4.0、CC0 1.0（`docs/research/facts-tables.md`） | 維基偏書面語，要補口語，訓練 bigram 與基準都用；Tatoeba 沒有版本化的下載又要逐句署名，M1 不用；LIHKG、OpenSubtitles 權利來源不清，不用 |
 | 字級 bigram | 中文維基、粵語維基訓練（plan §4.3） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
-| 英文詞表 | AOSP LatinIME 的 `en_US_wordlist.combined.gz`（逐詞頻率，`docs/research/facts-tables.md`） | Apache-2.0（repo 的 NOTICE；詞表沒有自己的授權檔） | 中文狀態的英文候選與英文模式共用；不用 aosp-dictionaries 的 experimental 詞典（來源混雜，使用者 2026-11-15 決定） |
+| 英文詞表 | AOSP LatinIME 的 `en_US_wordlist.combined.gz`（逐詞頻率，`docs/research/facts-tables.md`） | Apache-2.0（repo 的 NOTICE；詞表沒有自己的授權檔） | 中文狀態的英文候選與英文模式共用；不用 aosp-dictionaries 的 experimental 詞典（來源混雜，協調者 2026-11-15 定） |
 | 簡繁轉換 | OpenCC | Apache-2.0 | — |
 | emoji 標註 | Unicode CLDR 的粵語、繁中標註（`common/annotations/yue.xml`、`zh_Hant.xml`）與 Unicode 的 `emoji-test.txt` | Unicode-3.0（`docs/research/facts-tables.md`） | emoji 候選用（plan §4.4）；不用 Helium314 彙整的 emoji 字典（混有 AGPL 資料，`docs/research/data-sources.md` §10） |
 
