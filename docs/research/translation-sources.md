@@ -1,8 +1,8 @@
 # 譯詞的來源與授權
 
-M4 票 20，2026-11-15 查。回答：繁體與粵語對英文的詞表，哪個能做成可選資料包（plan §4.6 的 manifest，新一種 `PackKind`）隨網頁與日後的商店 App 散布；查不到合用的，自己用 LLM 離線生成（青簡做法，`qingjian.md` §10）要花多少、生成結果是什麼授權、品質怎麼抽查。
+M4 票 20，2026-11-15 查；譯詞已移出 M4（§4）。回答：繁體與粵語對英文的詞表，哪個能做成可選資料包（plan §4.6 的 manifest，新一種 `PackKind`）隨網頁與日後的商店 App 散布；查不到合用的，自己用 LLM 離線生成（青簡做法，`qingjian.md` §10）要花多少、生成結果是什麼授權、品質怎麼抽查。
 
-譯詞要的是「可直接上屏的英文詞」（「發票」→ invoice），不是釋義句。鍵是 QIM 詞庫的詞（香港常見寫法），簡體模式查原文（spec〈細節〉）。
+譯詞要的是「可直接上屏的英文詞」（「發票」→ invoice），不是釋義句。鍵是 QIM 詞庫的詞（香港常見寫法），簡體模式查原文（當時 M4 spec〈細節〉的設計，譯詞移出 M4 後已從 spec 刪掉）。
 
 「能不能用」只照條款字面回答能否以資料包散布，不下法律結論；需要判斷的寫「需使用者判斷」。下載檔放在 session 的 scratchpad，不進 repo；數字除註明外是本機統計，腳本在 `scripts/experiments/gloss-coverage/`。
 
@@ -17,7 +17,7 @@ M4 票 20，2026-11-15 查。回答：繁體與粵語對英文的詞表，哪個
 
 ### 1.2 CC-Canto（Pleco，cantonese.org）
 
-- **授權**：CC BY-SA 3.0（事實 T14；`cccanto-170202.zip` 檔頭「Distributed under a Creative Commons Attribution-Share Alike 3.0 license」，sha256 `0cc9e600a19c02405064d6d227d96563c09da1a0af1c7717508c0f231028af27`）。格式是 CC-CEDICT 式加粵拼，英文同樣是釋義。
+- **授權**：CC BY-SA 3.0（事實 T14；[下載頁](https://cantonese.org/download.html)、[BY-SA 3.0 legalcode](https://creativecommons.org/licenses/by-sa/3.0/legalcode)；`cccanto-170202.zip` 檔頭「Distributed under a Creative Commons Attribution-Share Alike 3.0 license」，sha256 `0cc9e600a19c02405064d6d227d96563c09da1a0af1c7717508c0f231028af27`）。格式是 CC-CEDICT 式加粵拼，英文同樣是釋義。
 - **和 CC-CEDICT 合成一包**：BY-SA 3.0 legalcode §4(b) 允許改作物以「(ii) a later version of this License with the same License Elements as this License」散布；[CC 的相容授權頁](https://creativecommons.org/share-your-work/licensing-considerations/compatible-licenses/)：「Your contributions to adaptations of BY-SA 3.0 materials may only be licensed under: BY-SA 3.0, or a later version of the BY-SA license.」所以兩份合併、去重、抽詞後整包用 BY-SA 4.0 可以，NOTICE 寫明 CC-Canto 那部分原為 3.0、依 §4(b)(ii) 改以 4.0 散布；反過來 4.0 不能退回 3.0。
 - **能不能用**：同 §1.1，share-alike。
 
@@ -31,19 +31,19 @@ M4 票 20，2026-11-15 查。回答：繁體與粵語對英文的詞表，哪個
 
 | 來源 | 授權（原文連結） | 能不能用 | 為什麼不當主要來源 |
 | --- | --- | --- | --- |
-| Unihan `kDefinition`（18.0.0，23,310 字） | Unicode-3.0（事實 T5；[UAX #38](https://www.unicode.org/reports/tr38/)：「An English definition for this ideograph」，Provisional） | 可，附聲明，無 share-alike；可釘 `Public/18.0.0/ucd/Unihan.zip` | 只有單字、是釋義（「票」= slip of paper or bamboo; ticket） |
+| Unihan `kDefinition`（18.0.0，23,310 字） | [Unicode-3.0](https://www.unicode.org/license.txt)（事實 T5；欄位定義見 [UAX #38](https://www.unicode.org/reports/tr38/)：「An English definition for this ideograph」，Provisional） | 可，附聲明，無 share-alike；可釘 `Public/18.0.0/ucd/Unihan.zip` | 只有單字、是釋義（「票」= slip of paper or bamboo; ticket） |
 | Wikidata 標籤 | CC0（[Wikidata:Copyright](https://www.wikidata.org/wiki/Wikidata:Copyright)：「All structured data from the main, Property, Lexeme, and EntitySchema namespaces is available under the Creative Commons CC0 License」） | 可；dump 可釘日期 `entities/<日期>/wikidata-<日期>-all.json.bz2`（約 104 GB） | 以人名、地名、機構等實體為主，日常詞少；`zh-hk`／`yue` 對 `en` 的配對數沒量 |
 | 樂詞網雙語詞彙（國家教育研究院） | [政府網站資料開放宣告](https://terms.naer.edu.tw/mysite/about/2/)：「重製、改作、編輯、公開傳輸…開發各種產品或服務…然使用時，應註明出處」，另有「不得惡意變更」與第三方著作例外 | 字面可，無 share-alike；檔無版本號（`.ods`） | 台灣用語、專業名詞為主（雙語詞彙約 2 萬則，二手數字） |
-| Cantonese Wordnet（[lmorgadodacosta/CantoneseWN](https://github.com/lmorgadodacosta/CantoneseWN)） | CC BY 4.0（README） | 可，無 share-alike；無 tag，可釘 commit | 繁體＋粵拼、約 1.6 萬 lemma、5,188 個 synset；英文要經 Princeton WordNet／OEWN（CC BY 4.0 ＋ WordNet License）的 synset 取，拿到的是 synset 的第一個 lemma，不一定是日常的譯詞 |
-| Chinese Open Wordnet 1.1（[bond-lab/cow](https://github.com/bond-lab/cow)） | WordNet 式寬鬆授權（`docs/LICENSE`） | 字面可，但 2013 論文寫早期混入研究授權的 SEW 與 BY-SA 的 Wiktionary，來源待確認 | 簡體 |
-| Wiktionary | CC BY-SA 4.0／GFDL（`cantonese-lexicon.md` §4） | share-alike，同 §1.1 | 要自己從 wiktextract 抽，釋義同樣是句子 |
-| ECDICT | MIT，但 README 寫詞條來自來源不明的 EDictAZ.txt、爬蟲、網友貢獻 | 不建議 | 英→簡中，方向與字體都不對 |
-| MUSE zh-en | CC BY-NC 4.0（repo `LICENSE`） | **不可**（非商業） | 簡體、內部翻譯工具產生 |
-| 香港 DoJ 法律詞彙 | 版權政策原文沒取到；data.gov.hk 條款要署名、有彌償條款（事實 T24） | 未查清 | 法律領域 |
+| Cantonese Wordnet（[lmorgadodacosta/CantoneseWN](https://github.com/lmorgadodacosta/CantoneseWN)） | [CC BY 4.0（README）](https://github.com/lmorgadodacosta/CantoneseWN#readme) | 可，無 share-alike；無 tag，可釘 commit | 繁體＋粵拼、約 1.6 萬 lemma、5,188 個 synset；英文要經 Princeton WordNet／OEWN（[CC BY 4.0 ＋ WordNet License](https://github.com/globalwordnet/english-wordnet)）的 synset 取，拿到的是 synset 的第一個 lemma，不一定是日常的譯詞 |
+| Chinese Open Wordnet 1.1（[bond-lab/cow](https://github.com/bond-lab/cow)） | [WordNet 式寬鬆授權（`docs/LICENSE`）](https://github.com/bond-lab/cow/blob/master/docs/LICENSE) | 字面可，但 2013 論文寫早期混入研究授權的 SEW 與 BY-SA 的 Wiktionary，來源待確認 | 簡體 |
+| Wiktionary | [CC BY-SA 4.0／GFDL](https://en.wiktionary.org/wiki/Wiktionary:Copyrights)（`cantonese-lexicon.md` §4） | share-alike，同 §1.1 | 要自己從 wiktextract 抽，釋義同樣是句子 |
+| ECDICT | [MIT](https://github.com/skywind3000/ECDICT/blob/master/LICENSE)，但 README 寫詞條來自來源不明的 EDictAZ.txt、爬蟲、網友貢獻 | 不建議 | 英→簡中，方向與字體都不對 |
+| MUSE zh-en | [CC BY-NC 4.0（repo `LICENSE`）](https://github.com/facebookresearch/MUSE/blob/main/LICENSE) | **不可**（非商業） | 簡體、內部翻譯工具產生 |
+| 香港 DoJ 法律詞彙 | [詞彙站](https://www.glossary.doj.gov.hk)的版權政策原文沒取到；[data.gov.hk 條款](https://data.gov.hk/en/terms-and-conditions)要署名、有彌償條款（事實 T24） | 未查清 | 法律領域 |
 
 ## 2. CC-CEDICT 能蓋多少
 
-`scripts/experiments/gloss-coverage/coverage.py`：拿 rime-essay `054920d` 詞頻 ≥ 100 的兩字以上詞（詞庫門檻，251,622 詞，依詞頻排）去查，兩邊都把 HKVariants 與 QIM 的並存寫法折成同一寫法（近似詞庫的寫法處理）。「可直接上屏」：跳過 `CL:`、`variant of`、`see`、`surname` 這類義項，取第一個義項分號、逗號前那段，去括號與開頭的「to 」，剩 1–3 個英文詞。
+`scripts/experiments/gloss-coverage/coverage.py`：拿 rime-essay `054920d` 詞頻 ≥ 100 的兩字以上詞（詞庫門檻，251,622 詞，依詞頻排）去查，兩邊都把 HKVariants 與 QIM 的並存寫法折成同一寫法（近似詞庫的寫法處理）。「可直接上屏」：依檔內順序（同一詞的各讀音條目串起來，加 CC-Canto 時接在 CC-CEDICT 後面）逐個看義項，跳過 `CL:`、`variant of`、`see`、`surname` 這類，取分號、逗號前那段、去括號與開頭的「to 」，第一個剩 1–3 個英文詞的就是它的譯詞。前面的義項化不成短詞時會往後找，所以「可直接上屏」是上限，挑到的也不一定是第一個義項。
 
 | 範圍 | CC-CEDICT 有條目 | 可直接上屏 | 加 CC-Canto 後可直接上屏 |
 | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ M4 票 20，2026-11-15 查。回答：繁體與粵語對英文的詞表，哪個
 | --- | --- | --- | --- |
 | Claude Haiku 5.5 | 0.10 | 0.50 | 0.05／0.25 |
 | Claude Sonnet 5.5 | 2 | 10 | 1／5 |
+| OpenAI gpt-6-astra（旗艦） | 10 | 50 | 5／25 |
 | OpenAI gpt-6-luna | 0.10 | 0.50 | 0.05／0.25 |
 | OpenAI gpt-6.1-sol | 2 | 10 | 1／5 |
 | DeepSeek deepseek-flash | 0.30（離峰 0.15） | 1.20（離峰 0.60） | 沒有 Batch API，離峰半價 |
@@ -87,7 +88,7 @@ M4 票 20，2026-11-15 查。回答：繁體與粵語對英文的詞表，哪個
 
 ### 3.2 生成結果的授權
 
-- 四家條款都把輸出給使用者、都只禁止拿輸出訓練競爭的模型，做詞表不在其列：
+- 四家都把輸出給使用者（Google 只寫不主張所有權）；查到的限制是不得用服務開發競爭的模型（Anthropic D.4、Gemini API Terms；OpenAI Services Agreement 那條全文頁面截斷沒取到），做詞表不在其列：
   - [Anthropic Commercial Terms](https://www.anthropic.com/legal/commercial-terms)：「Customer (a) retains all rights to its Inputs, and (b) owns its Outputs … Anthropic hereby assigns to Customer its right, title and interest (if any) in and to Outputs.」
   - [OpenAI Services Agreement](https://openai.com/policies/services-agreement) 4.1：「Customer … (b) owns all Output. OpenAI hereby assigns to Customer all OpenAI's right, title, and interest, if any, in and to Output.」
   - [DeepSeek Terms of Use](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) 4.2 轉讓輸出權利；3.1 另要求公開散布時「clearly indicate that the output content is generated by artificial intelligence」。
@@ -117,7 +118,9 @@ QIM 可用的方案：
 | B. LLM 離線生成 | 輸出歸 QIM，可標 CC0；鍵的授權同詞庫 | 25 萬詞 Batch：Haiku 約 $1、Sonnet 約 $17；裁判不到 $0.5 | 整份詞庫都有；品質要照 §3.3 量，沒有公開數字 |
 | C. A 為主、缺的用 B 補 | 兩種授權在同一包，整包仍要 BY-SA | 同 B 但量少 | 留著 A 的錯義項 |
 
-建議 B：A 的瓶頸在 CC-CEDICT 的格式（釋義句、義項不依常用度），一半以上的常用詞拿不到合用的譯詞，修這個要的人工比生成加抽查多；B 的費用即使用 Sonnet 級模型跑完整份詞庫也在 $20 內。要花錢，**由使用者決定**（spec〈共同規則〉）。
+**結論：暫不採用、不花錢。** 使用者 2026-11-15 決定暫不需要譯詞，移出 M4、放 roadmap〈不排里程碑〉，原本的資料包票（M4 票 29）wontfix；brief 不寫採用的來源。上表與 §3 的 LLM 方案、費用估計留著，日後要做時從這裡接。
+
+當時給使用者的建議是 B：A 的瓶頸在 CC-CEDICT 的格式（釋義句、義項不依常用度），常用詞有一半拿不到合用的譯詞，修這個要的人工比生成加抽查多；B 即使用 Sonnet 級模型跑完整份詞庫也在 $20 內（2026-11-15 的定價，重開時要重查）。
 
 ## 5. 未查證
 

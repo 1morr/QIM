@@ -272,7 +272,7 @@ QIM（暫名）。
 
 | 編號開頭 | 檔案 | 主題 |
 | --- | --- | --- |
-| T | [`docs/research/facts-tables.md`](research/facts-tables.md) | 速成與碼表（33 條） |
+| T | [`docs/research/facts-tables.md`](research/facts-tables.md) | 速成與碼表（38 條） |
 | R | [`docs/research/facts-rime.md`](research/facts-rime.md) | Rime 行為（librime `56737cd2`）（22 條） |
 | P | [`docs/research/facts-platforms.md`](research/facts-platforms.md) | 平台框架（24 條） |
 | M | [`docs/research/facts-products.md`](research/facts-products.md) | 成熟產品的做法（48 條） |

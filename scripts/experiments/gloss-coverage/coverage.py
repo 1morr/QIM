@@ -1,20 +1,20 @@
-"""CC-CEDICT / CC-Canto as a gloss source: coverage of QIM's lexicon and how many
-glosses can be committed as-is (docs/research/translation-sources.md).
+"""CC-CEDICT／CC-Canto 當譯詞來源：對 QIM 詞庫的覆蓋率，與多少釋義能直接上屏
+（docs/research/translation-sources.md〈CC-CEDICT 能蓋多少〉）。
 
-Run from the repo root after `cargo xtask data` has filled the source cache:
+在 repo 根目錄、`cargo xtask data` 填好來源快取後跑：
 
     python3 -I scripts/experiments/gloss-coverage/coverage.py <cedict.txt> <cccanto-webdist.txt>
 
-<cedict.txt> is the unzipped cedict_1_0_ts_utf-8_mdbg.txt from mdbg.net; the
-download is not versioned, so record its header `date=` and sha256 with the
-numbers. <cccanto-webdist.txt> comes from cantonese.org/cccanto-170202.zip.
+<cedict.txt> 是 mdbg.net 的 cedict_1_0_ts_utf-8_mdbg.txt 解壓檔；下載沒有版本，
+記數字時一併記檔頭的 `date=` 與 sha256。<cccanto-webdist.txt> 取自
+cantonese.org/cccanto-170202.zip。快取路徑照 docs/development.md〈資料建置〉：
+有 QIM_CACHE_DIR 就用它，否則用 macOS 的 ~/Library/Caches/qim。
 
-Lexicon words are rime-essay entries with frequency >= 100 and two or more Han
-characters (the lexicon threshold); both sides fold HK / OpenCC variants onto
-one form, so matching is approximate. "Committable" means the first sense that
-is not a cross-reference, classifier, surname or variant note reduces to at
-most three plain English words after dropping brackets, everything after the
-first ';' or ',', and a leading "to ".
+詞庫的詞取 rime-essay 詞頻 >= 100、兩字以上的漢字詞（詞庫門檻）；兩邊都把香港寫法與
+OpenCC 標準寫法折成同一寫法，比對是近似的。「可直接上屏」：依檔內順序（同一詞的各讀音
+條目串起來，加 CC-Canto 時接在後面）逐個看義項，跳過參照、量詞、姓氏、異體的說明，
+取第一個分號或逗號前、去括號與開頭 "to " 後剩 1–3 個英文詞的義項；前面的化不成時往後
+找，所以是上限。
 """
 
 import collections
@@ -34,8 +34,8 @@ SKIP = re.compile(
     r"\(classical\)|pr\. |erhua variant|\(Tw\) variant|\(Cantonese\)|Taiwan pr\.)",
     re.I,
 )
-# QIM's two-way forms (crates/qim-databuild/src/common_forms.rs) plus OpenCC-standard
-# forms that rime-essay uses where CC-CEDICT uses the common one.
+# QIM 的雙向並存寫法（手抄自 crates/qim-databuild/src/common_forms.rs，那邊改了這裡要跟著改），
+# 加上 rime-essay 用 OpenCC 標準寫法、CC-CEDICT 用常見寫法的字。
 EXTRA_FOLDS = "線綫 啟啓 麵麪 床牀 戶户 敘敍 臥卧 裏裡 污汙 泄洩 枱檯 鈎鉤 群羣 峰峯 溫温 說説 為爲 著着 衛衞 眾衆"
 
 
@@ -102,48 +102,51 @@ def committable(senses):
 
 
 def report(name, keys, dicts):
-    hit = ok = 0
-    for w in keys:
-        senses = [s for d in dicts for s in d.get(w, [])]
+    has_entry = has_gloss = 0
+    for word in keys:
+        senses = [s for d in dicts for s in d.get(word, [])]
         if senses:
-            hit += 1
-            ok += committable(senses) is not None
+            has_entry += 1
+            has_gloss += committable(senses) is not None
     n = len(keys)
-    print(f"{name}\tn={n}\t有條目 {hit} ({hit / n:.1%})\t可直接上屏 {ok} ({ok / n:.1%})")
+    print(f"{name}\tn={n}\t有條目 {has_entry} ({has_entry / n:.1%})\t可直接上屏 {has_gloss} ({has_gloss / n:.1%})")
 
 
 def main(cedict_path, canto_path):
     essay = load_essay()
     words = [w for w, n in essay.most_common() if len(w) >= 2 and n >= 100]
     chars = [w for w, _ in essay.most_common() if len(w) == 1]
-    ced, can = load_dict(cedict_path), load_dict(canto_path)
-    print(f"essay 詞 {len(words)}、單字 {len(chars)}；CC-CEDICT 詞頭 {len(ced)}、CC-Canto 詞頭 {len(can)}")
+    cedict, canto = load_dict(cedict_path), load_dict(canto_path)
+    print(f"essay 詞 {len(words)}、單字 {len(chars)}；CC-CEDICT 詞頭 {len(cedict)}、CC-Canto 詞頭 {len(canto)}")
     for top in (5000, 20000, 50000, len(words)):
-        report(f"essay 詞前 {top}：CC-CEDICT", words[:top], [ced])
-        report(f"essay 詞前 {top}：CC-CEDICT+CC-Canto", words[:top], [ced, can])
+        report(f"essay 詞前 {top}：CC-CEDICT", words[:top], [cedict])
+        report(f"essay 詞前 {top}：CC-CEDICT+CC-Canto", words[:top], [cedict, canto])
     for top in (1000, 3000, 6000):
-        report(f"單字前 {top}：CC-CEDICT", chars[:top], [ced])
+        report(f"單字前 {top}：CC-CEDICT", chars[:top], [cedict])
     with open("data/lexicon/yue-colloquial.tsv", encoding="utf-8") as f:
         yue = [norm(l.split("\t")[0]) for l in f if l.strip() and not l.startswith("#")]
-    report("粵語口語小詞表：CC-CEDICT", yue, [ced])
-    report("粵語口語小詞表：CC-CEDICT+CC-Canto", yue, [ced, can])
+    report("粵語口語小詞表：CC-CEDICT", yue, [cedict])
+    report("粵語口語小詞表：CC-CEDICT+CC-Canto", yue, [cedict, canto])
     words_hk = set()
     with open(cached("words_hk/*/wordslist.csv"), encoding="utf-8") as f:
         for line in f:
             w = norm(line.split(",")[0].replace("*", ""))
             if len(w) >= 2 and HAN.match(w) and w not in essay:
                 words_hk.add(w)
-    report("粵典詞頭（essay 沒有）：CC-CEDICT+CC-Canto", sorted(words_hk), [ced, can])
+    report("粵典詞頭（essay 沒有）：CC-CEDICT+CC-Canto", sorted(words_hk), [cedict, canto])
 
     print("\n單字前 20 的第一個可上屏釋義（CC-CEDICT 依拼音排列，不依常用度）：")
-    print(" ".join(f"{c}={committable(ced[c])}" for c in chars[:20]))
+    print(" ".join(f"{c}={committable(cedict[c])}" for c in chars[:20]))
 
     print("\n抽查樣本（可直接上屏的詞，前 5000 與 5000–20000 各 50，種子 2020）：")
     rng = random.Random(2020)
     for lo, hi in ((0, 5000), (5000, 20000)):
-        pool = [(w, committable(ced[w])) for w in words[lo:hi] if w in ced and committable(ced[w])]
+        glossed = ((w, committable(cedict[w])) for w in words[lo:hi] if w in cedict)
+        pool = [(w, g) for w, g in glossed if g]
         print(f"[{lo}–{hi}] " + "  ".join(f"{w}={g}" for w, g in rng.sample(pool, 50)))
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    if len(sys.argv) != 3:
+        sys.exit("usage: coverage.py <cedict.txt> <cccanto-webdist.txt>")
+    main(sys.argv[1], sys.argv[2])
