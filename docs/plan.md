@@ -175,6 +175,7 @@ pub struct Snapshot {
     pub candidates: Vec<Candidate>, // 目前頁；每個候選是字（`text`）與原文（`original`）
     pub page: usize,
     pub has_more: bool,
+    pub delete_before: usize,       // 上屏前殼先刪游標前幾個字元（Unicode scalar；ADR 0008）
     pub commit: Option<String>,     // 這次事件要上屏的文字
     pub commit_original: Option<String>, // `commit` 的原文
     pub ascii: bool,                // 英文：沒有組字時是英文直通，鍵都交還宿主；組字中是臨時英文
@@ -205,6 +206,8 @@ impl Session {
 - `Letter` 含大寫與方案以外的字母，`Punct` 是其餘的可見 ASCII 字元，`Other` 是殼不轉成其他種的鍵（Tab、Delete、↑ ↓…）；`Modifier` 是只改鍵盤狀態、不送字元的鍵（單按 Ctrl、Cmd、Alt、CapsLock 這類修飾鍵，觸控的切頁、⇧、換鍵盤），組字中同 `Other` 吃下，沒有組字時交還宿主但不結束數字（M1 票 26b）；全形對照與組字中各鍵的行為在核心（brief §4.3）。只改殼的畫面、不動組字的鍵由殼攔下、不轉給核心：組字中 Tab 開關字根提示、↓ / ↑ 開關展開面板（§3.1）。組字中每個鍵都 `handled`，所以 `handled` 為假時組字是空的、`commit` 也是空的，殼不必處理「交還宿主又要上屏」。
 - `text`：直接輸入一段文字、不經組字（佈局的 `text` 動作，§2.6）。沒有組字時上屏它（英文直通也是）；組字中和標點相同，先上屏整個組字再接它；臨時英文中和實體鍵盤的可見字元一樣接在英文後（M1 票 27b）。文字照原樣，不轉全形、不套數字後半形（M1 票 20、27b）；簡體模式下文字也轉簡體，原文留繁體（使用者決定，M1 票 23）。觸控的標點鍵也走這裡，照鍵上的字輸出（使用者決定，M1 票 27b）。
 - `ToggleAscii`（單按 Shift，brief §4.3）：沒有組字時切英文直通，`Snapshot.ascii` 跟著變；英文直通下每個鍵都 `handled` 為假，沒有組字。組字中照 `Options.shift_switch`：`commit_text` 先上屏整個組字再切；`inline_ascii` 進臨時英文，`ascii` 為真而組字還在，最後一段是 `Segment.raw` 的分段（Rime 的 `raw` 標記），各鍵的行為照目前發佈版 librime（≤ 1.17.0，空白接進英文，M1 票 25b），見 brief §4.3。預設 `Rime` 是左 Shift `inline_ascii`、右 Shift `commit_text`（M1 票 25，推翻票 23 的左右相同）。單按的判定（按下到放開 500 ms 內、中間沒有按下或放開別的鍵，librime 同值）與分辨左右在殼；網頁用 `KeyboardEvent.code`，觸控鍵盤的中英鍵（佈局動作 `toggleAscii`）當右 Shift；觸控的 ⇧ 是另一個動作 `shift`（§2.6），是大寫鍵，不送 `ToggleAscii`。臨時英文中 `-` / `=` 是字元，殼不轉成翻頁。
+- 英文模式（ADR 0008，M4 票 24 起實作）：觸控的中英鍵切到的英文狀態，實體鍵盤單按 Shift 照舊切英文直通，核心照切換鍵的來源決定、不另加選項；組字中按中英鍵先上屏整個組字再切，在英文模式按任一種切換鍵都回中文。英文模式沒有組字：可見字元與空白核心吃下、當場經 `commit` 上屏，建議列跟著正在打的串（〈英文使用者詞〉的串字元，email 整串一個詞），退格、Enter、方向鍵照英文直通交還宿主。自動修正只修去掉頭尾 `.` `'` 後全是字母（中間可有 `'` `-`）的詞，在串打完時修。預測只補完、修正正在打的詞，不出下一個詞（M5 評估）。`Options` 要加的三個欄位與預設：`autocorrect` 關、`auto_capitalize` 關、`english_corrections`（英文容錯）開，都只在英文模式作用，由用到的票加。
+- `delete_before`（ADR 0008，M4 票 21）：殼先刪游標前（有選取時是選取前）這麼多個字元，再上屏 `commit`；0 是不刪，可以只刪不上屏。單位是 Unicode scalar（`char`），同 Fcitx5。核心只刪自己送出去、之後沒作廢的字（正在打的串、剛上屏的字；作廢的條件同〈上下文〉），不刪殼給的前文；這些字都是 ASCII 與 BMP 的標點，一個 scalar 就是一個 UTF-16 碼元、一個字素，各平台用自己的單位刪得剛好（iOS N 次 `deleteBackward()`、Android `deleteSurroundingText(N, 0)` 包在 batch edit 裡、macOS `insertText:replacementRange:`，`docs/research/facts-platforms.md`）。送出它的票同時把前文與正在打的串的最後 N 字拿掉（等於 N 次退格但前文不作廢），經公開介面測；M4 票 21 只加欄位，核心一直送 0，網頁照做（`host.ts` 的 `insert`、`deleteStart`，單元測試在 `web/test/host.test.ts`）。
 - 英文候選：`Engine::with_english` 掛上英文資料包（不由方案指名，各方案共用）；`Options.english_candidates`（預設開，brief §7）開著時套用排位規則 4（§2.4）。組字中換這個選項同簡體模式，殼呼叫 `refresh`（M1 票 15）。
 - 詞級 trigram（M3 票 11b，§2.3、§4.3）：`Engine::with_word_trigram(WordTrigramPack)` 掛上，方案 `[packs]` 的 `word_trigram` 指名預設那份，`Engine::open` 照方案要不要核對（`WordTrigramMismatch`，同詞庫、語言模型只核對有沒有、不核對 id）。核心內建的打分、不經 `dyn` 介面：lattice 的邊與整串字詞的靜態機率改用它，前面兩段是部分路徑的最後兩段，組字開頭的前一段是選定的分段、前文剛上屏的那段，或前文的最後一字、句首（`Preceding::segment`）；β、γ、`personal` 照舊，聯想仍用字級 bigram。沒掛上時打分照字級 bigram。
 - emoji 候選：`Engine::with_emoji` 掛上 emoji 資料包（不由方案指名，各方案共用，§4.4）；`Options.emoji_candidates`（預設開，brief §7）開著時，整串的字詞後面接它的 emoji（§2.4）。組字中換這個選項同英文候選，殼呼叫 `refresh`（M3 票 16）。
