@@ -308,7 +308,7 @@ fn rule4(english: &EnglishWords, w: &str) -> bool {
     lower.len() > 2 && letters_a_to_y(&lower) && english.lookup(&lower).is_some()
 }
 
-/// 句中英文混輸收得進 lattice（同 `Engine` 的 `inline_english_edge`）。
+/// 句中英文混輸收得進 lattice（同 `aec9741` 的 `Engine::inline_english_edge`）。
 fn inline_covers(english: &EnglishWords, inline: &InlineEnglish, w: &str) -> bool {
     let lower = w.to_lowercase();
     lower.len() >= inline.min_len
