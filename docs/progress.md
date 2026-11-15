@@ -50,3 +50,4 @@
 | 2026-11-15 | M4 21 | ADR 0008 定英文模式逐字上屏與 `delete_before`，事實 P25–P28，`Snapshot` 加欄位、網頁照做；協調者代答 7 題；見票 21 | 新 session 下 `/implement .scratch/m4/issues/22-aosp-english-pack.md` |
 | 2026-11-15 | M4 22 | 英文資料包改用 AOSP LatinIME en_US 詞表（協調者定，T39），156,636 詞帶頻率；規則 4 觸發 54→87 題、bench 不退步；見票 22 | 新 session 下 `/implement .scratch/m4/issues/28-inline-english-experiment.md` |
 | 2026-11-15 | M4 28 | 句中英文混輸實驗不採用：test 純中文集退 1 題（首次跨→tumors），混輸句修正 −10.9%（口語 −1.7%）；brief 改不做、機制已刪；見票 28 | 新 session 下 `/implement .scratch/m4/issues/30-association-boost.md` |
+| 2026-11-15 | M4 30 | 聯想補強：做聯想的 emoji（照 macOS 排第 3 位、選了不學不接）；句首建議、量詞聯想和桌面數字鍵衝突、搶 M5 工具列的位置，不做、排進 M5 評估；bench 不變；見票 30 | 新 session 下 `/implement .scratch/m4/issues/23-touch-english-keyboard.md` |
