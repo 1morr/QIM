@@ -16,21 +16,24 @@ export function deleteStart(
 	return cursor - removed.join("").length;
 }
 
+/** 上屏要動到的輸入框：`HTMLTextAreaElement` 用到的部分（單元測試給假的）。 */
+export type Editable = Pick<
+	HTMLTextAreaElement,
+	"value" | "selectionStart" | "selectionEnd" | "setRangeText" | "dispatchEvent"
+>;
+
 /**
- * 上屏：先刪游標前 `deleteBefore` 個字（核心的 `delete_before`，ADR 0008），再把 `commit` 插入游標處、
- * 取代選取的文字。
+ * 上屏：先刪游標前（有選取時是選取前）`deleteBefore` 個字（核心的 `delete_before`，ADR 0008），再把
+ * `commit` 插入、取代選取的文字。只刪不上屏（`commit` 是空的）時選取留著，同 Android
+ * `deleteSurroundingText` 不碰選取。
  */
-export function insert(
-	text: HTMLTextAreaElement,
-	commit: string,
-	deleteBefore = 0,
-): void {
+export function insert(text: Editable, commit: string, deleteBefore = 0): void {
 	const start = deleteStart(text.value, text.selectionStart, deleteBefore);
-	if (start < text.selectionStart) {
-		// 選取跟著往前挪、不收起（"preserve"），接著的上屏照舊取代它。
+	if (commit === "") {
 		text.setRangeText("", start, text.selectionStart, "preserve");
+	} else {
+		text.setRangeText(commit, start, text.selectionEnd, "end");
 	}
-	text.setRangeText(commit, text.selectionStart, text.selectionEnd, "end");
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
