@@ -10,7 +10,7 @@ swiftc -O -o build/ffi/bin/qim-swift scripts/experiments/ffi-swift/main.swift sc
 
 # 基準載入的四份資料包（qim-bench 的 load_engine）。
 set -- build/packs/quick/quick.pack build/packs/quick-lexicon/quick-lexicon.pack \
-	build/packs/zh-hant-bigram/zh-hant-bigram.pack build/packs/scowl-en-us/scowl-en-us.pack
+	build/packs/zh-hant-bigram/zh-hant-bigram.pack build/packs/aosp-en-us/aosp-en-us.pack
 build/ffi/bin/qim-swift demo "$@"
 
 scripts/experiments/ffi-swift/inputs.sh | build/ffi/bin/qim-swift latency "$@"

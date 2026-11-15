@@ -40,7 +40,7 @@
 
 - 開頭先做 Gboard 英文鍵盤的黑箱實測（自動修正的時機、退格還原、連按兩下空白、句首大寫、成對符號；`orca emulator-android`），寫到 `docs/research/`。
 - 英文模式（brief §4.7；〈細節〉〈英文模式〉）：寫 ADR 定新的組字狀態、`Snapshot` 的 `delete_before`（先查證 iOS `deleteBackward()`、Android `deleteSurroundingText`、macOS IMK `replacementRange`，寫進 `docs/research/facts-platforms.md`）、英文的切詞（`@`、`.`）、「預測」含不含下一個詞。單字預測與英文建議列（英文使用者詞與詞典的前綴補完）、Shift 與句首大寫、自動修正（退格可還原、還原時不學修正字、照 AOSP 不自動修的條件）；自動修正與句首大寫各有開關、預設關。
-- 英文資料包改用 aosp-dictionaries 的 experimental 詞典（CC BY 4.0），取代 `scowl-en-us`，也給規則 4；`bench` 確認第 2 位不會被多搶；`z` 只在中文組字的比對時濾掉。
+- 英文資料包改用 AOSP LatinIME 的美式英文詞表（Apache-2.0，逐詞頻率、含 `z` 開頭的詞；原定 aosp-dictionaries 的 experimental 詞典，查證後來源混雜，協調者 2026-11-15 定，事實 T39），取代 `scowl-en-us`，也給規則 4；`bench` 確認第 2 位不會被多搶；`z` 只在中文組字的比對時濾掉。
 - 觸控的中英鍵與英文鍵盤（QWERTY 字母頁）：做成佈局的頁面與按鍵動作，預設觸控佈局加上；英文狀態的建議列沿用現在的候選列（M5 重做）。
 - 欄位類型：email、網址預設英文模式並關自動修正，數字欄開數字頁。
 - 智慧標點（可關）：成對符號自動配對（照 Gboard 實測定插入一對還是左右輪流）、英文模式連按兩下空白輸出句點；都用 `delete_before`。
@@ -145,7 +145,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 - 英文模式（brief §4.7）：單字預測、自動修正（退格可還原）、Shift 與句首大寫；自動修正與句首自動大寫各有開關、預設關，容錯也有開關、預設開（brief §7），都放進 `Options`。自動修正對原樣讀得通的要保守，照 AOSP 不自動修的條件（含數字、全大寫、email 字元等）；退格還原時不學修正字。核心的英文直通把鍵交還宿主，英文模式要核心自己組字、出建議，是新的組字狀態，寫一份 ADR，一起定：
   - `Snapshot` 加「先刪游標前 N 字再上屏」（例如 `delete_before`），給自動修正還原、連按兩下空白、成對符號用；殼照做，不自己判斷（§1.3）。先查證 iOS `deleteBackward()`、Android `deleteSurroundingText`、macOS IMK `replacementRange` 的行為，寫進 `docs/research/facts-platforms.md`。
   - 英文的切詞：`@`、`.` 這類字元算不算詞內（email 要整串是一個詞，LatinIME 以 `.` 分隔）。
-  - 英文資料包改用 aosp-dictionaries 的 experimental 詞典（CC BY 4.0，逐詞頻率與 bigram、含 `z` 開頭的詞，`docs/research/spatial-correction-swipe.md` §6），取代 `scowl-en-us`，同一份也給規則 4；用 `bench` 確認第 2 位不會被多搶；`z` 只在中文組字的比對時濾掉（§4.4）。「預測」包不包括下一個詞由 ADR 定。
+  - 英文資料包改用 AOSP LatinIME 的美式英文詞表（Apache-2.0，逐詞頻率與 bigram、含 `z` 開頭的詞；原定 aosp-dictionaries 的 experimental 詞典，`docs/research/spatial-correction-swipe.md` §6，查證後來源混雜，協調者 2026-11-15 定，事實 T39），取代 `scowl-en-us`，同一份也給規則 4；用 `bench` 確認第 2 位不會被多搶；`z` 只在中文組字的比對時濾掉（§4.4）。「預測」包不包括下一個詞由 ADR 定。
 - 觸控的中英切換鍵與英文鍵盤（QWERTY 字母頁）：預設觸控佈局加中英鍵（brief §4.4 現在沒有，只有接實體鍵盤才進得了英文）。英文頁與中英鍵做成佈局的頁面與按鍵動作，自訂佈局才能自己決定放不放；英文狀態的建議列只做最小版，沿用現在的候選列，M5 重做候選列時再改。
 - 英文建議列：英文使用者詞與英文詞典的前綴補完（上面〈英文使用者詞〉）。
 - 欄位類型：email、網址預設英文模式並關自動修正，數字欄開數字頁。
@@ -217,7 +217,7 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [19](issues/19-gboard-english-blackbox.md) | 18 | Gboard 英文鍵盤黑箱實測，寫到 `docs/research/` |
 | [20](issues/20-translation-sources.md) | 18 | 譯詞的來源與授權研究（譯詞移出 M4 後只留研究） |
 | [21](issues/21-english-mode-adr.md) | 19, 18b | 英文模式 ADR；三個平台刪除前文的 API 查證；`Snapshot.delete_before` 與網頁照做 |
-| [22](issues/22-aosp-english-pack.md) | 18, 18b | 英文資料包換成 aosp-dictionaries；規則 4 不多搶第 2 位 |
+| [22](issues/22-aosp-english-pack.md) | 18, 18b | 英文資料包換成 AOSP LatinIME 的詞表；規則 4 不多搶第 2 位 |
 | [23](issues/23-touch-english-keyboard.md) | 18, 18b | 觸控中英鍵與 QWERTY 英文頁（先接英文直通） |
 | [24](issues/24-english-mode.md) | 14, 21, 22, 23 | 英文模式組字、英文建議列的前綴補完、Shift 與句首大寫 |
 | [25](issues/25-autocorrect.md) | 24, 18c | 自動修正（預設關、退格還原、AOSP 的保守條件） |

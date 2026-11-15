@@ -245,6 +245,8 @@ if (mLastComposedWord.canRevertCommit() && sv.mBackspaceRevertsAutocorrect) {
 | **Google Books Ngram** | 1-gram 到 5-gram 年份計數，版本 2009／2012／2020（v3） | 頁面：「This compilation is licensed under a Creative Commons Attribution 3.0 Unported License.」wordfreq 引用的用語為「Ngram Viewer graphs and data may be freely used for any purpose」 | 可，須標示 | v2 有按首字母切檔（`googlebooks-eng-all-1gram-20120701-z.gz`） | 資料量大（要先自己彙整）；書本語體、含 OCR 雜訊；只有詞形計數，不分詞性 |
 | **OpenSubtitles／OPUS** | 字幕平行語料，英文含數十億 token | 頁面無授權條款文字（OPUS 的 `/OpenSubtitles` 頁 404）；Hugging Face 資料卡 `license: ""`（空）；要求「add a link to [opensubtitles.org] to your website」 | **未查到** → 不要直接用，透過 FrequencyWords／wordfreq 用等於繼承同一疑慮 | — | 原始語料太大，不建議自己處理 |
 
+2026-11-15 補查（M4 票 22，事實 T39）：experimental 詞典把 AOSP LatinIME 的 `en_US_wordlist.combined.gz`（160,715 詞）整個併進去、66,178 詞的 `f` 照抄，README 的「CC BY 4.0」只涵蓋 Leipzig 那層，Leipzig 的條款也沒寫版本；QIM 改用 LatinIME 原表（Apache-2.0）。
+
 z 開頭詞的抽查方法：Norvig 檔用 `grep -c "^z" count_1w.txt`；FrequencyWords 用 `grep -c "^z" en_50k.txt`；aosp-dictionaries 用 `grep -c "word=z"` 於 `main_en_US__experimental.combined`。三者都含常用 z 詞（`zero`、`zone`、`zoom`、`zoo`、`zebra`），所以「來源沒有 z 詞」不是風險；風險在 plan 現行管線自己把 z 濾掉了。
 
 ---

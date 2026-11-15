@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// 資料包格式的版本，各種資料包共用；格式改了就加一，舊核心遇到新版本回 [`PackError::UnsupportedVersion`]。
-pub const FORMAT_VERSION: u32 = 8;
+pub const FORMAT_VERSION: u32 = 9;
 
 /// 各種資料包共用的位元組格式：魔數 [`Pack::MAGIC`]、postcard 的 [`FORMAT_VERSION`]、
 /// postcard 的本體。
@@ -111,7 +111,7 @@ pub struct RadicalHintPack {
     pub hints: RadicalHints,
 }
 
-/// 英文資料包：中文狀態的英文候選用的詞表（plan〈英文、簡繁與 emoji〉），由 [`crate::Engine::with_english`]
+/// 英文資料包：中文狀態的英文候選與英文模式用的詞表與頻率（plan〈英文、簡繁與 emoji〉），由 [`crate::Engine::with_english`]
 /// 掛上，不由方案指名，各方案共用。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnglishPack {

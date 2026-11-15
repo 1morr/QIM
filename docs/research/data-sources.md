@@ -17,7 +17,7 @@
 5. **繁體詞頻的寬鬆來源很少**：rime-essay（八股文，442,688 筆含詞頻，LGPL-3.0）與 libchewing-data（`tsi.csv` 160,462 筆，LGPL-2.1-or-later）都是 LGPL；教育部國語辭典是 CC BY-ND 3.0 台灣，且只有詞條沒有詞頻。
 6. **粵語**：rime-cantonese 是 CC BY 4.0（`maps` 檔另為 ODbL），但詞條部分參考了粵典、搜狗 / QQ / 百度用戶詞庫等，而粵典自己的授權是**非商業**（Non-Commercial Open Data License 1.0）；兩者關係未查證，是最需要使用者判斷的風險點。粵典另提供 public domain 的「字 → 讀音」詞表。
 7. **語言模型**：librime-octagram 外掛是 BSD-3-Clause，但現成的繁體語法模型 `zh-hant-t-essay-bgw.gram`（41 MB）資料授權是 LGPL-3.0，且語料來源只寫「開放的互聯網語料」，無法追溯。KenLM 為 LGPL-2.1 / GPL-3.0 混合。
-8. **英文**：SCOWL / ESDB（MIT-like 寬鬆）是最乾淨的詞表；wordfreq 資料為 CC BY-SA 4.0 且已停止更新（約 2021）；AOSP LatinIME 倉庫是 Apache-2.0，但其英文字典的內容來源未查證，且 AOSP 沒有中文 / 粵語主字典。
+8. **英文**：SCOWL / ESDB（MIT-like 寬鬆）是最乾淨的詞表；wordfreq 資料為 CC BY-SA 4.0 且已停止更新（約 2021）；AOSP LatinIME 倉庫是 Apache-2.0，但其英文字典的內容來源未查證，且 AOSP 沒有中文 / 粵語主字典。（2026-11-15 補查：`dictionaries/` 沒有自己的授權檔，適用 repo 的 NOTICE；怎麼建的仍查不到。QIM 的英文資料包 M4 起改用它的 `en_US_wordlist.combined.gz`，事實 T39。）
 9. **簡繁轉換**：OpenCC 整個 repo（含字典）是 Apache-2.0。純 Rust（ferrous-opencc，Apache-2.0）與純 JS（opencc-js）可用；Swift（SwiftyOpenCC）與 Android（android-opencc）綁定都停在 2021 年。
 10. **Emoji**：CLDR annotations 檔頭為 `SPDX-License-Identifier: Unicode-3.0`，`yue`、`zh_Hant`、`zh_Hant_HK` 各 3,950 個 `<annotation>` 元素，是目前唯一查到的、授權乾淨的粵語 / 繁中 emoji 標註。
 
@@ -241,7 +241,7 @@
 | SCOWL / ESDB（`en-wl/wordlist` v2） | `Copyright` 檔：「Permission to use, copy, modify, distribute, and sell any part of the English Speller Database (ESDB, previously known as SCOWLv2), or word lists created from it, is hereby granted without fee, provided that the above copyright notice appears in all copies and that both the above copyright notice and this notice appear in supporting documentation.」另：澳式英語與 `AU` region 另有聲明；生成的詞表 size >80 適用 UKACD 聲明；若散布資料庫本身或非拼字字典的衍生物，可能適用多份版權（含 WordNet 可能）。 | size 35（最小）至 85；60 為預設拼字字典；主要資訊為「詞有多常見」，不是精確頻次。資料部分來自 COCA 3-gram（作者稱符合購買時簽署的 NDA 範圍）。 |
 | wordfreq | README：程式 Apache-2.0；資料可依 CC BY-SA 4.0 再散布；Google Books Ngrams 與 SUBTLEX 另有署名要求；不得轉成 CSV（理由為無處署名）。 | 40+ 語言；`zh` 含繁簡、以普通話為主，無 `yue`；資料為約 2021 年快照，作者在 SUNSET.md 說明 LLM 生成文字汙染網路語料，不再更新。 |
 | Google Books Ngram | 頁面：「licensed under a Creative Commons Attribution 3.0 Unported License」 | v3（2020-02-17）、v2（2012-07-01）、v1（2009）；英文已確認，中文子集未讀到（頁面超長，只讀了前 10 萬字）。 |
-| AOSP LatinIME | 倉庫 NOTICE：Apache-2.0。`dictionaries/` 有 `en_US` / `en_GB` / `en` 等 `.combined.gz`（24 種語言，無中文）。 | 字典內容的原始來源與是否另有授權：**未查證** ★。 |
+| AOSP LatinIME | 倉庫 NOTICE：Apache-2.0。`dictionaries/` 有 `en_US` / `en_GB` / `en` 等 `.combined.gz`（24 種語言，無中文）。 | 字典內容的原始來源與是否另有授權：**未查證** ★。2026-11-15：`dictionaries/` 沒有自己的授權檔（事實 T39）。 |
 | Helium314/aosp-dictionaries（社群彙整，Codeberg） | 各語言列出授權；英文「experimental」字典 main_en_US 279,960 詞、main_en_GB 386,549 詞，標 CC BY 4.0；「legacy」en_US 160,715 詞（授權欄未標）。 | 另有 emoji 字典：中文 12,267、繁中 15,680、粵語 10,015 詞，授權欄為 "UNICODE LICENSE V3 (CLDR) and AGPL-3.0 (Signal)"，含 AGPL 成分，不宜直接採用 ★。 |
 
 ---

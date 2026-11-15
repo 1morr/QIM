@@ -127,7 +127,7 @@ enum CoreProbe {
             let lexicon = try pack("quick-lexicon", LexiconPack.init)
             let languageModel = try pack("zh-hant-bigram", LanguageModelPack.init)
             let simplifier = try pack("opencc-hk2s", SimplifierPack.init)
-            let english = try pack("scowl-en-us", EnglishPack.init)
+            let english = try pack("aosp-en-us", EnglishPack.init)
             var hints: RadicalHintPack? = nil
             var words: WordTrigramPack? = nil
             if let wordTrigram {

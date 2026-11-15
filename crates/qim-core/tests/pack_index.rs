@@ -59,7 +59,7 @@ fn updates_are_newer_versions_of_installed_packs() {
         // 比 semver，不比字串："1.10.0" > "1.9.0"。
         entry(manifest(PackKind::Emoji, "emoji", "1.10.0", b"emoji2")),
         // 沒裝的不下載。
-        entry(manifest(PackKind::English, "scowl-en-us", "2.0.0", b"en")),
+        entry(manifest(PackKind::English, "aosp-en-us", "2.0.0", b"en")),
     ]);
     assert_eq!(
         ids(&index.updates(&installed)),

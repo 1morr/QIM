@@ -268,7 +268,7 @@ fn simplifier() -> SimplifierPack {
 fn the_english_candidate_keeps_second_and_the_emoji_follow() {
     let engine = engine().with_english(EnglishPack {
         id: "english".into(),
-        words: EnglishWords::new(["niyi"]),
+        words: EnglishWords::new([("niyi", 1)]),
     });
     let mut ime = Ime::with(engine);
     assert_eq!(ime.candidates("niyi")[..3], ["多謝", "niyi", "🙏"]);

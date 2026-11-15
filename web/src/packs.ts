@@ -31,7 +31,7 @@ const BUILTIN_IDS = [
 	"zh-hant-word-trigram-large",
 	"cangjie-hint",
 	"opencc-hk2s",
-	"scowl-en-us",
+	"aosp-en-us",
 	"cldr-emoji-yue-hant",
 	"zh-hant-neural-rerank",
 ] as const;

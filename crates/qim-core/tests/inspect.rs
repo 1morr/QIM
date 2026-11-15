@@ -65,7 +65,7 @@ fn engine() -> Engine {
     .unwrap()
     .with_english(EnglishPack {
         id: "english".into(),
-        words: EnglishWords::new(["cdc"]),
+        words: EnglishWords::new([("cdc", 1)]),
     })
     .with_emoji(EmojiPack {
         id: "emoji".into(),

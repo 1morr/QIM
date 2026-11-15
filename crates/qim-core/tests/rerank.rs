@@ -42,7 +42,7 @@ fn engine() -> Engine {
         .unwrap()
         .with_english(EnglishPack {
             id: "english".into(),
-            words: EnglishWords::new(["abba"]),
+            words: EnglishWords::new([("abba", 1)]),
         })
 }
 

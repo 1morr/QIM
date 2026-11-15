@@ -34,7 +34,7 @@ const PACKS = [
 	"build/packs/quick/quick.pack",
 	"build/packs/quick-lexicon/quick-lexicon.pack",
 	"build/packs/zh-hant-bigram/zh-hant-bigram.pack",
-	"build/packs/scowl-en-us/scowl-en-us.pack",
+	"build/packs/aosp-en-us/aosp-en-us.pack",
 ];
 const files = {
 	"/qim_wasm.js": ["web/src/wasm/qim_wasm.js", "text/javascript"],

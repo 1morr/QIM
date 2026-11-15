@@ -50,7 +50,19 @@ pub struct SourceFile {
     /// 檔案在來源 repo 裡的路徑。
     pub path: String,
     pub url: String,
+    /// 解開後的內容的 sha256：`encoding` 有寫時是解開後的。
     pub sha256: String,
+    /// 下載回來的是編碼過的內容時怎麼解；沒寫就是原樣。
+    #[serde(default)]
+    pub encoding: Option<Encoding>,
+}
+
+/// 下載回來的內容的編碼。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Encoding {
+    /// googlesource 的 `?format=TEXT` 只給 base64（沒有原樣下載的網址）。
+    Base64,
 }
 
 impl Source {
@@ -180,16 +192,29 @@ pub fn cached(
     outcome.map(|()| path)
 }
 
-/// 下載到 `partial`，回傳內容的 sha256。
+/// 下載到 `partial`（`encoding` 有寫時存解開後的），回傳存下的內容的 sha256。
 fn download(partial: &Path, file: &SourceFile, fetch: &dyn Fetch) -> Result<String, Error> {
     let out = File::create(partial).map_err(Error::io(partial))?;
     let mut out = Hashed::new(BufWriter::new(out));
-    fetch
-        .fetch(&file.url, &mut out)
-        .map_err(|reason| Error::Fetch {
+    let fetch_into = |out: &mut dyn Write| {
+        fetch.fetch(&file.url, out).map_err(|reason| Error::Fetch {
             url: file.url.clone(),
             reason,
-        })?;
+        })
+    };
+    match file.encoding {
+        None => fetch_into(&mut out)?,
+        // 編碼過的檔都小（授權檔、壓縮過的詞表），整份收進記憶體再解。
+        Some(Encoding::Base64) => {
+            use base64::Engine as _;
+            let mut encoded = Vec::new();
+            fetch_into(&mut encoded)?;
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(encoded.trim_ascii())
+                .map_err(|e| Error::invalid(&file.url, format!("不是 base64：{e}")))?;
+            out.write_all(&decoded).map_err(Error::io(partial))?;
+        }
+    }
     out.flush().map_err(Error::io(partial))?;
     Ok(out.sha256())
 }

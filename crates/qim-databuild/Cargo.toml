@@ -7,9 +7,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64 = "0.23.1"
 bzip2 = "0.6.1"
 dirs = "7.0.0"
 ferrous-opencc = "0.4.0"
+flate2 = "1.1.11"
 qim-core = { version = "0.0.0", path = "../qim-core" }
 qim-layout = { version = "0.0.0", path = "../qim-layout" }
 qim-neural = { version = "0.0.0", path = "../qim-neural" }

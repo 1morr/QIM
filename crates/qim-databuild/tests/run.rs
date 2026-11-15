@@ -142,15 +142,23 @@ const APACHE: &str = "\
                            Version 2.0, January 2004
 ";
 
-/// ESDB release 的 Hunspell 字典（這裡只取幾個詞）：`the`、`walk` 展開出 `walked`，
-/// `damn` 是禁忌詞，`zoo` 打不出（`z`）。
-const EN_US_AFF: &str = "SET UTF-8\nNOSUGGEST !\n\nSFX D Y 1\nSFX D   0     ed         [^ey]\n";
-const EN_US_DIC: &str = "4\nthe\nwalk/D\ndamn/D!\nzoo\n";
+/// LatinIME 的英文詞表（這裡只取幾個詞）：`zero` 有 `z` 也收，`damn` 標可能冒犯、`acomodate` 是只當 shortcut
+/// 的錯拼，都不收；`the` 下面接 bigram。
+const EN_US_WORDLIST: &str = "\
+dictionary=main:en_us,locale=en_US,description=English (US),date=1414726260,version=54
+ word=the,f=222,flags=,originalFreq=222
+  bigram=new,f=1
+ word=walked,f=120,flags=,originalFreq=120
+ word=zero,f=126,flags=,originalFreq=126
+ word=damn,f=110,flags=,originalFreq=110,possibly_offensive=true
+ word=acomodate,f=0,not_a_word=true
+  shortcut=accommodate,f=whitelist
+";
 
-/// ESDB 的 `Copyright`（這裡只取開頭）。
-const SCOWL_COPYRIGHT: &str = "Copyright 2000-2026 by Kevin Atkinson\n";
+/// LatinIME 的 `NOTICE`（這裡只取開頭）。
+const LATINIME_NOTICE: &str = "   Copyright (c) 2008, The Android Open Source Project\n";
 
-const SCOWL_ZIP: &str = "hunspell-en_US-2026.02.25.zip";
+const LATINIME_WORDLIST: &str = "dictionaries/en_US_wordlist.combined.gz";
 
 /// CLDR 的粵語標註：「笑」是 😂 的關鍵字，「門口」是 🚪 的短名，「臉」打不出（碼表沒有）。
 const CLDR_YUE: &str = r#"<?xml version="1.0" encoding="UTF-8" ?>
@@ -174,14 +182,19 @@ const CLDR_LICENSE: &str = "COPYRIGHT AND PERMISSION NOTICE\n\nAll other content
 const EMOJI_TEST: &str =
     "2764 FE0F ; fully-qualified # ❤️ E0.6 red heart\n2764 ; unqualified # ❤ E0.6 red heart\n";
 
-fn scowl_zip() -> Vec<u8> {
-    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    for (name, text) in [("en_US.aff", EN_US_AFF), ("en_US.dic", EN_US_DIC)] {
-        zip.start_file(name, zip::write::SimpleFileOptions::default())
-            .unwrap();
-        zip.write_all(text.as_bytes()).unwrap();
-    }
-    zip.finish().unwrap().into_inner()
+/// 壓縮過的詞表（解開 base64 後的檔，sources.toml 釘它的 sha256）。
+fn wordlist_gz() -> Vec<u8> {
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(EN_US_WORDLIST.as_bytes()).unwrap();
+    encoder.finish().unwrap()
+}
+
+/// googlesource 的 `?format=TEXT` 給的 base64。
+fn base64(bytes: &[u8]) -> Vec<u8> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD
+        .encode(bytes)
+        .into_bytes()
 }
 
 const DUMP_FILE: &str = "zh_yuewiki-20261101-pages-articles.xml.bz2";
@@ -430,10 +443,13 @@ fn upstream(readme: &str) -> Files {
                 "https://example.invalid/opencc-LICENSE".into(),
                 APACHE.into(),
             ),
-            (format!("https://example.invalid/{SCOWL_ZIP}"), scowl_zip()),
             (
-                "https://example.invalid/scowl-Copyright".into(),
-                SCOWL_COPYRIGHT.into(),
+                "https://example.invalid/latinime-wordlist".into(),
+                base64(&wordlist_gz()),
+            ),
+            (
+                "https://example.invalid/latinime-NOTICE".into(),
+                base64(LATINIME_NOTICE.as_bytes()),
             ),
             (
                 "https://example.invalid/cldr-yue.xml".into(),
@@ -612,21 +628,23 @@ path = "LICENSE"
 url = "https://example.invalid/opencc-LICENSE"
 sha256 = "{apache}"
 {opencc}
-[source.scowl]
-repository = "https://example.invalid/wordlist"
-version = "rel-2026.02.25"
-license = "LicenseRef-SCOWL"
-license_text = {{ upstream_file = "Copyright" }}
+[source.latinime]
+repository = "https://example.invalid/LatinIME"
+version = "127336e9f29d69607eab55982324b210279ae8c5"
+license = "Apache-2.0"
+license_text = {{ upstream_file = "NOTICE" }}
 
-[[source.scowl.files]]
-path = "{SCOWL_ZIP}"
-url = "https://example.invalid/{SCOWL_ZIP}"
-sha256 = "{scowl}"
+[[source.latinime.files]]
+path = "{LATINIME_WORDLIST}"
+url = "https://example.invalid/latinime-wordlist"
+sha256 = "{latinime}"
+encoding = "base64"
 
-[[source.scowl.files]]
-path = "Copyright"
-url = "https://example.invalid/scowl-Copyright"
-sha256 = "{scowl_copyright}"
+[[source.latinime.files]]
+path = "NOTICE"
+url = "https://example.invalid/latinime-NOTICE"
+sha256 = "{latinime_notice}"
+encoding = "base64"
 
 [source.cldr]
 repository = "https://example.invalid/cldr"
@@ -687,8 +705,8 @@ sha256 = "{word_count}"
         essay = sha256_hex(ESSAY.as_bytes()),
         lgpl = sha256_hex(LGPL.as_bytes()),
         apache = sha256_hex(APACHE.as_bytes()),
-        scowl = sha256_hex(&scowl_zip()),
-        scowl_copyright = sha256_hex(SCOWL_COPYRIGHT.as_bytes()),
+        latinime = sha256_hex(&wordlist_gz()),
+        latinime_notice = sha256_hex(LATINIME_NOTICE.as_bytes()),
         cldr_yue = sha256_hex(CLDR_YUE.as_bytes()),
         cldr_zh_hant = sha256_hex(CLDR_ZH_HANT.as_bytes()),
         cldr_license = sha256_hex(CLDR_LICENSE.as_bytes()),
@@ -1139,33 +1157,40 @@ fn builds_the_english_pack_with_its_own_license_and_notice() {
     repo(root.path(), STATEMENT);
     let outcome = run(root.path(), &upstream(README), false).unwrap();
 
-    let dir = root.path().join("build/packs/scowl-en-us");
-    assert_eq!(path(&outcome, "英文"), dir.join("scowl-en-us.pack"));
+    let dir = root.path().join("build/packs/aosp-en-us");
+    assert_eq!(path(&outcome, "英文"), dir.join("aosp-en-us.pack"));
     let bytes = std::fs::read(path(&outcome, "英文")).unwrap();
     assert_eq!(written(&outcome, "英文").sha256, sha256_hex(&bytes));
     let pack = EnglishPack::from_bytes(&bytes).unwrap();
-    assert_eq!(pack.id, "scowl-en-us");
+    assert_eq!(pack.id, "aosp-en-us");
     assert_eq!(
         pack.words.iter().collect::<Vec<_>>(),
-        ["the", "walk", "walked"]
+        ["the", "walked", "zero"]
     );
+    assert_eq!(pack.words.frequency("the"), Some(222));
     assert_eq!(
         (
-            outcome.english.stems,
-            outcome.english.taboo,
-            outcome.english.untypable
+            outcome.english.entries,
+            outcome.english.offensive,
+            outcome.english.not_a_word
         ),
-        (4, 1, 1)
+        (5, 1, 1)
     );
 
     let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
-    assert!(license.contains("LicenseRef-SCOWL"), "{license}");
-    assert!(license.contains(SCOWL_COPYRIGHT.trim_end()), "{license}");
-    assert!(!license.contains("Apache"), "{license}");
+    assert!(license.contains("Apache-2.0"), "{license}");
+    assert!(license.contains(LATINIME_NOTICE.trim()), "{license}");
+    assert!(
+        !license.contains(APACHE.trim()),
+        "只寫用到的來源，沒有 OpenCC：{license}"
+    );
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
-    assert!(notice.contains("rel-2026.02.25"), "{notice}");
-    assert!(notice.contains(&sha256_hex(&scowl_zip())), "{notice}");
-    assert!(notice.contains("NOSUGGEST"), "{notice}");
+    assert!(
+        notice.contains("127336e9f29d69607eab55982324b210279ae8c5"),
+        "{notice}"
+    );
+    assert!(notice.contains(&sha256_hex(&wordlist_gz())), "{notice}");
+    assert!(notice.contains("possibly_offensive"), "{notice}");
 }
 
 #[test]
@@ -1192,7 +1217,7 @@ fn builds_the_emoji_pack_with_its_own_license_and_notice() {
     let license = std::fs::read_to_string(dir.join("LICENSE")).unwrap();
     assert!(license.contains(CLDR_LICENSE.trim_end()), "{license}");
     assert!(license.contains(UNICODE_LICENSE.trim_end()), "{license}");
-    assert!(!license.contains("LicenseRef-SCOWL"), "{license}");
+    assert!(!license.contains(LATINIME_NOTICE.trim()), "{license}");
     let notice = std::fs::read_to_string(dir.join("NOTICE")).unwrap();
     assert!(
         notice.contains("96e54b273d2da4ec6fbad350ba19ff23fa24a588"),

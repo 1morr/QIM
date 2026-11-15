@@ -76,3 +76,32 @@ test("單按 Shift 切英文時打 the 直接進輸入框、沒有候選；切�
 	await page.keyboard.press("2");
 	await expect(text).toHaveValue("thethe");
 });
+
+// 英文資料包換成 AOSP LatinIME 的詞表（M4 票 22）：常用詞照樣在第 2 位，debug 面板讀得到來源是英文；
+// 錯拼不在詞表（LatinIME 只把它當 shortcut 的錯拼不收），沒有英文候選。
+test("打 receive 第 2 位是 receive、來源是英文；打 recieve 沒有英文候選", async ({
+	page,
+}, testInfo) => {
+	const { text, items } = await ready(page);
+	await page.getByRole("button", { name: "debug" }).click();
+	const debug = page.locator("#debug");
+	await expect(debug).toBeVisible();
+	await text.focus();
+
+	await page.keyboard.type("receive");
+	await expect(items.nth(1)).toHaveText("2receive");
+	const row = debug
+		.getByRole("table", { name: "候選來源" })
+		.locator("tbody tr")
+		.filter({ has: page.locator("td:nth-child(2)", { hasText: /^receive$/ }) });
+	await expect(row).toHaveAttribute("data-kind", "english");
+	await page.screenshot({ path: testInfo.outputPath("english-receive.png") });
+	await page.keyboard.press("Escape");
+
+	await page.keyboard.type("recieve");
+	await expect(items.first()).toBeVisible();
+	for (const item of await items.allTextContents()) {
+		expect(item, `recieve：${item}`).not.toMatch(/^\d[a-z]+$/i);
+	}
+	await expect(debug.locator('tbody tr[data-kind="english"]')).toHaveCount(0);
+});
