@@ -51,6 +51,29 @@ figcaption b { color: var(--ink); font-weight: 600; }
 .option { border: 1px solid var(--rule); border-radius: 12px; padding: 16px; }
 .option h3 { display: flex; gap: 8px; align-items: baseline; }
 .tag { font-size: 0.78rem; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--page); }
+.changes { margin: 16px 0 0; padding: 12px 16px; border-radius: 12px; background: light-dark(#eef1fd, #1a1e2b); max-width: 72ch; }
+.changes h3 { margin: 0 0 4px; }
+.changes ul, ul.plain { margin: 0; padding-left: 1.2em; max-width: 72ch; }
+ul.plain { margin: 0 0 12px; }
+ul.plain li, .changes li { margin: 2px 0; }
+.key .label svg { width: 1.1em; height: 1.1em; display: block; }
+/* 長按地球鍵的選單：畫在鍵盤範圍內（iOS 不能畫到鍵盤外，事實 M29）。 */
+.menu-scrim { position: absolute; inset: 0; z-index: 6; background: rgb(0 0 0 / 28%); display: grid; place-items: center; }
+.menu {
+	/* 長度以排高（--row，withMenu 依佈局版本設）為單位，直向橫向都放得進四排高的鍵盤。 */
+	width: min(86%, calc(var(--row) * 6.5)); border-radius: calc(var(--row) * 0.3);
+	padding: calc(var(--row) * 0.18) calc(var(--row) * 0.16) calc(var(--row) * 0.12);
+	background: light-dark(#f8f8fd, #262932); color: light-dark(#1f2128, #e4e5f0);
+	box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
+}
+.menu .title { font-size: max(13px, calc(var(--row) * 0.27)); font-weight: 600; text-align: center; margin: 0 0 calc(var(--row) * 0.08); }
+.menu .item { display: grid; grid-template-columns: max(20px, calc(var(--row) * 0.42)) 1fr; align-items: center; padding: max(3px, calc(var(--row) * 0.09)) calc(var(--row) * 0.2); border-radius: 999px; }
+.menu .item.current { background: light-dark(#c9d5fb, #3a4870); }
+.menu .item .check { font-size: max(13px, calc(var(--row) * 0.26)); color: light-dark(#2f437a, #c8d4ff); }
+.menu .item .name { font-size: max(13px, calc(var(--row) * 0.26)); line-height: 1.2; }
+.menu .item .sub { grid-column: 2; font-size: max(11px, calc(var(--row) * 0.19)); color: light-dark(#5b5e6b, #a3a6b4); line-height: 1.25; }
+.menu .item.placeholder .name { color: light-dark(#8a8d99, #7c7f8c); }
+.menu .rule { height: 1px; margin: calc(var(--row) * 0.06) calc(var(--row) * 0.2); background: light-dark(#d9dbe6, #3a3d48); }
 .notes { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.92rem; }
 .notes th, .notes td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
 .notes th { font-weight: 600; white-space: nowrap; }
@@ -113,17 +136,26 @@ figcaption b { color: var(--ink); font-weight: 600; }
 </head>
 <body>
 <main>
-<h1>觸控的中英鍵與英文鍵盤</h1>
-<p class="lede">票 23 的設計稿。預設觸控佈局加一顆中英鍵，點了換成 QWERTY 英文頁，再點換回速成。鍵盤的尺寸、配色、字級和現在網頁畫的速成鍵盤一樣（<code>gboard.rs</code>），只多畫這次新增的頁與鍵。藍框是這次新增或改動的鍵。</p>
+<h1>觸控的地球鍵與英文鍵盤</h1>
+<p class="lede">票 23 的設計稿（第二版，2026-11-17）。預設觸控佈局加一顆地球鍵：點一下在速成與英文之間切換，長按跳出切換鍵盤的選單。英文頁是 QWERTY。鍵盤的尺寸、配色、字級和現在網頁畫的速成鍵盤一樣（<code>gboard.rs</code>），只多畫這次新增的頁與鍵。藍框是這次新增或改動的鍵。</p>
 <p class="lede">第一版的英文頁接<b>英文直通</b>：字母直接上屏，候選列沒有建議；英文模式（建議、自動修正）在票 24 接上，外觀不變。</p>
+<div class="changes">
+	<h3>這版改了什麼</h3>
+	<ul>
+		<li>「中/英」標籤換成 Gboard 式的<b>地球鍵</b>（使用者 2026-11-17 定），位置不變：逗號與空白之間。</li>
+		<li>新增<b>長按地球鍵的選單</b>（第 5 節）與<b>點一下的行為</b>（第 6 節）。</li>
+		<li>英文頁第一排的數字角標、brief 的設計稿規格、其餘排法已確認（使用者 2026-11-17 同意），照第一版。</li>
+		<li>格式多一個動作 <code>"keyboardMenu"</code>（第 8 節）。</li>
+	</ul>
+</div>
 <div class="theme-switch" role="group" aria-label="淺色深色">
 	<button type="button" data-theme-choice="auto" aria-pressed="true">跟隨系統</button>
 	<button type="button" data-theme-choice="light" aria-pressed="false">淺色</button>
 	<button type="button" data-theme-choice="dark" aria-pressed="false">深色</button>
 </div>
 
-<h2>1. 中英鍵放哪裡</h2>
-<p>Gboard 的中文佈局（粵語速成、簡體拼音、繁體注音）都沒有鍵盤內的中英鍵，中英要靠地球鍵換語言。Gboard 唯一放在鍵盤裡的切換鍵，是設定「Language switch key」打開後的地球鍵：<b>放在 emoji 鍵的位置，逗號與空白之間</b>，白鍵（事實 M49，截圖 <code>.scratch/m4/evidence/23-*.png</code>）。中英鍵照這個位置放。</p>
+<h2>1. 地球鍵放哪裡</h2>
+<p>Gboard 的中文佈局（粵語速成、簡體拼音、繁體注音）都沒有鍵盤內的中英鍵，中英要靠換語言。Gboard 放在鍵盤裡的切換鍵，是設定「Language switch key」打開後的地球鍵：<b>放在 emoji 鍵的位置，逗號與空白之間</b>，白鍵（事實 M49，截圖 <code>.scratch/m4/evidence/23-*.png</code>）。QIM 的地球鍵照這個位置與樣子。</p>
 <p>QIM 的底排沒有 emoji 鍵（表情在長按逗號進的「常用」頁），所以這顆鍵占掉一格空白：空白鍵從 5 格寬縮成 4 格，和 Gboard 有 emoji 鍵時的空白一樣寬。字母鍵的位置不動，空間模型與觸控基準不受影響。</p>
 <div class="pair" id="position"></div>
 
@@ -137,24 +169,28 @@ figcaption b { color: var(--ink); font-weight: 600; }
 <p>同一套排法，畫布 844 寬（現在的橫向版本）。</p>
 <div class="wide" id="landscape"></div>
 
-<h2>5. 要你選的地方</h2>
-<h3 style="margin-top:20px">5.1 中英鍵的標籤</h3>
-<p>Gboard 沒有這顆鍵可以照。兩種做法：</p>
-<div class="pair" id="label-ab"></div>
+<h2>5. 長按地球鍵：切換鍵盤的選單</h2>
+<p>照 Gboard 長按地球鍵的「變更鍵盤」選單（截圖 <code>23-jyutping-longpress-globe-key</code>）：一列一個鍵盤，名稱下面一行小字，目前的打勾、底色標出。選單畫在<b>鍵盤範圍內</b>，蓋住按鍵：iOS 鍵盤不能畫到鍵盤上緣之外（事實 M29），網頁照平台殼的限制做。點一列就切過去並收起；點選單外面收起、什麼都不做。</p>
+<ul class="plain">
+	<li><b>速成</b>、<b>English</b>：QIM 自己的兩種，選了就和點地球鍵一樣切中英、換頁。</li>
+	<li><b>系統鍵盤</b>：網頁原型只占位（灰字、點了沒有作用）。iOS 殼接系統的「使用者啟用的鍵盤」清單（<code>handleInputModeList</code>，事實 P29），Android 殼叫系統的輸入法選擇視窗（<code>showInputMethodPicker</code>，事實 P30）。兩個平台都是叫出系統自己的清單，不是把別的鍵盤一個個列進這個選單：平台沒有給輸入法讀別的鍵盤清單的介面。</li>
+</ul>
+<div class="flow" id="menu"></div>
 
-<h3 style="margin-top:28px">5.2 英文頁第一排的數字</h3>
-<p>Gboard 英文鍵盤第一排有 1–0 的角標，長按打出數字；速成頁的角標是英文字母，長按只出英文字母（brief 手機觸控鍵盤一節，使用者 2026-11-05 決定）。英文頁點一下就是字母，長按再出同一個字母沒有用處。</p>
-<div class="pair" id="digits-ab"></div>
+<h2>6. 點一下地球鍵</h2>
+<p><b>建議：速成與英文互切</b>，照 Gboard：Gboard 點地球鍵是依序換到下一個<b>自己的</b>佈局（實測速成 → English → 粵拼，事實 M49），QIM 自己只有速成與英文兩種，所以就是互切。點一下不換到別的鍵盤 App；要換別的鍵盤用長按選單的「系統鍵盤」。</p>
+<p><b>和 iOS 規範不同的地方</b>：Apple 描述的切換鍵是「點一下換到下一個系統鍵盤、長按出系統清單」（事實 P29），沒有「點一下在自己的語言間切換」。這只影響 iOS 上 <code>needsInputModeSwitchKey</code> 為真的機型（要鍵盤自己提供切換鍵；有 Face ID 的 iPhone 由系統在鍵盤下方畫地球鍵，為假）。那時地球鍵要照 Apple 改成點一下換系統鍵盤，還是另放一顆，在 M8 iOS 殼開工時定（plan 的佈局測試一節已把 iOS 預設佈局放不放切換鍵盤鍵排在 M8）。網頁與 Android 照上面的建議。</p>
 
-<h2>6. 每顆鍵怎麼動</h2>
+<h2>7. 每顆鍵怎麼動</h2>
 <table class="notes">
 	<thead><tr><th>鍵／情境</th><th>行為</th><th>依據</th></tr></thead>
 	<tbody>
-		<tr><td>速成頁的中英鍵</td><td>切到英文頁，候選列左邊的狀態變「英」。組字中按下時和實體鍵盤的中英鍵一樣，照「組字中單按 Shift」的設定處理組字（上屏、留碼…）。</td><td>brief 手機觸控鍵盤：那個設定管「實體 Shift 與佈局裡的中英鍵」</td></tr>
-		<tr><td>英文頁的中英鍵</td><td>回速成頁，狀態變「中」。</td><td>—</td></tr>
-		<tr><td>長按中英鍵</td><td>沒有作用（Gboard 長按地球鍵出換鍵盤選單，QIM 只有一種中文）。</td><td>實測 23-jyutping-longpress-globe-key</td></tr>
+		<tr><td>速成頁點地球鍵</td><td>切到英文頁，候選列左邊的狀態變「英」。組字中按下時和實體鍵盤的中英鍵一樣，照「組字中單按 Shift」的設定處理組字（上屏、留碼…）。</td><td>brief 手機觸控鍵盤：那個設定管「實體 Shift 與佈局裡的中英鍵」</td></tr>
+		<tr><td>英文頁點地球鍵</td><td>回速成頁，狀態變「中」。</td><td>Gboard 點地球鍵換下一個佈局（M49）</td></tr>
+		<tr><td>長按地球鍵</td><td>按住 400 ms 跳出切換鍵盤的選單（第 5 節），不出一般的長按清單；放開手指選單留著，點一列才切。</td><td>Gboard 長按地球鍵（M49）</td></tr>
+		<tr><td>地球鍵的樣子</td><td>白鍵、單色線條地球圖示，顏色同其他鍵的字；讀屏念「切換鍵盤」。兩頁一樣，現在是中文還是英文看候選列左邊的狀態。</td><td>Gboard 的地球鍵（截圖 23-quick-language-switch-key）</td></tr>
 		<tr><td>實體鍵盤單按 Shift 切中英</td><td>觸控鍵盤跟著換頁：在速成頁就換到英文頁，在英文頁就換回速成頁；在符號頁不動。</td><td>Trime <code>ascii_keyboard</code></td></tr>
-		<tr><td>英文頁的字母</td><td>小寫，直接上屏（英文直通）。沒有角標的方案（5.2 選 B）長按沒有東西。</td><td>實測 23-english-letters-lowercase</td></tr>
+		<tr><td>英文頁的字母</td><td>小寫，直接上屏（英文直通）。第一排右上角標 1–0，長按打出那個數字；其餘排沒有角標、長按沒有東西。Shift 開著時不顯示角標。</td><td>Gboard 英文鍵盤（M49）</td></tr>
 		<tr><td>英文頁的 ⇧</td><td>和速成頁的 ⇧ 一樣：點一下大寫一個字母、快點兩下鎖定。英文頁沒有組字，所以不會換成「'詞」分隔鍵。句首自動大寫在票 24。</td><td>brief 手機觸控鍵盤的 ⇧</td></tr>
 		<tr><td>英文頁的 <code>,</code> <code>.</code></td><td>半形。逗號長按照速成頁進「常用」頁；句號長按照 Gboard 英文的 16 個半形符號，預設 <code>,</code>，所以英文頁本身就打得出 <code>? ! : ;</code>。</td><td>實測 23-english-longpress-period</td></tr>
 		<tr><td>英文頁的 ?123</td><td>進英文的符號頁：照 Gboard 英文，括號、冒號、問號、驚嘆號都是半形，左下「ABC」回英文頁；=\&lt; 頁也照 Gboard 英文。12/34 數字鍵盤兩邊共用，左下「返回」在英文時回英文頁。</td><td>實測 23-english-sym-page1、-page2</td></tr>
@@ -164,8 +200,14 @@ figcaption b { color: var(--ink); font-weight: 600; }
 	</tbody>
 </table>
 
-<h2>7. 佈局格式（只加不改）</h2>
-<p>中英鍵沿用現有的 <code>"toggleAscii"</code> 動作，不加新動作。頁面加一個可省略的欄位，寫「切到英文時換成哪一頁」：速成字母頁寫英文頁、符號頁寫英文符號頁。點中英鍵或實體鍵盤切中英時，鍵盤照這個欄位換頁；在英文時按「返回」這類切到速成字母頁的鍵，也落到英文頁。這是 Trime 的做法（中英鍵 <code>Mode_switch</code> 切 <code>ascii_mode</code>，鍵盤的 <code>ascii_keyboard</code> 是「切到英文時自動跳到的鍵盤」）。自訂佈局不寫這個欄位，就和現在一樣只切中英、不換頁。欄位名稱與 Schema 在實作時定。</p>
+<h2>8. 佈局格式（只加不改）</h2>
+<ul class="plain">
+	<li><b>點一下</b>：地球鍵的 <code>tap</code> 沿用現有的 <code>"toggleAscii"</code>，不加新動作。</li>
+	<li><b>長按</b>：新增不帶資料的動作 <code>"keyboardMenu"</code>（開切換鍵盤的選單）。地球鍵寫 <code>"longPress": ["keyboardMenu"]</code>；長按清單只有它一個時，殼按住到時直接開選單，不畫一般的長按清單。選單列哪些項由殼決定（QIM 的速成、英文，加平台的系統鍵盤），不寫進佈局。和現有的 <code>"nextKeyboard"</code>（直接換下一個系統鍵盤，iOS <code>advanceToNextInputMode</code>）分開。</li>
+	<li><b>換頁</b>：頁面加一個可省略的欄位，寫「切到英文時換成哪一頁」：速成字母頁寫英文頁、符號頁寫英文符號頁。切中英時（地球鍵、選單、實體鍵盤）鍵盤照這個欄位換頁；在英文時按「返回」這類切到速成字母頁的鍵，也落到英文頁。這是 Trime 的做法（中英鍵 <code>Mode_switch</code> 切 <code>ascii_mode</code>，鍵盤的 <code>ascii_keyboard</code> 是「切到英文時自動跳到的鍵盤」）。自訂佈局不寫這個欄位，就和現在一樣只切中英、不換頁。</li>
+	<li><b>標籤</b>：地球鍵的 <code>label</code> 寫 <code>🌐</code>、<code>a11yLabel</code> 寫「切換鍵盤」；殼把這個標籤畫成單色線條圖示（同網頁現在把 Shift 的狀態換成圖示），不畫彩色 emoji。</li>
+	<li>欄位名稱與 Schema 在實作時定，加的東西都有 Schema 與雙向測試（plan 佈局測試一節）。</li>
+</ul>
 </main>
 <script>
 /* ---------- 尺寸與配色：照 gboard.rs ---------- */
@@ -197,27 +239,20 @@ const enter = () => fn("enter", "↵", { units: 1.5, size: SIZE.icon, pill: true
 const space = (units, label) => cell("space", label, { units, size: SIZE.small, a11y: "空白" });
 const row = (indent, cells) => ({ indent, cells });
 
-/* 中英鍵：label "A" 是「中/英」目前的亮、"B" 是要去的那邊（英文頁寫「中」）。白鍵，同 Gboard 的地球鍵。 */
-function toggleKey(ascii, label = "A") {
-	if (label === "A") {
-		const html = ascii
-			? '<span class="off">中</span><span class="slash">/</span><span class="on">英</span>'
-			: '<span class="on">中</span><span class="slash">/</span><span class="off">英</span>';
-		return cell("toggle", "", { html, size: SIZE.label, a11y: ascii ? "中英切換，現在英文" : "中英切換，現在中文" });
-	}
-	return cell("toggle", ascii ? "中" : "英", { size: SIZE.label, a11y: ascii ? "切到中文" : "切到英文" });
-}
+/* 地球鍵：白鍵、單色線條圖示（同 Gboard 的 Language switch key），兩頁一樣。 */
+const GLOBE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3.5 9h17M3.5 15h17"/></svg>';
+const globeKey = () => cell("globe", "", { html: GLOBE_SVG, size: SIZE.icon * 0.92, a11y: "切換鍵盤" });
 
 /* ---------- 頁面 ---------- */
-function quickLetters({ toggle = true, label = "A", shiftGlyph } = {}) {
+function quickLetters({ toggle = true, shiftGlyph } = {}) {
 	const r = (s) => [...s].map((c) => cell(c, RADICALS[c], { hint: c }));
 	const comma = fn("，", "，", { size: SIZE.label, hint: "☺" });
 	const bottom = toggle
-		? [fn("to-symbols", "?123", { units: 1.5, pill: true }), comma, toggleKey(false, label), space(4, "速成"), fn("。", "。", { size: SIZE.label }), enter()]
+		? [fn("to-symbols", "?123", { units: 1.5, pill: true }), comma, globeKey(), space(4, "速成"), fn("。", "。", { size: SIZE.label }), enter()]
 		: [fn("to-symbols", "?123", { units: 1.5, pill: true }), comma, space(5, "速成"), fn("。", "。", { size: SIZE.label }), enter()];
 	return [row(0, r("qwertyuiop")), row(0.5, r("asdfghjkl")), row(0, [shift(shiftGlyph), ...r("zxcvbnm"), backspace()]), row(0, bottom)];
 }
-function englishLetters({ caps = false, digits = true, label = "A", shiftGlyph } = {}) {
+function englishLetters({ caps = false, digits = true, shiftGlyph } = {}) {
 	const key = (c, hint) => cell(c, caps ? c.toUpperCase() : c, { size: caps ? SIZE.upper : SIZE.lower, hint });
 	// Shift 開著時字母鍵不顯示角標（plan 佈局一節的 "shift"）。
 	const top = [..."qwertyuiop"].map((c, i) => key(c, digits && !caps ? String((i + 1) % 10) : undefined));
@@ -225,7 +260,7 @@ function englishLetters({ caps = false, digits = true, label = "A", shiftGlyph }
 	const bottom = [
 		fn("to-symbols", "?123", { units: 1.5, pill: true }),
 		fn(",", ",", { size: SIZE.label, hint: "☺" }),
-		toggleKey(true, label),
+		globeKey(),
 		space(4, "English"),
 		fn(".", ".", { size: SIZE.label }),
 		enter(),
@@ -259,6 +294,7 @@ function drawKeyboard(rows, orientation, opts = {}) {
 	const kb = document.createElement("div");
 	kb.className = "kb";
 	kb.style.aspectRatio = `${g.width} / ${height}`;
+	kb.style.setProperty("--row", `${(g.rowHeight / g.width) * 100}cqw`);
 	const placed = {};
 	rows.forEach((r, ri) => {
 		let left = r.indent;
@@ -372,76 +408,69 @@ function figure(content, caption) {
 	f.append(c);
 	return f;
 }
-function option(tag, title, figures, text) {
-	const o = document.createElement("div");
-	o.className = "option";
-	o.innerHTML = `<h3>${tag ? `<span class="tag">${tag}</span>` : ""}${title}</h3><p>${text}</p>`;
-	const grid = document.createElement("div");
-	grid.style.display = "grid";
-	grid.style.gap = "16px";
-	figures.forEach((f) => grid.append(f));
-	o.append(grid);
-	return o;
-}
 const $ = (id) => document.getElementById(id);
 
 /* ---------- 1. 位置：現在 vs 加了中英鍵 ---------- */
 $("position").append(
 	figure(device(quickLetters({ toggle: false })), "<b>現在</b>：底排 ?123、逗號、空白（5 格）、句號、Enter。"),
-	figure(device(quickLetters(), { focus: ["toggle", "space"] }), "<b>改成</b>：逗號與空白之間多一顆中英鍵（白鍵），空白縮成 4 格。"),
+	figure(device(quickLetters(), { focus: ["globe", "space"] }), "<b>改成</b>：逗號與空白之間多一顆地球鍵（白鍵），空白縮成 4 格。"),
 );
 
 /* ---------- 2. 流程 ---------- */
 $("flow").append(
-	figure(device(quickLetters(), { theme: "light", typed: "", focus: ["toggle"], pressed: "toggle" }), "<b>① 速成頁</b>，點中英鍵。"),
-	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "", note: "英文直通：沒有建議（票 24 接英文模式）", focus: ["toggle", "space", ","] }), "<b>② 英文頁</b>：QWERTY 小寫、第一排有數字角標（5.2）、空白寫 English，狀態「英」。"),
+	figure(device(quickLetters(), { theme: "light", typed: "", focus: ["globe"], pressed: "globe" }), "<b>① 速成頁</b>，點地球鍵。"),
+	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "", note: "英文直通：沒有建議（票 24 接英文模式）", focus: ["globe", "space", ","] }), "<b>② 英文頁</b>：QWERTY 小寫、第一排右上角標 1–0、空白寫 English，狀態「英」。"),
 	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello", pressed: "o" }), "<b>③ 打 hello</b>：每個字母直接上屏。"),
 	figure(device(englishLetters({ caps: true, shiftGlyph: "⬆" }), { theme: "light", mode: "英", typed: "hello ", focus: ["shift"] }), "<b>④ 點 ⇧</b>：字母換大寫，下一個字母打大寫、打完回小寫（和速成頁的 ⇧ 一樣）。"),
 	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello", popup: { key: ".", items: PERIOD_EN, selected: 14 } }), "<b>⑤ 長按句號</b>：照 Gboard 英文的 16 個半形符號，預設 <code>,</code>；<code>? ! :</code> 在這裡就打得出來。圖上選到 <code>,</code>。"),
 	figure(device(englishSymbols(), { theme: "light", mode: "英", typed: "hello?", focus: ["to-english", "(", ")", ":", ";", "!", "?", "\"", "'"] }), "<b>⑥ ?123 進英文符號頁</b>：照 Gboard 英文，括號與 <code>: ; ! ?</code> 半形；左下 ABC 回英文頁。"),
 	figure(device(englishMoreSymbols(), { theme: "light", mode: "英", typed: "hello?", focus: ["to-english"] }), "<b>⑦ =\\&lt; 頁</b>：照 Gboard 英文的第二頁，左下 ABC 回英文頁。"),
-	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello?", focus: ["toggle"], pressed: "toggle" }), "<b>⑧ 在英文頁點中英鍵</b>……"),
-	figure(device(quickLetters(), { theme: "light", typed: "hello?", focus: ["toggle"] }), "<b>⑨ 回到速成頁</b>，狀態「中」。"),
+	figure(device(englishLetters(), { theme: "light", mode: "英", typed: "hello?", focus: ["globe"], pressed: "globe" }), "<b>⑧ 在英文頁點地球鍵</b>……"),
+	figure(device(quickLetters(), { theme: "light", typed: "hello?", focus: ["globe"] }), "<b>⑨ 回到速成頁</b>，狀態「中」。"),
 );
 
 /* ---------- 3. 深色 ---------- */
 $("dark").append(
-	figure(device(quickLetters(), { theme: "dark", focus: ["toggle"] }), "速成頁"),
-	figure(device(englishLetters(), { theme: "dark", mode: "英", note: "英文直通：沒有建議", focus: ["toggle"] }), "英文頁"),
+	figure(device(quickLetters(), { theme: "dark", focus: ["globe"] }), "速成頁"),
+	figure(device(englishLetters(), { theme: "dark", mode: "英", note: "英文直通：沒有建議", focus: ["globe"] }), "英文頁"),
 	figure(device(englishSymbols(), { theme: "dark", mode: "英" }), "英文符號頁"),
 );
 
 /* ---------- 4. 橫向 ---------- */
 $("landscape").append(
-	figure(device(quickLetters(), { orientation: "landscape", focus: ["toggle"] }), "速成頁，橫向（淺色）"),
-	figure(device(englishLetters(), { orientation: "landscape", mode: "英", note: "英文直通：沒有建議", focus: ["toggle"], theme: "dark" }), "英文頁，橫向（深色）"),
+	figure(device(quickLetters(), { orientation: "landscape", focus: ["globe"] }), "速成頁，橫向（淺色）"),
+	figure(device(englishLetters(), { orientation: "landscape", mode: "英", note: "英文直通：沒有建議", focus: ["globe"], theme: "dark" }), "英文頁，橫向（深色）"),
 );
 
-/* ---------- 5.1 標籤 A／B ---------- */
-$("label-ab").append(
-	option("A", "「中/英」，目前的那個字亮（建議）", [
-		figure(device(quickLetters({ label: "A" }), { focus: ["toggle"] }), "速成頁：<b>中</b>亮"),
-		figure(device(englishLetters({ label: "A" }), { mode: "英", focus: ["toggle"] }), "英文頁：<b>英</b>亮"),
-	], "兩頁同一個字樣，一看就知道是切換鍵；實體鍵盤切了中英，鍵上也跟著亮另一個字。Trime 的中英鍵也是顯示目前狀態（<code>states: [中文, 西文]</code>）。缺點：字小，兩個字擠在一格。"),
-	option("B", "寫要去的那邊：速成頁「英」、英文頁「中」", [
-		figure(device(quickLetters({ label: "B" }), { focus: ["toggle"] }), "速成頁寫「英」"),
-		figure(device(englishLetters({ label: "B" }), { mode: "英", focus: ["toggle"] }), "英文頁寫「中」"),
-	], "跟鍵盤裡其他切頁鍵一樣寫目的地（?123、ABC、返回），字大好認。缺點：英文頁一片字母裡出現一個「中」，和候選列左邊的狀態「英」相反，第一次看可能以為現在是中文。"),
+/* ---------- 5. 長按選單 ---------- */
+function withMenu(wrap, ascii) {
+	const kb = wrap.querySelector(".kb");
+	const scrim = document.createElement("div");
+	scrim.className = "menu-scrim";
+	const items = [
+		{ name: "速成", sub: "中文", current: !ascii },
+		{ name: "English", sub: "英文 QWERTY", current: ascii },
+		"rule",
+		{ name: "系統鍵盤…", sub: "網頁原型沒有；平台殼叫出系統的清單", placeholder: true },
+	];
+	const menu = document.createElement("div");
+	menu.className = "menu";
+	menu.setAttribute("role", "menu");
+	menu.setAttribute("aria-label", "切換鍵盤");
+	menu.innerHTML = '<p class="title">切換鍵盤</p>' + items.map((it) => it === "rule"
+		? '<div class="rule" role="separator"></div>'
+		: `<div class="item${it.current ? " current" : ""}${it.placeholder ? " placeholder" : ""}" role="menuitemradio" aria-checked="${it.current ? "true" : "false"}"${it.placeholder ? ' aria-disabled="true"' : ""}><span class="check">${it.current ? "✓" : ""}</span><span class="name">${it.name}</span><span class="sub">${it.sub}</span></div>`).join("");
+	scrim.append(menu);
+	kb.append(scrim);
+	return wrap;
+}
+$("menu").append(
+	figure(device(quickLetters(), { theme: "light", focus: ["globe"], pressed: "globe" }), "<b>① 速成頁</b>，按住地球鍵。"),
+	figure(withMenu(device(quickLetters(), { theme: "light" }), false), "<b>② 400 ms 後跳出選單</b>，速成打勾。放開手指選單留著；點 English 切到英文頁並收起。"),
+	figure(withMenu(device(englishLetters(), { theme: "dark", mode: "英" }), true), "<b>英文頁按住地球鍵</b>（深色）：English 打勾。"),
 );
-/* 5.1 的字樣：A 方案的暗字。 */
-const style = document.createElement("style");
-style.textContent = ".key .label .off{opacity:.45;font-size:.8em}.key .label .on{font-weight:600}.key .label .slash{opacity:.45;font-size:.8em;margin:0 .05em}";
-document.head.append(style);
-
-/* ---------- 5.2 數字角標 A／B ---------- */
-$("digits-ab").append(
-	option("A", "照 Gboard：第一排角標 1–0，長按打數字（建議）", [
-		figure(device(englishLetters(), { mode: "英", popup: { key: "e", items: ["3"] }, focus: ["e"] }), "長按 e 出 3"),
-	], "英文打數字不必進 ?123，同 Gboard 英文鍵盤。速成頁不變，長按照舊只出英文字母。"),
-	option("B", "不加角標，長按沒有東西", [
-		figure(device(englishLetters({ digits: false }), { mode: "英" }), "沒有角標"),
-	], "畫面最乾淨；數字一律從 ?123 打。"),
-);
+$("menu").append(figure(withMenu(device(quickLetters(), { orientation: "landscape", theme: "light" }), false), "<b>橫向</b>：選單照排高縮放，一樣畫在鍵盤範圍內。"));
+$("menu").lastElementChild.style.gridColumn = "1 / -1";
 
 /* ---------- 淺色深色切換 ---------- */
 for (const b of document.querySelectorAll("[data-theme-choice]")) {
