@@ -169,6 +169,19 @@ impl crate::user::Versioned for EnglishUserWord {
     }
 }
 
+/// 一個英文使用者詞打得多常（[`EnglishUserWords::starting_with`]）。
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct UsedWord<'a> {
+    /// 小寫的鍵。
+    pub(crate) key: &'a str,
+    /// 最後打的寫法。
+    pub(crate) text: &'a str,
+    /// 衰減到現在的衰減值：誰最近常打。
+    pub(crate) used: f64,
+    /// 一年內打過的次數（各台相加）：出現門檻用。
+    pub(crate) count: u64,
+}
+
 /// 英文使用者詞的鍵：不分大小寫，所以是小寫。
 pub(crate) fn key(text: &str) -> String {
     text.to_ascii_lowercase()
@@ -253,29 +266,25 @@ impl EnglishUserWords {
             .collect()
     }
 
-    /// 英文模式的建議列（M4 票 24）：鍵以 `prefix`（小寫）開頭、`today` 時一年內打過的詞，各是（鍵, 最後打的
-    /// 寫法, 衰減值, 一年內打過的次數），依鍵排。
+    /// 英文模式的建議列（M4 票 24）：鍵以 `prefix`（小寫）開頭、`today` 時一年內打過的詞，依鍵排。
     pub(crate) fn starting_with<'a>(
         &'a self,
         prefix: &'a str,
         today: Option<Date>,
-    ) -> impl Iterator<Item = (&'a str, &'a str, f64, u64)> + 'a {
+    ) -> impl Iterator<Item = UsedWord<'a>> + 'a {
         self.words
             .range::<str, _>((
                 std::ops::Bound::Included(prefix),
                 std::ops::Bound::Unbounded,
             ))
             .take_while(move |(key, _)| key.starts_with(prefix))
-            .map(move |(key, w)| {
-                let count = self.count_on(key, today);
-                (
-                    key.as_str(),
-                    w.text.as_str(),
-                    w.decayed.at(self.tick),
-                    count,
-                )
+            .map(move |(key, w)| UsedWord {
+                key,
+                text: &w.text,
+                used: w.decayed.at(self.tick),
+                count: self.count_on(key, today),
             })
-            .filter(|&(_, _, _, count)| count > 0)
+            .filter(|w| w.count > 0)
     }
 
     /// 寫法，依小寫排；殼的清單用。

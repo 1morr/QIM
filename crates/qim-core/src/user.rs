@@ -592,11 +592,11 @@ impl UserModel {
     }
 
     /// 英文模式的建議列（M4 票 24，[`EnglishUserWords::starting_with`]）：鍵以 `prefix`（小寫）開頭、一年內打過的
-    /// 英文使用者詞，各是（鍵, 寫法, 衰減值, 一年內打過的次數）。
+    /// 英文使用者詞。
     pub(crate) fn english_starting_with<'a>(
         &'a self,
         prefix: &'a str,
-    ) -> impl Iterator<Item = (&'a str, &'a str, f64, u64)> + 'a {
+    ) -> impl Iterator<Item = english_user::UsedWord<'a>> + 'a {
         self.english.starting_with(prefix, self.today)
     }
 

@@ -44,7 +44,7 @@ pub(crate) fn takes_picked_space(c: char) -> bool {
 }
 
 /// 建議列最多幾個：兩頁（[`crate::PAGE_SIZE`]），候選展開面板看得到第二頁。
-pub const ENGLISH_SUGGESTION_LIMIT: usize = 2 * crate::PAGE_SIZE;
+pub(crate) const ENGLISH_SUGGESTION_LIMIT: usize = 2 * crate::PAGE_SIZE;
 
 /// 正在打的詞 `typed`（[`crate::english_user::TypedRun::word`]）的建議，照使用頻率排：
 ///
@@ -65,14 +65,15 @@ pub(crate) fn suggestions(
     let mut learned: Vec<(f64, &str, SpanKind)> = Vec::new();
     let mut learned_keys: HashSet<&str> = HashSet::new();
     if user_words {
-        for (key, text, used, count) in user.english_starting_with(&prefix) {
-            let shown = match dictionary.lookup(key) {
+        for word in user.english_starting_with(&prefix) {
+            let shown = match dictionary.lookup(word.key) {
                 Some(spelling) => Some((spelling, SpanKind::English)),
-                None => (count >= ENGLISH_SHOWN_AFTER).then_some((text, SpanKind::EnglishUserWord)),
+                None => (word.count >= ENGLISH_SHOWN_AFTER)
+                    .then_some((word.text, SpanKind::EnglishUserWord)),
             };
             if let Some((text, kind)) = shown {
-                learned.push((used, text, kind));
-                learned_keys.insert(key);
+                learned.push((word.used, text, kind));
+                learned_keys.insert(word.key);
             }
         }
     }

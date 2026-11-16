@@ -416,3 +416,53 @@ fn punctuation_typed_as_text_after_a_pick_also_takes_the_place_of_its_space() {
     let word = ime.session.text(&ime.engine, &mut ime.user, "A");
     assert_eq!((word.delete_before, word.commit.as_deref()), (0, Some("A")));
 }
+
+/// 殼給的前文不以正在打的串結尾（游標移走、宿主改了字）：建議收起，點不到舊建議，不會刪錯字。
+#[test]
+fn moving_the_cursor_away_drops_the_suggestions() {
+    let mut ime = Ime::new();
+    ime.session.set_context("");
+    ime.globe();
+    ime.type_text("hel");
+    assert!(!ime.all().is_empty());
+    ime.session.set_context("x");
+    assert!(ime.all().is_empty());
+    let picked = ime.select(0);
+    assert_eq!((picked.delete_before, picked.commit), (0, None));
+}
+
+/// 點了建議之後游標移走（殼給的前文不以補的空白結尾）或換欄位：下一個空白、句讀照常上屏，不再吃掉或換掉。
+#[test]
+fn a_picked_space_is_forgotten_once_the_cursor_moves() {
+    let mut ime = Ime::new();
+    ime.session.set_context("");
+    ime.globe();
+    ime.type_text("hel");
+    ime.select(0);
+    ime.session.set_context("hello ");
+    assert_eq!(
+        ime.press(Key::Punct(',')).delete_before,
+        1,
+        "前文照舊：還是剛補的空白"
+    );
+
+    ime.type_text(" hel");
+    ime.select(0);
+    ime.session.set_context("elsewhere");
+    assert_eq!(ime.press(Key::Space).commit.as_deref(), Some(" "));
+    ime.type_text("hel");
+    ime.select(0);
+    ime.session.clear_context(&mut ime.user);
+    assert_eq!(ime.press(Key::Punct(',')).delete_before, 0);
+}
+
+/// 換掉補的空白的句讀是串字元（`.`）時，接著打的照樣是經 QIM 打的串：有建議。
+#[test]
+fn typing_on_after_a_full_stop_that_took_the_picked_space_still_suggests() {
+    let mut ime = Ime::new();
+    ime.globe();
+    ime.type_text("hel");
+    ime.select(0);
+    ime.press(Key::Punct('.'));
+    assert_eq!(ime.suggestions("he"), ["hello", "help", "held", "helmet"]);
+}

@@ -503,9 +503,9 @@ pub struct Session {
     /// 最近一個動作送出去的字與動作之前的正在打的串；退格撤銷那個動作時拿來重算正在打的串
     /// （[`Session::typed_after_undo`]）。沒送出字的動作是 `None`。
     last_sent: Option<LastSent>,
-    /// 剛點了英文模式的建議、補了一個空白（[`Session::select_suggestion`]）；下一個動作開始時取走
-    /// （[`Session::begin_action`]）。
-    picked: bool,
+    /// 剛點了英文模式的建議：上屏的建議與補的空白（[`Session::select_suggestion`]）。下一個動作開始時取走
+    /// （[`Session::begin_action`]）；殼給的前文不以它結尾（游標移走）或前文作廢時丟掉。
+    picked: Option<String>,
     /// 這個 Session 寫的撤銷紀錄的記號（[`UserModel::take_undo`]）。
     undo_owner: UndoOwner,
     /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
@@ -564,7 +564,14 @@ impl Session {
         self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
         self.sentence = Sentence::Start.after(before);
         self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
+        let word = self.typed.word().map(str::to_owned);
         self.typed.sync(before);
+        // 游標不在正在打的串後面了：建議接不上，收起；點了建議補的空白也不在游標前了。
+        if self.english && self.typed.word() != word.as_deref() {
+            self.drop_suggestions();
+        }
+        self.picked
+            .take_if(|picked| !before.ends_with(picked.as_str()));
         // 游標前不是剛上屏的字：殼點了別處、移了游標，聯想接不上了。
         if self
             .association
@@ -605,6 +612,7 @@ impl Session {
         self.context = None;
         self.after_digit = false;
         self.sentence = Sentence::Unknown;
+        self.picked = None;
         self.end_association();
     }
 
@@ -963,7 +971,7 @@ impl Session {
         Action {
             pending: user.take_undo(self.undo_owner),
             typed: self.typed.clone(),
-            picked: std::mem::take(&mut self.picked),
+            picked: self.picked.take().is_some(),
         }
     }
 
@@ -1453,14 +1461,26 @@ impl Session {
             self.english = true;
         }
         Snapshot {
-            ascii: self.ascii || self.english || self.inline.is_some(),
+            ascii: self.in_english(),
             ..snapshot
         }
+    }
+
+    /// 英文：英文直通、英文模式或臨時英文（[`Snapshot::ascii`]）。
+    fn in_english(&self) -> bool {
+        self.ascii || self.english || self.inline.is_some()
     }
 
     /// 離開英文模式：建議列收起。
     fn leave_english(&mut self) {
         if std::mem::take(&mut self.english) {
+            self.drop_suggestions();
+        }
+    }
+
+    /// 收起英文模式的建議列。
+    fn drop_suggestions(&mut self) {
+        if !self.candidates.is_empty() {
             self.candidates.clear();
             self.page = 0;
             self.generation += 1;
@@ -1479,11 +1499,7 @@ impl Session {
             _ => return self.snapshot(engine, false, None),
         };
         let deleted = usize::from(picked && english_mode::takes_picked_space(c));
-        self.retract(deleted);
-        Snapshot {
-            delete_before: deleted,
-            ..self.snapshot(engine, true, Some(Commit::plain(c.to_string())))
-        }
+        self.commit_after_deleting(engine, deleted, Commit::plain(c.to_string()))
     }
 
     /// 點英文模式建議列的第 `index` 個（ADR 0008）：殼先刪掉正在打的詞（`delete_before`），再上屏建議接一個空白
@@ -1494,25 +1510,27 @@ impl Session {
         };
         let text = format!("{} ", choice.text());
         let deleted = self.typed.word().map_or(0, |w| w.chars().count());
-        self.retract(deleted);
-        self.picked = true;
-        Snapshot {
-            delete_before: deleted,
-            ..self.snapshot(engine, true, Some(Commit::plain(text)))
-        }
+        self.typed.retract(deleted);
+        self.picked = Some(text.clone());
+        self.commit_after_deleting(engine, deleted, Commit::plain(text))
     }
 
-    /// 殼要刪掉游標前 `n` 個核心送出去的字（`delete_before`，ADR 0008）：前文與正在打的串跟著拿掉，等於 `n` 次
-    /// 退格，但核心知道刪了什麼，前文不作廢。
-    fn retract(&mut self, n: usize) {
-        if n == 0 {
-            return;
-        }
-        self.typed.retract(n);
+    /// 叫殼先刪掉游標前 `deleted` 個核心送出去的字（`delete_before`，ADR 0008）再上屏 `commit`。前文跟著拿掉
+    /// 那些字，等於退格但前文不作廢；正在打的串由呼叫端處理（補的空白不在串裡）。
+    fn commit_after_deleting(
+        &mut self,
+        engine: &Engine,
+        deleted: usize,
+        commit: Commit,
+    ) -> Snapshot {
         if let Some(context) = &mut self.context {
-            for _ in 0..n {
+            for _ in 0..deleted {
                 context.pop();
             }
+        }
+        Snapshot {
+            delete_before: deleted,
+            ..self.snapshot(engine, true, Some(commit))
         }
     }
 
@@ -1641,11 +1659,7 @@ impl Session {
                     && action.picked
                     && text.text.starts_with(english_mode::takes_picked_space),
             );
-            self.retract(deleted);
-            Snapshot {
-                delete_before: deleted,
-                ..self.snapshot(engine, true, Some(text))
-            }
+            self.commit_after_deleting(engine, deleted, text)
         };
         self.end_action(
             user,
@@ -2088,7 +2102,7 @@ impl Session {
             delete_before: 0,
             commit,
             commit_original,
-            ascii: self.ascii || self.english || self.inline.is_some(),
+            ascii: self.in_english(),
             generation: self.generation,
             auto_shift: self.auto_shift(),
         }
