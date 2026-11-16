@@ -237,6 +237,11 @@ impl Engine {
         self.scheme.spells(&key) && self.english.lookup(&key).is_some()
     }
 
+    /// 英文詞典（英文模式的建議列，ADR 0008）。
+    pub(crate) fn english_words(&self) -> &EnglishWords {
+        &self.english
+    }
+
     /// 簡體模式下輸出的文字；沒掛上簡繁資料包時照原樣。
     pub(crate) fn simplify(&self, text: &str) -> String {
         match &self.simplifier {

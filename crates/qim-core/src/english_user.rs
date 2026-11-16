@@ -34,38 +34,56 @@ fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '%' | '+' | '-' | '@' | '\'')
 }
 
-/// 正在打的一串（plan〈介面〉〈英文使用者詞〉）：送出去的字的結尾連續的串字元（[`is_word_char`]），
+/// 正在打的一串（plan〈介面〉〈英文使用者詞〉、名詞表）：送出去的字的結尾連續的串字元（[`is_word_char`]），
 /// 遇到其他字元就是打完了。開頭不是使用者經 QIM 打的（接在輸入框原有的串字元後面、退格刪到它前面、
-/// 有一段是無痕或學習關掉時打的、長過上限）時是 `partial`：打完也不學，到下一個分隔的字元重新開始。
+/// 長過上限）時是 `partial`：打完也不學、英文模式也不給建議，到下一個分隔的字元重新開始。有一段是無痕或
+/// 學習關掉時打的是 `private`：照樣追蹤、英文模式照樣給建議（ADR 0008），只是打完不學。
 #[derive(Debug, Clone, Default)]
 pub(crate) struct TypedRun {
     text: String,
     partial: bool,
+    private: bool,
 }
 
 impl TypedRun {
-    /// 送出去一個字元。串字元接上（`recording` 為假時不接、標成 `partial`）；其他字元讓這串打完，
-    /// 回傳要學的串（[`TypedRun::finish`]）。
-    pub(crate) fn push(&mut self, c: char, recording: bool) -> Option<String> {
+    /// 送出去一個字元。串字元接上（`learning` 為假時標成 `private`）；其他字元讓這串打完，回傳要學的串
+    /// （[`TypedRun::finish`]）。
+    pub(crate) fn push(&mut self, c: char, learning: bool) -> Option<String> {
         if !is_word_char(c) {
             return self.finish();
         }
-        if recording && self.text.len() < MAX_LEN + 1 {
+        if self.text.len() < MAX_LEN + 1 {
             self.text.push(c);
         } else {
             // 長過上限的不學；之後退格留下的也不是輸入框裡的樣子。
             self.partial = true;
         }
+        self.private |= !learning;
         None
     }
 
-    /// 打完了：整串都看得到時回傳要學的部分（[`to_learn`]），然後重新開始。
+    /// 打完了：整串都看得到、又都是學得了時打的，回傳要學的部分（[`to_learn`]），然後重新開始。
     pub(crate) fn finish(&mut self) -> Option<String> {
-        let done = (!self.partial)
+        let done = (!self.partial && !self.private)
             .then(|| to_learn(&self.text).map(String::from))
             .flatten();
         *self = Self::default();
         done
+    }
+
+    /// 英文模式建議與換掉的詞：這串去掉開頭的 `.` 與 `'`（同 [`to_learn`]）；開頭不是經 QIM 打的
+    /// （`partial`）或是空的時沒有。
+    pub(crate) fn word(&self) -> Option<&str> {
+        let word = self.text.trim_start_matches(['.', '\'']);
+        (!self.partial && !word.is_empty()).then_some(word)
+    }
+
+    /// 核心叫殼刪掉游標前 `n` 個自己送出去的字（`delete_before`，ADR 0008）：從這串的結尾拿掉；刪到這串
+    /// 前面時，之後接在不知道的字後面。
+    pub(crate) fn retract(&mut self, n: usize) {
+        for _ in 0..n {
+            self.backspace();
+        }
     }
 
     /// 交還宿主的退格刪掉最後一個字元；已經是空的時刪到了這串前面的字，之後接在不知道的字後面。
@@ -233,6 +251,31 @@ impl EnglishUserWords {
             .map(|(_, text)| text)
             .filter(|text| letters(text, alphabet).starts_with(prefix))
             .collect()
+    }
+
+    /// 英文模式的建議列（M4 票 24）：鍵以 `prefix`（小寫）開頭、`today` 時一年內打過的詞，各是（鍵, 最後打的
+    /// 寫法, 衰減值, 一年內打過的次數），依鍵排。
+    pub(crate) fn starting_with<'a>(
+        &'a self,
+        prefix: &'a str,
+        today: Option<Date>,
+    ) -> impl Iterator<Item = (&'a str, &'a str, f64, u64)> + 'a {
+        self.words
+            .range::<str, _>((
+                std::ops::Bound::Included(prefix),
+                std::ops::Bound::Unbounded,
+            ))
+            .take_while(move |(key, _)| key.starts_with(prefix))
+            .map(move |(key, w)| {
+                let count = self.count_on(key, today);
+                (
+                    key.as_str(),
+                    w.text.as_str(),
+                    w.decayed.at(self.tick),
+                    count,
+                )
+            })
+            .filter(|&(_, _, _, count)| count > 0)
     }
 
     /// 寫法，依小寫排；殼的清單用。

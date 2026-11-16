@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::association::{self, ASSOCIATION_TAIL};
+use crate::english_mode::{self, Sentence};
 use crate::english_user::TypedRun;
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding, SpanKind};
 use crate::scheme::{SEPARATOR, without_separators};
@@ -113,6 +114,9 @@ pub struct Options {
     /// 鄰鍵字母換進輸入碼（一段碼換一碼，單字也換），換出來的讀法從候選列第 2 格起插、最多 2 個、不搶首選；
     /// 實體鍵盤（[`Key::Physical`]）不換。選了它學的是換過的碼。預設開。
     pub neighbor_readings: bool,
+    /// 英文模式的句首自動大寫（brief〈英文模式與欄位類型〉〈設定與同步〉，ADR 0008）：句子開頭時快照的
+    /// [`Snapshot::auto_shift`] 為真，觸控鍵盤自動開 Shift。預設關。
+    pub auto_capitalize: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -191,6 +195,7 @@ impl Default for Options {
             english_user_words: true,
             association: true,
             neighbor_readings: true,
+            auto_capitalize: false,
         }
     }
 }
@@ -211,8 +216,11 @@ pub enum Key {
     PageDown,
     Left,
     Right,
-    /// 單按 Shift（切中英，brief〈桌面鍵盤操作〉）；單按的判定在殼。
+    /// 單按 Shift（切中英，brief〈桌面鍵盤操作〉）；單按的判定在殼。沒有組字時切英文直通。
     ToggleAscii(ShiftKey),
+    /// 觸控的地球鍵（佈局動作 `toggleAscii`）：沒有組字時切英文模式（ADR 0008）；組字中同單按右 Shift，照
+    /// [`Options::shift_switch`] 處理。在英文直通或英文模式按任一種切換鍵都回中文。
+    ToggleEnglish,
     /// 殼不轉成上面各種的鍵（Tab、Delete、↑ ↓、Home、End…）：組字中吃下，免得宿主拿它改輸入框。
     Other,
     /// 只改鍵盤狀態、不送字元的鍵：單按 Ctrl、Alt、Cmd、CapsLock 這類修飾鍵，觸控鍵盤的切頁、⇧、
@@ -231,7 +239,7 @@ pub enum Key {
 impl Key {
     /// 由「種類 + 值」讀出按鍵，綁定收不了帶資料的列舉時用（網頁、Swift）；同 librime 能從字串讀按鍵。
     /// 種類是 `letter`、`punct`、`digit`、`space`、`enter`、`backspace`、`escape`、`pageUp`、`pageDown`、
-    /// `left`、`right`、`toggleAscii`、`other`、`modifier`、`weighted`（觸控）、`physical`（實體鍵盤）；`letter`、`punct`
+    /// `left`、`right`、`toggleAscii`、`toggleEnglish`、`other`、`modifier`、`weighted`（觸控）、`physical`（實體鍵盤）；`letter`、`punct`
     /// 的值是一個字元，`digit` 是 `0`–`9`，`toggleAscii` 是 `left` 或 `right`，`weighted`、`physical` 是 `字母:機率`
     /// 以逗號分隔（`a:0.62,s:0.38`，見 [`Weights::new`]），其他種類沒有值。加一種鍵時這裡與殼的按鍵對照一起改。
     pub fn parse(kind: &str, value: Option<&str>) -> Result<Key, KeyError> {
@@ -253,6 +261,7 @@ impl Key {
             }
             ("toggleAscii", Some("left")) => Key::ToggleAscii(ShiftKey::Left),
             ("toggleAscii", Some("right")) => Key::ToggleAscii(ShiftKey::Right),
+            ("toggleEnglish", None) => Key::ToggleEnglish,
             ("space", None) => Key::Space,
             ("enter", None) => Key::Enter,
             ("backspace", None) => Key::Backspace,
@@ -401,6 +410,10 @@ pub struct Snapshot {
     pub ascii: bool,
     /// 每次候選變動加一，非同步重排用。
     pub generation: u64,
+    /// 觸控鍵盤要自動開 Shift（開一次）：英文模式、句首自動大寫開著（[`Options::auto_capitalize`]）、游標在
+    /// 句子開頭（空的欄位、`.` `?` `!` 後接空白、換行之後，照 Gboard，事實 M48）。殼在它由假變真時開 Shift、
+    /// 由真變假時關掉開一次的 Shift；使用者點掉的不再開，所以句首也打得出小寫。
+    pub auto_shift: bool,
 }
 
 /// 後處理過的一個候選：排序時的候選（學習用）與轉換過的文字。
@@ -462,6 +475,9 @@ pub struct Session {
     options: Options,
     /// 英文直通（[`Key::ToggleAscii`]）：沒有組字、鍵都交還宿主。
     ascii: bool,
+    /// 英文模式（[`Key::ToggleEnglish`]，ADR 0008）：沒有組字，可見字元與空白核心吃下、逐字上屏，候選列是
+    /// 正在打的串的建議（[`Session::list_suggestions`]）。和 `ascii` 不會同時為真。
+    english: bool,
     /// 前文（plan〈介面〉，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
     /// 接上之後核心送出去的字（上屏的、交還宿主打的可見字元與空白）。殼沒給過時只有核心送出去的，
     /// 同 librime 的 commit history。`None` 是不知道：沒給過也還沒送出過字、交還宿主的鍵改了游標前的
@@ -477,6 +493,9 @@ pub struct Session {
     /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief〈英文模式與欄位類型〉）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
     after_digit: bool,
+    /// 游標在不在句子開頭（句首自動大寫，[`Snapshot::auto_shift`]）。和數字後半形一樣跟著前文與送出去的字
+    /// 更新、不記文字，無痕時只看送出去的字（殼不給前文）。
+    sentence: Sentence,
     /// 正在打的一串字（英文使用者詞，plan〈介面〉）：送出去的字的結尾連續的串字元。遇到其他字元、
     /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，學成英文使用者詞
     /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
@@ -484,6 +503,9 @@ pub struct Session {
     /// 最近一個動作送出去的字與動作之前的正在打的串；退格撤銷那個動作時拿來重算正在打的串
     /// （[`Session::typed_after_undo`]）。沒送出字的動作是 `None`。
     last_sent: Option<LastSent>,
+    /// 剛點了英文模式的建議、補了一個空白（[`Session::select_suggestion`]）；下一個動作開始時取走
+    /// （[`Session::begin_action`]）。
+    picked: bool,
     /// 這個 Session 寫的撤銷紀錄的記號（[`UserModel::take_undo`]）。
     undo_owner: UndoOwner,
     /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
@@ -540,6 +562,7 @@ impl Session {
             return;
         }
         self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
+        self.sentence = Sentence::Start.after(before);
         self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
         self.typed.sync(before);
         // 游標前不是剛上屏的字：殼點了別處、移了游標，聯想接不上了。
@@ -581,6 +604,7 @@ impl Session {
     fn forget_context(&mut self) {
         self.context = None;
         self.after_digit = false;
+        self.sentence = Sentence::Unknown;
         self.end_association();
     }
 
@@ -613,6 +637,8 @@ impl Session {
         if self.composing_chinese() {
             self.lattice.forget_spans();
             self.refresh_candidates(engine, user);
+        } else if self.english {
+            self.list_suggestions(engine, user);
         } else if self.association.is_some() {
             if self.options.association {
                 self.list_association(engine, user);
@@ -631,12 +657,19 @@ impl Session {
             self.select_at(engine, user, index)
         } else if self.showing_association() {
             self.select_association(engine, user, index)
+        } else if self.english {
+            self.select_suggestion(engine, index)
         } else {
             // 只呼叫 `set_options` 關掉聯想、還沒 `refresh` 時，照沒有聯想收起。
             self.end_association();
             self.snapshot(engine, false, None)
         };
-        self.end_action(user, action, snapshot.commit.clone());
+        self.end_action(
+            user,
+            action,
+            snapshot.commit.clone(),
+            snapshot.delete_before,
+        );
         self.finish(engine, user, snapshot)
     }
 
@@ -651,7 +684,7 @@ impl Session {
     pub fn forget(&mut self, engine: &Engine, user: &mut UserModel, index: usize) -> Snapshot {
         self.apply_pending_options(engine, user);
         let action = self.begin_action(user);
-        self.end_action(user, action, None);
+        self.end_action(user, action, None, 0);
         if !self.composing() {
             return self.snapshot(engine, false, None);
         }
@@ -709,7 +742,7 @@ impl Session {
     ) -> Snapshot {
         self.apply_pending_options(engine, user);
         let action = self.begin_action(user);
-        self.end_action(user, action, None);
+        self.end_action(user, action, None, 0);
         if !self.composing() {
             return self.snapshot(engine, false, None);
         }
@@ -889,7 +922,7 @@ impl Session {
             }
         };
         let action = self.begin_action(user);
-        let snapshot = self.handle_key(engine, user, key.clone());
+        let snapshot = self.handle_key(engine, user, key.clone(), action.picked);
         if !snapshot.handled {
             self.passed_to_host(user, key.clone());
         }
@@ -906,12 +939,12 @@ impl Session {
             // 收起聯想）都算夾在中間。
             Key::Modifier => user.keep_undo(action.pending),
             _ => {
-                let sent = if snapshot.handled {
-                    snapshot.commit.clone()
+                let (sent, deleted) = if snapshot.handled {
+                    (snapshot.commit.clone(), snapshot.delete_before)
                 } else {
-                    sent_to_host(&key)
+                    (sent_to_host(&key), 0)
                 };
-                self.end_action(user, action, sent);
+                self.end_action(user, action, sent, deleted);
             }
         }
         self.finish(engine, user, snapshot)
@@ -924,16 +957,25 @@ impl Session {
         Action {
             pending: user.take_undo(self.undo_owner),
             typed: self.typed.clone(),
+            picked: std::mem::take(&mut self.picked),
         }
     }
 
-    /// 動作結束，前一個動作的紀錄丟掉：記下這個動作送出去的字 `sent`，緊接著的退格可以撤銷它學到的。
-    /// 沒送字的動作（方向鍵、Tab 這類移走游標的鍵）之後的退格不在它打完的字旁邊，學到的不能撤銷。
-    fn end_action(&mut self, user: &mut UserModel, action: Action, sent: Option<String>) {
+    /// 動作結束，前一個動作的紀錄丟掉：記下這個動作先刪掉的字數 `deleted`（`delete_before`）與送出去的字
+    /// `sent`，緊接著的退格可以撤銷它學到的。沒送字的動作（方向鍵、Tab 這類移走游標的鍵）之後的退格不在它
+    /// 打完的字旁邊，學到的不能撤銷。
+    fn end_action(
+        &mut self,
+        user: &mut UserModel,
+        action: Action,
+        sent: Option<String>,
+        deleted: usize,
+    ) {
         match sent {
             Some(text) => {
                 self.last_sent = Some(LastSent {
                     typed: action.typed,
+                    deleted,
                     text,
                 });
             }
@@ -945,9 +987,15 @@ impl Session {
     /// 那個動作之前，再接上其餘送出去的字。那個動作讓串打完時學到的已經撤銷，這裡不再學；所以
     /// `teh` 空白、退格之後改成 `the` 再打空白，學的是 `the`。
     fn typed_after_undo(&mut self) {
-        let Some(LastSent { mut typed, text }) = self.last_sent.take() else {
+        let Some(LastSent {
+            mut typed,
+            deleted,
+            text,
+        }) = self.last_sent.take()
+        else {
             return;
         };
+        typed.retract(deleted);
         let recording = self.learns_english();
         let mut kept = text.chars();
         kept.next_back();
@@ -985,6 +1033,7 @@ impl Session {
     /// 裡不會有的字元時那串打完，[`Session::end_typed`]）。
     fn sent(&mut self, user: &mut UserModel, text: &str) {
         self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
+        self.sentence = self.sentence.after(text);
         let recording = self.learns_english();
         for c in text.chars() {
             let done = self.typed.push(c, recording);
@@ -1016,14 +1065,60 @@ impl Session {
 
     /// 會上屏的公開方法回傳前都經過這裡：上屏的字接在前文後面（[`Session::context`]，
     /// 同 librime 的 commit history），再補分段的字根。
+    /// 英文模式的建議跟著正在打的串，串在這裡才接上上屏的字，所以建議也在這裡重列。
     fn finish(&mut self, engine: &Engine, user: &mut UserModel, snapshot: Snapshot) -> Snapshot {
         if let Some(commit) = &snapshot.commit {
             self.sent(user, commit);
         }
+        let snapshot = if self.english {
+            self.list_suggestions(engine, user);
+            Snapshot {
+                commit: snapshot.commit,
+                commit_original: snapshot.commit_original,
+                delete_before: snapshot.delete_before,
+                ..self.snapshot(engine, snapshot.handled, None)
+            }
+        } else {
+            snapshot
+        };
         with_radicals(engine, snapshot)
     }
 
-    fn handle_key(&mut self, engine: &Engine, user: &mut UserModel, key: Key) -> Snapshot {
+    /// 英文模式的建議列（ADR 0008）：正在打的串的前綴補完（[`english_mode::suggestions`]）；建議變了才算候選
+    /// 變動。
+    fn list_suggestions(&mut self, engine: &Engine, user: &UserModel) {
+        let spans = self.typed.word().map_or_else(Vec::new, |word| {
+            english_mode::suggestions(engine, user, word, self.options.english_user_words)
+        });
+        let same = spans.len() == self.candidates.len()
+            && spans
+                .iter()
+                .zip(&self.candidates)
+                .all(|(span, shown)| span.text == shown.span.text);
+        if same {
+            return;
+        }
+        self.candidates = spans
+            .into_iter()
+            .map(|span| ShownCandidate {
+                span,
+                converted: None,
+                rerank: None,
+            })
+            .collect();
+        self.listed_with = self.options;
+        self.page = 0;
+        self.generation += 1;
+    }
+
+    /// `picked` 是上一個動作點了英文模式的建議（[`Session::select_suggestion`]）。
+    fn handle_key(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        key: Key,
+        picked: bool,
+    ) -> Snapshot {
         if self.association.is_some()
             && let Some(snapshot) = self.handle_association(engine, user, key.clone())
         {
@@ -1032,8 +1127,14 @@ impl Session {
         if let Key::ToggleAscii(shift) = key {
             return self.toggle_ascii(engine, user, shift);
         }
+        if key == Key::ToggleEnglish {
+            return self.toggle_english(engine, user);
+        }
         if self.inline.is_some() {
             return self.handle_inline(engine, user, key);
+        }
+        if self.english {
+            return self.handle_english(engine, key, picked);
         }
         // 英文直通沒有組字，鍵都交還宿主。
         if self.ascii {
@@ -1144,6 +1245,7 @@ impl Session {
             // `Weighted`、`Physical` 在 `handle` 已換成機率最高的字母，到不了這裡。
             Key::Letter(_)
             | Key::ToggleAscii(_)
+            | Key::ToggleEnglish
             | Key::Other
             | Key::Modifier
             | Key::Weighted(_)
@@ -1233,7 +1335,7 @@ impl Session {
         mut segments: Vec<String>,
     ) -> Snapshot {
         self.clear();
-        if self.options.association && !self.ascii && !self.options.incognito {
+        if self.options.association && !self.ascii && !self.english && !self.options.incognito {
             // 留到蓋住最後 ASSOCIATION_TAIL 字的段，最後一段一定留。
             let mut chars = 0;
             let keep = segments
@@ -1306,7 +1408,11 @@ impl Session {
             return self.snapshot(engine, true, None);
         }
         if !self.composing() {
-            self.ascii = !self.ascii;
+            if self.english {
+                self.leave_english();
+            } else {
+                self.ascii = !self.ascii;
+            }
             return self.snapshot(engine, true, None);
         }
         // 組字中一定是中文：英文直通沒有組字。
@@ -1321,6 +1427,87 @@ impl Session {
         self.page = 0;
         self.generation += 1;
         self.snapshot(engine, true, None)
+    }
+
+    /// 地球鍵（[`Key::ToggleEnglish`]，ADR 0008）：英文直通或英文模式中回中文；沒有組字時切英文模式；組字中
+    /// 同單按右 Shift（[`Session::toggle_ascii`]，照 [`Options::shift_switch`]），先上屏時切到的是英文模式。
+    fn toggle_english(&mut self, engine: &Engine, user: &mut UserModel) -> Snapshot {
+        if self.english || (self.ascii && !self.composing()) {
+            self.leave_english();
+            self.ascii = false;
+            return self.snapshot(engine, true, None);
+        }
+        if !self.composing() {
+            self.english = true;
+            return self.snapshot(engine, true, None);
+        }
+        let snapshot = self.toggle_ascii(engine, user, ShiftKey::Right);
+        if self.ascii && !self.composing() {
+            self.ascii = false;
+            self.english = true;
+        }
+        Snapshot {
+            ascii: self.ascii || self.english || self.inline.is_some(),
+            ..snapshot
+        }
+    }
+
+    /// 離開英文模式：建議列收起。
+    fn leave_english(&mut self) {
+        if std::mem::take(&mut self.english) {
+            self.candidates.clear();
+            self.page = 0;
+            self.generation += 1;
+        }
+    }
+
+    /// 英文模式的鍵（ADR 0008）：字母（含大寫）、數字、標點與空白吃下、原樣上屏，不轉全形、不套數字後半形；
+    /// 其他鍵（退格、Enter、方向鍵…）照英文直通交還宿主。`picked`（上一個動作點了建議、補了空白）時照 Gboard
+    /// （事實 M48）：空白吃掉不上屏，句讀與右括號（[`english_mode::takes_picked_space`]）先刪掉那個空白再上屏。
+    fn handle_english(&mut self, engine: &Engine, key: Key, picked: bool) -> Snapshot {
+        let c = match key {
+            Key::Letter(c) | Key::Punct(c) => c,
+            Key::Digit(d) => char::from(b'0' + d),
+            Key::Space if picked => return self.snapshot(engine, true, None),
+            Key::Space => ' ',
+            _ => return self.snapshot(engine, false, None),
+        };
+        let deleted = usize::from(picked && english_mode::takes_picked_space(c));
+        self.retract(deleted);
+        Snapshot {
+            delete_before: deleted,
+            ..self.snapshot(engine, true, Some(Commit::plain(c.to_string())))
+        }
+    }
+
+    /// 點英文模式建議列的第 `index` 個（ADR 0008）：殼先刪掉正在打的詞（`delete_before`），再上屏建議接一個空白
+    /// （照 Gboard，事實 M47），空白讓這串打完、學起來。沒有這個建議時不動作。
+    fn select_suggestion(&mut self, engine: &Engine, index: usize) -> Snapshot {
+        let Some(choice) = self.candidates.get(index) else {
+            return self.snapshot(engine, true, None);
+        };
+        let text = format!("{} ", choice.text());
+        let deleted = self.typed.word().map_or(0, |w| w.chars().count());
+        self.retract(deleted);
+        self.picked = true;
+        Snapshot {
+            delete_before: deleted,
+            ..self.snapshot(engine, true, Some(Commit::plain(text)))
+        }
+    }
+
+    /// 殼要刪掉游標前 `n` 個核心送出去的字（`delete_before`，ADR 0008）：前文與正在打的串跟著拿掉，等於 `n` 次
+    /// 退格，但核心知道刪了什麼，前文不作廢。
+    fn retract(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        self.typed.retract(n);
+        if let Some(context) = &mut self.context {
+            for _ in 0..n {
+                context.pop();
+            }
+        }
     }
 
     /// 臨時英文中的鍵，照 librime 1.17.0 的 `ascii_composer`：可見字元與空白接在英文
@@ -1444,7 +1631,12 @@ impl Session {
         } else {
             self.snapshot(engine, true, Some(text))
         };
-        self.end_action(user, action, snapshot.commit.clone());
+        self.end_action(
+            user,
+            action,
+            snapshot.commit.clone(),
+            snapshot.delete_before,
+        );
         // 兩條路回來時組字都已清空，補字根現在沒有作用；照其他公開方法一樣經過它，組字留下時才不會漏。
         self.finish(engine, user, snapshot)
     }
@@ -1880,8 +2072,11 @@ impl Session {
             delete_before: 0,
             commit,
             commit_original,
-            ascii: self.ascii || self.inline.is_some(),
+            ascii: self.ascii || self.english || self.inline.is_some(),
             generation: self.generation,
+            auto_shift: self.english
+                && self.options.auto_capitalize
+                && self.sentence == Sentence::Start,
         }
     }
 }
@@ -1892,12 +2087,16 @@ struct Action {
     pending: Undo,
     /// 動作之前的正在打的串。
     typed: TypedRun,
+    /// 上一個動作點了英文模式的建議（[`Session::picked`]）。
+    picked: bool,
 }
 
 /// 一個動作送出去的字（交還宿主的字元、上屏的字）與動作之前的正在打的串（[`Session::last_sent`]）。
 #[derive(Debug, Clone)]
 struct LastSent {
     typed: TypedRun,
+    /// 送出之前叫殼刪掉的字數（`delete_before`），從 `typed` 的結尾拿掉。
+    deleted: usize,
     text: String,
 }
 

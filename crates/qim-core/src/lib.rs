@@ -8,6 +8,7 @@ mod date;
 mod emoji;
 mod engine;
 mod english;
+mod english_mode;
 mod english_user;
 mod language_model;
 mod lattice;
@@ -31,6 +32,7 @@ pub use date::{Date, ParseDateError};
 pub use emoji::{EMOJI_LIMIT, EmojiTable};
 pub use engine::Engine;
 pub use english::EnglishWords;
+pub use english_mode::ENGLISH_SUGGESTION_LIMIT;
 pub use english_user::{
     ENGLISH_COMPLETION_AFTER, ENGLISH_COMPLETION_LIMIT, ENGLISH_COMPLETION_POOL,
     ENGLISH_SHOWN_AFTER,
