@@ -370,6 +370,7 @@ export function mountKeyboard(
 			return;
 		}
 		const key = keys[index];
+		const opensMenu = key.keyboardMenu;
 		press = {
 			pointerId: event.pointerId,
 			index,
@@ -378,10 +379,11 @@ export function mountKeyboard(
 			mmPerUnit: (rect.width / layout.canvasWidth) * MM_PER_CSS_PX,
 			choice: undefined,
 			menu: false,
+			// 到時重取這個鍵：按住時停鍵重排可能重畫了按鍵、釋放了按下時拿到的 `key`。
 			timer:
 				key.longPress.length > 0
 					? window.setTimeout(
-							() => (key.keyboardMenu ? longPressMenu(index) : showPopup(key)),
+							() => (opensMenu ? longPressMenu(index) : showPopup(keys[index])),
 							KEY_LONG_PRESS_MS,
 						)
 					: undefined,

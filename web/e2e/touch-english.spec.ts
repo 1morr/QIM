@@ -58,7 +58,7 @@ test("點地球鍵切到英文頁、打 hello 直接上屏，再點切回速成�
 
 	await page.getByTestId("key-globe").tap();
 	await expect(mode).toHaveText("英");
-	// 英文頁：小寫字母，第一排角標 1–0（設計稿第 7 節）。
+	// 英文頁：小寫字母，第一排角標 1–0（設計稿〈每顆鍵怎麼動〉）。
 	await expect(page.getByTestId("key-q")).toHaveText("q1");
 	await expect(page.getByTestId("key-a")).toHaveText("a");
 	await expect(page.getByTestId("key-space")).toHaveText("English");
@@ -150,4 +150,19 @@ test("實體鍵盤單按 Shift 切中英時觸控鍵盤跟著換頁", async ({ p
 	await expect(page.getByTestId("key-q")).toHaveText("q1");
 	await page.keyboard.press("Shift");
 	await expect(page.getByTestId("key-a")).toHaveText("日a");
+});
+
+test("組字中長按地球鍵也開選單：按住時按鍵重畫了也一樣", async ({ page }) => {
+	// 停鍵重排回來會重畫按鍵、釋放舊的；長按到時不能再讀按下時拿到的那個鍵（手動亂按找到的，
+	// 這個順序穩定重現）。
+	const menu = page.getByRole("menu", { name: "切換鍵盤" });
+	await longPress(page, "key-globe");
+	await menu.getByRole("menuitemradio", { name: /速成/ }).tap();
+	await tapKeys(page, ["a", "n"]);
+	await expect(page.getByTestId("composition")).toHaveText("日弓");
+	await longPress(page, "key-globe");
+	await expect(menu).toBeVisible();
+	// 只開選單：組字還在、沒有切中英。
+	await expect(page.getByTestId("composition")).toHaveText("日弓");
+	await expect(page.getByTestId("mode")).toHaveText("中");
 });
