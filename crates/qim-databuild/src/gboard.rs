@@ -281,6 +281,15 @@ fn labelled_space(units: f64, label: &str) -> Cell {
         .units(units)
 }
 
+/// 字母頁與英文頁的逗號鍵：照鍵上的字輸出，長按進常用頁（代替 Gboard 逗號鍵的表情入口），角標 ☺。
+fn comma(label: &str) -> Cell {
+    let mut cell = text(label).function();
+    cell.hint = Some("☺".into());
+    cell.a11y_label = Some("逗號，長按切到常用".into());
+    cell.long_press = vec![Action::SwitchPage(PHRASES.into())];
+    cell
+}
+
 /// 地球鍵（M4 票 23）：點一下切中英，長按開切換鍵盤的選單；照 Gboard「Language switch key」是白鍵、
 /// 放在逗號與空白之間（事實 M49）。標籤 🌐 由殼畫成單色圖示。
 fn globe() -> Cell {
@@ -328,16 +337,12 @@ fn row(indent: f64, cells: Vec<Cell>) -> Row {
 const PERIOD_LONG_PRESS: &str = "…… ^_^ :) :( :D :P & $ ^ % _ ； ： 、 ！ ？";
 
 /// 字母頁照 Gboard：QWERTY 三排，第二排錯開半鍵；第三排左 Shift、右刪除；
-/// 底排 ?123、逗號（長按進常用頁，代替 Gboard 的表情入口）、空白、句號、Enter。
+/// 底排 ?123、逗號（長按進常用頁，代替 Gboard 的表情入口）、地球鍵、空白、句號、Enter。
 fn letters_page() -> Vec<Row> {
     let letters = |row: &str| row.chars().map(letter).collect::<Vec<_>>();
     let mut third = vec![shift()];
     third.extend(letters("zxcvbnm"));
     third.push(backspace());
-    let mut comma = text("，").function();
-    comma.hint = Some("☺".into());
-    comma.a11y_label = Some("逗號，長按切到常用".into());
-    comma.long_press = vec![Action::SwitchPage(PHRASES.into())];
     vec![
         row(0.0, letters("qwertyuiop")),
         row(0.5, letters("asdfghjkl")),
@@ -346,7 +351,7 @@ fn letters_page() -> Vec<Row> {
             0.0,
             vec![
                 switch(SYMBOLS, "?123").units(1.5).pill(),
-                comma,
+                comma("，"),
                 globe(),
                 space(4.0),
                 text("。")
@@ -387,10 +392,6 @@ fn english_page(digit_hints: bool) -> Vec<Row> {
     let mut third = vec![shift];
     third.extend(letters("zxcvbnm"));
     third.push(backspace());
-    let mut comma = text(",").function();
-    comma.hint = Some("☺".into());
-    comma.a11y_label = Some("逗號，長按切到常用".into());
-    comma.long_press = vec![Action::SwitchPage(PHRASES.into())];
     vec![
         row(0.0, top),
         row(0.5, letters("asdfghjkl")),
@@ -399,7 +400,7 @@ fn english_page(digit_hints: bool) -> Vec<Row> {
             0.0,
             vec![
                 switch(ENGLISH_SYMBOLS, "?123").units(1.5).pill(),
-                comma,
+                comma(","),
                 globe(),
                 english_space(4.0),
                 text(".")

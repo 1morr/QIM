@@ -404,12 +404,12 @@ impl Key {
         }
     }
 
-    /// 這個鍵所有的動作：`tap`、長按、滑動、組字中的 `tap`。
     /// 長按直接開切換鍵盤的選單：長按清單只有 `keyboardMenu`。殼按住到時開選單，不畫長按清單。
     pub fn opens_keyboard_menu(&self) -> bool {
         matches!(self.long_press.as_slice(), [Action::KeyboardMenu])
     }
 
+    /// 這個鍵所有的動作：`tap`、長按、滑動、組字中的 `tap`。
     pub fn actions(&self) -> impl Iterator<Item = &Action> {
         let swipe = self.swipe.iter().flat_map(|s| {
             [&s.up, &s.down, &s.left, &s.right]

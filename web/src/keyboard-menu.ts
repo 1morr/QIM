@@ -1,4 +1,4 @@
-// 切換鍵盤的選單（長按地球鍵，M4 票 23，設計稿 docs/design/23-touch-english-keyboard.html 第 5 節）：
+// 切換鍵盤的選單（長按地球鍵，M4 票 23，設計稿 docs/design/23-touch-english-keyboard.html〈長按地球鍵〉）：
 // 照 Gboard 長按地球鍵的「變更鍵盤」選單，一列一個鍵盤、目前的打勾。畫在鍵盤範圍內蓋住按鍵（iOS 鍵盤
 // 不能畫到鍵盤外，事實 M29）。「系統鍵盤」在網頁只占位：iOS、Android 殼叫系統的清單（事實 P29、P30）。
 
@@ -16,6 +16,8 @@ interface Item {
 	note: string;
 	/** 選了要切到的中英狀態；`undefined` 是占位、點了沒有作用。 */
 	ascii: boolean | undefined;
+	/** 上面畫一條分隔線（QIM 自己的鍵盤和平台的分開）。 */
+	separated?: boolean;
 }
 
 const ITEMS: Item[] = [
@@ -25,6 +27,7 @@ const ITEMS: Item[] = [
 		name: "系統鍵盤…",
 		note: "網頁原型沒有；平台殼叫出系統的清單",
 		ascii: undefined,
+		separated: true,
 	},
 ];
 
@@ -67,10 +70,16 @@ export function createKeyboardMenu(
 		row.append(check, name, note);
 		return row;
 	});
-	const rule = document.createElement("div");
-	rule.className = "rule";
-	rule.setAttribute("role", "separator");
-	menu.append(title, ...rows.slice(0, 2), rule, ...rows.slice(2));
+	menu.append(title);
+	ITEMS.forEach((item, i) => {
+		if (item.separated) {
+			const rule = document.createElement("div");
+			rule.className = "rule";
+			rule.setAttribute("role", "separator");
+			menu.append(rule);
+		}
+		menu.append(rows[i]);
+	});
 	scrim.append(menu);
 
 	/** 這次放開之前，手指是不是在打開的選單上按下的。 */
