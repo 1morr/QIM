@@ -16,6 +16,8 @@ pub struct Keyboard {
     shift: Shift,
     /// 沒有組字的英文狀態（英文直通、英文模式），殼每次拿到結果就交給 [`Keyboard::set_ascii`]。
     ascii: bool,
+    /// 核心上次給的句首自動大寫（`Snapshot.auto_shift`，[`Keyboard::set_auto_shift`]）。
+    auto_shift: bool,
 }
 
 /// 觸控鍵盤點按後送出、殼交給核心的東西。只改鍵盤狀態的動作（切頁、⇧、換鍵盤）已在 [`Keyboard`] 做完，
@@ -34,7 +36,8 @@ pub enum Output {
     Space,
     Backspace,
     Enter,
-    /// 觸控的中英鍵，同實體鍵盤單按右 Shift（組字怎麼處理依核心的 `ShiftSwitch`，預設先上屏）。
+    /// 觸控的地球鍵：綁定轉成核心的 `Key::ToggleEnglish`，沒有組字時切英文模式；組字中同實體鍵盤單按右 Shift
+    /// （依核心的 `ShiftSwitch`，預設先上屏）。
     ToggleAscii,
     /// 開切換鍵盤的選單（`keyboardMenu`）：殼畫選單；交給核心時同 `Modifier`。
     KeyboardMenu,
@@ -100,6 +103,7 @@ impl Keyboard {
             page: 0,
             shift: Shift::Off,
             ascii: false,
+            auto_shift: false,
         };
         keyboard.show_page_or_initial(None);
         (keyboard, warning)
@@ -119,6 +123,7 @@ impl Keyboard {
     pub fn keep_state_of(&mut self, old: &Keyboard) {
         self.shift = old.shift;
         self.ascii = old.ascii;
+        self.auto_shift = old.auto_shift;
         self.show_page_or_initial(Some(&old.page().id));
     }
 
@@ -139,6 +144,23 @@ impl Keyboard {
             }
             None => false,
         }
+    }
+
+    /// 核心的句首自動大寫（`Snapshot.auto_shift`，M4 票 24），殼每次拿到結果就給：由假變真時 Shift 關著就開一次
+    /// （照 Gboard 句首 Shift 亮起，事實 M48），由真變假時關掉開一次的 Shift；沒變時不動，使用者在句首點掉的
+    /// Shift 不會被開回來。鎖定的不動。回傳 Shift 有沒有變，殼依它重畫。
+    pub fn set_auto_shift(&mut self, on: bool) -> bool {
+        if on == self.auto_shift {
+            return false;
+        }
+        self.auto_shift = on;
+        let before = self.shift;
+        self.shift = match (on, before) {
+            (true, Shift::Off) => Shift::Once,
+            (false, Shift::Once) => Shift::Off,
+            (_, other) => other,
+        };
+        self.shift != before
     }
 
     pub fn variant(&self) -> &LayoutVariant {

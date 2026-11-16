@@ -285,3 +285,31 @@ fn a_letter_tap_with_a_touch_point_sends_letter_probabilities() {
         Output::Text("A".into())
     );
 }
+
+/// 句首自動大寫（核心的 `Snapshot.auto_shift`，M4 票 24）：由假變真時 Shift 開一次（照 Gboard 句首 Shift 亮起，
+/// 事實 M48），由真變假時關掉開一次的；一直是真時不再開，使用者點掉的 Shift 不會被開回來。鎖定的不動。
+#[test]
+fn auto_shift_turns_shift_on_once_when_it_becomes_true_and_off_when_it_ends() {
+    let mut keyboard = keyboard();
+    assert!(keyboard.set_auto_shift(true));
+    assert_eq!(keyboard.shift(), Shift::Once);
+    tap(&mut keyboard, "shift", false);
+    assert_eq!(keyboard.shift(), Shift::Off, "使用者點掉");
+    assert!(!keyboard.set_auto_shift(true), "還在句首，不再開");
+    assert_eq!(keyboard.shift(), Shift::Off);
+
+    assert!(!keyboard.set_auto_shift(false));
+    assert!(keyboard.set_auto_shift(true));
+    assert!(
+        keyboard.set_auto_shift(false),
+        "不在句首了（例如退格刪到字後面）"
+    );
+    assert_eq!(keyboard.shift(), Shift::Off);
+
+    let shift = index(&keyboard, "shift");
+    keyboard.tap(shift, false, false, None).unwrap();
+    keyboard.tap(shift, false, true, None).unwrap();
+    assert!(!keyboard.set_auto_shift(true));
+    assert!(!keyboard.set_auto_shift(false));
+    assert_eq!(keyboard.shift(), Shift::Locked);
+}

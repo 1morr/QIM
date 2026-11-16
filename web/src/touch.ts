@@ -14,6 +14,11 @@ export interface Keyboard {
 	 * 目前頁有切到英文時換的頁（佈局的 `asciiPage`）就換過去重畫；臨時英文留在速成頁（M4 票 23）。
 	 */
 	setAscii(ascii: boolean, composing: boolean): void;
+	/**
+	 * 核心的句首自動大寫（`Snapshot.autoShift`、給前文之後的 `Session.autoShift`，M4 票 24）：由假變真時
+	 * Shift 開一次、由真變假時關掉，Shift 變了就重畫標籤。
+	 */
+	setAutoShift(on: boolean): void;
 }
 
 /** 按住多久算長按。 */
@@ -111,10 +116,10 @@ export function mountKeyboard(
 	popup.hidden = true;
 	/** 沒有組字的英文狀態（`setAscii` 給的，同目前頁是速成還是英文）；選單打勾用。 */
 	let ascii = false;
-	// 選單選了另一種就切中英，同點地球鍵（核心的 `toggleAscii`）；換頁由結果的 `ascii` 帶動。
+	// 選單選了另一種就切中英，同點地球鍵（核心的 `toggleEnglish`，英文模式）；換頁由結果的 `ascii` 帶動。
 	const menu = createKeyboardMenu((wanted) => {
 		if (wanted !== ascii) {
-			finish(session.press("toggleAscii", "right"));
+			finish(session.press("toggleEnglish"));
 		}
 	});
 
@@ -471,6 +476,10 @@ export function mountKeyboard(
 		setAscii(next, composing) {
 			ascii = next && !composing;
 			layout.setAscii(next, composing);
+			followPage();
+		},
+		setAutoShift(on) {
+			layout.setAutoShift(on);
 			followPage();
 		},
 	};

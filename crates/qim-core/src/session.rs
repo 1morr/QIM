@@ -625,6 +625,12 @@ impl Session {
         self.writes_learning() && self.options.english_user_words
     }
 
+    /// 觸控鍵盤要不要自動開 Shift（[`Snapshot::auto_shift`]）。殼給了前文（[`Session::set_context`]）之後讀它：
+    /// 聚焦空的欄位、移游標到句子開頭都沒有快照。
+    pub fn auto_shift(&self) -> bool {
+        self.english && self.options.auto_capitalize && self.sentence == Sentence::Start
+    }
+
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
     pub fn options(&self) -> Options {
         self.options
@@ -1629,7 +1635,17 @@ impl Session {
         } else if self.composing() {
             self.commit_all_then(engine, user, text)
         } else {
-            self.snapshot(engine, true, Some(text))
+            // 英文模式點了建議之後，觸控的句讀鍵（送文字）同 `handle_english` 先刪掉補的空白。
+            let deleted = usize::from(
+                self.english
+                    && action.picked
+                    && text.text.starts_with(english_mode::takes_picked_space),
+            );
+            self.retract(deleted);
+            Snapshot {
+                delete_before: deleted,
+                ..self.snapshot(engine, true, Some(text))
+            }
         };
         self.end_action(
             user,
@@ -2074,9 +2090,7 @@ impl Session {
             commit_original,
             ascii: self.ascii || self.english || self.inline.is_some(),
             generation: self.generation,
-            auto_shift: self.english
-                && self.options.auto_capitalize
-                && self.sentence == Sentence::Start,
+            auto_shift: self.auto_shift(),
         }
     }
 }

@@ -219,6 +219,8 @@ pub struct Snapshot {
     pub commit_original: Option<String>,
     pub ascii: bool,
     pub generation: u64,
+    /// 觸控鍵盤要自動開 Shift（句首自動大寫），核心的 `auto_shift`（M4 票 24）。
+    pub auto_shift: bool,
 }
 
 /// 核心的 `Segment`。
@@ -273,6 +275,7 @@ impl From<qim_core::Snapshot> for Snapshot {
             commit_original: s.commit_original,
             ascii: s.ascii,
             generation: s.generation,
+            auto_shift: s.auto_shift,
         }
     }
 }

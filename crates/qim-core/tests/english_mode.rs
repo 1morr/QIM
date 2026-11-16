@@ -400,3 +400,19 @@ fn auto_capitalize_asks_the_keyboard_to_shift_at_the_start_of_a_sentence() {
     ime.session.clear_context(&mut ime.user);
     assert!(!ime.press(Key::Modifier).auto_shift, "不知道前文時不大寫");
 }
+
+/// 觸控的標點鍵送文字（`Session::text`）：點了建議之後同樣先刪掉補的空白。
+#[test]
+fn punctuation_typed_as_text_after_a_pick_also_takes_the_place_of_its_space() {
+    let mut ime = Ime::new();
+    ime.globe();
+    ime.type_text("hel");
+    ime.select(0);
+    let comma = ime.session.text(&ime.engine, &mut ime.user, ",");
+    assert_eq!(
+        (comma.delete_before, comma.commit.as_deref()),
+        (1, Some(","))
+    );
+    let word = ime.session.text(&ime.engine, &mut ime.user, "A");
+    assert_eq!((word.delete_before, word.commit.as_deref()), (0, Some("A")));
+}

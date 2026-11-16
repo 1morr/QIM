@@ -208,7 +208,11 @@ test("帶 Ctrl、Meta、Alt 按下的 Shift 不算單按", () => {
 	assert.equal(shift.up("ShiftLeft", 10), undefined);
 });
 
-test("臨時英文中 - 與 = 是字元，不是翻頁", () => {
+test("英文（臨時英文、英文直通、英文模式）中 - 與 = 是字元，不是翻頁", () => {
+	assert.deepEqual(toKey(press("-"), false, true), {
+		kind: "punct",
+		value: "-",
+	});
 	assert.deepEqual(toKey(press("-"), true, true), {
 		kind: "punct",
 		value: "-",
