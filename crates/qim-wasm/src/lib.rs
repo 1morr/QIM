@@ -1176,11 +1176,11 @@ impl WebLayout {
         .into()
     }
 
-    /// 核心的中英狀態（`Snapshot.ascii`）：每次拿到結果就給，目前頁有切到英文時換的頁就換過去
-    /// （[`Keyboard::set_ascii`]，M4 票 23）。回傳目前頁有沒有變。
+    /// 核心的中英狀態（`Snapshot.ascii`）與有沒有組字：每次拿到結果就給，沒有組字的英文狀態變了時
+    /// 目前頁有切到英文時換的頁就換過去（[`Keyboard::set_ascii`]，M4 票 23）。回傳目前頁有沒有變。
     #[wasm_bindgen(js_name = setAscii)]
-    pub fn set_ascii(&mut self, ascii: bool) -> bool {
-        self.keyboard.set_ascii(ascii)
+    pub fn set_ascii(&mut self, ascii: bool, composing: bool) -> bool {
+        self.keyboard.set_ascii(ascii, composing)
     }
 
     /// 目前頁的 id；切頁鍵按下後網頁比對它決定要不要重畫。

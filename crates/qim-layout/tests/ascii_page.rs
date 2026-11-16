@@ -68,18 +68,18 @@ fn switching_to_english_shows_the_ascii_page_and_switching_back_returns() {
     assert_eq!(tap(&mut keyboard, "globe"), Output::ToggleAscii);
     // 鍵盤照核心回來的中英狀態換頁，不自己猜（實體 Shift 切的也一樣）。
     assert_eq!(page(&keyboard), "letters");
-    assert!(keyboard.set_ascii(true));
+    assert!(keyboard.set_ascii(true, false));
     assert_eq!(page(&keyboard), "english");
-    assert!(keyboard.set_ascii(false));
+    assert!(keyboard.set_ascii(false, false));
     assert_eq!(page(&keyboard), "letters");
 }
 
 #[test]
 fn telling_the_same_state_again_changes_nothing() {
     let mut keyboard = keyboard();
-    assert!(!keyboard.set_ascii(false));
-    keyboard.set_ascii(true);
-    assert!(!keyboard.set_ascii(true));
+    assert!(!keyboard.set_ascii(false, false));
+    keyboard.set_ascii(true, false);
+    assert!(!keyboard.set_ascii(true, false));
     assert_eq!(page(&keyboard), "english");
 }
 
@@ -87,9 +87,9 @@ fn telling_the_same_state_again_changes_nothing() {
 fn each_page_goes_to_its_own_ascii_page() {
     let mut keyboard = keyboard();
     tap(&mut keyboard, "sym");
-    keyboard.set_ascii(true);
+    keyboard.set_ascii(true, false);
     assert_eq!(page(&keyboard), "english-symbols");
-    keyboard.set_ascii(false);
+    keyboard.set_ascii(false, false);
     assert_eq!(page(&keyboard), "symbols");
 }
 
@@ -98,14 +98,14 @@ fn a_page_without_an_ascii_page_stays_when_the_mode_changes() {
     let mut keyboard = keyboard();
     tap(&mut keyboard, "sym");
     tap(&mut keyboard, "num");
-    assert!(!keyboard.set_ascii(true));
+    assert!(!keyboard.set_ascii(true, false));
     assert_eq!(page(&keyboard), "numbers");
 }
 
 #[test]
 fn in_english_a_switch_to_a_page_with_an_ascii_page_lands_on_that_page() {
     let mut keyboard = keyboard();
-    keyboard.set_ascii(true);
+    keyboard.set_ascii(true, false);
     tap(&mut keyboard, "sym");
     tap(&mut keyboard, "num");
     assert_eq!(page(&keyboard), "numbers");
@@ -117,11 +117,11 @@ fn in_english_a_switch_to_a_page_with_an_ascii_page_lands_on_that_page() {
 #[test]
 fn a_replacement_keyboard_takes_over_the_mode() {
     let mut old = keyboard();
-    old.set_ascii(true);
+    old.set_ascii(true, false);
     let mut new = keyboard();
     new.keep_state_of(&old);
     assert_eq!(page(&new), "english");
-    new.set_ascii(false);
+    new.set_ascii(false, false);
     assert_eq!(page(&new), "letters");
 }
 
@@ -140,4 +140,15 @@ fn a_long_press_on_the_globe_asks_the_shell_for_the_keyboard_menu() {
     assert_eq!(output, Output::KeyboardMenu);
     assert_eq!(output.kind(), "keyboardMenu");
     assert_eq!(page(&keyboard), "letters");
+}
+
+#[test]
+fn temporary_english_while_composing_keeps_the_chinese_page() {
+    // 臨時英文（組字中留碼接英文）核心是英文，但觸控留在速成頁（使用者 2026-11-17 定）；
+    // 組字上屏、還在英文時才換英文頁。
+    let mut keyboard = keyboard();
+    assert!(!keyboard.set_ascii(true, true));
+    assert_eq!(page(&keyboard), "letters");
+    assert!(keyboard.set_ascii(true, false));
+    assert_eq!(page(&keyboard), "english");
 }

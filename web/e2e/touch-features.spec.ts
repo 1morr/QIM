@@ -305,9 +305,8 @@ test("臨時英文中觸控的標點接在英文後面，接的是鍵上的字",
 	await page.getByRole("textbox", { name: "輸入框" }).focus();
 	await page.keyboard.press("ShiftLeft");
 	await expect(page.getByTestId("composition")).toHaveText("anr");
-	// 臨時英文也是英文（`Snapshot.ascii`），觸控換到英文頁（M4 票 23）。
-	await tapKeys(page, [".", "to-english-symbols", "?"]);
-	await expect(page.getByTestId("composition")).toHaveText("anr.?");
+	await tapKeys(page, ["。", "to-symbols", "."]);
+	await expect(page.getByTestId("composition")).toHaveText("anr。.");
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("");
 });
 

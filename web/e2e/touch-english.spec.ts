@@ -166,3 +166,16 @@ test("組字中長按地球鍵也開選單：按住時按鍵重畫了也一樣",
 	await expect(page.getByTestId("composition")).toHaveText("日弓");
 	await expect(page.getByTestId("mode")).toHaveText("中");
 });
+
+test("臨時英文時觸控留在速成頁", async ({ page }) => {
+	// 組字中單按左 Shift 留碼接英文：核心是英文，觸控仍是速成頁（使用者 2026-11-17 定），
+	// 按得到全形的「，」「。」。
+	const text = page.getByRole("textbox", { name: "輸入框" });
+	await tapKeys(page, ["a", "n", "r"]);
+	await text.focus();
+	await page.keyboard.press("ShiftLeft");
+	await expect(page.getByTestId("composition")).toHaveText("anr");
+	await expect(page.getByTestId("mode")).toHaveText("英");
+	await expect(page.getByTestId("key-a")).toHaveText("日a");
+	await expect(page.getByTestId("key-。")).toBeVisible();
+});

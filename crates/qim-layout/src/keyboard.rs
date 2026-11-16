@@ -14,7 +14,7 @@ pub struct Keyboard {
     variant: usize,
     page: usize,
     shift: Shift,
-    /// 核心的中英狀態（英文直通或英文模式），殼每次拿到結果就交給 [`Keyboard::set_ascii`]。
+    /// 沒有組字的英文狀態（英文直通、英文模式），殼每次拿到結果就交給 [`Keyboard::set_ascii`]。
     ascii: bool,
 }
 
@@ -122,9 +122,12 @@ impl Keyboard {
         self.show_page_or_initial(Some(&old.page().id));
     }
 
-    /// 核心的中英狀態變了（觸控的中英鍵、選單、實體鍵盤的 Shift 都算）：目前頁有對應的頁
-    /// （[`LayoutVariant::ascii_counterpart`]）就換過去。回傳目前頁有沒有變，殼依它重畫。
-    pub fn set_ascii(&mut self, ascii: bool) -> bool {
+    /// 核心的中英狀態（`Snapshot.ascii`）與有沒有組字（`Session::composing`）：沒有組字的英文狀態變了
+    /// （觸控的中英鍵、選單、實體鍵盤的 Shift 都算）時，目前頁有對應的頁（[`LayoutVariant::ascii_counterpart`]）
+    /// 就換過去。臨時英文（組字中留碼接英文）留在中文的頁（使用者 2026-11-17 定，M4 票 23）。
+    /// 回傳目前頁有沒有變，殼依它重畫。
+    pub fn set_ascii(&mut self, ascii: bool, composing: bool) -> bool {
+        let ascii = ascii && !composing;
         if self.ascii == ascii {
             return false;
         }

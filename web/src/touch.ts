@@ -10,10 +10,10 @@ export interface Keyboard {
 	/** 換一份佈局（例如打開數字列），整個重畫；舊的由呼叫端釋放。 */
 	setLayout(layout: Layout): void;
 	/**
-	 * 核心的中英狀態（`Snapshot.ascii`）：每次拿到結果就給。目前頁有切到英文時換的頁（佈局的
-	 * `asciiPage`）就換過去重畫（M4 票 23）。
+	 * 核心的中英狀態（`Snapshot.ascii`）與有沒有組字：每次拿到結果就給。沒有組字的英文狀態變了時，
+	 * 目前頁有切到英文時換的頁（佈局的 `asciiPage`）就換過去重畫；臨時英文留在速成頁（M4 票 23）。
 	 */
-	setAscii(ascii: boolean): void;
+	setAscii(ascii: boolean, composing: boolean): void;
 }
 
 /** 按住多久算長按。 */
@@ -109,7 +109,7 @@ export function mountKeyboard(
 	popup.dataset.testid = "long-press";
 	popup.setAttribute("role", "listbox");
 	popup.hidden = true;
-	/** 核心現在的中英狀態（`setAscii` 給的）；選單打勾用。 */
+	/** 沒有組字的英文狀態（`setAscii` 給的，同目前頁是速成還是英文）；選單打勾用。 */
 	let ascii = false;
 	// 選單選了另一種就切中英，同點地球鍵（核心的 `toggleAscii`）；換頁由結果的 `ascii` 帶動。
 	const menu = createKeyboardMenu((wanted) => {
@@ -468,9 +468,9 @@ export function mountKeyboard(
 			layout = next;
 			render();
 		},
-		setAscii(next) {
-			ascii = next;
-			layout.setAscii(next);
+		setAscii(next, composing) {
+			ascii = next && !composing;
+			layout.setAscii(next, composing);
 			followPage();
 		},
 	};
