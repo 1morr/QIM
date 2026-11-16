@@ -592,7 +592,8 @@ impl WebSession {
             Output::Backspace => self.handle(Key::Backspace),
             Output::Enter => self.handle(Key::Enter),
             Output::ToggleAscii => self.handle(Key::ToggleAscii(ShiftKey::Right)),
-            Output::Modifier => self.handle(Key::Modifier),
+            // 開選單只改鍵盤的畫面，對核心同切頁；網頁照 `action` 畫選單。
+            Output::KeyboardMenu | Output::Modifier => self.handle(Key::Modifier),
         };
         let mut snapshot = WebSnapshot::from(snapshot);
         snapshot.action = Some(output.kind().into());
@@ -1175,6 +1176,13 @@ impl WebLayout {
         .into()
     }
 
+    /// 核心的中英狀態（`Snapshot.ascii`）：每次拿到結果就給，目前頁有切到英文時換的頁就換過去
+    /// （[`Keyboard::set_ascii`]，M4 票 23）。回傳目前頁有沒有變。
+    #[wasm_bindgen(js_name = setAscii)]
+    pub fn set_ascii(&mut self, ascii: bool) -> bool {
+        self.keyboard.set_ascii(ascii)
+    }
+
     /// 目前頁的 id；切頁鍵按下後網頁比對它決定要不要重畫。
     #[wasm_bindgen(getter, js_name = pageId)]
     pub fn page_id(&self) -> String {
@@ -1233,6 +1241,7 @@ impl WebLayout {
                     label_offset_y,
                     preview: key.shows_preview(state),
                     long_press: key.long_press.iter().map(Action::spoken).collect(),
+                    keyboard_menu: key.opens_keyboard_menu(),
                 }
             })
             .collect()
@@ -1300,4 +1309,7 @@ pub struct WebLayoutKey {
     /// 長按清單各選項的標籤（[`Action::spoken`]），依序排、第一個是預設；空的就沒有長按。
     #[wasm_bindgen(readonly, js_name = longPress)]
     pub long_press: Vec<String>,
+    /// 長按直接開切換鍵盤的選單（[`qim_layout::Key::opens_keyboard_menu`]），不畫長按清單。
+    #[wasm_bindgen(readonly, js_name = keyboardMenu)]
+    pub keyboard_menu: bool,
 }

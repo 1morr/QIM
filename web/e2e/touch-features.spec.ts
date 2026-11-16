@@ -290,13 +290,14 @@ test("符號頁「3」→「返回」→ 實體鍵盤「.」讀回「3.」；點
 	await expect(text).toHaveValue("3.4.5。");
 });
 
-test("英文直通時觸控的標點也照鍵上的字", async ({ page }) => {
+test("英文直通時觸控換到英文頁，標點也照鍵上的字", async ({ page }) => {
+	// 實體鍵盤切到英文，觸控鍵盤跟著換到英文頁與英文的符號頁（M4 票 23），鍵上是半形。
 	const text = page.getByRole("textbox", { name: "輸入框" });
 	await text.focus();
 	await page.keyboard.press("ShiftRight");
 	await expect(page.getByTestId("mode")).toHaveText("英");
-	await tapKeys(page, ["。", "，", "to-symbols", ".", "？", "（"]);
-	await expect(text).toHaveValue("。，.？（");
+	await tapKeys(page, [".", ",", "to-english-symbols", "?", "("]);
+	await expect(text).toHaveValue(".,?(");
 });
 
 test("臨時英文中觸控的標點接在英文後面，接的是鍵上的字", async ({ page }) => {
@@ -304,8 +305,9 @@ test("臨時英文中觸控的標點接在英文後面，接的是鍵上的字",
 	await page.getByRole("textbox", { name: "輸入框" }).focus();
 	await page.keyboard.press("ShiftLeft");
 	await expect(page.getByTestId("composition")).toHaveText("anr");
-	await tapKeys(page, ["。", "to-symbols", "."]);
-	await expect(page.getByTestId("composition")).toHaveText("anr。.");
+	// 臨時英文也是英文（`Snapshot.ascii`），觸控換到英文頁（M4 票 23）。
+	await tapKeys(page, [".", "to-english-symbols", "?"]);
+	await expect(page.getByTestId("composition")).toHaveText("anr.?");
 	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveValue("");
 });
 

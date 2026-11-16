@@ -214,6 +214,8 @@ async function start(): Promise<void> {
 		shown.ascii = snapshot.ascii;
 		shown.page = snapshot.page;
 		candidateBar.setMode(snapshot.ascii);
+		// 觸控鍵盤照中英狀態換頁（地球鍵、實體鍵盤的 Shift 都一樣，M4 票 23）。
+		touchKeyboard?.setAscii(snapshot.ascii);
 		candidateBar.show(
 			snapshot.candidates,
 			snapshot.candidatesOriginal,
