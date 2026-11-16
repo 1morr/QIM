@@ -52,7 +52,7 @@ figcaption b { color: var(--ink); font-weight: 600; }
 .option h3 { display: flex; gap: 8px; align-items: baseline; }
 .tag { font-size: 0.78rem; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--page); }
 .changes { margin: 16px 0 0; padding: 12px 16px; border-radius: 12px; background: light-dark(#eef1fd, #1a1e2b); max-width: 72ch; }
-.changes h3 { margin: 0 0 4px; }
+.changes-title { margin: 0 0 4px; }
 .changes ul, ul.plain { margin: 0; padding-left: 1.2em; max-width: 72ch; }
 ul.plain { margin: 0 0 12px; }
 ul.plain li, .changes li { margin: 2px 0; }
@@ -140,7 +140,7 @@ ul.plain li, .changes li { margin: 2px 0; }
 <p class="lede">票 23 的設計稿（第二版，2026-11-17）。預設觸控佈局加一顆地球鍵：點一下在速成與英文之間切換，長按跳出切換鍵盤的選單。英文頁是 QWERTY。鍵盤的尺寸、配色、字級和現在網頁畫的速成鍵盤一樣（<code>gboard.rs</code>），只多畫這次新增的頁與鍵。藍框是這次新增或改動的鍵。</p>
 <p class="lede">第一版的英文頁接<b>英文直通</b>：字母直接上屏，候選列沒有建議；英文模式（建議、自動修正）在票 24 接上，外觀不變。</p>
 <div class="changes">
-	<h3>這版改了什麼</h3>
+	<p class="changes-title"><b>這版改了什麼</b></p>
 	<ul>
 		<li>「中/英」標籤換成 Gboard 式的<b>地球鍵</b>（使用者 2026-11-17 定），位置不變：逗號與空白之間。</li>
 		<li>新增<b>長按地球鍵的選單</b>（第 5 節）與<b>點一下的行為</b>（第 6 節）。</li>
