@@ -290,6 +290,16 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
                 }
             }
         }
+        for page in &variant.pages {
+            if let Some(target) = &page.ascii_page
+                && variant.page_index(target).is_none()
+            {
+                errors.push(LayoutError::Broken(format!(
+                    "佈局版本 {index} 頁 {}：asciiPage 指到不存在的頁 {target}",
+                    page.id
+                )));
+            }
+        }
         if let Some(initial) = &variant.initial_page
             && variant.page_index(initial).is_none()
         {
@@ -303,18 +313,26 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
 
 /// 從一開始的頁面切得到、卻切不到「有符合 `wanted` 的鍵」的頁面的頁 id。
 /// 頁面之間只算點一下（`tap`）的 `switchPage`：長按、滑動、組字中的動作不是隨時都在，
-/// 只靠它們回去的頁仍會困住使用者。
+/// 只靠它們回去的頁仍會困住使用者。頁上有點一下的 `toggleAscii` 時，切中英換到的頁
+/// （[`LayoutVariant::ascii_counterpart`]，兩個方向）也算。
 fn pages_without(variant: &LayoutVariant, wanted: impl Fn(&Key) -> bool) -> Vec<String> {
     let edges: Vec<Vec<usize>> = variant
         .pages
         .iter()
-        .map(|page| {
+        .enumerate()
+        .map(|(index, page)| {
+            let toggles = page.keys.iter().any(|key| key.tap == Action::ToggleAscii);
+            let ascii = [true, false]
+                .into_iter()
+                .filter(|_| toggles)
+                .filter_map(|ascii| variant.ascii_counterpart(index, ascii));
             page.keys
                 .iter()
                 .filter_map(|key| match &key.tap {
                     Action::SwitchPage(id) => variant.page_index(id),
                     _ => None,
                 })
+                .chain(ascii)
                 .collect()
         })
         .collect();

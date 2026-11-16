@@ -1,6 +1,6 @@
 # 23: 觸控的中英鍵與英文鍵盤
 
-Status: ready-for-agent
+Status: done
 Blocked by: 18, 18b
 讀: brief §4.4；plan §2.6（佈局格式、動作）、§3.1、§5.3；ADR 0004；spec〈共同規則〉
 
@@ -14,10 +14,10 @@ Blocked by: 18, 18b
 
 ## 驗收
 
-- [ ] 英文頁與中英鍵的設計稿在 `docs/design/`，使用者確認過（回覆記在 Comments）。
-- [ ] 內建佈局的嚴格檢查照過（plan §5.3）；格式加的東西有 Schema 與雙向測試。
-- [ ] Playwright 手機 viewport：按中英鍵切到英文頁、打 `hello` 上屏、再切回中文頁；英文頁打得出半形的 `? ! :`；截圖。
-- [ ] brief §4.4 的已知限制改寫；plan §2.6 更新；`cargo xtask check` 綠燈。
+- [x] 英文頁與中英鍵的設計稿在 `docs/design/`，使用者確認過（回覆記在 Comments）。
+- [x] 內建佈局的嚴格檢查照過（plan §5.3）；格式加的東西有 Schema 與雙向測試。
+- [x] Playwright 手機 viewport：按中英鍵切到英文頁、打 `hello` 上屏、再切回中文頁；英文頁打得出半形的 `? ! :`；截圖。
+- [x] brief §4.4 的已知限制改寫；plan §2.6 更新；`cargo xtask check` 綠燈。
 
 ## Comments
 
@@ -26,3 +26,24 @@ Blocked by: 18, 18b
 - 決定：英文頁第一排照 Gboard 標 1–0 角標、長按打數字（使用者同意）
 - 決定：brief 寫設計稿規格：手機直向 390 寬與橫向 844 寬、淺色與深色、照 Gboard 實測的現有鍵盤樣式（使用者同意）
 - 決定：設計稿其餘部分照建議實作（英文頁與英文符號頁的排法、各鍵動作、佈局格式沿用 `toggleAscii` 加切到英文時換哪一頁的欄位）（使用者同意）
+- 設計稿 `docs/design/23-touch-english-keyboard.html` 已出（2026-11-15），等使用者確認標籤（5.1）、英文頁數字角標（5.2）與整體；確認前不實作。
+- Gboard 的中文佈局沒有中英鍵（事實 M49），中英鍵放在 Gboard「Language switch key」的位置：逗號與空白之間，空白 5 格縮成 4 格。
+- 等使用者：設計稿確認（中英鍵標籤、英文頁數字角標、設計稿規格寫進 brief、整體確認），協調者已轉使用者。
+- 做到哪：設計稿與 Gboard 實測截圖（`.scratch/m4/evidence/23-*.png`、事實 M49）已 commit；brief、plan、佈局格式與程式都還沒改。
+- 剩什麼：使用者確認後，照設計稿加佈局格式欄位（沿用 `toggleAscii`、Trime `ascii_keyboard` 式的換頁欄位，Schema 與雙向測試）、預設佈局加中英鍵與英文三頁、網頁接上、Playwright 驗收截圖、改 brief §4.4 已知限制與 plan §2.6、`cargo xtask check`。
+- 使用者 2026-11-17 確認設計稿第二版（地球鍵）：點一下速成與英文互切、長按選單照第 5 節、格式照第 8 節（`toggleAscii`、新動作 `keyboardMenu`、頁的切到英文換頁欄位、標籤 🌐 畫成單色圖示）。
+- 決定：點一下地球鍵在速成與英文互切，照 Gboard 換自己的下一個佈局；iOS 要鍵盤自己放切換鍵的機型是否照 Apple 改成換系統鍵盤，留到 M8（使用者同意）
+- 決定：長按地球鍵跳出畫在鍵盤範圍內的切換鍵盤選單（速成、English、系統鍵盤占位）（使用者同意）
+- 決定：佈局格式加動作 `keyboardMenu` 與頁的切到英文換頁欄位，地球鍵點一下沿用 `toggleAscii`（使用者同意）
+- 實作：中英鍵照使用者決定做成地球鍵（`toggleAscii` 點一下、新動作 `keyboardMenu` 長按），頁加 `asciiPage`（Trime 的 `ascii_keyboard`），`qim_layout::Keyboard::set_ascii` 照核心的 `Snapshot.ascii` 換頁；預設佈局多英文頁、英文符號頁、英文更多符號頁；網頁的選單在 `web/src/keyboard-menu.ts`。Playwright `web/e2e/touch-english.spec.ts` 7 個測試；截圖 `.scratch/m4/evidence/23-impl-*.png`（直向淺色、深色、橫向深色、選單）。
+- `cargo xtask check` 綠燈（e2e 295 passed，修完亂按找到的問題後 e2e 再多 1 個）。`cargo xtask bench --check` 通過：各集合沒有翻盤、固定題 84/84、每鍵延遲在上限內（空白全部 p95 252 µs、學過 406 µs）。觸控模擬的 `bench/colloquial/touch/common-voice-yue.tsv` 有 1 題重新取樣：底排多了地球鍵，落在第三排與底排之間縫裡的一個點擊，最近的鍵從字母變成功能鍵、照規則重抽；兩個觸控集合與 baseline 比都沒有翻盤，`--check` 通過，`--update-baseline` 不必跑。
+- 亂按一輪（spec〈共同規則〉）：組字中點與長按地球鍵、快速連按地球鍵、Shift 一次與鎖定、長按字母、選單選兩種、數字列開關、常用頁進出、深色、橫向。找到一個 bug：按住地球鍵時停鍵重排重畫了按鍵、釋放了按下時拿到的鍵，長按到時讀它丟 `null pointer passed to rust`，選單沒開、放開又當點一下切了中英；長按清單也是同一種寫法。先寫成會紅的 Playwright 測試，改成按下時讀好旗標、到時重取 `keys[index]`。
+- code-review 已處理：`actions()` 的 doc comment 被插到新函式上、`letters_page` 註解漏地球鍵、註解引設計稿節號改引節名、兩個逗號鍵抽成 `comma()`、選單的分隔線改由項目自己標；設計稿第 7 節「在符號頁不動」和第 8 節矛盾，照第 8 節（已實作、使用者確認）改正第 7 節；名詞表補地球鍵、英文頁、切換鍵盤選單（使用者 2026-11-17 確認草稿）。
+- code-review 未處理：(1) 網頁用標籤 `🌐` 認出要畫成圖示的鍵，自訂佈局把 🌐 當文字也會變圖示；設計稿第 8 節就是這樣定的，要改成依動作判斷時再議。(2) `touch.ts` 另存一份中英狀態給選單打勾，和 `Keyboard` 裡的重複；可改成 `Layout` 開 getter。(3) 加一個動作要改 `Action`、`Output`、wasm、Schema 多處，是既有寫法。(4) 選單的「點外面收起」只在鍵盤範圍內，鍵盤外的點擊交給宿主（iOS 鍵盤也收不到鍵盤外的點擊）。
+- 決定：標籤就是那個字母的字母鍵（英文頁）Shift 開著時大寫不放大 1.85 倍，同 Gboard 英文鍵盤大小寫同字級；自訂佈局標籤等於字母的鍵也一樣（Agent 定）
+- 臨時英文：先做成跟著 `Snapshot.ascii` 換到英文頁，使用者看過後改定留在速成頁；`Keyboard::set_ascii` 多收「有沒有組字」，`touch-features` 的臨時英文測試改回原本的期望，另加 `touch-english` 的守門測試。英文直通那個舊測試（沒有組字）照新規則仍換英文頁，維持改寫後的樣子。
+- 決定：臨時英文時觸控鍵盤留在速成頁，只在沒有組字的英文狀態換英文頁（使用者定）
+- 決定：在符號頁切中英時換到英文的符號頁，數字鍵盤與常用頁兩邊共用、不動，照設計稿第 8 節改正第 7 節（Agent 定）
+- 決定：選單選了另一種時送核心 `toggleAscii`，組字中照「組字中單按 Shift」的設定處理，同點地球鍵（Agent 定）
+- 決定：英文頁句號長按的預設 `,` 排第一個，其餘照 Gboard 順序，同速成頁把預設「……」排第一（Agent 定）
+Session 紀錄：中英鍵照使用者定改成地球鍵（點一下切中英、長按切換鍵盤選單），格式加 `keyboardMenu` 與 `asciiPage`，預設佈局加英文頁與英文符號頁，網頁照核心中英狀態換頁；事實 M49、P29、P30；bench 不變。

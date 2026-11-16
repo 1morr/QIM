@@ -50,6 +50,7 @@ prop_compose! {
 fn page(keys: Vec<Key>) -> Page {
     Page {
         id: "letters".into(),
+        ascii_page: None,
         keys,
     }
 }
@@ -104,6 +105,7 @@ fn scaled(page: &Page, s: f64) -> Page {
         .collect();
     Page {
         id: page.id.clone(),
+        ascii_page: None,
         keys,
     }
 }

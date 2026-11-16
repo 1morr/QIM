@@ -14,6 +14,8 @@ pub struct Keyboard {
     variant: usize,
     page: usize,
     shift: Shift,
+    /// 沒有組字的英文狀態（英文直通、英文模式），殼每次拿到結果就交給 [`Keyboard::set_ascii`]。
+    ascii: bool,
 }
 
 /// 觸控鍵盤點按後送出、殼交給核心的東西。只改鍵盤狀態的動作（切頁、⇧、換鍵盤）已在 [`Keyboard`] 做完，
@@ -34,6 +36,8 @@ pub enum Output {
     Enter,
     /// 觸控的中英鍵，同實體鍵盤單按右 Shift（組字怎麼處理依核心的 `ShiftSwitch`，預設先上屏）。
     ToggleAscii,
+    /// 開切換鍵盤的選單（`keyboardMenu`）：殼畫選單；交給核心時同 `Modifier`。
+    KeyboardMenu,
     /// 只改了鍵盤狀態的鍵。
     Modifier,
 }
@@ -50,6 +54,7 @@ impl Output {
             Output::Backspace => "backspace",
             Output::Enter => "enter",
             Output::ToggleAscii => "toggleAscii",
+            Output::KeyboardMenu => "keyboardMenu",
             Output::Modifier => "modifier",
         }
     }
@@ -94,6 +99,7 @@ impl Keyboard {
             variant,
             page: 0,
             shift: Shift::Off,
+            ascii: false,
         };
         keyboard.show_page_or_initial(None);
         (keyboard, warning)
@@ -112,7 +118,27 @@ impl Keyboard {
     /// 那頁，否則回到一開始的頁（同轉向，M1 票 27b）。
     pub fn keep_state_of(&mut self, old: &Keyboard) {
         self.shift = old.shift;
+        self.ascii = old.ascii;
         self.show_page_or_initial(Some(&old.page().id));
+    }
+
+    /// 核心的中英狀態（`Snapshot.ascii`）與有沒有組字（`Session::composing`）：沒有組字的英文狀態變了
+    /// （觸控的中英鍵、選單、實體鍵盤的 Shift 都算）時，目前頁有對應的頁（[`LayoutVariant::ascii_counterpart`]）
+    /// 就換過去。臨時英文（組字中留碼接英文）留在中文的頁（使用者 2026-11-17 定，M4 票 23）。
+    /// 回傳目前頁有沒有變，殼依它重畫。
+    pub fn set_ascii(&mut self, ascii: bool, composing: bool) -> bool {
+        let ascii = ascii && !composing;
+        if self.ascii == ascii {
+            return false;
+        }
+        self.ascii = ascii;
+        match self.variant().ascii_counterpart(self.page, ascii) {
+            Some(page) => {
+                self.page = page;
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn variant(&self) -> &LayoutVariant {
@@ -192,12 +218,17 @@ impl Keyboard {
             Action::Enter => Output::Enter,
             Action::ToggleAscii => Output::ToggleAscii,
             Action::SwitchPage(id) => {
-                // `validate` 保證 `switchPage` 指到的頁存在。
+                // `validate` 保證 `switchPage` 指到的頁存在；英文時落到那頁的 `asciiPage`。
                 if let Some(page) = self.variant().page_index(&id) {
-                    self.page = page;
+                    self.page = if self.ascii {
+                        self.variant().ascii_counterpart(page, true).unwrap_or(page)
+                    } else {
+                        page
+                    };
                 }
                 Output::Modifier
             }
+            Action::KeyboardMenu => Output::KeyboardMenu,
             // ⇧ 的狀態在 `tap` 改；換鍵盤由殼接系統的切換。
             Action::Shift | Action::NextKeyboard => Output::Modifier,
         }

@@ -1,3 +1,4 @@
+import { createKeyboardMenu } from "./keyboard-menu.ts";
 import type { Layout, LayoutKey, Session, Snapshot } from "./wasm/qim_wasm.js";
 
 /** 觸控鍵盤掛好後給外面用的操作。 */
@@ -8,6 +9,11 @@ export interface Keyboard {
 	relayout(): void;
 	/** 換一份佈局（例如打開數字列），整個重畫；舊的由呼叫端釋放。 */
 	setLayout(layout: Layout): void;
+	/**
+	 * 核心的中英狀態（`Snapshot.ascii`）與有沒有組字：每次拿到結果就給。沒有組字的英文狀態變了時，
+	 * 目前頁有切到英文時換的頁（佈局的 `asciiPage`）就換過去重畫；臨時英文留在速成頁（M4 票 23）。
+	 */
+	setAscii(ascii: boolean, composing: boolean): void;
 }
 
 /** 按住多久算長按。 */
@@ -20,6 +26,10 @@ const LONG_PRESS_COLUMNS = 8;
 const SHIFT_GLYPHS: Record<string, string> = {
 	once: "⬆",
 	locked: "⇪",
+};
+/** 地球鍵（佈局的標籤 🌐）畫成單色線條圖示，顏色同其他鍵的字，不畫彩色 emoji（M4 票 23）。 */
+const ICON_LABELS: Record<string, string> = {
+	"🌐": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3.5 9h17M3.5 15h17"/></svg>',
 };
 
 /**
@@ -53,6 +63,8 @@ interface Press {
 	timer: number | undefined;
 	/** 長按清單出現後，目前選的選項；`undefined` 是還沒出現。 */
 	choice: number | undefined;
+	/** 長按開了切換鍵盤的選單：放開時什麼都不做。 */
+	menu: boolean;
 }
 
 /** 有寫淺色與深色時交給 CSS `light-dark()`，由 `color-scheme` 選（網頁的深色開關改 `color-scheme`）。 */
@@ -97,6 +109,14 @@ export function mountKeyboard(
 	popup.dataset.testid = "long-press";
 	popup.setAttribute("role", "listbox");
 	popup.hidden = true;
+	/** 沒有組字的英文狀態（`setAscii` 給的，同目前頁是速成還是英文）；選單打勾用。 */
+	let ascii = false;
+	// 選單選了另一種就切中英，同點地球鍵（核心的 `toggleAscii`）；換頁由結果的 `ascii` 帶動。
+	const menu = createKeyboardMenu((wanted) => {
+		if (wanted !== ascii) {
+			finish(session.press("toggleAscii", "right"));
+		}
+	});
 
 	// 長度依鍵盤寬度縮放：`#keyboard` 是 inline-size 容器，1cqw 是它寬度的 1%。
 	const scaled = (value: number) => `${(value / layout.canvasWidth) * 100}cqw`;
@@ -159,7 +179,7 @@ export function mountKeyboard(
 			paint(element, key);
 			return element;
 		});
-		container.replaceChildren(...elements, preview, popup);
+		container.replaceChildren(...elements, preview, popup, menu.element);
 	}
 
 	/** 畫會隨狀態變的部分：標籤、角標、無障礙標籤、Shift 鍵的狀態。 */
@@ -167,9 +187,14 @@ export function mountKeyboard(
 		const label = element.querySelector<HTMLElement>(".label");
 		const hint = element.querySelector<HTMLElement>(".hint");
 		if (label) {
-			label.textContent = key.isShift
-				? (SHIFT_GLYPHS[layout.shift] ?? key.label)
-				: key.label;
+			const icon = ICON_LABELS[key.label];
+			if (icon !== undefined) {
+				label.innerHTML = icon;
+			} else {
+				label.textContent = key.isShift
+					? (SHIFT_GLYPHS[layout.shift] ?? key.label)
+					: key.label;
+			}
 			// Shift 開著時字母鍵的大寫字母比字根大（`display_label_size`），字級跟著狀態變。
 			label.style.fontSize =
 				key.labelSize === undefined ? "" : scaled(key.labelSize);
@@ -311,6 +336,7 @@ export function mountKeyboard(
 
 	/** 照綁定的結果更新畫面。重畫會釋放舊頁的鍵，所以先交給外面再看要不要重畫。 */
 	function finish(snapshot: Snapshot) {
+		const openMenu = snapshot.action === "keyboardMenu";
 		try {
 			if (snapshot.handled) {
 				onSnapshot(snapshot);
@@ -320,6 +346,9 @@ export function mountKeyboard(
 		} finally {
 			snapshot.free();
 			followPage();
+		}
+		if (openMenu) {
+			menu.open(ascii);
 		}
 	}
 
@@ -341,6 +370,7 @@ export function mountKeyboard(
 			return;
 		}
 		const key = keys[index];
+		const opensMenu = key.keyboardMenu;
 		press = {
 			pointerId: event.pointerId,
 			index,
@@ -348,9 +378,14 @@ export function mountKeyboard(
 			y,
 			mmPerUnit: (rect.width / layout.canvasWidth) * MM_PER_CSS_PX,
 			choice: undefined,
+			menu: false,
+			// 到時重取這個鍵：按住時停鍵重排可能重畫了按鍵、釋放了按下時拿到的 `key`。
 			timer:
 				key.longPress.length > 0
-					? window.setTimeout(() => showPopup(key), KEY_LONG_PRESS_MS)
+					? window.setTimeout(
+							() => (opensMenu ? longPressMenu(index) : showPopup(keys[index])),
+							KEY_LONG_PRESS_MS,
+						)
 					: undefined,
 		};
 		container.setPointerCapture(event.pointerId);
@@ -369,13 +404,27 @@ export function mountKeyboard(
 		}
 	});
 
+	/** 長按到時直接開切換鍵盤的選單（地球鍵），不畫長按清單；手指放開時不再做什麼。 */
+	function longPressMenu(index: number): void {
+		if (!press) {
+			return;
+		}
+		press.menu = true;
+		preview.hidden = true;
+		lastTap = undefined;
+		finish(session.longPress(layout, index, 0));
+	}
+
 	/** 放開目前按著的鍵：長按清單開著就做選到的選項，否則點一下。 */
 	function release(): void {
 		if (!press) {
 			return;
 		}
-		const { index, choice, x, y, mmPerUnit } = press;
+		const { index, choice, x, y, mmPerUnit, menu: menuOpened } = press;
 		cancel();
+		if (menuOpened) {
+			return;
+		}
 		if (choice !== undefined) {
 			lastTap = undefined;
 			finish(session.longPress(layout, index, choice));
@@ -418,6 +467,11 @@ export function mountKeyboard(
 		setLayout(next) {
 			layout = next;
 			render();
+		},
+		setAscii(next, composing) {
+			ascii = next && !composing;
+			layout.setAscii(next, composing);
+			followPage();
 		},
 	};
 }

@@ -89,6 +89,7 @@ fn tap_in_a_gap_hits_the_nearest_key() {
 fn page_without_keys_hits_nothing() {
     let page = Page {
         id: "empty".into(),
+        ascii_page: None,
         keys: vec![],
     };
     assert_eq!(page.hit(10.0, 10.0), None);

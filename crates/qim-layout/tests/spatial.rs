@@ -39,6 +39,7 @@ fn key(id: &str, tap: Action, frame: Frame, rotate: f64, z: i32, radius: f64) ->
 fn page(keys: Vec<Key>) -> Page {
     Page {
         id: "letters".into(),
+        ascii_page: None,
         keys,
     }
 }
@@ -142,6 +143,7 @@ fn rotated(page: &Page, degrees: f64) -> Page {
         .collect();
     Page {
         id: page.id.clone(),
+        ascii_page: None,
         keys,
     }
 }
@@ -173,6 +175,7 @@ fn scaled(page: &Page, s: f64) -> Page {
         .collect();
     Page {
         id: page.id.clone(),
+        ascii_page: None,
         keys,
     }
 }

@@ -368,6 +368,87 @@ body:has(#keyboard:not([hidden])) {
 	border-radius: inherit;
 }
 
+/* 地球鍵的圖示（touch.ts 把標籤 🌐 換成線條圖示），大小跟著鍵的字級。 */
+#keyboard .label svg {
+	display: block;
+	width: 1.1em;
+	height: 1.1em;
+}
+
+/* 長按地球鍵的切換鍵盤選單（keyboard-menu.ts，設計稿 docs/design/23-touch-english-keyboard.html）：
+   蓋在按鍵上、畫在鍵盤範圍內（iOS 不能畫到鍵盤外）。長度以排高為單位（鍵盤高約四排），直向橫向都放得進。 */
+#keyboard .keyboard-menu-scrim {
+	--row: calc(100cqw / var(--aspect, 1.8) / 4);
+	position: absolute;
+	inset: 0;
+	z-index: 2000;
+	display: grid;
+	place-items: center;
+	background: rgb(0 0 0 / 28%);
+}
+
+#keyboard .keyboard-menu-scrim[hidden] {
+	display: none;
+}
+
+#keyboard .keyboard-menu {
+	box-sizing: border-box;
+	width: min(86%, calc(var(--row) * 6.5));
+	padding: calc(var(--row) * 0.18) calc(var(--row) * 0.16)
+		calc(var(--row) * 0.12);
+	border-radius: calc(var(--row) * 0.3);
+	background: light-dark(#f8f8fd, #262932);
+	color: light-dark(#1f2128, #e4e5f0);
+	box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
+}
+
+#keyboard .keyboard-menu .title {
+	margin: 0 0 calc(var(--row) * 0.08);
+	font-size: max(13px, calc(var(--row) * 0.27));
+	font-weight: 600;
+	text-align: center;
+}
+
+#keyboard .keyboard-menu .item {
+	display: grid;
+	grid-template-columns: max(20px, calc(var(--row) * 0.42)) 1fr;
+	align-items: center;
+	padding: max(3px, calc(var(--row) * 0.09)) calc(var(--row) * 0.2);
+	border-radius: 999px;
+}
+
+/* 目前的那列照 Gboard「變更鍵盤」選單的淡藍底（淺色實測，截圖 23-jyutping-longpress-globe-key）。 */
+#keyboard .keyboard-menu .item.current {
+	background: light-dark(#c9d5fb, #3a4870);
+}
+
+#keyboard .keyboard-menu .check {
+	font-size: max(13px, calc(var(--row) * 0.26));
+	color: light-dark(#2f437a, #c8d4ff);
+}
+
+#keyboard .keyboard-menu .name {
+	font-size: max(13px, calc(var(--row) * 0.26));
+	line-height: 1.2;
+}
+
+#keyboard .keyboard-menu .detail {
+	grid-column: 2;
+	font-size: max(11px, calc(var(--row) * 0.19));
+	line-height: 1.25;
+	color: light-dark(#5b5e6b, #a3a6b4);
+}
+
+#keyboard .keyboard-menu .item[aria-disabled="true"] .name {
+	color: light-dark(#8a8d99, #7c7f8c);
+}
+
+#keyboard .keyboard-menu .rule {
+	height: 1px;
+	margin: calc(var(--row) * 0.06) calc(var(--row) * 0.2);
+	background: light-dark(#d9dbe6, #3a3d48);
+}
+
 /* 選到的選項照 Gboard 的深藍圓底（淺色實測；深色是同色系的估計）。 */
 #keyboard .long-press .option[aria-selected="true"] {
 	background: light-dark(#4c5e8b, #b5c4ff);

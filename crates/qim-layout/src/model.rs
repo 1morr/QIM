@@ -70,6 +70,22 @@ impl LayoutVariant {
     pub fn page_index(&self, id: &str) -> Option<usize> {
         self.pages.iter().position(|page| page.id == id)
     }
+
+    /// 切中英時第 `page` 頁換成哪一頁：切到英文（`ascii`）是它的 `asciiPage`；切回中文是 `asciiPage`
+    /// 寫著它的第一頁。沒有就是 `None`（不換頁）。
+    pub fn ascii_counterpart(&self, page: usize, ascii: bool) -> Option<usize> {
+        let current = self.pages.get(page)?;
+        if ascii {
+            current
+                .ascii_page
+                .as_deref()
+                .and_then(|id| self.page_index(id))
+        } else {
+            self.pages
+                .iter()
+                .position(|other| other.ascii_page.as_deref() == Some(current.id.as_str()))
+        }
+    }
 }
 
 /// 佈局版本適用的裝置與方向。
@@ -168,9 +184,14 @@ pub struct ThemeColor {
 
 /// 一頁按鍵。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Page {
     pub id: String,
+    /// 切到英文時換成的頁（同一個佈局版本的頁 id，Trime 的 `ascii_keyboard`，M4 票 23）：在這頁切到英文就換到
+    /// 那頁、在那頁切回中文就回到這頁；英文時切到這頁也落到那頁（[`crate::Keyboard::set_ascii`]）。
+    /// 省略時切中英不換頁。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ascii_page: Option<String>,
     pub keys: Vec<Key>,
 }
 
@@ -292,9 +313,14 @@ impl Key {
 
     /// 主標籤的字級（`style.labelSize`，沒寫是 `None`，殼用自己的預設）：Shift 開著、字母鍵顯示
     /// 大寫字母時放大 `SHIFTED_LETTER_SCALE` 倍（同 Gboard）。
+    /// 標籤本來就是那個字母（英文頁）時不放大：大小寫同字級，同 Gboard 英文鍵盤（M4 票 23）。
     pub fn display_label_size(&self, state: KeyState) -> Option<f64> {
         let size = self.style.as_ref()?.label_size?;
-        Some(if self.shows_capital(state) {
+        let labelled_with_letter = match (&self.label, &self.tap) {
+            (Some(label), Action::Letter(letter)) => label.chars().eq(std::iter::once(*letter)),
+            _ => false,
+        };
+        Some(if self.shows_capital(state) && !labelled_with_letter {
             size * SHIFTED_LETTER_SCALE
         } else {
             size
@@ -376,6 +402,11 @@ impl Key {
             Some(hint) if hint != base => format!("{base}，{hint}"),
             _ => base,
         }
+    }
+
+    /// 長按直接開切換鍵盤的選單：長按清單只有 `keyboardMenu`。殼按住到時開選單，不畫長按清單。
+    pub fn opens_keyboard_menu(&self) -> bool {
+        matches!(self.long_press.as_slice(), [Action::KeyboardMenu])
     }
 
     /// 這個鍵所有的動作：`tap`、長按、滑動、組字中的 `tap`。
@@ -533,6 +564,8 @@ pub enum Action {
     NextKeyboard,
     /// 中英切換。
     ToggleAscii,
+    /// 開切換鍵盤的選單（長按地球鍵，M4 票 23）：列哪些項由殼決定（QIM 的中英、平台的系統鍵盤）。
+    KeyboardMenu,
     /// Shift：下一個字母鍵輸入大寫英文字母，快速點兩下鎖定（[`Shift`]）。
     Shift,
 }
@@ -550,6 +583,7 @@ impl Action {
             Action::SwitchPage(_) => "switchPage",
             Action::NextKeyboard => "nextKeyboard",
             Action::ToggleAscii => "toggleAscii",
+            Action::KeyboardMenu => "keyboardMenu",
             Action::Shift => "shift",
         }
     }
@@ -565,6 +599,7 @@ impl Action {
             Action::SwitchPage(page) => format!("切到 {page}"),
             Action::NextKeyboard => "下一個鍵盤".into(),
             Action::ToggleAscii => "中英切換".into(),
+            Action::KeyboardMenu => "切換鍵盤".into(),
             Action::Shift => "大寫".into(),
         }
     }
