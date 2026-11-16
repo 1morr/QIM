@@ -58,7 +58,10 @@ fn has_phone_portrait_and_landscape_with_the_gboard_pages_and_phrases() {
                 gboard::SYMBOLS,
                 gboard::MORE_SYMBOLS,
                 gboard::NUMBERS,
-                gboard::PHRASES
+                gboard::PHRASES,
+                gboard::ENGLISH,
+                gboard::ENGLISH_SYMBOLS,
+                gboard::ENGLISH_MORE_SYMBOLS,
             ]
         );
         assert_eq!(variant.initial_page_index(), Some(0));
@@ -217,7 +220,7 @@ fn letters_page_matches_gboard_quick() {
                 "q w e r t y u i o p",
                 "a s d f g h j k l",
                 "shift z x c v b n m backspace",
-                "to-symbols ， space 。 enter",
+                "to-symbols ， globe space 。 enter",
             ]
         );
         assert_eq!(key(letters, "shift").tap, Action::Shift);
@@ -434,5 +437,142 @@ fn touch_keys_type_what_their_label_shows() {
                 }
             }
         }
+    }
+}
+
+/// 地球鍵（M4 票 23，使用者 2026-11-17 定）：照 Gboard「Language switch key」放在逗號與空白之間，
+/// 點一下切中英、長按開切換鍵盤的選單；速成頁與英文頁都有。
+#[test]
+fn the_globe_key_toggles_english_and_opens_the_keyboard_menu_on_long_press() {
+    for variant in &layout().variants {
+        for id in [gboard::LETTERS, gboard::ENGLISH] {
+            let globe = key(page(variant, id), "globe");
+            assert_eq!(globe.tap, Action::ToggleAscii, "{id}");
+            assert!(globe.opens_keyboard_menu(), "{id}");
+            assert_eq!(globe.label.as_deref(), Some("🌐"));
+            assert_eq!(
+                globe.accessibility_label(KeyState::default(), "🌐"),
+                "切換鍵盤"
+            );
+        }
+        // 空白鍵讓出一格：和 Gboard 有 emoji 鍵時一樣寬。
+        let letters = page(variant, gboard::LETTERS);
+        let space = frame(letters, "space").w;
+        let unit = frame(letters, "q").w;
+        assert!(space > 3.5 * unit && space < 4.5 * unit, "{space} {unit}");
+    }
+}
+
+/// 切到英文時換的頁（Trime 的 `ascii_keyboard`）：速成字母頁、兩種符號頁各有英文的那頁；數字鍵盤與常用頁共用。
+#[test]
+fn chinese_pages_name_their_english_counterparts() {
+    for variant in &layout().variants {
+        let ascii = |id: &str| page(variant, id).ascii_page.clone();
+        assert_eq!(ascii(gboard::LETTERS).as_deref(), Some(gboard::ENGLISH));
+        assert_eq!(
+            ascii(gboard::SYMBOLS).as_deref(),
+            Some(gboard::ENGLISH_SYMBOLS)
+        );
+        assert_eq!(
+            ascii(gboard::MORE_SYMBOLS).as_deref(),
+            Some(gboard::ENGLISH_MORE_SYMBOLS)
+        );
+        for id in [gboard::NUMBERS, gboard::PHRASES, gboard::ENGLISH] {
+            assert_eq!(ascii(id), None, "{id}");
+        }
+    }
+}
+
+/// 英文頁照 Gboard English (US)（事實 M49）：QWERTY 小寫，第一排角標 1–0、長按打數字（使用者 2026-11-17 同意），
+/// 逗號、句號半形，句號長按 16 個半形符號、預設逗號。
+#[test]
+fn english_page_matches_gboard_english() {
+    for variant in &layout().variants {
+        let english = page(variant, gboard::ENGLISH);
+        assert_eq!(
+            rows(english),
+            [
+                "q w e r t y u i o p",
+                "a s d f g h j k l",
+                "shift z x c v b n m backspace",
+                "to-english-symbols , globe space . enter",
+            ]
+        );
+        let off = KeyState::default();
+        for (i, c) in "qwertyuiop".chars().enumerate() {
+            let letter = key(english, &c.to_string());
+            let digit = ((i + 1) % 10).to_string();
+            assert_eq!(letter.tap, Action::Letter(c));
+            assert_eq!(letter.label.as_deref(), Some(c.to_string().as_str()));
+            assert_eq!(letter.display_hint(off), Some(digit.as_str()));
+            assert_eq!(letter.long_press, [Action::Text(digit)]);
+        }
+        for c in "asdfghjklzxcvbnm".chars() {
+            let letter = key(english, &c.to_string());
+            assert_eq!(letter.label.as_deref(), Some(c.to_string().as_str()));
+            assert_eq!(letter.hint, None, "{c}");
+            assert_eq!(letter.long_press, [], "{c}");
+        }
+        // 英文頁沒有組字，⇧ 不換成分隔鍵。
+        assert_eq!(key(english, "shift").composing, None);
+        assert_eq!(key(english, ",").tap, Action::Text(",".into()));
+        assert_eq!(
+            key(english, ",").long_press,
+            [Action::SwitchPage(gboard::PHRASES.into())]
+        );
+        assert_eq!(key(english, ".").tap, Action::Text(".".into()));
+        let period: Vec<Action> = "&,%,+,\",-,:,',@,;,/,(,),#,!,?"
+            .split(',')
+            .map(|t| Action::Text(t.into()))
+            .collect();
+        let long_press = &key(english, ".").long_press;
+        assert_eq!(long_press[0], Action::Text(",".into()));
+        assert_eq!(long_press[1..], period[..]);
+        assert_eq!(key(english, "space").label.as_deref(), Some("English"));
+    }
+}
+
+/// 英文的符號頁照 Gboard English (US)（事實 M49）：標點半形，左下「ABC」回英文頁。
+#[test]
+fn english_symbol_pages_match_gboard_english() {
+    for variant in &layout().variants {
+        let symbols = page(variant, gboard::ENGLISH_SYMBOLS);
+        assert_eq!(
+            rows(symbols),
+            [
+                "1 2 3 4 5 6 7 8 9 0",
+                "@ # $ _ & - + ( ) /",
+                "to-english-more-symbols * \" ' : ; ! ? backspace",
+                "to-english , to-numbers space . enter",
+            ]
+        );
+        let more = page(variant, gboard::ENGLISH_MORE_SYMBOLS);
+        assert_eq!(
+            rows(more),
+            [
+                "~ ` | • √ π ÷ × § Δ",
+                "£ ¢ € ¥ ^ ° = { } \\",
+                "to-english-symbols % © ® ™ ✓ [ ] backspace",
+                "to-english < to-numbers space > enter",
+            ]
+        );
+        for page in [symbols, more] {
+            let abc = key(page, "to-english");
+            assert_eq!(abc.label.as_deref(), Some("ABC"));
+            assert_eq!(abc.tap, Action::SwitchPage(gboard::ENGLISH.into()));
+            assert_eq!(key(page, "space").label.as_deref(), Some("English"));
+        }
+    }
+}
+
+#[test]
+fn number_row_also_tops_the_english_page_and_replaces_its_digit_hints() {
+    let layout = Layout::from_json(&gboard::number_row_layout().to_json()).unwrap();
+    for variant in &layout.variants {
+        let english = page(variant, gboard::ENGLISH);
+        assert_eq!(key(english, "1").tap, Action::Text("1".into()));
+        assert!(frame(english, "1").y < frame(english, "q").y);
+        assert_eq!(key(english, "q").hint, None);
+        assert_eq!(key(english, "q").long_press, []);
     }
 }

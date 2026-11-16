@@ -200,6 +200,45 @@ fn duplicate_ids_and_dangling_page_references_are_broken() {
     let mut initial = layout(vec![letters(vec![])]);
     initial["variants"][1]["initialPage"] = json!("symbols");
     assert_broken(&initial, "initialPage 指到不存在的頁 symbols");
+
+    let mut ascii_page = layout(vec![letters(vec![])]);
+    ascii_page["variants"][0]["pages"][0]["asciiPage"] = json!("english");
+    assert_broken(&ascii_page, "asciiPage 指到不存在的頁 english");
+}
+
+#[test]
+fn the_ascii_page_counts_as_a_way_between_pages_when_the_page_has_a_toggle_key() {
+    let globe = || key("globe", 260.0, json!("toggleAscii"));
+    let with_ascii_page = |mut page: Value| {
+        page["asciiPage"] = json!("english");
+        page
+    };
+    // 英文頁沒有字母鍵、也沒有切回去的鍵：切到英文就困住。
+    let trap = json!({ "id": "english", "keys": [key("comma", 0.0, json!({ "text": "," }))] });
+    let report = check(&layout(vec![with_ascii_page(letters(vec![globe()])), trap]));
+    assert!(
+        report.errors.contains(&LayoutError::NoWayBackToLetters {
+            variant: 0,
+            page: "english".into()
+        }),
+        "{:?}",
+        report.errors
+    );
+
+    // 英文頁有中英鍵就切得回速成字母頁。
+    let english = json!({ "id": "english", "keys": [globe()] });
+    let report = check(&layout(vec![
+        with_ascii_page(letters(vec![globe()])),
+        english,
+    ]));
+    assert_eq!(report.errors, []);
+
+    // 沒有中英鍵的頁不會切到英文，`asciiPage` 不算一條路（英文頁不在檢查範圍內）。
+    let report = check(&layout(vec![
+        with_ascii_page(letters(vec![])),
+        json!({ "id": "english", "keys": [] }),
+    ]));
+    assert_eq!(report.errors, []);
 }
 
 #[test]

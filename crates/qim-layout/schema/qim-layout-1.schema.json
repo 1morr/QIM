@@ -68,6 +68,11 @@
       "required": ["id", "keys"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "asciiPage": {
+          "description": "切到英文時換成的頁（同一個佈局版本的頁 id，Trime 的 ascii_keyboard）；省略時切中英不換頁。",
+          "type": "string",
+          "minLength": 1
+        },
         "keys": { "type": "array", "items": { "$ref": "#/$defs/key" } }
       }
     },
@@ -223,7 +228,7 @@
     "action": {
       "description": "帶資料的動作寫成單一鍵的物件，不帶的寫成名字。",
       "oneOf": [
-        { "enum": ["backspace", "space", "enter", "nextKeyboard", "toggleAscii", "shift"] },
+        { "enum": ["backspace", "space", "enter", "nextKeyboard", "toggleAscii", "keyboardMenu", "shift"] },
         {
           "type": "object",
           "additionalProperties": false,

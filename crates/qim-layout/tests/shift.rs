@@ -117,3 +117,25 @@ fn while_shifted_letter_keys_draw_the_capital_bigger_like_gboard() {
         keys[0].display_label_size(shifted(Shift::Once))
     );
 }
+
+#[test]
+fn a_key_already_labelled_with_its_letter_keeps_its_size_when_shifted() {
+    // 英文頁的字母鍵標籤本來就是字母，大寫和小寫同字級（Gboard 英文鍵盤，M4 票 23）。
+    let layout = Layout::from_json(
+        r#"{ "format": "qim-layout/1", "variants": [
+          { "when": { "device": "phone", "orientation": "portrait" },
+            "canvas": { "width": 10, "height": 10 },
+            "pages": [ { "id": "english", "keys": [
+              { "id": "q", "frame": { "x": 0, "y": 0, "w": 10, "h": 10 }, "label": "q", "hint": "1",
+                "style": { "labelSize": 24 }, "tap": { "letter": "q" } }
+            ] } ] }
+        ] }"#,
+    )
+    .unwrap();
+    let key = &layout.variants[0].pages[0].keys[0];
+    let shifted = shifted(Shift::Once);
+    assert_eq!(key.display_label(shifted, radical), "Q");
+    assert_eq!(key.display_label_size(shifted), Some(24.0));
+    assert_eq!(key.display_hint(shifted), None);
+    assert_eq!(key.display_label(KeyState::default(), radical), "q");
+}

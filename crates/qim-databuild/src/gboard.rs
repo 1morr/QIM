@@ -6,6 +6,7 @@
 //! 頁面、鍵位、配色與尺寸照 Android 模擬器上的 Gboard 速成實測（M1 票 27，
 //! `.scratch/m1/evidence/27-*.png`）：字母、符號（?123）、更多符號（=\<）、數字鍵盤（12/34），
 //! 加上 Gboard 沒有的常用頁（自訂頁面的示範，長按逗號鍵進去，代替 Gboard 的表情入口）。
+//! 英文頁與英文的兩個符號頁照 Gboard English (US)（事實 M49），由地球鍵切過去（M4 票 23）。
 
 use qim_core::SEPARATOR;
 use qim_layout::{
@@ -25,6 +26,10 @@ pub const MORE_SYMBOLS: &str = "more-symbols";
 pub const NUMBERS: &str = "numbers";
 /// 自訂頁面的示範；id 也是長按清單上顯示的字（「切到 常用」）。
 pub const PHRASES: &str = "常用";
+/// 英文頁與英文的符號頁（速成字母頁、符號頁的 `asciiPage`）。
+pub const ENGLISH: &str = "english";
+pub const ENGLISH_SYMBOLS: &str = "english-symbols";
+pub const ENGLISH_MORE_SYMBOLS: &str = "english-more-symbols";
 
 /// 一排十個鍵寬。
 const UNITS_PER_ROW: f64 = 10.0;
@@ -90,6 +95,10 @@ const SMALL_LABEL_SIZE: f64 = 12.5;
 const SYMBOL_LABEL_SIZE: f64 = 20.0;
 const NUMPAD_LABEL_SIZE: f64 = 24.0;
 const ICON_LABEL_SIZE: f64 = 24.0;
+/// 英文頁的字母：Gboard 英文鍵盤的字母比字根大，大寫與小寫同字級（`Key::display_label_size`）。
+const ENGLISH_LETTER_SIZE: f64 = 24.0;
+/// 地球鍵的圖示比 ⇧ ⌫ 略小，同 Gboard。
+const GLOBE_LABEL_SIZE: f64 = 22.0;
 
 fn style(tone: Tone, label_size: f64) -> Style {
     let (fill, label) = match tone {
@@ -257,15 +266,39 @@ fn enter() -> Cell {
 
 /// 空白鍵顯示方案名「速成」，讀屏唸「空白」。
 fn space(units: f64) -> Cell {
-    Cell::new("space", Action::Space, Some("速成"))
+    labelled_space(units, "速成")
+}
+
+/// 英文的頁的空白鍵寫「English」，同 Gboard 英文鍵盤。
+fn english_space(units: f64) -> Cell {
+    labelled_space(units, "English")
+}
+
+fn labelled_space(units: f64, label: &str) -> Cell {
+    Cell::new("space", Action::Space, Some(label))
         .spoken()
         .small()
         .units(units)
 }
 
-/// 「返回」回字母頁（Gboard 符號頁左下）。
+/// 地球鍵（M4 票 23）：點一下切中英，長按開切換鍵盤的選單；照 Gboard「Language switch key」是白鍵、
+/// 放在逗號與空白之間（事實 M49）。標籤 🌐 由殼畫成單色圖示。
+fn globe() -> Cell {
+    let mut cell = Cell::new("globe", Action::ToggleAscii, Some("🌐"))
+        .size(GLOBE_LABEL_SIZE)
+        .long_press(vec![Action::KeyboardMenu]);
+    cell.a11y_label = Some(Action::KeyboardMenu.spoken());
+    cell
+}
+
+/// 「返回」回字母頁（Gboard 符號頁左下）；英文時落到英文頁（字母頁的 `asciiPage`）。
 fn back() -> Cell {
     switch(LETTERS, "返回").units(1.5).pill()
+}
+
+/// 「ABC」回英文頁（Gboard 英文的符號頁左下）。
+fn abc() -> Cell {
+    switch(ENGLISH, "ABC").units(1.5).pill()
 }
 
 /// 「12/34」切到數字鍵盤（白鍵）。
@@ -314,7 +347,8 @@ fn letters_page() -> Vec<Row> {
             vec![
                 switch(SYMBOLS, "?123").units(1.5).pill(),
                 comma,
-                space(5.0),
+                globe(),
+                space(4.0),
                 text("。")
                     .function()
                     .long_press(texts_of(PERIOD_LONG_PRESS)),
@@ -322,6 +356,83 @@ fn letters_page() -> Vec<Row> {
             ],
         ),
     ]
+}
+
+/// 英文頁的句號鍵長按：Gboard English (US) 的 2 × 8（事實 M49），預設的 `,` 排第一個（同速成頁把預設排第一），
+/// 其餘照 Gboard 由左上到右下。全是半形，英文頁本身就打得出 `? ! : ;`。
+const ENGLISH_PERIOD_LONG_PRESS: &str = ", & % + \" - : ' @ ; / ( ) # ! ?";
+
+/// 英文頁照 Gboard English (US)（事實 M49）：QWERTY 小寫字母直接送字母（英文直通或英文模式由核心決定）；
+/// `digit_hints` 時第一排右上角標 1–0、長按打數字（使用者 2026-11-17 同意；數字列打開時不標，同 Gboard）。
+/// ⇧ 沒有組字中的分隔鍵；底排 ?123、逗號、地球鍵、空白、句號、Enter，逗號長按照速成頁進常用頁。
+fn english_page(digit_hints: bool) -> Vec<Row> {
+    let english_letter = |c: char| {
+        Cell::new(&c.to_string(), Action::Letter(c), Some(&c.to_string())).size(ENGLISH_LETTER_SIZE)
+    };
+    let top = "qwertyuiop"
+        .chars()
+        .zip("1234567890".chars())
+        .map(|(c, digit)| {
+            let mut cell = english_letter(c);
+            if digit_hints {
+                cell.hint = Some(digit.to_string());
+                cell.long_press = vec![Action::Text(digit.to_string())];
+            }
+            cell
+        })
+        .collect();
+    let letters = |row: &str| row.chars().map(english_letter).collect::<Vec<_>>();
+    let mut shift = shift();
+    shift.composing = None;
+    let mut third = vec![shift];
+    third.extend(letters("zxcvbnm"));
+    third.push(backspace());
+    let mut comma = text(",").function();
+    comma.hint = Some("☺".into());
+    comma.a11y_label = Some("逗號，長按切到常用".into());
+    comma.long_press = vec![Action::SwitchPage(PHRASES.into())];
+    vec![
+        row(0.0, top),
+        row(0.5, letters("asdfghjkl")),
+        row(0.0, third),
+        row(
+            0.0,
+            vec![
+                switch(ENGLISH_SYMBOLS, "?123").units(1.5).pill(),
+                comma,
+                globe(),
+                english_space(4.0),
+                text(".")
+                    .function()
+                    .long_press(texts_of(ENGLISH_PERIOD_LONG_PRESS)),
+                enter(),
+            ],
+        ),
+    ]
+}
+
+/// 英文的符號頁（英文頁的 ?123）：照 Gboard English (US)，括號與 `: ; ! ?` 半形，「ABC」回英文頁。
+fn english_symbols_page() -> Vec<Row> {
+    symbol_page_with(
+        ["1 2 3 4 5 6 7 8 9 0", "@ # $ _ & - + ( ) /"],
+        switch(ENGLISH_MORE_SYMBOLS, "=\\<"),
+        "* \" ' : ; ! ?",
+        [",", "."],
+        abc(),
+        english_space(4.0),
+    )
+}
+
+/// 英文的更多符號頁（=\<）：照 Gboard English (US)，左邊「?123」回英文的符號頁。
+fn english_more_symbols_page() -> Vec<Row> {
+    symbol_page_with(
+        ["~ ` | • √ π ÷ × § Δ", "£ ¢ € ¥ ^ ° = { } \\"],
+        switch(ENGLISH_SYMBOLS, "?123"),
+        "% © ® ™ ✓ [ ]",
+        ["<", ">"],
+        abc(),
+        english_space(4.0),
+    )
 }
 
 /// 數字列（Gboard 的 Number row）：點一下輸入數字，長按出上標（`1` 另有分數，同 Gboard）。
@@ -348,7 +459,19 @@ fn number_row() -> Row {
 
 /// 兩個符號頁共用的排法：兩排符號；第三排左邊切到另一個符號頁、七個符號、刪除；
 /// 底排「返回」、兩個功能鍵符號夾著「12/34」與空白、Enter。
-fn symbol_page(rows: [&str; 2], other: Cell, third: &str, [left, right]: [&str; 2]) -> Vec<Row> {
+fn symbol_page(rows: [&str; 2], other: Cell, third: &str, bottom: [&str; 2]) -> Vec<Row> {
+    symbol_page_with(rows, other, third, bottom, back(), space(4.0))
+}
+
+/// [`symbol_page`]，左下回字母頁的鍵與空白鍵另給（英文的符號頁是「ABC」與「English」）。
+fn symbol_page_with(
+    rows: [&str; 2],
+    other: Cell,
+    third: &str,
+    [left, right]: [&str; 2],
+    back: Cell,
+    space: Cell,
+) -> Vec<Row> {
     let mut third_row = vec![other.units(1.5)];
     third_row.extend(symbols(third));
     third_row.push(backspace());
@@ -359,10 +482,10 @@ fn symbol_page(rows: [&str; 2], other: Cell, third: &str, [left, right]: [&str; 
         row(
             0.0,
             vec![
-                back(),
+                back,
                 text(left).function(),
                 to_numbers(),
-                space(4.0),
+                space,
                 text(right).function(),
                 enter(),
             ],
@@ -545,6 +668,7 @@ fn page(id: &str, placed: Vec<Placed>, rows: f64, geometry: &Geometry, height: f
         .collect();
     Page {
         id: id.into(),
+        ascii_page: None,
         keys,
     }
 }
@@ -561,9 +685,11 @@ const ROWS: f64 = 4.0;
 
 fn variant(geometry: &Geometry, number_row: NumberRow) -> LayoutVariant {
     let mut letters = letters_page();
+    let mut english = english_page(number_row == NumberRow::Off);
     let mut height = ROWS * geometry.row_height;
     if number_row == NumberRow::On {
         letters.insert(0, self::number_row());
+        english.insert(0, self::number_row());
         height += NUMBER_ROW_EXTRA_ROWS * geometry.row_height;
     }
     let letter_rows = letters.len() as f64;
@@ -583,13 +709,28 @@ fn variant(geometry: &Geometry, number_row: NumberRow) -> LayoutVariant {
         grid: None,
         initial_page: None,
         pages: vec![
-            page(LETTERS, place_rows(letters), letter_rows, geometry, height),
-            rows(SYMBOLS, symbols_page()),
-            rows(MORE_SYMBOLS, more_symbols_page()),
+            with_ascii_page(
+                page(LETTERS, place_rows(letters), letter_rows, geometry, height),
+                ENGLISH,
+            ),
+            with_ascii_page(rows(SYMBOLS, symbols_page()), ENGLISH_SYMBOLS),
+            with_ascii_page(
+                rows(MORE_SYMBOLS, more_symbols_page()),
+                ENGLISH_MORE_SYMBOLS,
+            ),
             page(NUMBERS, numbers_page(), ROWS, geometry, height),
             rows(PHRASES, phrases_page()),
+            page(ENGLISH, place_rows(english), letter_rows, geometry, height),
+            rows(ENGLISH_SYMBOLS, english_symbols_page()),
+            rows(ENGLISH_MORE_SYMBOLS, english_more_symbols_page()),
         ],
     }
+}
+
+/// 切到英文時這頁換成 `english`（[`Page::ascii_page`]）。
+fn with_ascii_page(mut page: Page, english: &str) -> Page {
+    page.ascii_page = Some(english.into());
+    page
 }
 
 fn build(number_row: NumberRow) -> Layout {

@@ -9,6 +9,7 @@
       "pages": [
         {
           "id": "letters",
+          "asciiPage": "symbols",
           "keys": [
             {
               "id": "a",
@@ -54,7 +55,8 @@
               "id": "ascii",
               "frame": { "x": 210, "y": 80, "w": 36, "h": 48 },
               "label": "中/英",
-              "tap": "toggleAscii"
+              "tap": "toggleAscii",
+              "longPress": ["keyboardMenu"]
             },
             {
               "id": "space",
