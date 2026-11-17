@@ -9,7 +9,13 @@ import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { mountFieldType } from "./field.ts";
 import { commitBeforeHost, hostDefault, insert } from "./host.ts";
-import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
+import {
+	LoneShift,
+	MODIFIERS,
+	physicalCode,
+	toKey,
+	usKeyEvent,
+} from "./keys.ts";
 import { NeuralReranker } from "./neural-rerank.ts";
 import { mountPackSettings } from "./pack-settings.ts";
 import { checkModelPack, PackLibrary } from "./packs.ts";
@@ -41,6 +47,8 @@ import { mountWordList } from "./word-list.ts";
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 /** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief〈手機觸控鍵盤〉）。 */
 const NUMBER_ROW_LAYOUT_URL = "/layouts/gboard-quick-number-row.json";
+/** 連按兩下空白輸出句點的時限（毫秒）：照 LatinIME 的 `config_double_space_period_timeout`（事實 M52）。 */
+const DOUBLE_SPACE_WINDOW_MS = 1100;
 
 const text = element<HTMLTextAreaElement>("#text");
 const status = element<HTMLElement>("#status");
@@ -178,8 +186,31 @@ async function start(): Promise<void> {
 	});
 	// 退格撤銷的時限（plan〈學習與排位〉）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
 	const undoTimer = undoWindow(() => session.expireUndo());
-	// 點輸入框會移游標：之後的退格不在剛上屏的字旁邊，不撤銷。
-	text.addEventListener("pointerdown", () => session.expireUndo());
+	// 連按兩下空白輸出句點的時限（M4 票 27）：核心不讀時間，每個按鍵、點擊（觸控鍵也是）之前重新計時，照 LatinIME 的
+	// 1100 ms（`config_double_space_period_timeout`）到了叫核心丟掉「剛按了空白」。單按修飾鍵不送字元、核心不算夾在
+	// 中間，也不重新計時，兩下之間按了 Shift 照樣是 1.1 秒內。
+	const doubleSpaceTimer = undoWindow(
+		() => session.expireDoubleSpace(),
+		DOUBLE_SPACE_WINDOW_MS,
+	);
+	window.addEventListener(
+		"keydown",
+		(event) => {
+			if (!MODIFIERS.has(event.key)) {
+				doubleSpaceTimer.restart();
+			}
+		},
+		{ capture: true },
+	);
+	window.addEventListener("pointerdown", doubleSpaceTimer.restart, {
+		capture: true,
+	});
+	// 點輸入框會移游標：之後的退格不在剛上屏的字旁邊，不撤銷；接著的空白也不是緊接在剛才的空白後（LatinIME 移游標時
+	// 取消兩下空白的倒數）。window 捕獲階段的計時器重算比這裡早，這裡再丟掉。
+	text.addEventListener("pointerdown", () => {
+		session.expireUndo();
+		session.expireDoubleSpace();
+	});
 	/**
 	 * 核心可能學到東西之後：存檔，退格撤銷的 3 秒從這裡重算。上屏、英文直通打完一串字（核心學英文使用者詞）、
 	 * 失焦（核心這時已讓撤銷紀錄失效，重算也無妨）。

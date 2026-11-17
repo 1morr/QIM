@@ -6,8 +6,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use qim_core::{
-    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Packs, Ranking, SEPARATOR, Scheme,
-    SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
+    CodeEntry, CodeTable, Engine, Key, Lexicon, LexiconPack, Options, Packs, Ranking, SEPARATOR,
+    Scheme, SchemePack, Session, ShiftKey, Snapshot, UserModel, Word,
 };
 
 /// `mir`（一戈口）：「一台」是 `m` + `ir`，「歹口」是 `mi` + `r`，「一戈口」是 `m` + `i` + `r`。
@@ -304,9 +304,14 @@ fn a_trailing_separator_lists_the_candidates_of_the_code_before_it() {
     assert_eq!(ime.press(Key::Space).commit.as_deref(), Some("歹"));
 }
 
+/// 沒有組字時 `'` 是引號：預設左右輪流（`smart_punctuation.rs`），關掉時交還宿主。
 #[test]
-fn without_composition_the_separator_key_goes_to_the_host() {
+fn without_composition_and_quote_pairing_off_the_separator_key_goes_to_the_host() {
     let mut ime = Ime::new();
+    ime.session.set_options(Options {
+        paired_quotes: false,
+        ..ime.session.options()
+    });
     let shown = ime.press(Key::Punct(SEPARATOR));
     assert!(!shown.handled);
     assert_eq!(shown.commit, None);

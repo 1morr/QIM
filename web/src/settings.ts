@@ -158,6 +158,28 @@ const ROWS: readonly Row[] = [
 			return undefined;
 		},
 	},
+	{
+		// 英文模式字後連按兩下空白輸出「. 」，照 Gboard、LatinIME；email、網址、密碼欄不做（M4 票 27）。
+		kind: "checkbox",
+		id: "double-space-period",
+		label: "兩下空白輸出句點",
+		checked: true,
+		apply: (session, on) => {
+			session.setDoubleSpacePeriod(on);
+			return undefined;
+		},
+	},
+	{
+		// 中文狀態的 " ' 左右輪流出 “” ‘’，照 Rime；關掉時上屏半形（M4 票 27）。
+		kind: "checkbox",
+		id: "paired-quotes",
+		label: "引號左右輪流",
+		checked: true,
+		apply: (session, on) => {
+			session.setPairedQuotes(on);
+			return undefined;
+		},
+	},
 	RERANK,
 	{
 		kind: "select",

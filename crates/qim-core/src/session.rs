@@ -8,9 +8,10 @@ use crate::association::{self, ASSOCIATION_TAIL};
 use crate::english_mode::{self, Sentence};
 use crate::english_user::{TypedRun, is_word_char};
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding, SpanKind};
+use crate::punctuation::{self, Quotes, SpaceTail};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Undo, UndoOwner};
-use crate::{Engine, UserModel, Weights, punctuation};
+use crate::{Engine, UserModel, Weights};
 
 mod inspect;
 mod rerank_cache;
@@ -124,6 +125,14 @@ pub struct Options {
     /// 英文容錯（brief〈設定與同步〉，ADR 0008，M4 票 25）：英文模式的建議列除了前綴補完，也列一處拼錯的修正
     /// （同 LatinIME 的「Show correction suggestions」）。關掉時只補完，自動修正也沒有對象。預設開。
     pub english_corrections: bool,
+    /// 英文模式連按兩下空白輸出句點（brief〈英文模式與欄位類型〉，M4 票 27）：字後的空白緊接著再按一下空白（殼的
+    /// 時限內，[`Session::expire_double_space`]），刪掉那個空白、上屏「. 」，照 Gboard 與 LatinIME（事實 M48、M52）；
+    /// email、網址、密碼欄不做（LatinIME 只在一般文字欄）。預設開（brief〈設定與同步〉）。
+    pub double_space_period: bool,
+    /// 中文狀態的 `"` `'` 左右輪流出 “” ‘’（brief〈桌面鍵盤操作〉〈英文模式與欄位類型〉，M4 票 27，使用者定）：照
+    /// librime 的 `pair`，每個鍵各自輪流，換欄位（[`Session::clear_context`]）從左邊重來。關掉時照舊上屏半形。
+    /// `'` 組字中照舊是分隔記號。預設開（brief〈設定與同步〉，同 Rime）。
+    pub paired_quotes: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -265,6 +274,8 @@ impl Default for Options {
             auto_capitalize: false,
             autocorrect: false,
             english_corrections: true,
+            double_space_period: true,
+            paired_quotes: true,
         }
     }
 }
@@ -572,6 +583,14 @@ pub struct Session {
     /// 游標在不在句子開頭（句首自動大寫，[`Snapshot::auto_shift`]）。和數字後半形一樣跟著前文與送出去的字
     /// 更新、不記文字，無痕時只看送出去的字（殼不給前文）。
     sentence: Sentence,
+    /// 游標前是不是「可以接句點的字加一個空白」（連按兩下空白輸出句點，[`Options::double_space_period`]）。和數字後
+    /// 半形一樣跟著前文與送出去的字更新、只記布林值。
+    space_tail: SpaceTail,
+    /// 這個動作是英文模式的空白（含點建議後被吃掉的那一下）：下一個動作開始時取走（[`Session::begin_action`]），
+    /// 緊接著的空白才換成句點；殼的時限到了也丟掉（[`Session::expire_double_space`]）。
+    pressed_space: bool,
+    /// 中文狀態的引號下一下出哪半邊（[`Options::paired_quotes`]）。
+    quotes: Quotes,
     /// 正在打的一串字（英文使用者詞，plan〈介面〉）：送出去的字的結尾連續的串字元。遇到其他字元、
     /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，學成英文使用者詞
     /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
@@ -691,6 +710,7 @@ impl Session {
         }
         self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
         self.sentence = Sentence::Start.after(before);
+        self.space_tail = SpaceTail::default().after(before);
         self.context = Some(last_chars(before, CONTEXT_LIMIT).to_string());
         let word = self.typed.word().map(str::to_owned);
         self.typed.sync(before);
@@ -717,6 +737,7 @@ impl Session {
     /// 離開欄位也是打完了一串字：正在打的串學成英文使用者詞（plan〈學習與排位〉）。
     pub fn clear_context(&mut self, user: &mut UserModel) {
         self.leave_text(user);
+        self.quotes = Quotes::default();
         // 換了欄位，之後的退格不在剛上屏的字後面，前一個動作與這裡學到的都不撤銷。
         self.expire_undo(user);
     }
@@ -732,6 +753,13 @@ impl Session {
         self.corrected = None;
     }
 
+    /// 連按兩下空白輸出句點（[`Options::double_space_period`]）的時限到了：之後的空白照打。核心不讀時間，由殼計時：
+    /// 照 LatinIME 的 1100 ms（`config_double_space_period_timeout`，事實 M52；Gboard 實測約 1 秒，M48），殼在每個
+    /// 按鍵（修飾鍵除外）、點擊之前重新計時，到了就呼叫；使用者點輸入框時也呼叫。
+    pub fn expire_double_space(&mut self) {
+        self.pressed_space = false;
+    }
+
     /// 游標不在剛打的字後面了（Enter、Tab、方向鍵這類交還宿主的鍵，或離開欄位）：正在打的串打完，
     /// 前文作廢。
     fn leave_text(&mut self, user: &mut UserModel) {
@@ -744,6 +772,7 @@ impl Session {
         self.context = None;
         self.after_digit = false;
         self.sentence = Sentence::Unknown;
+        self.space_tail = SpaceTail::default();
         self.picked = None;
         self.corrected = None;
         self.end_association();
@@ -1096,6 +1125,7 @@ impl Session {
             Key::Modifier => {
                 user.keep_undo(action.pending);
                 self.corrected = action.corrected;
+                self.pressed_space = action.pressed_space;
             }
             _ => {
                 let sent = if snapshot.handled {
@@ -1123,6 +1153,7 @@ impl Session {
             typed: self.typed.clone(),
             picked: self.picked.take(),
             corrected: self.corrected.take(),
+            pressed_space: std::mem::take(&mut self.pressed_space),
             restart: None,
         }
     }
@@ -1204,6 +1235,7 @@ impl Session {
     fn sent(&mut self, user: &mut UserModel, text: &str) {
         self.after_digit = text.ends_with(|c: char| c.is_ascii_digit());
         self.sentence = self.sentence.after(text);
+        self.space_tail = self.space_tail.after(text);
         let recording = self.learns_english();
         for c in text.chars() {
             let done = self.typed.push(c, recording);
@@ -1349,8 +1381,8 @@ impl Session {
                 {
                     self.snapshot(engine, true, Some(Commit::plain(c.to_string())))
                 }
-                Key::Punct(c) if let Some(full) = punctuation::full_width(c) => {
-                    self.snapshot(engine, true, Some(Commit::plain(full.to_string())))
+                Key::Punct(c) if let Some(punct) = self.chinese_punct(c) => {
+                    self.snapshot(engine, true, Some(Commit::plain(punct)))
                 }
                 _ => self.snapshot(engine, false, None),
             };
@@ -1404,7 +1436,7 @@ impl Session {
                 self.commit(engine, commit)
             }
             Key::Punct(c) => {
-                let punct = punctuation::full_width(c).map_or_else(|| c.to_string(), String::from);
+                let punct = self.chinese_punct(c).unwrap_or_else(|| c.to_string());
                 self.commit_all_then(engine, user, Commit::plain(punct))
             }
             Key::Letter(c) if !c.is_ascii_lowercase() => {
@@ -1435,6 +1467,19 @@ impl Session {
             | Key::Weighted(_)
             | Key::Physical(_) => self.snapshot(engine, true, None),
         }
+    }
+
+    /// 中文狀態的標點 `c` 上屏什麼：全形（[`punctuation::full_width`]），或引號左右輪流（[`Options::paired_quotes`]）；
+    /// 都不是時 `None`，上屏半形。
+    fn chinese_punct(&mut self, c: char) -> Option<String> {
+        let quote = self
+            .options
+            .paired_quotes
+            .then(|| self.quotes.next(c))
+            .flatten();
+        quote
+            .or_else(|| punctuation::full_width(c))
+            .map(String::from)
     }
 
     /// 聯想顯示中的鍵（plan〈介面〉），照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
@@ -1661,6 +1706,7 @@ impl Session {
     /// 英文模式的鍵（ADR 0008）：字母（含大寫）、數字、標點與空白吃下、原樣上屏，不轉全形、不套數字後半形；
     /// 其他鍵（退格、Enter、方向鍵…）照英文直通交還宿主。`action.picked`（上一個動作點了建議、補了空白）時照
     /// Gboard（事實 M48）：空白吃掉不上屏，句讀與右括號（[`english_mode::takes_picked_space`]）先刪掉那個空白再上屏。
+    /// 上一個動作是空白（含吃掉的那一下）、游標前是字加一個空白時，空白換成「. 」（[`Options::double_space_period`]）。
     ///
     /// 自動修正（[`Session::autocorrect`]）：串打完的那一下（空白、句讀）先換掉打的詞再上屏那個字元；Enter 換掉
     /// 詞之後照樣交還宿主（`handled` 為假而有 `commit`，殼先上屏再交還，照 Gboard 在 Enter 時修，事實 M47）。
@@ -1676,8 +1722,21 @@ impl Session {
         let c = match key {
             Key::Letter(c) | Key::Punct(c) => c,
             Key::Digit(d) => char::from(b'0' + d),
-            Key::Space if picked => return self.snapshot(engine, true, None),
-            Key::Space => ' ',
+            Key::Space
+                if action.pressed_space
+                    && self.space_tail.after_space
+                    && self.converts_double_space() =>
+            {
+                return self.commit_after_deleting(engine, 1, Commit::plain(". ".into()));
+            }
+            Key::Space if picked => {
+                self.pressed_space = true;
+                return self.snapshot(engine, true, None);
+            }
+            Key::Space => {
+                self.pressed_space = true;
+                ' '
+            }
             Key::Backspace if let Some(corrected) = action.corrected.take() => {
                 return self.revert_correction(engine, user, corrected, action);
             }
@@ -1695,6 +1754,11 @@ impl Session {
         };
         let deleted = usize::from(picked && english_mode::takes_picked_space(c));
         self.commit_corrected(engine, user, deleted, Commit::plain(c.to_string()))
+    }
+
+    /// 連按兩下空白輸出句點開著、又不在 email、網址、密碼欄（LatinIME 的 `mIsGeneralTextInput`，事實 M52）。
+    fn converts_double_space(&self) -> bool {
+        self.options.double_space_period && !self.field.wants_english()
     }
 
     /// 上屏 `commit`（先刪 `deleted` 字，[`Session::commit_after_deleting`]）；它讓正在打的詞打完又要自動修正時，
@@ -1814,6 +1878,10 @@ impl Session {
             for _ in 0..deleted {
                 context.pop();
             }
+        }
+        if deleted > 0 {
+            // 刪掉之後游標前是什麼只記了布林值，算不回來；接著上屏的字會重算。
+            self.space_tail = SpaceTail::default();
         }
         Snapshot {
             delete_before: deleted,
@@ -2407,6 +2475,8 @@ struct Action {
     picked: Option<String>,
     /// 上一個動作自動修正了（[`Session::corrected`]）。
     corrected: Option<Corrected>,
+    /// 上一個動作是英文模式的空白（[`Session::pressed_space`]）。
+    pressed_space: bool,
     /// 這個動作把正在打的串換成這個（自動修正的還原）：緊接著的退格從它重算，不從 `typed` 減掉刪的字。
     restart: Option<TypedRun>,
 }

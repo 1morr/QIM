@@ -59,9 +59,9 @@ const NAMED: Record<string, Key> = {
 
 /**
  * 單按時沒有字元的修飾鍵（`KeyboardEvent.key`），照 MDN「Modifier keys」一表；Rime 不記這類鍵，
- * 送核心的 `modifier` 不結束數字（brief〈英文模式與欄位類型〉）。
+ * 送核心的 `modifier` 不結束數字（brief〈英文模式與欄位類型〉），也不重算兩下空白的時限（M4 票 27）。
  */
-const MODIFIERS = new Set([
+export const MODIFIERS: ReadonlySet<string> = new Set([
 	"Alt",
 	"AltGraph",
 	"CapsLock",
