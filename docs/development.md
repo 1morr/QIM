@@ -62,7 +62,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
   - `repo_file`：repo 裡的授權全文檔，整份寫進 `LICENSE`。上游授權檔沒有版本化網址、會改內容時用，例如 Unicode 的 `license.txt` 每年改版權年份，釘 sha256 會讓乾淨建置過期失敗；全文放 `data/licenses/`（Unihan 用 `Unicode-3.0.txt`；語料的字頻進詞庫資料包、bigram 進語言模型資料包，用 Creative Commons 的三份全文）。
 - 方案檔在 `data/schemes/`，由 `qim-databuild` 編進資料包；`qim-core` 不讀 TOML。
 - 產物：`build/packs/<id>/` 下的 `<id>.pack`、`manifest.json`（id、種類、版本、最低核心版本、大小、sha256、授權，plan §4.6）、`LICENSE`、`NOTICE`，每個資料包只寫它用到的來源（plan §4）。資料包的內容改了，就在 `pipeline.rs` 的 `build_packs` 加那份的 `version`。速成資料包的 `<id>` 是方案 id（`quick`），碼表的簡體字標記由 OpenCC 的字典判定（plan §4.1，`crates/qim-databuild/src/simplified.rs`），所以授權除了 libcangjie、Unihan 還有 OpenCC；詞庫資料包的 `<id>` 是方案檔 `[packs]` 的 `lexicon`（`quick-lexicon`），內容是 rime-essay 與 repo 裡的粵語口語詞表 `data/lexicon/yue-colloquial.tsv` 的詞與詞頻、HKCanCor train 切分裡的詞（已分詞，`crates/qim-databuild/src/hkcancor.rs` 的 `TrainWords`），加上各語料 train 切分乘上語料權重相加的字頻（plan §4.2），在語料之後建；詞表不經 `sources.toml`，`NOTICE` 記它這次內容的 sha256，授權是 `data/licenses/CC0-1.0.txt`；另一份詞庫 `quick-lexicon-words-hk` 是同樣的詞再補粵典的詞頭（`crates/qim-databuild/src/words_hk.rs`，plan §4.2），可選、不是預設，授權多一段粵典的非商業條款（`data/licenses/words-hk-NCODL-1.0.txt`）；語言模型資料包的 `<id>` 是 `[packs]` 的 `language_model`（`zh-hant-bigram`），是由各語料的 `train.txt` 訓練的字級 bigram（plan §4.3，訓練與剪枝在 `crates/qim-databuild/src/bigram.rs`，語料權重在 `corpora.rs`），也在語料之後建；字根提示資料包的 `<id>` 是 `[packs]` 的 `radical_hint`（`cangjie-hint`），是 libcangjie 每個漢字的倉頡三代 / 五代碼（plan §4.1 步驟 5，`crates/qim-databuild/src/radical_hint.rs`），授權只有 libcangjie，`Engine` 不載入它，由殼另外載入顯示（ADR 0003）；簡繁資料包 `opencc-hk2s` 不由方案指名、各方案共用，是 OpenCC 的 `hk2s` 轉換表（plan §4.4，讀字典的規則在 `crates/qim-databuild/src/opencc.rs`），由 `Engine::with_simplifier` 掛上；英文資料包 `aosp-en-us` 也不由方案指名、各方案共用，是 AOSP LatinIME 美式英文詞表的詞與頻率（plan §4.4，篩選的規則在 `crates/qim-databuild/src/english.rs`），中文狀態的英文候選與英文模式共用，由 `Engine::with_english` 掛上；emoji 資料包 `cldr-emoji-yue-hant` 也不由方案指名、各方案共用，是 CLDR 粵語與繁中標註的「字詞 → emoji」（plan §4.4，規則與關鍵字門檻在 `crates/qim-databuild/src/emoji.rs`，門檻怎麼定見 `scripts/experiments/emoji-keywords/`），由 `Engine::with_emoji` 掛上；停鍵層的模型資料包 `zh-hant-neural-rerank`（種類 `model`）不由方案指名，是 `data/neural-rerank/` 裡採用的 1.4M 神經模型原樣包起來（q8 權重、字表、λ，`crates/qim-databuild/src/neural.rs`，見〈停鍵層的模型〉），授權是訓練語料的，`Engine` 不載入它，由殼交給 `qim-neural`（plan §2.7）。九種資料包的格式都定義在 `crates/qim-core/src/pack.rs`（各自實作 `Pack` trait：魔數不同、共用 `FORMAT_VERSION`），改格式時加 `FORMAT_VERSION`。建哪些資料包只列在 `crates/qim-databuild/src/pipeline.rs` 的 `build_packs`：加一種資料包就在那裡加一項（建法、授權來源、`NOTICE` 的說明），寫檔、印路徑與 sha256、`--verify` 的決定性比對都跟著這份清單走；要它解得開、接得上核心的抽查另加在 `verify.rs`。
-- 預設佈局：`build/layouts/gboard-quick.json`（設定的「數字列」打開時改讀 `gboard-quick-number-row.json`，字母頁上方多一排數字），Gboard 速成的手機直向與橫向，各有字母、兩個符號、數字鍵盤、常用（自訂頁面的示範）頁，加上地球鍵切過去的英文頁與英文的兩個符號頁（M4 票 23），由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式 `qim-layout/1` 的型別與 JSON Schema 在 `crates/qim-layout`（`schema/qim-layout-1.schema.json`）。不讀來源、沒有授權檔。內建佈局的嚴格檢查（plan §5.3）是 `crates/qim-databuild/tests/gboard.rs` 的測試，跟著 `cargo xtask check` 的 `test` 跑；網頁載入佈局時把驗證的警告印在瀏覽器 console。
+- 預設佈局：`build/layouts/gboard-quick.json`（設定的「數字列」打開時改讀 `gboard-quick-number-row.json`，字母頁上方多一排數字），Gboard 速成的手機直向與橫向，各有字母、兩個符號、數字鍵盤、常用（自訂頁面的示範）頁，加上地球鍵切過去的英文頁與英文的兩個符號頁（M4 票 23），由 `crates/qim-databuild/src/gboard.rs` 依按鍵排列算出（plan §2.6），格式 `qim-layout/1` 的型別與 JSON Schema 在 `crates/qim-layout`（`schema/qim-layout-1.schema.json`）。不讀來源、沒有授權檔。內建佈局的嚴格檢查（`qim_layout::check_builtin`）是 `crates/qim-databuild/tests/gboard.rs` 的測試，跟著 `cargo xtask check` 的 `test` 跑；網頁載入佈局時把驗證的警告印在瀏覽器 console。
 - 語料（plan §4.3）：清單在 `crates/qim-databuild/src/corpora.rs`。維基（粵語 `yue-wiki`、中文 `zh-wiki`）與口語（`hkcancor`、`common-voice-yue`）各自抽出文字，轉成香港繁體（中文維基 `s2hk`，其餘 `t2hk`）再換回常見寫法（字形對照表，plan §4.3）、切句、切分，寫出基準檔、「有前文」的題（各目錄下的 `context/<名>.tsv`）、口語的打錯碼題（`typo/<名>.tsv`、`touch/<名>.tsv`，見〈語料〉）與 `ATTRIBUTION.md`（進 git：維基在 `bench/corpus/`，口語在 `bench/colloquial/`）與 `build/corpus/<名>/` 下的 `train.txt`、`dev.txt`（一行一句）、`dev.tsv`（dev 切分的調參題，取法與格式同基準檔，見〈首選字基準〉的〈dev 切分調參〉）、`dev-context.tsv`（dev 切分的「有前文」調參題，取法與格式同 `context/` 下的題）、`test-context-long.tsv` 與 `dev-context-long.tsv`（test、dev「有前文」的同一批題，前文換成同一段裡前面最多 200 字，模型階梯用，`scripts/experiments/model-ladder/`）、口語的 `dev-typo.tsv` 與 `dev-touch.tsv`（dev 的打錯碼調參題）、只有 `hkcancor` 有的 `test-dialogue.tsv` 與 `dev-dialogue.tsv`（口語長前文：test、dev 的句子配同一段對話裡前面的話輪，最多 200 字，模型階梯用）、`chars.tsv`（字頻，見〈語料〉），`build/` 下的都不進 git。第一次要下載約 360 MB 的來源；之後 `cargo xtask data` 約 75 秒（其中詞級 trigram 切段、訓練約 30 秒，峰值記憶體約 5 GB），`--verify` 把語料再建一次、bigram 與詞級 trigram 再訓練一次比 sha256，約 130 秒（Apple M6，release）。
 
 `cargo xtask data` 每次都印各資料包的路徑與 sha256；`--verify` 的報告另列出連打字集字數、擴展區字數、速成碼個數、詞庫的詞數與被門檻和字集濾掉的數量、HKCanCor 補上的詞數與對不上而略過的話輪數、粵典詞庫的詞頭數與補上的詞數、有字頻的字數、bigram 的字數、剪枝前後的相鄰字對數與句首的字數、英文的詞幹數、禁忌詞數、詞形數、打不出而不收的數量與收的詞數、Unihan 交叉比對的摘要、各語料的句數，再逐項列 `[通過]` 或 `[失敗]`，最後一行 `verify 通過` 或 `verify 失敗`。檢查定義在 `crates/qim-databuild/src/verify.rs`；字序（`a` 的首選）、`anr` 的「門口」與繁體模式 `ls` 的「门」排在繁體字之後經 `qim-core` 的 `Engine` 查，簡體模式的「门口」與中文狀態 `the` 的英文候選經 `Session` 打，與網頁同一條路。
@@ -86,7 +86,7 @@ cargo xtask data --verify   # 建資料包並跑 plan §4.5 的檢查，有一�
 
 `build/corpus/<名>/chars.tsv` 是該語料 train 切分的字頻；各語料的次數乘上語料權重（和 bigram 同一個，`corpora.rs` 的 `weight`）相加後放進詞庫資料包，`Engine` 載入時用它排字序（plan §4.1、§4.2）。UTF-8、tab 分隔、沒有欄名，一行「字<TAB>次數」，次數多的在前、同次數依碼位；dev、test 不算。
 
-`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句、「有前文」與打錯碼的題的碼也要等於轉碼結果，有前文與打錯碼的題要剛好三欄）、基準句與「有前文」的句子沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練，有前文的另列一項 `<名> 有前文`）、建兩次基準檔、有前文的題、打錯碼的題、切分與字頻的 sha256 相同；另有一項看全部語料：前處理保留的粵語用字（`corpora.rs` 的 `CANTONESE_KEPT`）在 train 的字頻都大於 0，字形對照表（`common_forms.rs`）換掉的香港寫法與並存寫法（`TWO_WAY_FORMS`）的另一種寫法在 train 都不出現（確認前處理接上了對照表；表本身由轉換用的 OpenCC 查出，不另驗覆蓋）；詞庫也查一項：沒有對照表換掉的寫法與「着名」這類反向的錯字（`common_forms.rs` 的 `REVERSED_ONE_WAY`；rime-essay 原有的「顯着」建詞庫時併進「顯著」），含雙向並存寫法的詞每種寫法都收、詞頻相同、兩字字頻相同，兩字的 unigram 與詞裡相鄰字每種寫法的 bigram 也相同（確認 bigram 接上了並存寫法），含「着」「臺」「菸」的詞都另收「著」「台」「煙」的寫法（`ONE_WAY_FORMS`；義項不同的 `ONE_WAY_DISTINCT` 除外）；粵典詞庫收了預設詞庫的每個詞條（同碼、同詞頻）、也多了詞。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。換 OpenCC 或語料版本時，用 `scripts/experiments/s2hk-diff/` 重看轉換換掉了哪些字；換 rime-essay 或 OpenCC 版本時，用 `scripts/experiments/lexicon-forms/` 重看詞庫裡和常見寫法不同的字，`GAPS=1` 看建詞庫實際換成不同碼的字（用法在各自的 README）。
+`--verify` 對每個語料多三項檢查：基準句與 train、dev 每句都轉得了碼（基準句、「有前文」與打錯碼的題的碼也要等於轉碼結果，有前文與打錯碼的題要剛好三欄）、基準句與「有前文」的句子沒有一句原樣出現在任何一份語料的 train（bigram 用全部的 train 訓練，有前文的另列一項 `<名> 有前文`；測試句漏進訓練語料會讓分數虛高，CyIME 踩過，`docs/research/cyime.md` §3）、建兩次基準檔、有前文的題、打錯碼的題、切分與字頻的 sha256 相同；另有一項看全部語料：前處理保留的粵語用字（`corpora.rs` 的 `CANTONESE_KEPT`）在 train 的字頻都大於 0，字形對照表（`common_forms.rs`）換掉的香港寫法與並存寫法（`TWO_WAY_FORMS`）的另一種寫法在 train 都不出現（確認前處理接上了對照表；表本身由轉換用的 OpenCC 查出，不另驗覆蓋）；詞庫也查一項：沒有對照表換掉的寫法與「着名」這類反向的錯字（`common_forms.rs` 的 `REVERSED_ONE_WAY`；rime-essay 原有的「顯着」建詞庫時併進「顯著」），含雙向並存寫法的詞每種寫法都收、詞頻相同、兩字字頻相同，兩字的 unigram 與詞裡相鄰字每種寫法的 bigram 也相同（確認 bigram 接上了並存寫法），含「着」「臺」「菸」的詞都另收「著」「台」「煙」的寫法（`ONE_WAY_FORMS`；義項不同的 `ONE_WAY_DISTINCT` 除外）；粵典詞庫收了預設詞庫的每個詞條（同碼、同詞頻）、也多了詞。切句與取樣規則見 plan §4.3，各來源怎麼抽文字寫在 `data/sources.toml` 的註解，wikitext 的規則在 `crates/qim-databuild/src/wikitext.rs`，HKCanCor 的在 `hkcancor.rs`。換 OpenCC 或語料版本時，用 `scripts/experiments/s2hk-diff/` 重看轉換換掉了哪些字；換 rime-essay 或 OpenCC 版本時，用 `scripts/experiments/lexicon-forms/` 重看詞庫裡和常見寫法不同的字，`GAPS=1` 看建詞庫實際換成不同碼的字（用法在各自的 README）。
 
 ### Unihan 交叉比對
 
@@ -112,9 +112,9 @@ Unihan kCangjie：比對 <字數> 字，差異 <字數> 字（其中 <字數> �
 
 ### 個人集
 
-有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，`docs/research/facts-rime.md` 的三欄格式，取得方式見 plan §5.2）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的倉頡全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
+有 `bench/personal/rime-userdb.txt`（使用者 Rime 的學習資料，`docs/research/facts-rime.md` 的 `.userdb.txt` 三欄格式；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）時，`cargo xtask data` 取上屏次數 `c ≥ 1` 的詞，用同一個 `Transcoder` 從詞轉出速成碼（不用 Rime 記下的碼：那是詞典的倉頡全碼，不是使用者按的鍵，也看不出使用者打不打全碼），寫成 `bench/personal/rime-userdb.tsv`，第一行記 `rime-userdb.txt` 的 sha256；同一個詞出現多次時併成一題、上屏次數相加，含連打字集以外字的詞略過。沒有 `rime-userdb.txt` 時刪掉上次轉出的 `rime-userdb.tsv`。換了 `rime-userdb.txt` 要重跑 `cargo xtask data`。
 
-`bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數。邏輯在 `crates/qim-databuild/src/personal.rs`。個人集的路徑與檔頭、基準目錄與「有前文」的目錄、`build/corpus/<名>/dev.tsv`、`dev-context.tsv`、兩份長前文題與兩份口語長前文題在 `qim-databuild`（寫）與 `qim-bench`（讀）各有一份（`ARCHITECTURE.md`〈依賴規則〉不讓 `qim-bench` 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
+`bench/personal/` 整個在 `.gitignore`，內容只在本機：不寫進 repo 的任何檔案、commit、票，終端機只印題數與略過的列數；不送雲端 LLM（roadmap〈M3 的模型階梯實驗〉的雲端部分要跑個人集，每次先問使用者）。個人集不進訓練語料，也不匯入基準用的 `UserModel`。邏輯在 `crates/qim-databuild/src/personal.rs`。個人集的路徑與檔頭、基準目錄與「有前文」的目錄、`build/corpus/<名>/dev.tsv`、`dev-context.tsv`、兩份長前文題與兩份口語長前文題在 `qim-databuild`（寫）與 `qim-bench`（讀）各有一份（`ARCHITECTURE.md`〈依賴規則〉不讓 `qim-bench` 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
 
 ### 線上更新的 release
 
@@ -153,7 +153,7 @@ cargo xtask data                                     # 建模型資料包
 
 ## 首選字基準
 
-改核心或資料包時必跑（plan §5.2），不在 `cargo xtask check` 裡。基準讀 `build/packs/quick/quick.pack` 與方案指名的 `build/packs/quick-lexicon/quick-lexicon.pack`、`build/packs/zh-hant-bigram/zh-hant-bigram.pack`、`build/packs/zh-hant-word-trigram/zh-hant-word-trigram.pack`，再掛上英文資料包 `build/packs/aosp-en-us/aosp-en-us.pack` 與 emoji 資料包 `build/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack`（預設選項開著英文候選與 emoji 候選，同網頁），沒有就失敗，但不會自己重建：
+改核心或資料包時必跑，不在 `cargo xtask check` 裡。基準讀 `build/packs/quick/quick.pack` 與方案指名的 `build/packs/quick-lexicon/quick-lexicon.pack`、`build/packs/zh-hant-bigram/zh-hant-bigram.pack`、`build/packs/zh-hant-word-trigram/zh-hant-word-trigram.pack`，再掛上英文資料包 `build/packs/aosp-en-us/aosp-en-us.pack` 與 emoji 資料包 `build/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack`（預設選項開著英文候選與 emoji 候選，同網頁），沒有就失敗，但不會自己重建：
 
 - 改了 `data/`、`crates/qim-databuild/` 或資料包格式（`crates/qim-core/src/pack.rs`）之後，跑 bench 前先跑 `cargo xtask data`，否則量到的是舊資料包，前後數字一樣、`--check` 也照過。
 - 只改核心程式碼不必重建：`cargo xtask bench` 每次都重編核心。
@@ -169,7 +169,7 @@ cargo xtask bench --lexicon quick-lexicon-words-hk --check   # 換成粵典詞�
 
 `--lexicon <id>` 放在最前面，讀 `build/packs/<id>/<id>.pack` 換掉方案指名的詞庫，其餘資料包不變；和印結果、`--check`、`--dev` 合用（`cargo xtask bench --lexicon <id> --dev --set …`）。baseline 是預設詞庫的數字，所以不能和 `--update-baseline` 合用，`--check` 照樣和它比、看換了詞庫有沒有變差；`--learning` 不收它。
 
-`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。按鍵照殼的做法送：字母照實體鍵位經 `qim_layout::PhysicalModel` 轉成按鍵機率（同網頁的 `pressCode`），觸控模擬的點擊經 `qim_layout::SpatialModel` 轉成按鍵機率（同網頁的 `tap`）；觸控模擬的題打錯後照碼重打時，每一碼點對鍵（`qim_bench::Taps`：同〈語料〉的觸控錯誤模型抽點擊、點到別的鍵就重抽，種子是集合名與行號的 sha256，載入題目時填 `Item::retyped`）。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`；每次上屏後換回空白的 `UserModel`，題內也不學（核心只在上屏時學；不開無痕，無痕連前文也不用）。「有前文」的題給前文時，兩次都先 `Session::set_context`：
+`cargo xtask bench` 用 release 編 `qim-bench` 並在 repo 根目錄執行。按鍵照殼的做法送：字母照實體鍵位經 `qim_layout::PhysicalModel` 轉成按鍵機率（同網頁的 `pressCode`），觸控模擬的點擊經 `qim_layout::SpatialModel` 轉成按鍵機率（同網頁的 `tap`）；觸控模擬的題打錯後照碼重打時，每一碼點對鍵（`qim_bench::Taps`：同〈語料〉的觸控錯誤模型抽點擊、點到別的鍵就重抽，種子是集合名與行號的 sha256，載入題目時填 `Item::retyped`；照實體鍵重打會低估鄰鍵讀法擠位置的代價。觸控錯誤模型的參數 `qim-databuild` 與 `qim_bench::Taps` 各有一份，`xtask/tests/shared_paths.rs` 比對兩邊）。每題打兩次，都用新的 `Session` 與空白的 `UserModel`、只經 `Session::handle`；每次上屏後換回空白的 `UserModel`，題內也不學（核心只在上屏時學；不開無痕，無痕連前文也不用）。「有前文」的題給前文時，兩次都先 `Session::set_context`：
 
 1. 逐鍵打完輸入碼、不選字，取當下的第一個候選當首選；沒有候選時首選是空字串。途中的首選拿來算跳動。
 2. 模擬使用者選字打出整題，算修正次數與按鍵數：
@@ -181,9 +181,9 @@ cargo xtask bench --lexicon quick-lexicon-words-hk --check   # 換成粵典詞�
 
 | 檔案 | 格式 |
 | --- | --- |
-| `bench/fixed.tsv` | 固定必過題，一行 `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。輸入碼可以含分隔記號 `'`，照實體鍵盤的 `'` 鍵按（「回報」照打的記）。案例通過的那張票才加，不先加會紅的題 |
+| `bench/fixed.tsv` | 固定必過題，一行 `輸入碼<TAB>期望首選<TAB>來源`；空行與 `#` 開頭的行略過。輸入碼可以含分隔記號 `'`，照實體鍵盤的 `'` 鍵按（「回報」照打的記）。使用者回報的新案例一律加進來（網頁的「回報」照這個格式記，`web/e2e/report.spec.ts`）；案例通過的那張票才加，不先加會紅的題 |
 | `bench/corpus/<名>.tsv`、`bench/colloquial/<名>.tsv` | 一個檔一個集合，集合名是檔名，兩個目錄間不能重名；先跑維基、再跑口語。格式見〈資料建置〉的〈語料〉 |
-| `bench/corpus/context/<名>.tsv`、`bench/colloquial/context/<名>.tsv` | 「有前文」的題，一行 `<前文><TAB><逐字速成碼，空格分隔><TAB><句子>`，由 `cargo xtask data` 產生（plan §5.2）。每個檔打兩次：給前文的集合 `<名>·前文`、不給前文的 `<名>·前文·不給`，都進 baseline、都由 `--check` 擋；不量每鍵延遲 |
+| `bench/corpus/context/<名>.tsv`、`bench/colloquial/context/<名>.tsv` | 「有前文」的題，一行 `<前文><TAB><逐字速成碼，空格分隔><TAB><句子>`，由 `cargo xtask data` 產生。每個檔打兩次：給前文的集合 `<名>·前文`、不給前文的 `<名>·前文·不給`，都進 baseline、都由 `--check` 擋；不量每鍵延遲 |
 | `bench/colloquial/typo/<名>.tsv`、`bench/colloquial/touch/<名>.tsv` | 「含打錯碼」與「觸控模擬」的題，格式與產生方式見〈資料建置〉的〈語料〉（M4 票 08）。集合名 `<名>·打錯`、`<名>·觸控`，接在「有前文」的集合之後，都進 baseline、都由 `--check` 擋；不量每鍵延遲、不進學過的學習資料。觸控模擬的集合另用鄰鍵讀法關掉（`Options::neighbor_readings: false`）打一次，報告多一張表：開與關的修正次數、打錯的題想打的整句在第一頁的比例與平均名次（只算在第一頁內的）；baseline 記開著的（預設選項）。觸控模擬要讀 `build/layouts/gboard-quick.json`，沒有就失敗、提示先跑 `cargo xtask data` |
 | `bench/personal/rime-userdb.tsv` | 個人集的題目：第一行 `# rime-userdb.txt sha256 <sha256>` 記轉自哪份資料，之後一行 `<逐字速成碼，空格分隔><TAB><詞><TAB><上屏次數>`，由 `cargo xtask data` 從 `bench/personal/rime-userdb.txt` 轉出（見〈資料建置〉的〈個人集〉）；集合名 `personal`，語料不能用這個名字 |
 | `bench/baseline.json` | `{"<集合名>": {"wrong": <答錯數>, "correction_count": <修正次數總和>, "wrong_lines": "<答錯的行號，如 1-3,7>"}}`，固定題不記。只用 `--update-baseline` 改，同一個 commit 說明原因 |
@@ -200,13 +200,13 @@ cargo xtask bench --lexicon quick-lexicon-words-hk --check   # 換成粵典詞�
 
 表下面依序是：
 
-- 依長度分組：各集合按期望的字數分成 1、2、3–4、5–8、9 以上，每格「整句首選正確率 · 修正/句（題數）」，不加權。
+- 依長度分組：各集合按期望的字數分成 1、2、3–4、5–8、9 以上，每格「整句首選正確率 · 修正/句（題數）」，不加權。熟手多半打幾個字就上屏，長句的整句正確率低且雜訊大，分組才看得出變化。
 - 有前文的題：每批題給前文與不給前文的答錯數、修正次數並列，最後一列合計。
-- 打錯碼的集合：沒打錯（每一鍵機率最高的字母都等於原本的碼）與打錯的題各幾題、答對幾題，與「原樣正確卻被改錯」：沒打錯、原樣讀法（容錯關，`score.rs` 的 `literal_options`）首選正確的題裡，實際首選不正確的題數與比例。速成不做容錯（M4 票 09，`docs/research/tolerance.md`），原樣讀法就是預設選項，改錯一直是 0。
-- 翻盤清單：和 baseline 的 `wrong_lines` 比，列出由錯變對、由對變錯的題；每個方向最多列 20 題。公開集合附期望與首選，個人集只列行號。
+- 打錯碼的集合：沒打錯（每一鍵機率最高的字母都等於原本的碼）與打錯的題各幾題、答對幾題，與「原樣正確卻被改錯」：沒打錯、原樣讀法（容錯關，`score.rs` 的 `literal_options`：預設選項再關掉鄰鍵讀法）首選正確的題裡，實際首選不正確的題數與比例。速成不做容錯（M4 票 09，`docs/research/tolerance.md`），鄰鍵讀法不搶首選，改錯一直是 0；上限在 [M4 spec〈容錯採用門檻〉](../.scratch/m4/spec.md#容錯採用門檻)。
+- 翻盤清單：和 baseline 的 `wrong_lines` 比，列出由錯變對、由對變錯的題；每個方向最多列 20 題。公開集合附期望與首選，個人集只列行號。只看總數會把一處變好、一處變壞看成沒變。
 - 固定題通過數與沒過的題。
 
-個人集只印數字與行號（plan §5.2）。沒有 `bench/personal/rime-userdb.txt` 就跳過並註明，`bench/personal/baseline.json` 也不比；`rime-userdb.tsv` 檔頭的 sha256 和現在的 `rime-userdb.txt` 不同（還沒轉，或換了資料沒重跑 `cargo xtask data`）也跳過，提示先跑 `cargo xtask data`。個人集的行號依轉出的順序，換了 `rime-userdb.txt` 後行號會位移，先 `--update-baseline` 再比翻盤。
+個人集只印數字與行號（〈資料建置〉的〈個人集〉）。個人集偏向 Rime 詞庫已有的詞（使用者只選得到 Rime 給的候選，QIM 的詞庫也來自 rime-essay），分數可能偏高，判斷時要和口語集一起看。沒有 `bench/personal/rime-userdb.txt` 就跳過並註明，`bench/personal/baseline.json` 也不比；`rime-userdb.tsv` 檔頭的 sha256 和現在的 `rime-userdb.txt` 不同（還沒轉，或換了資料沒重跑 `cargo xtask data`）也跳過，提示先跑 `cargo xtask data`。個人集的行號依轉出的順序，換了 `rime-userdb.txt` 後行號會位移，先 `--update-baseline` 再比翻盤。
 
 個人集只放在主 checkout 的 `bench/personal/`。在 git worktree 裡做票時，先用軟連結接上，否則基準照樣綠燈但沒有個人集的數字：
 
@@ -218,7 +218,7 @@ ln -s <主 checkout>/bench/personal bench/personal
 
 ### dev 切分調參
 
-β、γ 這類打分參數只用 dev 切分調（plan §2.3、§5.2），不看 test 與個人集：
+β、γ 這類打分參數只用 dev 切分調（plan §2.3、`ARCHITECTURE.md`〈測試策略〉），不看 test 與個人集：
 
 ```sh
 cargo xtask bench --dev                                              # 用方案檔的值打各集合的 dev 切分
@@ -251,7 +251,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 ### 學習模式
 
-`cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開（plan §5.2）。「有前文」的題只打給前文的（集合名 `<名>·前文`）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關同一般模式，每題用空白的 `UserModel`、上屏後換回空白的（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
+`cargo xtask bench --learning` 只印一張表：各語料集合與個人集的修正次數，學習關與學習開。「有前文」的題只打給前文的（集合名 `<名>·前文`）。每個集合照檔案的順序，每題照上面第 2 步模擬一次：學習關同一般模式，每題用空白的 `UserModel`、上屏後換回空白的（數字和一般模式的修正次數相同），學習開整個集合共用一個 `UserModel`，上屏的字詞照常學進去，後面的題受前面的影響。只報不擋，不讀也不寫 baseline，不量延遲也不重編 WebAssembly 綁定。個人集同樣只印數字。
 
 `--check` 的違規每條一行，最後一行 `bench 通過` 或 `bench 失敗`：固定題沒過（附期望與實際首選）、集合答錯數或修正次數高於 baseline、集合有題打不出、集合沒有 baseline（新語料要先 `--update-baseline`）、baseline 的集合這次沒跑到、觸控集合鄰鍵讀法開著的修正次數比關著的多、照實體鍵送的集合（固定題、語料、「有前文」兩種、含打錯碼）用鄰鍵讀法關掉另打一次後逐題結果不同（列出前幾個題號）；後兩條讓 `--check` 多打一輪這些集合。`--update-baseline` 讀不了舊 baseline（例如格式改了）時直接覆寫。邏輯在 `crates/qim-bench/`。
 
@@ -264,7 +264,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
-網頁把學習資料（`# qim-userdict v3`，plan §2.4；仍讀得進 v1、v2）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。匯出檔頭的裝置 id 在 `qim.device`（第一次載入時產生）；今天的日期取瀏覽器的當地時間，Playwright 用 `page.clock` 換日。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。瀏覽器封鎖網站資料或存不下時，網頁只用內建的資料包、存不了的只留到關掉網頁，狀態列會說明（plan §3.1、§4.6）；`e2e/storage.spec.ts` 在網頁的程式跑之前換掉 `indexedDB.open` 與 `window.localStorage` 來試。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
+網頁把學習資料（`# qim-userdict v3`，plan §2.4；仍讀得進 v1、v2）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。匯出檔頭的裝置 id 在 `qim.device`（第一次載入時產生）；今天的日期取瀏覽器的當地時間，Playwright 用 `page.clock` 換日。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。瀏覽器封鎖網站資料或存不下時，網頁只用內建的資料包、存不了的只留到關掉網頁，狀態列會說明（`web/src/storage.ts`、plan §4.6）；`e2e/storage.spec.ts` 在網頁的程式跑之前換掉 `indexedDB.open` 與 `window.localStorage` 來試。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
 
 線上更新（plan §4.7）：網頁向開發伺服器的 `/pack-updates/<檔名>` 要更新索引與資料包，`web/vite.config.ts` 轉給更新來源，預設 `https://github.com/1morr/QIM/releases/download/packs/`（瀏覽器直接讀不了 GitHub 的 release，沒有 CORS 標頭）；環境變數 `QIM_PACK_UPDATE_URL`（結尾要有 `/`）換成別的來源，例如在本機試：
 
@@ -278,7 +278,9 @@ QIM_PACK_UPDATE_URL=http://localhost:8787/ npm run --prefix web dev
 
 e2e 的小詞庫在 `web/e2e/fixtures/` 並進 git，Biome 不碰它們：`e2e-lexicon/`（從檔案匯入用）、`e2e-update-lexicon/`（線上更新前先匯入的舊版）、`quick-lexicon-1.0.1/` 與 `quick-lexicon-1.0.2/`（和內建詞庫同 id 的兩版，驗下載版與內建版取較高的）、`pack-release/`（扮演 GitHub release 的 `index.json` 與新版）。`cargo test` 比對它們和現在的格式一致，格式改了會紅，照訊息重產：`pack-release/` 以外的由 `crates/qim-core/tests/web_fixture.rs` 產生（`QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test web_fixture`），`pack-release/` 由 `crates/qim-databuild/tests/release.rs` 照 `cargo xtask pack-release` 的路寫出（`QIM_UPDATE_FIXTURES=1 cargo test -p qim-databuild --test release`）。Playwright 另起一個本機靜態伺服器（`web/e2e/static-server.ts`）放 `pack-release/`，埠是 e2e 的埠加 10000，開發伺服器的 `QIM_PACK_UPDATE_URL` 指向它；被佔用時同樣直接失敗。手動試匯入時，一起選 `build/packs/<id>/` 裡的 `manifest.json` 與 `.pack` 也行。
 
-停鍵層（plan §3.1）：「重排」選單預設「神經模型」，停鍵後在 Web Worker 裡跑；沒有 `zh-hant-neural-rerank`（或從檔案匯入的模型資料包）時不重排。網址加 `?rerank-delay=<毫秒>` 讓結果回來後再等那麼久才套用，模擬慢的模型（e2e 驗舊結果不套用）。候選列的 `data-rerank-applied`、`-unchanged`、`-stale`、`-none` 是各種結果的次數，`data-rerank-ms` 是模型上次算了幾毫秒；工具列的「debug」打開 debug 面板，看得到每次重排的要求、各路徑的模型總分與結果、候選列是不是照停鍵結果快取排（`debug-rerank-cache` 的 `data-cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`），和每個候選的來源、路徑分（plan §3.1）。瀏覽器裡重排一次的延遲：`QIM_RERANK_LATENCY=1 npm run --prefix web e2e -- e2e/rerank-latency.spec.ts`（平常略過；合成 9 條 × 18 字與實打口語集前 200 題，印 p50、p95，只報不擋）。
+停鍵層（`web/src/rerank.ts`）：「重排」選單預設「神經模型」，停鍵後在 Web Worker 裡跑；沒有 `zh-hant-neural-rerank`（或從檔案匯入的模型資料包）時不重排。網址加 `?rerank-delay=<毫秒>` 讓結果回來後再等那麼久才套用，模擬慢的模型（e2e 驗舊結果不套用）。候選列的 `data-rerank-applied`、`-unchanged`、`-stale`、`-none` 是各種結果的次數，`data-rerank-ms` 是模型上次算了幾毫秒；工具列的「debug」打開 debug 面板，看得到每次重排的要求、各路徑的模型總分與結果、候選列是不是照停鍵結果快取排（`debug-rerank-cache` 的 `data-cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`），和每個候選的來源、路徑分（`web/src/debug-panel.ts`）。瀏覽器裡重排一次的延遲：`QIM_RERANK_LATENCY=1 npm run --prefix web e2e -- e2e/rerank-latency.spec.ts`（平常略過；合成 9 條 × 18 字與實打口語集前 200 題，印 p50、p95，只報不擋）。
+
+在手機上試手感：`npm run --prefix web dev -- --host`，手機連同一個區網，開 Vite 印出的 Network 網址。這仍只是測試頁，不能在其他 App 打字，和真正的鍵盤有差距；區網的 `http://` 不是安全環境，瀏覽器不給 `crypto.randomUUID`、`navigator.clipboard`（`web/e2e/insecure-context.spec.ts`）。
 
 Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 
@@ -342,7 +344,7 @@ cargo xtask check
 
 `cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test`、`audit` 與 `e2e`：測試會隨碼表與性質測試變慢，`audit` 要連網路，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
 
-CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `gitleaks git`（全部歷史：`secrets` 步驟只看暫存區）、`cargo xtask check --fast`、`cargo test --workspace` 與 `audit` 步驟的 `osv-scanner`；`e2e` 與 `bench --check` 要資料包，只在本機跑（plan §6）。
+CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `gitleaks git`（全部歷史：`secrets` 步驟只看暫存區）、`cargo xtask check --fast`、`cargo test --workspace` 與 `audit` 步驟的 `osv-scanner`；`cargo test` 不讀 `build/packs/`（用到資料包的測試在暫存目錄自建小資料包），CI 不必建資料包；`e2e` 與 `bench --check` 要資料包，建它要下載約 360 MB 的來源，所以只在本機跑：`e2e` 在 `check`，`bench --check` 照〈首選字基準〉在改排序、資料或核心的票手動跑，不進 `check`。推到遠端仍要先問使用者。
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 `ARCHITECTURE.md`〈依賴規則〉的哪一條；禁用路徑附 `檔案:行號`。
 

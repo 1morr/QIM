@@ -9,7 +9,7 @@
 //!
 //! 字頻只數 train（plan〈詞庫〉），dev、test 不參與。
 //!
-//! 「有前文」的基準題（plan〈首選字基準〉）：test 切分的句子配上同一段文字裡它前面的
+//! 「有前文」的基準題（`docs/development.md`〈語料〉）：test 切分的句子配上同一段文字裡它前面的
 //! [`CONTEXT_CLAUSES`] 句與中間的標點，前文原樣保留，不轉碼。dev 切分用同樣的取法另出一份調參題。
 //! 同一批題另出一份長前文（同一段裡前面最多 [`LONG_CONTEXT_CHARS`] 字），給模型階梯量前文長度
 //! （M3 票 07，`scripts/experiments/model-ladder/`）。

@@ -14,7 +14,7 @@ use crate::sources::Source;
 use crate::transcode::Transcoder;
 use crate::{Error, hkcancor, wiki};
 
-/// 基準檔放哪個目錄（plan〈首選字基準〉）：維基防退步，口語是品質判斷的主要依據（brief〈效能與品質指標〉）。
+/// 基準檔放哪個目錄（`docs/development.md`〈語料〉）：維基防退步，口語是品質判斷的主要依據（brief〈效能與品質指標〉）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
     Wiki,
@@ -32,7 +32,7 @@ impl Group {
         }
     }
 
-    /// 「有前文」的基準題（plan〈首選字基準〉）：`<目錄>/context/<名>.tsv`，授權同 [`Group::dir`]。
+    /// 「有前文」的基準題（`docs/development.md`〈語料〉）：`<目錄>/context/<名>.tsv`，授權同 [`Group::dir`]。
     pub fn context_dir(self) -> &'static str {
         match self {
             Group::Wiki => "bench/corpus/context",
@@ -40,7 +40,7 @@ impl Group {
         }
     }
 
-    /// 「含打錯碼」的基準題（plan〈首選字基準〉，M4 票 08）：`<目錄>/typo/<名>.tsv`，授權同 [`Group::dir`]。只有口語：
+    /// 「含打錯碼」的基準題（`docs/development.md`〈語料〉，M4 票 08）：`<目錄>/typo/<名>.tsv`，授權同 [`Group::dir`]。只有口語：
     /// 品質判斷以口語為主（brief〈效能與品質指標〉），維基的長句每句都有好幾處錯、整句首選幾乎全錯，量不出容錯的差別；
     /// 維基集照舊守「沒打錯的不退步」。
     pub fn typo_dir(self) -> Option<&'static str> {

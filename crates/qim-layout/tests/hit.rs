@@ -1,4 +1,4 @@
-//! 點擊判定（plan〈佈局：畫布模型〉〈佈局〉）：從 JSON 讀進佈局，在設計尺寸的座標上點。
+//! 點擊判定（plan〈佈局：畫布模型〉、architecture〈測試策略〉）：從 JSON 讀進佈局，在設計尺寸的座標上點。
 
 use qim_layout::{Layout, Page};
 

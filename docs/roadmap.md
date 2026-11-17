@@ -75,7 +75,7 @@ M1–M4 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 
 ## 平台里程碑（M7–M11）
 
-每個平台一次接上當時已完成的全部功能。開工時補 §3 對應小節，完成標準都是：在真的宿主程式裡實打 M1、M3、M4 的驗收項目全部通過，鍵盤的外觀與互動照 M5 的網頁樣板，觸控平台的鍵盤原生繪製所有佈局功能（形狀、旋轉、透明度、重疊、深色、橫向），M6 的搞怪佈局也能打字（`AGENTS.md`〈驗收輸入行為〉）。
+每個平台一次接上當時已完成的全部功能。開工時在 `ARCHITECTURE.md`〈平台殼〉補該平台一小節（框架、怎麼接核心），安裝、註冊與實跑驗證的步驟寫進 `docs/development.md`。完成標準都是：在真的宿主程式裡實打 M1、M3、M4 的驗收項目全部通過，鍵盤的外觀與互動照 M5 的網頁樣板，觸控平台的鍵盤原生繪製所有佈局功能（形狀、旋轉、透明度、重疊、深色、橫向），M6 的搞怪佈局也能打字（`AGENTS.md`〈驗收輸入行為〉）。
 
 每個平台另有：
 - API key 存系統的安全儲存（Keychain、Android Keystore、Windows Credential Manager、Secret Service）。
@@ -88,8 +88,8 @@ M1–M4 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 - 欄位類型的邊角（M4 票 26，網頁沒查證）：使用者在 email、網址欄自己切到英文模式時，點建議仍補空白、建議列仍列拼錯的修正（LatinIME `shouldInsertSpacesAutomatically`）；`inputmode=text` 會不會蓋掉 `type=email` 沒查證（M4 回顧補）；各平台照自己的欄位屬性對應 `FieldKind` 時一起定。
 - 桌面平台接實體鍵盤（M4 票 07 留下，網頁驗不到）：ISO 鍵盤的 `Backquote` 與 `IntlBackslash` 在 macOS 可能對調、dead key 換了字元攔下後系統的 dead key 狀態有沒有取消，用系統的實體鍵位實機驗；Dvorak、AZERTY 等真實配列也在這時實打。
 
-- **M7 macOS**：`qim-ffi` 完整版、IMK 殼、使用者資料存檔、設定視窗（含學習資料管理、API key、內嵌佈局編輯器）。定外觀主題格式，鍵盤與桌面候選窗共用一份（參考青簡 `theme.json`：一個主題一個目錄、可繼承、按淺深色給變數、可帶圖片，`docs/research/qingjian.md` §7），接上候選窗；之後各平台殼接上同一份。依 〈M3 的模型階梯實驗〉 的結果接端上 LLM。定同步的傳輸方式（要能跨 Apple 與 Android，內容含自訂佈局；WebDAV 列入候選，CyIME 用它同步剪貼簿與備份）；接剪貼簿歷史與可選的崩潰回報（預設關，brief §8）。
-- **M8 iOS**：鍵盤擴充與主 App（設定、學習資料管理、使用者詞匯入匯出、內嵌佈局編輯器，開工時實測內嵌的手感）。開工先查證鍵盤擴充拿不拿得到宿主 App 的識別。鍵盤擴充讀佈局時略過 Schema 驗證（M2 票 09 決定）：佈局在主 App 與編輯器存檔時驗過，擴充只讀，驗一次 footprint 多約 3 MB、執行檔多 3.1 MB（Mac）；殼要讀佈局、`qim-ffi` 加佈局介面時，`qim-layout` 的 `jsonschema` 改成預設開的 feature，關掉時只留型別與引用檢查的讀法，`qim-ffi` 給鍵盤擴充的建置關掉它；`ARCHITECTURE.md`〈依賴規則〉的表不用改（關掉時 `jsonschema` 仍是可選依賴）。另外的完成標準：沒開完整取用權限時打字與學習照常；與 macOS 互相同步一個新使用者詞與一筆剪貼簿並讀回。做完後評估多端檔案傳輸，結論寫回 brief。
+- **M7 macOS**：`qim-ffi` 完整版、IMK 殼（InputMethodKit、Swift，經 `qim-ffi` 的 uniffi 綁定接核心）、使用者資料存檔（存在輸入法自己的 Application Support）、設定視窗（含學習資料管理、API key、內嵌佈局編輯器）。定外觀主題格式，鍵盤與桌面候選窗共用一份（參考青簡 `theme.json`：一個主題一個目錄、可繼承、按淺深色給變數、可帶圖片，`docs/research/qingjian.md` §7），接上候選窗；之後各平台殼接上同一份。依 〈M3 的模型階梯實驗〉 的結果接端上 LLM。定同步的傳輸方式（要能跨 Apple 與 Android，內容含自訂佈局；WebDAV 列入候選，CyIME 用它同步剪貼簿與備份）；接剪貼簿歷史與可選的崩潰回報（預設關，brief §8）。沒有付費帳號，先用本機簽章（brief §10）。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證。
+- **M8 iOS**：鍵盤擴充與主 App（設定、學習資料管理、使用者詞匯入匯出、內嵌佈局編輯器，開工時實測內嵌的手感）。iOS 的硬限制見 `docs/research/facts-platforms.md`。開工先查證鍵盤擴充拿不拿得到宿主 App 的識別。鍵盤擴充讀佈局時略過 Schema 驗證（M2 票 09 決定）：佈局在主 App 與編輯器存檔時驗過，擴充只讀，驗一次 footprint 多約 3 MB、執行檔多 3.1 MB（Mac）；殼要讀佈局、`qim-ffi` 加佈局介面時，`qim-layout` 的 `jsonschema` 改成預設開的 feature，關掉時只留型別與引用檢查的讀法，`qim-ffi` 給鍵盤擴充的建置關掉它；`ARCHITECTURE.md`〈依賴規則〉的表不用改（關掉時 `jsonschema` 仍是可選依賴）。另外的完成標準：沒開完整取用權限時打字與學習照常；與 macOS 互相同步一個新使用者詞與一筆剪貼簿並讀回。做完後評估多端檔案傳輸，結論寫回 brief。
 - **M9 Android**：InputMethodService 殼與設定 App（內嵌佈局編輯器）。開工先查證 Gemini Nano 能否在輸入法內使用，並讀 CyIME 的實體鍵盤與懸浮鍵盤做法（`docs/research/cyime.md` §4，GPL，只取做法）。做懸浮鍵盤（拖曳、調大小、半透明；iOS 不能畫到鍵盤外，不做）。評估語音輸入，結論寫回 brief（iOS 鍵盤擴充沒有麥克風）。另外的完成標準：與 macOS、iOS 互相同步並讀回。
 - **M10 Windows**、**M11 Linux**：平台殼。M10 開工先比較核心直接載入 TSF DLL 與「薄 DLL 加程序外引擎」（`docs/research/xsime.md` §2.1）：前者引擎崩潰會拖垮宿主、x86 宿主要另建，後者多一層 IPC 與冷啟動等待。
 
@@ -98,6 +98,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - M7：用 `codesign -d -r-` 讀回 Personal Team 簽章的 requirement，重建兩次確認輔助功能授權仍在（§4）；以 root 註冊輸入源、更新前切走輸入源、只換執行檔的開發迴圈（§2.2）。
 - M8：需要鍵盤自己放切換鍵的機型，地球鍵長按的切換鍵盤選單是否照 Apple 改成換系統鍵盤，選單裡的系統鍵盤現在只是占位，iOS、Android 殼接系統的清單（M4 票 23，使用者同意）；事實 P25 `deleteBackward()` 刪的單位實機量（M4 票 21，核心只刪單一 scalar 的字，不依賴它）。
 - M8：Full Access 只閘控網路與剪貼簿、App Group 只由主 App 寫、Keychain group 寫成固定字串（未簽章的 CI archive 前綴為空）、冷啟動高度、用 `phys_footprint` 量記憶體（§2.3）。
+- M8：iOS 的預設佈局要不要放地球鍵（`needsInputModeSwitchKey` 只在部分機型為真）開工時定；內建佈局的嚴格檢查（`qim_layout::check_builtin`）現在固定用不需要切換鍵盤鍵的 `Target`（M1 票 19）。
 - M9：測試宿主 App 涵蓋一般、密碼、WebView、`TYPE_NULL` 欄位（§2.4）。
 
 ## M3 的模型階梯實驗
@@ -106,7 +107,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 ## M5 觸控鍵盤與設定
 
-使用者 2026-11-12 決定：平台殼開工前，先在網頁把觸控鍵盤做到幾乎完整，使用者在手機瀏覽器確認後平台照做（§3.1）。排在 M4 之後，因為英文鍵盤與英文建議列在 M4；排在佈局編輯器（M6）之前，編輯器建在定稿的鍵盤上。
+使用者 2026-11-12 決定：平台殼開工前，先在網頁把觸控鍵盤做到幾乎完整，使用者在手機瀏覽器確認後平台照做（`ARCHITECTURE.md`〈平台殼〉）。排在 M4 之後，因為英文鍵盤與英文建議列在 M4；排在佈局編輯器（M6）之前，編輯器建在定稿的鍵盤上。
 
 - 分兩期（使用者 2026-11-17 同意，M4 回顧）：第一期盤點、設計稿、候選列與工具列、設定頁、鍵盤高度、從 M4 來的網頁整理，做完在手機試用；第二期面板、滑動、撤銷學習手勢、句首建議與量詞聯想、英文下一個詞。期界在盤點勾完後定。
 - 開工先盤點：Android 模擬器上的 Gboard 實測觸控鍵盤的全部功能（工具列、各面板、長按、手勢、設定頁的分類與項目），另對照 iOS 內建鍵盤，寫到 `docs/research/`；列成清單請使用者逐項勾要不要，勾完才拆票。
@@ -132,5 +133,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - plan 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字）：已拆成 `.scratch/arch-diet/` 的 6 張票，隨時可以用 `/1morr:ticket-coordinator .scratch/arch-diet/issues` 跑。出處：2026-11-13 流程對齊。
 - 容錯重評時要補的：四種修正沒過門檻（M4 票 09），重評時照票 10 列的四項與 `docs/research/tolerance.md` 補；空間模型的「上層加成 2」、σ、鄰鍵先驗 0.9／σ 0.5 沒有來源也沒調；重排開著時觸控集合的修正次數量不了（model-ladder 沒有觸控的路，M4 票 09c）。出處：M4 票 06–10、09c、18。
 - e2e 在高負載下偶發紅、單獨重跑會過：`pack-update.spec.ts`「sha256 不符時拒絕，保留舊版」（M4 票 13）、`touch-features` 長按切頁（M4 票 21）、單按 Shift 的計時（M4 票 26）。再紅一次就用 `mattpocock-skills:diagnosing-bugs` 開修復票。出處：M4 票 13、21、26 與票 31。
+- 雲端 LLM 重評通過、要在網頁接時（M3 票 22 的重評條件）：API key 只放開發機的環境變數、由 Vite 開發伺服器轉發（同線上更新的 `/pack-updates/`），不寫進瀏覽器儲存空間；平台殼的 key 照〈平台里程碑（M7–M11）〉存系統的安全儲存。出處：M3 票 22。
 - e2e 開跑前不檢查資料包建好了沒：網頁要載的資料包少一個（例如主 checkout 沒重跑 `cargo xtask data`），整批測試在等就緒時逾時，看不出原因；要做時讓 e2e 步驟先比對網頁要載的資料包，少了就印出要跑 `cargo xtask data`。再踩到或做 gates 時順手加再開票。出處：M4 回顧（2026-11-17）。
+- 個人句子檔 `bench/personal/sentences.txt`（選填，只在本機）：使用者提供的真實句子一行一句，由 `qim-databuild` 轉碼進個人集，英文段落切開不算；`corpus::clauses` 會丟掉含英文的整句，要另外切。等使用者提供句子（M1 票 04）。
 - 簡體模式逐個分段轉換，跨兩段的詞可能轉錯（「乾」「隆」分在兩段時成了「干隆」）；常見詞在詞庫裡本身就是一段，所以罕見。等使用者回報再改：整串一起轉換，再依字數切回各段。出處：M1 票 16。

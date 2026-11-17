@@ -60,37 +60,19 @@
 
 ## 3. 平台殼
 
+已搬到 `ARCHITECTURE.md`〈平台殼〉；只和某個平台有關的打算搬到 roadmap〈平台里程碑（M7–M11）〉。
+
 ### 3.1 網頁 prototype（M0–M4）
 
-- 目的：手感驗證核心與佈局，並在平台殼開工前驗完所有核心功能；核心是真的，網頁 UI 不隨產品發佈，只有 `web/editor/` 佈局編輯器隨產品發佈（ADR 0002、ADR 0004）。但觸控鍵盤（候選列與工具列、各面板、鍵盤內設定頁）是平台殼照做的樣板（使用者 2026-11-12 決定，M5，roadmap〈M5 觸控鍵盤與設定〉）：使用者在手機瀏覽器確認過的樣子，平台照做，免得到平台才發現和想像的不同。
-- 限制：只是測試頁，不能在其他 App 打字；手機上的手感用區網開在手機瀏覽器試，和真正的鍵盤仍有差距。
-- 兩種模式：
-  - 實體鍵盤：照 brief §4.3 的鍵位。
-  - 觸控模擬：行動裝置尺寸的觸控鍵盤，照 brief §4.4。按鍵幾何由 `qim-layout` 算，網頁只畫。
-- 候選列、展開面板、無痕開關、簡繁開關；按鍵放大預覽、深色模式、直向與橫向的佈局版本。
-  - 改候選與組字行為的開關（核心選項與重排）集中在頁面下方的設定區，由 `web/src/settings.ts` 的一張表產生，新開關在表裡加一列；之後的設定（常用語、詞庫匯入、資料包管理）也放在這一區。畫面與觸控鍵盤的開關（觸控鍵盤、深色、數字列、字根提示版本）留在候選列下方（M3 票 01）。
-  - 資料包（M3 票 20，§4.6）：設定區的「資料包」一段列出種類、名稱、版本、大小、授權與來源，每種有兩份以上時可切換，匯入與下載的可刪，從檔案匯入（一起選 `manifest.json` 與 `.pack`）；「線上更新」開關與「檢查更新」鍵（M3 票 21，§4.7）。`web/src/packs.ts` 管儲存，`pack-update.ts` 管線上更新，`pack-settings.ts` 管畫面。
-  - 展開面板：候選列右側的展開鍵，桌面組字中 ↓ 打開、↑ 收起；Microsoft 速成的 ↓ 進候選窗、Tab 與 → 展開成表格，Tab 與 → 這裡已給字根提示與分段。選了字就收起（M1 票 23）。
-  - 匯入詞庫（M3 票 17）：設定區的「匯入詞庫」一段選詞表檔（`web/src/word-list.ts`），先在頁面上列出格式、會加幾個詞、略過的列與原因，確認後才加；沒有可加的詞時不問。
-  - 常用語（M3 票 14）：設定區的「常用語」一段新增、編輯、刪除（`web/src/phrases.ts`）；候選列右側在沒有組字時有「常用語」鍵，叫出清單點一條就上屏，組字中藏起（和展開鍵不同時出現）。觸控與桌面共用，照 Gboard 工具列在沒有候選時給功能鍵、微信輸入法的常用語面板。
-  - 英文使用者詞（M4 票 14）：設定區的「英文使用者詞」一段列出核心學到的英文串（沒到出現門檻的也列）、可逐條刪（`web/src/english-user-words.ts`），開關「英文使用者詞」在設定表裡。學習資料除了上屏後存，交還瀏覽器的空白、標點、Enter、Tab 與失焦之後也存：核心這時可能剛學到打完的英文串。
-  - 欄位類型（M4 票 26，`web/src/field.ts`）：工具列的「欄位」選單模擬宿主的輸入框，選項是它的 `type`、`inputmode`（一般、email、網址、數字的 `type=number` 與 `inputmode=numeric`、密碼）；換選項等於聚焦新的欄位：`setField`、照回傳的中英換頁、數字欄開數字頁，再聚焦輸入框給前文。輸入框本身仍是同一個 `textarea`：`type=email` 與 `type=number` 的 `input` 沒有游標 API（`selectionStart`、`setRangeText`），上屏的路徑用不了。
-  - 上下文（M3 票 05，`web/src/context.ts`）：輸入框聚焦、`input`、`selectionchange` 時把游標前最多 `contextLimit()` 字交給 `setContext`、失焦時 `clearContext`，另外每個實體鍵送進核心前（沒有組字時）再給一次：交還瀏覽器的鍵讓核心作廢前文，游標沒動（結尾按 End）時不會有 `selectionchange` 補給。無痕時不給，改完設定區的開關後重給一次。
-  - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
-  - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，`docs/research/facts-products.md`）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗報不報由 `web/src/neural-rerank.ts` 的 `NeuralReranker` 管，換模型 A→B 時 A 晚失敗不報（M4 票 02）；沒有模型時不重排、打字與候選照常。開始、改設定、換資料包、模型載入失敗之後把重排識別交給 `Session.setRerankerId`（§2.7 停鍵結果快取）。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
-- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、英文使用者詞、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram、萬用鍵實際對到的碼（M4 票 11），路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）、最近一個字母鍵的按鍵機率（觸控或實體鍵盤，M4 票 06、07，`Inspection::key_weights`，面板 `debug-weights`）、鄰鍵讀法換了哪幾碼與空間懲罰（M4 票 09c，`InspectedCandidate::neighbor`，面板標「鄰鍵」）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）；候選列是否照停鍵結果快取排（`Inspection::rerank_cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`）也在這一段（M4 票 03）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因，在 `Inspection` 與面板加一欄，測試用面板讀回原因。
-- 撤銷學習（M4 票 16，§2.4）：組字中 Shift+Delete 或 Ctrl+Delete 呼叫 `Session.forget` 清目前頁的第一個（翻頁前是首選）、存檔；沒有組字時照常交還瀏覽器。debug 面板每個候選列的 `data-learning` 是它的學習加分，e2e 讀它看清掉後歸零（`e2e/forget.spec.ts`）。
-- 使用者資料存 `localStorage`（經 `web/src/storage.ts`）；瀏覽器封鎖網站資料或存不下時，第一次出錯起寫入只留在記憶體、照樣能打字，狀態列說明學習資料與設定這次不會存（M4 票 02）。提供匯出、匯入。匯入是合併（§2.4〈跨裝置合併〉，M4 票 17）：先在複本上合併，在頁面上寫出會新增、更新、刪除幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）；載入時讀回 `localStorage` 的存檔用 `loadUserDict`（取代）。「從備份還原」是另一個鍵（`restoreUserDict`，同樣先確認），取代目前的並留清空記號；「清空學習資料」也同步到別台，兩個鍵旁各有一句說明。網頁沒有傳輸層，兩個瀏覽器設定檔的同步是各自匯出、匯入對方的檔（`e2e/sync.spec.ts`）。
-- LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
-- 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。
+各殼都要守的搬到 `ARCHITECTURE.md`〈平台殼〉，在手機上試的步驟搬到 `docs/development.md`〈網頁〉；網頁自己的行為由 `web/src/` 與 `web/e2e/` 說明。
 
 ### 3.2 macOS（M7）
 
-InputMethodKit，Swift，經 `qim-ffi`（uniffi）呼叫核心。使用者資料存在輸入法自己的 Application Support。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證（`AGENTS.md`〈驗收輸入行為〉）。沒有付費帳號，先用本機簽章（brief §10）。
+已搬到 roadmap〈平台里程碑（M7–M11）〉的 M7。
 
 ### 3.3 之後的平台
 
-iOS（M8）、Android（M9）、Windows（M10）、Linux（M11）各在里程碑開頭補一節：框架、安裝與註冊、怎麼接核心、怎麼實跑驗證。iOS 的硬限制見 `docs/research/facts-platforms.md`。
+已搬到 roadmap〈平台里程碑（M7–M11）〉。
 
 ## 4. 碼表與資料管線
 
@@ -241,68 +223,27 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
 
 ## 5. 測試策略
 
+已搬到 `ARCHITECTURE.md`〈測試策略〉。
+
 ### 5.1 核心
 
-- 單元測試與性質測試（`cargo test`），新功能與修 bug 先寫會紅的測試。
-- 性質測試例：任何 Snapshot 的候選都能由目前輸入碼打出；無痕模式下 `UserModel` 不變；`export` 後 `import` 等價。
+已搬到 `ARCHITECTURE.md`〈測試策略〉。
 
 ### 5.2 首選字基準【決定】
 
-| 檔案 | 內容 | 授權 / 位置 |
-| --- | --- | --- |
-| `bench/fixed.tsv` | 固定必過題：`輸入碼<TAB>期望首選<TAB>來源`；起始為 M0 已過的 `a 日`；`anr 門口` 由 M1 票 06（詞庫整串查詢）加入，`mir 一台` 由 M1 票 07（unigram 連打）加入；輸入碼可含分隔記號（`an'r 門口`，M1 票 28），基準照實體鍵盤的 `'` 鍵按 | 進 git |
-| `bench/corpus/` | 維基 test 切分的句子，機械轉成速成碼（多碼字取五代第一碼）；每個語料一個 `<名>.tsv`，一行「逐字速成碼（空格分隔）<TAB>句子」，由 `cargo xtask data` 產生 | CC BY-SA 4.0，附 `ATTRIBUTION.md`，進 git |
-| `bench/colloquial/` | 口語語料 test 切分的句子，轉碼方式與格式同上（HKCanCor、Common Voice）；口語集的開發切分只用來調參 | 依來源（CC BY 4.0、CC0），附 `ATTRIBUTION.md`，進 git |
-| `bench/corpus/context/`、`bench/colloquial/context/` | 「有前文」的題（M3 票 04）：test 切分的句子，前文是來源同一行裡它前面的兩句與中間的標點（原樣，可含英文、數字）；每個語料取雜湊最小的 1,000 句，段落第一句沒有前文、不收。一行「前文<TAB>逐字速成碼<TAB>句子」，由 `cargo xtask data` 產生。基準把同一批題打兩次：給前文（集合名 `<名>·前文`）與不給前文（`<名>·前文·不給`），報告並列兩者與合計；兩個都進 baseline。給前文時每次從空的組字打起都先 `set_context`（前文接著這題已上屏的字），同殼在上屏後給游標前的文字 | 同所在目錄的授權，`ATTRIBUTION.md` 說明，進 git |
-| `bench/colloquial/typo/`、`bench/colloquial/touch/` | 打錯碼的題（M4 票 08）：口語 test 切分的同一批句子，「含打錯碼」照實體鍵盤的錯誤模型改成實際按的鍵（每鍵 3%，替換、漏碼、多碼、對調；替換多半是實體鄰鍵），「觸控模擬」照 Fowler 2015 在預設佈局上每鍵抽一個點擊、雜訊照 Goodman 2002（往下、往中心偏，x、y 的 σ 不同、有旋轉）。錯誤模型與容錯的鄰鍵先驗、空間模型故意不同；參數與來源在 `docs/research/typo-bench-models.md`，格式在 `docs/development.md`〈語料〉。由 `cargo xtask data` 以每行的 sha256 為種子決定性產生；dev 的同一種題在 `build/corpus/<名>/dev-typo.tsv`、`dev-touch.tsv`，`--dev` 打。集合名 `<名>·打錯`、`<名>·觸控`，進 baseline | 同所在目錄的授權，進 git |
-| `bench/personal/rime-userdb.txt` | 使用者 Rime 的學習資料（`docs/research/facts-rime.md` 的 `.userdb.txt`；拿到的是 `quick5.userdb` 資料庫目錄時，複製到暫存目錄用 Homebrew librime 的 `rime_dict_manager -b quick5` 轉出）：取上屏次數 `c` ≥ 1 的詞當題目，期望首選是詞本身 | 只在本機，`.gitignore`，存在就一起跑 |
-| `bench/personal/rime-userdb.tsv` | 個人集的題目：`cargo xtask data` 從上一列轉出的速成碼、詞、上屏次數 | 同上 |
-| `bench/personal/sentences.txt` | 選填：使用者提供的真實句子，一行一句，由 `qim-databuild` 轉碼；英文段落切開不算 | 同上 |
-| `bench/baseline.json` | 各集合（`personal` 除外）的答錯數、修正次數與答錯的題號（翻盤清單用） | 進 git |
-| `bench/personal/baseline.json` | 個人集的答錯數、修正次數與答錯的題號 | 只在本機 |
-
-- 個人集（Rime 資料）：
-  - 輸入碼由 `qim-databuild` 從詞轉成速成碼，轉法同 `bench/corpus/`。Rime 記下的碼是詞典的倉頡全碼，不是使用者按的鍵（`docs/research/facts-rime.md`），不能用，也看不出使用者打不打全碼。
-  - 同時報不加權與依上屏次數加權的結果。
-  - 偏差：使用者只選得到 Rime 給的候選，所以這份資料偏向 Rime 詞庫已有的詞；QIM 的詞庫也來自 rime-essay，個人集的分數可能偏高，判斷時要和口語集一起看。
-  - 隱私：個人集的內容不寫進 repo 的任何檔案、commit、票，只報數字；不送雲端 LLM（roadmap〈M3 的模型階梯實驗〉 的雲端部分不跑個人集，除非使用者同意）。
-- 指標：固定題通過數、整句首選正確率、字正確率、修正次數、每字按鍵數、首選跳動、每鍵延遲 p50 / p95（原生與 WebAssembly 各量一次，WebAssembly 用 Node 跑網頁同一份綁定；另報組字第 20 碼起的按鍵與「選開頭一段」那一鍵：選定後剩下的輸入碼從頭重建 lattice，M2 票 07 加；空白的學習資料與學過的〔一個 `UserModel` 依序學完全部公開集合〕各量一組，M4 票 05 加；同一批輸入另量每個輸入的第一碼換成萬用鍵的一批，M4 票 18b 加；原生每一鍵送觸控點對鍵的點擊、鄰鍵讀法開著，WebAssembly 照實體鍵送，M4 票 09c 改）。原生的 p95 由 `--check` 擋，上限在 [M4 spec〈每鍵延遲上限〉](../.scratch/m4/spec.md#每鍵延遲上限)；WebAssembly 只報。
-- 按鍵照殼的做法送（M4 票 08）：字母照實體鍵位經 `qim_layout::PhysicalModel` 轉成按鍵機率，觸控模擬的點擊經 `qim_layout::SpatialModel` 轉成按鍵機率，基準量到的就是殼實際送的機率。觸控模擬的題打錯後照碼重打時也點觸控（M4 票 09c，照票 09b 的量法）：每一碼照票 08 的觸控錯誤模型抽點擊、點到別的鍵就重抽（「觸控點對鍵」，`qim_bench::Taps`，參數和 `qim-databuild` 那份由 `xtask/tests/shared_paths.rs` 比對）；照實體鍵重打會低估鄰鍵讀法擠位置的代價。
-- 打錯碼的集合另報（M4 票 08）：沒打錯（每一鍵機率最高的字母都等於原本的碼）與打錯的題各答對幾題，與「原樣正確卻被改錯」的比例：沒打錯、原樣讀法（容錯關）首選正確的題裡，實際首選不正確的比例（Fowler 2015 的 false correction）。原樣讀法關掉鄰鍵讀法（M4 票 09c），鄰鍵讀法不搶首選，所以仍是 0；上限在 [M4 spec〈容錯採用門檻〉](../.scratch/m4/spec.md#容錯採用門檻)。打錯碼的題第一次按實際按的鍵、卡住後照碼重打（算修正），所以照樣每題打得出。觸控模擬的集合另用鄰鍵讀法關掉打一次，報開與關的修正次數、打錯的題想打的整句在第一頁的比例與平均名次（M4 票 09c）。
-- 依長度分組：正確率與修正次數另按目標的字數分組（1、2、3–4、5–8、9 以上）。熟手多半打幾個字就上屏，長句的整句正確率低且雜訊大，分組才看得出變化。
-- 翻盤清單：和 baseline 比，列出由錯變對、由對變錯的題目（個人集只列題號）。只看總數會把一處變好、一處變壞看成沒變。
-- 學習模式（`--learning`）：照檔案的順序打每個語料集合、「有前文」的題（給前文）與個人集，模擬使用者選字（同修正次數的模擬）並讓整個集合共用的 `UserModel` 學習，和同一順序、每題空白的 `UserModel` 比修正次數。只報不擋，不讀也不寫 baseline。基準其他模式都用空白的 `UserModel`（每鍵延遲另量學過的一組）。
-- 修正次數：模擬使用者打完整句輸入碼，首選能接上目標句就按空白，否則選能接上的最長候選，第一頁沒有就翻頁。每次選非首選或翻頁算一次，以每句平均回報。每字按鍵數把這些動作和輸入碼都算進去（文字輸入研究常用的 KSPC）。卡住（翻完都接不上）時按 Esc 清掉（算一次修正）改成一個字一個字打；一個字一個字也打不出就算「打不出」，`--check` 紅。細節見 `docs/development.md`〈首選字基準〉。
-- 首選跳動：逐碼打字時，首選開頭已打完的字被下一鍵改掉的次數，每句平均。先只回報，不擋 commit。
-- `cargo xtask bench --check`：固定題全過，且各集合答錯數與修正次數 ≤ baseline、沒有打不出的題、原生每鍵延遲的 p95 在上限內，否則失敗；集合沒有 baseline、或 baseline 的集合沒跑到也算失敗；觸控集合鄰鍵讀法開著的修正次數比關著的多、照實體鍵送的集合（固定題、語料、有前文、含打錯碼）鄰鍵讀法開關前後逐題結果不同，也失敗（M4 票 09c）。改核心或資料包時必跑。
-- 更新 baseline 要用 `--update-baseline`，並在同一個 commit 說明原因。
-- dev 切分也有「有前文」的題（`build/corpus/<名>/dev-context.tsv`，取法同 test 的），`--dev` 一樣給前文、不給前文各打一次（M3 票 04）。
-- 長前文（M3 票 07）：`cargo xtask data` 另寫 `build/corpus/<名>/test-context-long.tsv` 與 `dev-context-long.tsv`，是 test 與 dev「有前文」的同一批題、同順序，前文換成同一段裡前面最多 200 字（不跨換行）。基準不讀；模型階梯截成前文 0、50、200 字量（`scripts/experiments/model-ladder/`）。
-- 口語長前文（M3 票 25）：HKCanCor 一段錄音是一段對話，每個話輪各當一段，上面兩種前文都不跨話輪；`cargo xtask data` 另寫 `build/corpus/hkcancor/test-dialogue.tsv` 與 `dev-dialogue.tsv`：test、dev 切分裡有前文的句子（最多 2,000 句，同句取雜湊最小的前文），前文是同一段對話裡前面的話輪接起來的最後 200 字（話輪結尾不是標點時補空格），格式同「有前文」的題。基準不讀；模型階梯讀。
-- 調參（β、γ、語料權重）只看 dev 切分：`cargo xtask bench --dev [--set <鍵>=<值>]` 打各集合的 dev 切分與由它取出的單字、詞，不比 baseline（`docs/development.md`〈dev 切分調參〉）。test 與個人集只用 `--check` 守門。
-- 使用者回報的新案例一律加進 `fixed.tsv`。網頁的「回報」把剛才用空白或數字鍵選字上屏的那次組字存成一行（輸入碼、上屏的字、來源欄附當時的首選），清單存在 `localStorage`、可直接改；組字中按標點、Enter 的上屏不算（M1 票 12）。
-- 防洩漏：個人集不進訓練語料，也不匯入基準用的 `UserModel`；`qim-databuild` 報告各測試集有幾句原樣出現在訓練語料，不為零要先查明才算數（CyIME 踩過，`docs/research/cyime.md` §3）。
+組成與門檻已搬到 `ARCHITECTURE.md`〈測試策略〉；檔案格式、指標與量法在 `docs/development.md`〈首選字基準〉與〈資料建置〉的〈語料〉〈個人集〉。
 
 ### 5.3 佈局
 
-- 所有佈局：通過 JSON Schema 與 §2.6 的錯誤級驗證；測試雙向（造出每種錯誤會紅，只有警告不紅）。
-- 內建佈局（`data/layouts/` 與 `qim-databuild` 算出的預設佈局）另加嚴格檢查（`qim_layout::check_builtin`）：警告一個都不能有（有直向與橫向的版本、按鍵不重疊、不超出畫布、字母齊全），每個鍵的 `fill`、`labelColor` 都有淺色與深色；長按清單的動作是否有效由 Schema 與錯誤級的檢查保證。檢查固定用不需要切換鍵盤鍵的 `Target`：iOS 的預設佈局要不要放地球鍵（`needsInputModeSwitchKey` 只在部分機型為真）在 M8 iOS 殼開工時定。
-- 點擊判定的性質測試（`crates/qim-layout/tests/hit_properties.rs`）：上層優先、旋轉後內外判定正確、縮放後結果不變；多邊形的內外判定在 M6 加。
+已搬到 `ARCHITECTURE.md`〈測試策略〉；iOS 預設佈局要不要放地球鍵搬到 roadmap〈平台里程碑（M7–M11）〉的 M8。
 
 ### 5.4 平台殼
 
-- 網頁：Playwright e2e，實體鍵盤與觸控兩種模式都要測。
-- 原生殼：在真的宿主程式裡打字讀回（`AGENTS.md`〈驗收輸入行為〉），單元測試不能取代。
+已搬到 `ARCHITECTURE.md`〈測試策略〉。
 
 ## 6. 開發環境與閘門
 
-M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；02：`deps`；03：commit-msg；04：progress 與 spec 閘門）：
-
-- `docs/development.md`：環境需求、安裝、建置、〈全部檢查〉，是開發指令的單一來源。
-- `cargo xtask check`：暫存區的密鑰掃描（`secrets`）、`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、依賴漏洞掃描（`audit`，要連網路，`--fast` 跳過）、`deps`（§1.3）、`docs`（下面的 progress 與 spec 閘門），以及網頁的 WebAssembly 綁定（`wasm`）、`tsc --noEmit`、`biome check` 與 Playwright（`e2e`，`--fast` 跳過）。
-- `.githooks/`：pre-commit 跑 `cargo xtask check --fast`；commit-msg 跑 `cargo xtask commit-msg`（Conventional Commits、subject ≤ 72 字元）。以 `git config core.hooksPath .githooks` 啟用，寫進 `docs/development.md`。commit-msg 檢查附雙向測試（違規會紅、無關改動不紅）。
-- 文件的閘門（`cargo xtask check` 的 `docs` 步驟）：跑 `python3 scripts/check_docs.py` 與它的測試（`scripts/tests/`），要 Python 3。它守 progress、decisions、roadmap、里程碑 spec 與票的格式，brief 的字元上限與不寫票號，以及程式碼不引用 brief、plan 的章節號；規則逐條寫在腳本開頭。里程碑目錄的 `issues/` 要有一張 `-acceptance.md` 結尾的驗收票（早期里程碑的 `-close.md` 收尾票也算）。
-- CI（M2 票 05）：`.github/workflows/ci.yml` 在 push 到 `main` 與每個 PR 時，於 GitHub Actions 的 Ubuntu 跑 `cargo xtask check --fast`、`cargo test --workspace` 與 `audit` 步驟的依賴漏洞掃描，等於少了 `e2e` 的 `check`；另外全掃一次 git 歷史的密鑰（`check` 的 `secrets` 只看暫存區）。`cargo test` 不讀 `build/packs/`（用到資料包的測試在暫存目錄自建小資料包），CI 不必建資料包。`e2e` 與 `cargo xtask bench --check` 要資料包，建它要下載約 360 MB 的來源，CI 不跑，留在本機：`e2e` 在 `check`，`bench --check` 照〈首選字基準〉在改排序、資料或核心的票手動跑，不進 `check`（約 1 分鐘）。推到遠端仍要先問使用者。
+已搬到 `docs/development.md`〈全部檢查〉〈閘門〉〈安裝〉。
 
 ## 7. 里程碑任務
 

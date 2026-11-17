@@ -1,4 +1,4 @@
-// 候選列（plan〈網頁 prototype〉）：左邊中英狀態、目前頁的候選與字根提示；點候選選字，長按叫出字根提示。
+// 候選列：左邊中英狀態、目前頁的候選與字根提示；點候選選字，長按叫出字根提示。
 
 import { element } from "./dom.ts";
 import type { RadicalHints } from "./wasm/qim_wasm.js";

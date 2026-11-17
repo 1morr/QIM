@@ -1,6 +1,6 @@
 # QIM 架構
 
-> 狀態：從 `docs/plan.md` 搬移中。平台殼、碼表與資料管線、測試策略、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
+> 狀態：從 `docs/plan.md` 搬移中。碼表與資料管線、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
 >
 > 寫法：只寫現況，改了就改寫原句，舊說法留給 git；票號與「某日改」不寫進來。只寫打開程式碼看不出來的：模組的分工、誰能依賴誰、跨模組的資料與契約。單一模組內的行為由測試與程式碼說明；操作步驟（建置、在裝置上驗、排除故障）寫在 `docs/development.md`；選型與取捨的理由寫 ADR，這裡連過去。節用標題引用、不編號。全檔上限 15,000 字元，`scripts/check_docs.py` 強制。
 
@@ -157,6 +157,16 @@ flowchart LR
 
 觸控鍵盤的手勢門檻（放開才做動作、按住 400 ms 出長按清單、同一鍵 300 ms 內第二下算快速點兩下）各平台殼照網頁的 `web/src/touch.ts`。
 
+## 平台殼
+
+網頁是測試頁、不發佈（`web/editor/` 例外，ADR 0004），它的觸控鍵盤、候選列與設定頁是各平台殼照做的樣板。各殼都要：
+
+- 前文：聚焦、改字、移游標時，與沒有組字時送鍵前 `set_context`，失焦 `clear_context`；無痕與密碼欄不給。
+- 換欄位：`set_field`，照回傳換中英與數字頁，再給前文。
+- 存學習資料：上屏後、交還宿主的鍵（字母、數字除外）之後、失焦與換欄位時；讀回存檔用 `replace_learning`，匯入先預覽再 `merge`。存不了時照樣能打字，告訴使用者這次不會存。
+- 停鍵層：停鍵後在背景執行緒算，同時只算一個，經 `apply_rerank` 套用；模型資料包先核對，沒有可用的就不重排；啟動、換模型或設定、模型載入失敗後 `set_reranker_id`。
+- `Session::inspect` 只給網頁的 debug 面板。
+
 ## 主要依賴
 
 版本看 `rust-toolchain.toml`、`Cargo.lock`、`web/package-lock.json`；加依賴時用 `cargo add` / `npm install` 取當時的 stable，並在本表加一列。
@@ -189,7 +199,9 @@ flowchart LR
 
 ## 測試策略
 
-還在 plan〈測試策略〉。
+- 核心與 `qim-layout`：`cargo test` 的單元與性質測試；佈局驗證雙向測（每種錯誤會紅、只有警告不紅），內建佈局另過 `qim_layout::check_builtin`。
+- 網頁：Playwright e2e，實體鍵盤與觸控都測；原生殼在真的宿主程式裡打字讀回（`AGENTS.md`〈驗收輸入行為〉）。
+- 首選字基準（`qim-bench`）擋排序與資料的退步：固定題、維基與口語語料的 test 切分（含有前文、打錯碼、觸控模擬）、本機的個人集；按鍵照殼的做法經 `qim-layout` 轉成機率。`--check` 要固定題全過，各集合答錯數與修正次數不超過 baseline，原生每鍵延遲 p95 在上限內。調參只看 dev 切分；測試句不得出現在訓練語料；個人集的內容不進 repo、不送雲端。指令與量法見 `docs/development.md`〈首選字基準〉。
 
 ## 風險與回寫點
 

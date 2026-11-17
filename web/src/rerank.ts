@@ -1,5 +1,5 @@
 /**
- * 停鍵層的重排（plan〈模型分層〉〈網頁 prototype〉、ADR 0005）：停鍵 `STOP_MS` 後把核心的 `rerankRequest` 交給模型，
+ * 停鍵層的重排（plan〈模型分層〉、ADR 0005、architecture〈平台殼〉）：停鍵 `STOP_MS` 後把核心的 `rerankRequest` 交給模型，
  * 回來的路徑名次經 `applyRerank` 套用；過期的由核心丟掉，打字不等它。模型是 Web Worker 裡的神經模型
  * （`neural-rerank.ts`，M3 票 11e），或測試用的假實作：延遲一段時間後回傳固定的名次。
  *

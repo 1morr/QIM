@@ -1,4 +1,4 @@
-//! 個人集：把使用者 Rime 的學習資料（`docs/research/facts-rime.md` 的 `.userdb.txt`）轉成首選字基準的題目（plan〈首選字基準〉）。
+//! 個人集：把使用者 Rime 的學習資料（`docs/research/facts-rime.md` 的 `.userdb.txt`）轉成首選字基準的題目（`docs/development.md`〈個人集〉）。
 //!
 //! 輸入碼由 [`Transcoder`] 從詞轉出，不用 Rime 記下的碼：那是詞典的倉頡全碼，不是使用者按的鍵。
 //! 內容只在本機；錯誤訊息只帶行號，不帶內容。
