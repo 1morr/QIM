@@ -37,11 +37,28 @@ export function insert(text: Editable, commit: string, deleteBefore = 0): void {
 	text.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** 觸控鍵盤上核心沒吃下的動作：照輸入框收到實體按鍵時的預設動作。 */
-export function hostDefault(
-	text: HTMLTextAreaElement,
-	snapshot: Snapshot,
+/** 核心沒吃下的快照裡 `hostDefault` 要看的欄位。 */
+export type Unhandled = Pick<
+	Snapshot,
+	"action" | "character" | "commit" | "deleteBefore"
+>;
+
+/**
+ * 核心沒吃下的快照要先上屏的：英文模式 Enter 的自動修正（M4 票 25）帶著刪字與上屏，先換掉詞再交還鍵。
+ * 其他交還的快照沒有，不動作。
+ */
+export function commitBeforeHost(
+	text: Editable,
+	snapshot: Pick<Snapshot, "commit" | "deleteBefore">,
 ): void {
+	if (snapshot.commit !== undefined || snapshot.deleteBefore > 0) {
+		insert(text, snapshot.commit ?? "", snapshot.deleteBefore);
+	}
+}
+
+/** 觸控鍵盤上核心沒吃下的動作：先上屏快照帶的（`commitBeforeHost`），再照輸入框收到實體按鍵時的預設動作。 */
+export function hostDefault(text: Editable, snapshot: Unhandled): void {
+	commitBeforeHost(text, snapshot);
 	switch (snapshot.action) {
 		case "letter":
 		case "weighted":

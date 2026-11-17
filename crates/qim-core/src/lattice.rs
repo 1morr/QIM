@@ -147,6 +147,8 @@ pub(crate) enum SpanKind {
     Emoji,
     /// 英文使用者詞的前綴補完（排位規則 5，plan〈學習與排位〉）。
     EnglishCompletion,
+    /// 英文模式建議列的拼錯修正（英文容錯，M4 票 25）：英文詞典的詞或過了出現門檻的英文使用者詞。
+    EnglishCorrection,
 }
 
 impl SpanKind {

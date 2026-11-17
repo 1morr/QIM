@@ -86,6 +86,15 @@ impl Ime {
         self.session.handle(&self.engine, &mut self.user, key)
     }
 
+    /// 只看補完：關掉英文容錯（建議列不列拼錯的修正）。
+    fn completions_only(mut self) -> Self {
+        self.session.set_options(Options {
+            english_corrections: false,
+            ..self.session.options()
+        });
+        self
+    }
+
     /// 觸控的地球鍵。
     fn globe(&mut self) -> Snapshot {
         self.press(Key::ToggleEnglish)
@@ -185,11 +194,11 @@ fn the_globe_key_parses_from_its_kind() {
 /// 建議列是正在打的串的前綴補完：英文詞典的詞照頻率排；打的就是那個詞時不列它自己（選了也不變）。
 #[test]
 fn suggestions_complete_the_typed_word_from_the_dictionary_by_frequency() {
-    let mut ime = Ime::new();
+    let mut ime = Ime::new().completions_only();
     ime.globe();
     assert_eq!(ime.suggestions("hel"), ["hello", "help", "held", "helmet"]);
     assert_eq!(ime.suggestions("p"), Vec::<String>::new(), "help 打完了");
-    let mut ime = Ime::new();
+    let mut ime = Ime::new().completions_only();
     ime.globe();
     assert_eq!(ime.suggestions("the"), ["them"]);
     assert_eq!(
@@ -403,7 +412,7 @@ fn punctuation_right_after_a_picked_suggestion_takes_the_place_of_its_space() {
 /// 點建議之後緊接著退格：宿主刪掉補的空白、學到的撤銷（退格撤銷），正在打的串回到選的那個詞，再打空白學它。
 #[test]
 fn backspace_right_after_a_pick_undoes_its_learning_and_resumes_the_word() {
-    let mut ime = Ime::new();
+    let mut ime = Ime::new().completions_only();
     ime.globe();
     ime.type_text("hel");
     ime.select(3);
@@ -511,10 +520,275 @@ fn a_picked_space_is_forgotten_once_the_cursor_moves() {
 /// 換掉補的空白的句讀是串字元（`.`）時，接著打的照樣是經 QIM 打的串：有建議。
 #[test]
 fn typing_on_after_a_full_stop_that_took_the_picked_space_still_suggests() {
-    let mut ime = Ime::new();
+    let mut ime = Ime::new().completions_only();
     ime.globe();
     ime.type_text("hel");
     ime.select(0);
     ime.press(Key::Punct('.'));
     assert_eq!(ime.suggestions("he"), ["hello", "help", "held", "helmet"]);
+}
+
+// 自動修正（M4 票 25，brief〈英文模式與欄位類型〉）：預設關；開著時串打完（空白、句讀、Enter）那一下，原樣不是詞、
+// 一處拼錯就讀得通的詞換成修正字。
+
+/// 自動修正的測試詞典：`the` 遠比 `tea` 常見，`receive` 只有一個一處拼錯的鄰居。
+const TYPOS: &[(&str, u8)] = &[
+    ("the", 222),
+    ("tea", 121),
+    ("ten", 145),
+    ("receive", 137),
+    ("piece", 137),
+    ("peace", 135),
+    ("price", 134),
+    ("you'd", 85),
+    ("your", 190),
+    ("final", 150),
+    ("finally", 143),
+    ("truly", 120),
+    ("hello", 120),
+    ("held", 158),
+    ("help", 149),
+    ("her", 176),
+    ("don't", 185),
+    ("font", 120),
+    ("of", 214),
+];
+
+impl Ime {
+    fn autocorrecting() -> Self {
+        let mut ime = Self::with_words(TYPOS);
+        ime.session.set_options(Options {
+            autocorrect: true,
+            ..Options::default()
+        });
+        ime.globe();
+        ime
+    }
+
+    /// 打 `text`，回傳最後一個鍵的（`delete_before`, `commit`）。
+    fn last(&mut self, text: &str) -> (usize, Option<String>) {
+        let last = self.type_text(text).pop().expect("打了字");
+        (last.delete_before, last.commit)
+    }
+}
+
+/// 預設不修：`teh` 打空白照原樣上屏。
+#[test]
+fn autocorrect_is_off_by_default() {
+    let mut ime = Ime::with_words(TYPOS);
+    ime.globe();
+    assert_eq!(ime.last("teh "), (0, Some(" ".into())));
+}
+
+/// 開著時打空白那一下：刪掉打的詞，上屏修正字接空白（照 Gboard，事實 M47）。
+#[test]
+fn autocorrect_replaces_a_misspelled_word_when_it_is_finished() {
+    let mut ime = Ime::autocorrecting();
+    assert_eq!(ime.last("teh "), (3, Some("the ".into())));
+    assert_eq!(ime.last("recieve,"), (7, Some("receive,".into())));
+}
+
+/// 照 LatinIME（`Suggest.java`）不自動修的條件：原樣是詞、含數字、大寫超過一個（含全大寫）、email 字元與中間的
+/// `.`、太短；句中首字大寫照修、保留大寫，詞尾的 `.` 留著（ADR 0008）。
+#[test]
+fn autocorrect_leaves_words_that_were_typed_with_care() {
+    let mut ime = Ime::autocorrecting();
+    for typed in ["ten ", "teh2 ", "TEH ", "TeH ", "teh@x ", "teh.com ", "fo "] {
+        let (deleted, commit) = ime.last(typed);
+        assert_eq!((deleted, commit.as_deref()), (0, Some(" ")), "{typed}");
+    }
+    assert_eq!(
+        ime.last("Teh "),
+        (3, Some("The ".into())),
+        "句中首字大寫照修"
+    );
+    assert_eq!(ime.last("teh. "), (4, Some("the. ".into())), "修的是 teh");
+}
+
+/// 修正不夠明確時不修，留在建議列：最常見的不到次一個的 4 倍（piece、peace、price；`helo` 的 held 與 help）、有漏撇號的修正而最常見的不是它
+/// （`youd`：your 比 you'd 常見）、只有多打一個字母才讀得通的（`truely`）。重複的字母少打一個照修（`finaly`）。
+#[test]
+fn autocorrect_only_takes_a_clear_single_fix() {
+    let mut ime = Ime::autocorrecting();
+    for typed in ["peice", "helo", "youd", "truely"] {
+        ime.type_text(typed);
+        assert!(!ime.all().is_empty(), "{typed} 有修正可選");
+        let (deleted, commit) = ime.last(" ");
+        assert_eq!((deleted, commit.as_deref()), (0, Some(" ")), "{typed}");
+    }
+    assert_eq!(ime.last("finaly "), (6, Some("finally ".into())));
+}
+
+/// 學過的串當成使用者要的字（LatinIME、Gboard 都把使用者歷史當有效詞）：自動修正關著時打過的 `recieve`，打開後
+/// 照原樣。
+#[test]
+fn a_learned_string_is_not_autocorrected() {
+    let mut ime = Ime::with_words(TYPOS);
+    ime.globe();
+    ime.type_text("recieve ");
+    ime.session.set_options(Options {
+        autocorrect: true,
+        ..Options::default()
+    });
+    assert_eq!(ime.last("recieve "), (0, Some(" ".into())));
+}
+
+/// 英文容錯關掉時建議列只補完，自動修正也沒有對象。
+#[test]
+fn without_english_corrections_nothing_is_corrected() {
+    let mut ime = Ime::autocorrecting();
+    ime.session.set_options(Options {
+        english_corrections: false,
+        ..ime.session.options()
+    });
+    assert_eq!(ime.suggestions("recieve"), Vec::<String>::new());
+    assert_eq!(ime.last(" "), (0, Some(" ".into())));
+}
+
+/// 英文容錯（預設開）：建議列也列一處拼錯的修正；要自動修正時那個字排第一，debug 面板讀得到。
+#[test]
+fn corrections_are_suggested_and_the_autocorrection_comes_first() {
+    let mut ime = Ime::with_words(TYPOS);
+    ime.globe();
+    assert_eq!(ime.suggestions("recieve"), ["receive"]);
+    let inspection = ime.session.inspect(&ime.engine, &ime.user);
+    assert_eq!(
+        inspection.candidates[0].kind,
+        CandidateKind::EnglishCorrection
+    );
+    assert_eq!(inspection.autocorrection, None, "自動修正關著");
+
+    let mut ime = Ime::autocorrecting();
+    let listed = ime.suggestions("teh");
+    assert_eq!(listed.first().map(String::as_str), Some("the"));
+    assert!(listed.contains(&"ten".to_string()) && listed.contains(&"tea".to_string()));
+    let inspection = ime.session.inspect(&ime.engine, &ime.user);
+    assert_eq!(inspection.autocorrection.as_deref(), Some("the"));
+}
+
+/// 剛修正完緊接著退格：換回打的詞、觸發的空白一起拿掉（照 Gboard 的「Undo auto-correct on backspace」，事實 M47），
+/// 之後這個 Session 不再修它；修正字學到的撤銷，換回的詞照樣在打完時學（M4 票 25）。
+#[test]
+fn backspace_right_after_an_autocorrection_reverts_it_without_learning_the_correction() {
+    let mut ime = Ime::autocorrecting();
+    assert_eq!(ime.last("recieve "), (7, Some("receive ".into())));
+    assert_eq!(ime.user.english_user_words(), ["receive"]);
+    let reverted = ime.press(Key::Backspace);
+    assert!(reverted.handled);
+    assert_eq!(
+        (reverted.delete_before, reverted.commit.as_deref()),
+        (8, Some("recieve"))
+    );
+    assert!(ime.user.english_user_words().is_empty(), "修正字不學");
+    assert_eq!(ime.last(" "), (0, Some(" ".into())), "還原過的不再修");
+    assert_eq!(ime.user.english_user_words(), ["recieve"]);
+
+    // 句讀觸發的照 LatinIME 留著句讀；學不到的短詞（`teh`）也記得還原過。
+    assert_eq!(ime.last("teh,"), (3, Some("the,".into())));
+    let reverted = ime.press(Key::Backspace);
+    assert_eq!(
+        (reverted.delete_before, reverted.commit.as_deref()),
+        (4, Some("teh,"))
+    );
+    assert_eq!(ime.last(" teh "), (0, Some(" ".into())));
+}
+
+/// 還原只在緊接著的退格：中間打了別的字，退格照常交還宿主。
+#[test]
+fn only_the_next_backspace_reverts() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("teh x");
+    assert!(!ime.press(Key::Backspace).handled);
+    ime.type_text(" teh ");
+    ime.session.set_context("somewhere else");
+    assert!(!ime.press(Key::Backspace).handled, "游標移走了");
+}
+
+/// Enter 也觸發（照 Gboard，事實 M47）：換掉詞之後 Enter 照樣交還宿主，殼先上屏再交還。
+#[test]
+fn enter_autocorrects_then_goes_to_the_host() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("recieve");
+    let enter = ime.press(Key::Enter);
+    assert!(!enter.handled);
+    assert_eq!(
+        (enter.delete_before, enter.commit.as_deref()),
+        (7, Some("receive"))
+    );
+    assert_eq!(ime.user.english_user_words(), ["receive"]);
+    assert_eq!(
+        ime.suggestions("teh"),
+        ["the", "ten", "tea"],
+        "Enter 之後重新開始一串"
+    );
+}
+
+/// 觸控的句讀鍵送文字（`text`），同樣讓詞打完、自動修正。
+#[test]
+fn punctuation_typed_as_text_also_autocorrects() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("teh");
+    let comma = ime.session.text(&ime.engine, &mut ime.user, "?");
+    assert_eq!(
+        (comma.delete_before, comma.commit.as_deref()),
+        (3, Some("the?"))
+    );
+}
+
+/// 不送字元的修飾鍵（觸控的 ⇧）不算夾在中間：修正之後按了它，退格照樣還原。
+#[test]
+fn a_modifier_between_does_not_stop_the_revert() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("teh ");
+    ime.press(Key::Modifier);
+    let reverted = ime.press(Key::Backspace);
+    assert_eq!(
+        (reverted.delete_before, reverted.commit.as_deref()),
+        (4, Some("teh"))
+    );
+}
+
+/// 修正排在補完之間要再扣分：`hel` 的補完 held、help、hello 在前，一處拼錯的 her 雖然常見也排在它們後面。
+#[test]
+fn corrections_rank_behind_completions_unless_far_more_common() {
+    let mut ime = Ime::with_words(TYPOS);
+    ime.globe();
+    assert_eq!(
+        ime.suggestions("hel")[..4],
+        ["held", "help", "hello", "her"]
+    );
+}
+
+/// 漏打撇號不扣分：`dont` 修成 don't，不是 font。
+#[test]
+fn a_missing_apostrophe_is_the_cheapest_fix() {
+    let mut ime = Ime::autocorrecting();
+    assert_eq!(ime.last("dont "), (4, Some("don't ".into())));
+}
+
+/// 過了出現門檻的英文使用者詞也是修正的對象（Gboard 學到的字也會成為修正目標，事實 M47）。
+#[test]
+fn a_learned_string_past_the_threshold_is_a_correction_target() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("qimzorb qimzorb ");
+    assert_eq!(ime.last("qimzorv "), (7, Some("qimzorb ".into())));
+}
+
+/// 還原的時限同退格撤銷：殼呼叫 `expire_undo`（3 秒到了）之後，退格只刪字，修正字學到的照留。
+#[test]
+fn the_revert_expires_with_the_undo_window() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("recieve ");
+    ime.session.expire_undo(&mut ime.user);
+    assert!(!ime.press(Key::Backspace).handled);
+    assert_eq!(ime.user.english_user_words(), ["receive"]);
+}
+
+/// Enter 修的不還原：Enter 交還了宿主，核心不知道宿主有沒有換行，退格照常交還宿主。
+#[test]
+fn an_enter_autocorrection_is_not_reverted() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("teh");
+    ime.press(Key::Enter);
+    assert!(!ime.press(Key::Backspace).handled);
 }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::association::{self, ASSOCIATION_TAIL};
 use crate::english_mode::{self, Sentence};
-use crate::english_user::TypedRun;
+use crate::english_user::{TypedRun, is_word_char};
 use crate::lattice::{self, CandidateSpan, Lattice, Listing, Preceding, SpanKind};
 use crate::scheme::{SEPARATOR, without_separators};
 use crate::user::{Undo, UndoOwner};
@@ -117,6 +117,13 @@ pub struct Options {
     /// 英文模式的句首自動大寫（brief〈英文模式與欄位類型〉〈設定與同步〉，ADR 0008）：句子開頭時快照的
     /// [`Snapshot::auto_shift`] 為真，觸控鍵盤自動開 Shift。預設關。
     pub auto_capitalize: bool,
+    /// 英文模式的自動修正（brief〈英文模式與欄位類型〉〈設定與同步〉，ADR 0008，M4 票 25）：正在打的串打完那一下
+    /// （空白、句讀、Enter），原樣不是詞、一處拼錯就讀得通的詞換成修正字（[`Snapshot::delete_before`]），
+    /// 緊接著退格還原。要英文容錯也開著（它給修正的對象）。預設關。
+    pub autocorrect: bool,
+    /// 英文容錯（brief〈設定與同步〉，ADR 0008，M4 票 25）：英文模式的建議列除了前綴補完，也列一處拼錯的修正
+    /// （同 LatinIME 的「Show correction suggestions」）。關掉時只補完，自動修正也沒有對象。預設開。
+    pub english_corrections: bool,
 }
 
 /// 組字中單按 Shift 的處理，對應 Rime `ascii_composer/switch_key` 的兩種做法：`commit_text`
@@ -196,6 +203,8 @@ impl Default for Options {
             association: true,
             neighbor_readings: true,
             auto_capitalize: false,
+            autocorrect: false,
+            english_corrections: true,
         }
     }
 }
@@ -390,7 +399,9 @@ pub struct Candidate {
 /// 一次事件後殼要畫的全部狀態。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Snapshot {
-    /// 核心吃下了這個鍵；為假時殼把鍵交還宿主（librime `process_key` 的回傳值）。
+    /// 核心吃下了這個鍵；為假時殼把鍵交還宿主（librime `process_key` 的回傳值）。為假時通常沒有
+    /// `delete_before` 與 `commit`；英文模式 Enter 的自動修正（M4 票 25）例外：殼先刪字、上屏，再把 Enter 交還
+    /// 宿主，照 Gboard 先換詞再送 Enter（事實 M47）。
     pub handled: bool,
     pub composition: Composition,
     /// 目前頁的候選。
@@ -506,6 +517,14 @@ pub struct Session {
     /// 剛點了英文模式的建議：上屏的建議與補的空白（[`Session::select_suggestion`]）。下一個動作開始時取走
     /// （[`Session::begin_action`]）；殼給的前文不以它結尾（游標移走）或前文作廢時丟掉。
     picked: Option<String>,
+    /// 剛自動修正的詞（[`Session::autocorrect`]）：緊接著退格還原。下一個動作開始時取走（[`Session::begin_action`]）；
+    /// 殼給的前文不以修正字結尾（游標移走）或前文作廢時丟掉。
+    corrected: Option<Corrected>,
+    /// 使用者在這個 Session 還原過的詞（小寫，去掉詞尾 `.` `'`）：之後不再自動修正它們。無痕、學習關掉時學不到，
+    /// 靠它記住；只在記憶體。
+    kept: HashSet<String>,
+    /// 英文模式的建議列第一個是自動修正會換成的字時是它（[`english_mode::autocorrection`]），給 debug 面板。
+    autocorrection: Option<String>,
     /// 這個 Session 寫的撤銷紀錄的記號（[`UserModel::take_undo`]）。
     undo_owner: UndoOwner,
     /// 候選列是聯想（[`Options::association`]）：沒有組字，`candidates` 是聯想。選了一個就換成下一輪；
@@ -572,6 +591,8 @@ impl Session {
         }
         self.picked
             .take_if(|picked| !before.ends_with(picked.as_str()));
+        self.corrected
+            .take_if(|corrected| !before.ends_with(&corrected.replaced()));
         // 游標前不是剛上屏的字：殼點了別處、移了游標，聯想接不上了。
         if self
             .association
@@ -598,6 +619,8 @@ impl Session {
     pub fn expire_undo(&mut self, user: &mut UserModel) {
         user.expire_undo(self.undo_owner);
         self.last_sent = None;
+        // 自動修正的還原跟著失效：過了時限撤銷不了修正字學到的，還原就會留下它（M4 票 25）。
+        self.corrected = None;
     }
 
     /// 游標不在剛打的字後面了（Enter、Tab、方向鍵這類交還宿主的鍵，或離開欄位）：正在打的串打完，
@@ -613,6 +636,7 @@ impl Session {
         self.after_digit = false;
         self.sentence = Sentence::Unknown;
         self.picked = None;
+        self.corrected = None;
         self.end_association();
     }
 
@@ -715,9 +739,10 @@ impl Session {
                     user.forget(&engine.scheme().id, &code, &span.text, previous.as_deref())
                 })
             }
-            SpanKind::English | SpanKind::EnglishUserWord | SpanKind::EnglishCompletion => {
-                user.forget_english_user_word(&span.text)
-            }
+            SpanKind::English
+            | SpanKind::EnglishUserWord
+            | SpanKind::EnglishCompletion
+            | SpanKind::EnglishCorrection => user.forget_english_user_word(&span.text),
             SpanKind::Emoji => false,
         });
         if forgotten {
@@ -935,9 +960,13 @@ impl Session {
                 key
             }
         };
-        let action = self.begin_action(user);
-        let snapshot = self.handle_key(engine, user, key.clone(), action.picked);
+        let mut action = self.begin_action(user);
+        let snapshot = self.handle_key(engine, user, key.clone(), &mut action);
         if !snapshot.handled {
+            // 英文模式 Enter 的自動修正（`Session::handle_english`）：殼先換掉打的詞，再把 Enter 交還宿主。
+            if let Some(commit) = &snapshot.commit {
+                self.sent(user, commit);
+            }
             self.passed_to_host(user, key.clone());
         }
         match key {
@@ -951,13 +980,22 @@ impl Session {
             }
             // 不送字元的修飾鍵不算夾在中間：下一個鍵還能撤銷。其他鍵（含單按 Shift 切中英、Esc
             // 收起聯想）都算夾在中間。
-            Key::Modifier => user.keep_undo(action.pending),
+            // 剛修正的詞也留著，退格照樣還原。
+            Key::Modifier => {
+                user.keep_undo(action.pending);
+                self.corrected = action.corrected;
+            }
             _ => {
-                let (sent, deleted) = if snapshot.handled {
-                    (snapshot.commit.clone(), snapshot.delete_before)
+                let sent = if snapshot.handled {
+                    snapshot.commit.clone()
                 } else {
-                    (sent_to_host(&key), 0)
+                    let host = sent_to_host(&key);
+                    match (snapshot.commit.clone(), host) {
+                        (Some(commit), Some(host)) => Some(commit + &host),
+                        (commit, host) => commit.or(host),
+                    }
                 };
+                let deleted = snapshot.delete_before;
                 self.end_action(user, action, sent, deleted);
             }
         }
@@ -971,7 +1009,9 @@ impl Session {
         Action {
             pending: user.take_undo(self.undo_owner),
             typed: self.typed.clone(),
-            picked: self.picked.take().is_some(),
+            picked: self.picked.take(),
+            corrected: self.corrected.take(),
+            restart: None,
         }
     }
 
@@ -985,10 +1025,14 @@ impl Session {
         sent: Option<String>,
         deleted: usize,
     ) {
+        let (typed, deleted) = match action.restart {
+            Some(typed) => (typed, 0),
+            None => (action.typed, deleted),
+        };
         match sent {
             Some(text) => {
                 self.last_sent = Some(LastSent {
-                    typed: action.typed,
+                    typed,
                     deleted,
                     text,
                 });
@@ -1080,8 +1124,11 @@ impl Session {
     /// 會上屏的公開方法回傳前都經過這裡：上屏的字接在前文後面（[`Session::context`]，
     /// 同 librime 的 commit history），再補分段的字根。
     /// 英文模式的建議跟著正在打的串，串在這裡才接上上屏的字，所以建議也在這裡重列。
+    /// 交還宿主的快照的 `commit`（英文模式 Enter 的自動修正）在 [`Session::handle`] 交還之前就接上了。
     fn finish(&mut self, engine: &Engine, user: &mut UserModel, snapshot: Snapshot) -> Snapshot {
-        if let Some(commit) = &snapshot.commit {
+        if snapshot.handled
+            && let Some(commit) = &snapshot.commit
+        {
             self.sent(user, commit);
         }
         let snapshot = if self.english {
@@ -1101,8 +1148,15 @@ impl Session {
     /// 英文模式的建議列（ADR 0008）：正在打的串的前綴補完（[`english_mode::suggestions`]）；建議變了才算候選
     /// 變動。
     fn list_suggestions(&mut self, engine: &Engine, user: &UserModel) {
-        let spans = self.typed.word().map_or_else(Vec::new, |word| {
-            english_mode::suggestions(engine, user, word, self.options.english_user_words)
+        let word = self.typed.word();
+        self.autocorrection = word.and_then(|word| self.autocorrection(engine, user, word));
+        let spans = word.map_or_else(Vec::new, |word| {
+            let listing = english_mode::Sources {
+                user_words: self.options.english_user_words,
+                corrections: self.options.english_corrections,
+                autocorrection: self.autocorrection.as_deref(),
+            };
+            english_mode::suggestions(engine, user, word, listing)
         });
         let same = spans.len() == self.candidates.len()
             && spans
@@ -1125,13 +1179,13 @@ impl Session {
         self.generation += 1;
     }
 
-    /// `picked` 是上一個動作點了英文模式的建議（[`Session::select_suggestion`]）。
+    /// `action` 是這個鍵的動作（[`Session::begin_action`]）：英文模式要看上一個動作點了建議、自動修正了沒有。
     fn handle_key(
         &mut self,
         engine: &Engine,
         user: &mut UserModel,
         key: Key,
-        picked: bool,
+        action: &mut Action,
     ) -> Snapshot {
         if self.association.is_some()
             && let Some(snapshot) = self.handle_association(engine, user, key.clone())
@@ -1148,7 +1202,7 @@ impl Session {
             return self.handle_inline(engine, user, key);
         }
         if self.english {
-            return self.handle_english(engine, key, picked);
+            return self.handle_english(engine, user, key, action);
         }
         // 英文直通沒有組字，鍵都交還宿主。
         if self.ascii {
@@ -1480,6 +1534,7 @@ impl Session {
 
     /// 收起英文模式的建議列。
     fn drop_suggestions(&mut self) {
+        self.autocorrection = None;
         if !self.candidates.is_empty() {
             self.candidates.clear();
             self.page = 0;
@@ -1488,18 +1543,131 @@ impl Session {
     }
 
     /// 英文模式的鍵（ADR 0008）：字母（含大寫）、數字、標點與空白吃下、原樣上屏，不轉全形、不套數字後半形；
-    /// 其他鍵（退格、Enter、方向鍵…）照英文直通交還宿主。`picked`（上一個動作點了建議、補了空白）時照 Gboard
-    /// （事實 M48）：空白吃掉不上屏，句讀與右括號（[`english_mode::takes_picked_space`]）先刪掉那個空白再上屏。
-    fn handle_english(&mut self, engine: &Engine, key: Key, picked: bool) -> Snapshot {
+    /// 其他鍵（退格、Enter、方向鍵…）照英文直通交還宿主。`action.picked`（上一個動作點了建議、補了空白）時照
+    /// Gboard（事實 M48）：空白吃掉不上屏，句讀與右括號（[`english_mode::takes_picked_space`]）先刪掉那個空白再上屏。
+    ///
+    /// 自動修正（[`Session::autocorrect`]）：串打完的那一下（空白、句讀）先換掉打的詞再上屏那個字元；Enter 換掉
+    /// 詞之後照樣交還宿主（`handled` 為假而有 `commit`，殼先上屏再交還，照 Gboard 在 Enter 時修，事實 M47）。
+    /// 剛修正完緊接著退格是還原（[`Session::revert_correction`]）。
+    fn handle_english(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        key: Key,
+        action: &mut Action,
+    ) -> Snapshot {
+        let picked = action.picked.is_some();
         let c = match key {
             Key::Letter(c) | Key::Punct(c) => c,
             Key::Digit(d) => char::from(b'0' + d),
             Key::Space if picked => return self.snapshot(engine, true, None),
             Key::Space => ' ',
+            Key::Backspace if let Some(corrected) = action.corrected.take() => {
+                return self.revert_correction(engine, user, corrected, action);
+            }
+            Key::Enter => {
+                let Some(corrected) = self.autocorrect(engine, user, "\n") else {
+                    return self.snapshot(engine, false, None);
+                };
+                let deleted = corrected.original.chars().count();
+                return Snapshot {
+                    handled: false,
+                    ..self.commit_after_deleting(engine, deleted, Commit::plain(corrected.word))
+                };
+            }
             _ => return self.snapshot(engine, false, None),
         };
         let deleted = usize::from(picked && english_mode::takes_picked_space(c));
-        self.commit_after_deleting(engine, deleted, Commit::plain(c.to_string()))
+        self.commit_corrected(engine, user, deleted, Commit::plain(c.to_string()))
+    }
+
+    /// 上屏 `commit`（先刪 `deleted` 字，[`Session::commit_after_deleting`]）；它讓正在打的詞打完又要自動修正時，
+    /// 一起換掉那個詞（[`Session::autocorrect`]），記下還原用的紀錄。
+    fn commit_corrected(
+        &mut self,
+        engine: &Engine,
+        user: &UserModel,
+        deleted: usize,
+        commit: Commit,
+    ) -> Snapshot {
+        let Some(corrected) = self.autocorrect(engine, user, &commit.text) else {
+            return self.commit_after_deleting(engine, deleted, commit);
+        };
+        let deleted = deleted + corrected.original.chars().count();
+        let commit = Commit {
+            text: format!("{}{}", corrected.word, commit.text),
+            original: format!("{}{}", corrected.word, commit.original),
+        };
+        self.corrected = Some(corrected);
+        self.commit_after_deleting(engine, deleted, commit)
+    }
+
+    /// 英文模式送出 `trigger`（串字元以外的字元開頭：空白、句讀、換行）讓正在打的詞打完時，要不要自動修正
+    /// （[`Options::autocorrect`]，要英文容錯也開著；判斷在 [`english_mode::autocorrection`]）。要修時把那個詞從
+    /// 正在打的串拿掉（殼會刪掉它），回傳修正的紀錄。
+    fn autocorrect(
+        &mut self,
+        engine: &Engine,
+        user: &UserModel,
+        trigger: &str,
+    ) -> Option<Corrected> {
+        if !trigger.starts_with(|c: char| !is_word_char(c)) {
+            return None;
+        }
+        let original = self.typed.word()?.to_string();
+        let word = self.autocorrection(engine, user, &original)?;
+        self.typed.retract(original.chars().count());
+        Some(Corrected {
+            original,
+            word,
+            trigger: trigger.to_string(),
+            before: self.typed.clone(),
+        })
+    }
+
+    /// 英文模式打完 `typed` 時會換成的字：自動修正與英文容錯都開著才有。
+    fn autocorrection(&self, engine: &Engine, user: &UserModel, typed: &str) -> Option<String> {
+        let options = self.options;
+        (self.english && options.autocorrect && options.english_corrections)
+            .then(|| {
+                english_mode::autocorrection(
+                    engine,
+                    user,
+                    typed,
+                    options.english_user_words,
+                    &self.kept,
+                )
+            })
+            .flatten()
+    }
+
+    /// 剛自動修正完緊接著退格（brief〈英文模式與欄位類型〉的「退格可還原」，時限同退格撤銷，[`Session::expire_undo`]）：
+    /// 殼刪掉修正字與觸發的字元，換回打的詞。修正那一下學到的（修正字）撤銷，這個 Session 之後不再修這個詞。觸發的是空白時空白一起拿掉、游標回到
+    /// 打的詞後面，同 Gboard 的「Undo auto-correct on backspace」（事實 M47），接著打的接在詞後面；觸發的是句讀
+    /// 時留著它，同 LatinIME 的 `revertCommit`，句讀讓詞打完，學的是打的詞。
+    fn revert_correction(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        corrected: Corrected,
+        action: &mut Action,
+    ) -> Snapshot {
+        if self.writes_learning() {
+            user.revert(std::mem::take(&mut action.pending));
+        }
+        self.kept
+            .insert(english_mode::kept_key(&corrected.original));
+        // 正在打的串回到打這個詞之前，再接上換回的字（`Session::finish`）；緊接著的退格從這裡重算。
+        self.typed = corrected.before.clone();
+        action.restart = Some(corrected.before.clone());
+        let deleted = corrected.replaced().chars().count();
+        let trigger = if corrected.trigger == " " {
+            ""
+        } else {
+            corrected.trigger.as_str()
+        };
+        let text = format!("{}{trigger}", corrected.original);
+        self.commit_after_deleting(engine, deleted, Commit::plain(text))
     }
 
     /// 點英文模式建議列的第 `index` 個（ADR 0008）：殼先刪掉正在打的詞（`delete_before`），再上屏建議接一個空白
@@ -1653,13 +1821,14 @@ impl Session {
         } else if self.composing() {
             self.commit_all_then(engine, user, text)
         } else {
-            // 英文模式點了建議之後，觸控的句讀鍵（送文字）同 `handle_english` 先刪掉補的空白。
+            // 英文模式點了建議之後，觸控的句讀鍵（送文字）同 `handle_english` 先刪掉補的空白；讓詞打完時同樣
+            // 自動修正。
             let deleted = usize::from(
                 self.english
-                    && action.picked
+                    && action.picked.is_some()
                     && text.text.starts_with(english_mode::takes_picked_space),
             );
-            self.commit_after_deleting(engine, deleted, text)
+            self.commit_corrected(engine, user, deleted, text)
         };
         self.end_action(
             user,
@@ -2116,7 +2285,31 @@ struct Action {
     /// 動作之前的正在打的串。
     typed: TypedRun,
     /// 上一個動作點了英文模式的建議（[`Session::picked`]）。
-    picked: bool,
+    picked: Option<String>,
+    /// 上一個動作自動修正了（[`Session::corrected`]）。
+    corrected: Option<Corrected>,
+    /// 這個動作把正在打的串換成這個（自動修正的還原）：緊接著的退格從它重算，不從 `typed` 減掉刪的字。
+    restart: Option<TypedRun>,
+}
+
+/// 一次自動修正（[`Session::autocorrect`]）。
+#[derive(Debug, Clone)]
+struct Corrected {
+    /// 打的詞（去掉開頭的 `.` `'`，含詞尾的）。
+    original: String,
+    /// 換成的字（含詞尾的 `.` `'`）。
+    word: String,
+    /// 讓詞打完的字元（空白、句讀、換行）。
+    trigger: String,
+    /// 打這個詞之前的正在打的串。
+    before: TypedRun,
+}
+
+impl Corrected {
+    /// 修正時上屏的：換成的字接觸發的字元。
+    fn replaced(&self) -> String {
+        format!("{}{}", self.word, self.trigger)
+    }
 }
 
 /// 一個動作送出去的字（交還宿主的字元、上屏的字）與動作之前的正在打的串（[`Session::last_sent`]）。

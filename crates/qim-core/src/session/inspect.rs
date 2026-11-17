@@ -25,6 +25,8 @@ pub struct Inspection {
     pub key_weights: Option<Weights>,
     /// 候選列的停鍵重排來自快取（plan〈模型分層〉，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
     pub rerank_cached: bool,
+    /// 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）：建議列的第一個；不修時是 `None`。
+    pub autocorrection: Option<String>,
 }
 
 /// 核心記著的前文是什麼。
@@ -109,6 +111,8 @@ pub enum CandidateKind {
     Emoji,
     /// 英文使用者詞：整串輸入碼剛好是它（排位規則 4）或它的前綴補完（排位規則 5）。
     EnglishUserWord,
+    /// 英文模式建議列的拼錯修正（英文容錯，M4 票 25）。
+    EnglishCorrection,
     /// 聯想（上屏之後的候選）。
     Association,
 }
@@ -171,6 +175,7 @@ impl Session {
             candidates,
             key_weights: self.key_weights.clone(),
             rerank_cached: self.cached_at == Some(self.generation),
+            autocorrection: self.autocorrection.clone().filter(|_| self.english),
         }
     }
 }
@@ -189,6 +194,7 @@ fn inspect_candidate(
         SpanKind::Word => CandidateKind::Word,
         SpanKind::English => CandidateKind::English,
         SpanKind::EnglishUserWord | SpanKind::EnglishCompletion => CandidateKind::EnglishUserWord,
+        SpanKind::EnglishCorrection => CandidateKind::EnglishCorrection,
     };
     let mut inspected = InspectedCandidate {
         text: candidate.text().to_string(),

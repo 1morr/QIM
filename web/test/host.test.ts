@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deleteStart, type Editable, insert } from "../src/host.ts";
+import {
+	deleteStart,
+	type Editable,
+	hostDefault,
+	insert,
+} from "../src/host.ts";
 
 test("游標前刪 N 字：以字計（Unicode scalar），不切開代理對", () => {
 	assert.equal(deleteStart("teh ", 4, 4), 0);
@@ -86,4 +91,16 @@ test("insert：不刪時照舊插入游標處", () => {
 	insert(text as unknown as Editable, "X");
 	assert.equal(text.value, "aXb");
 	assert.equal(text.selectionStart, 2);
+});
+
+test("hostDefault：交還的鍵帶著上屏（英文模式 Enter 的自動修正）時先換字再照做預設動作", () => {
+	const text = fakeText("I teh", 5);
+	hostDefault(text as unknown as Editable, {
+		action: "enter",
+		character: undefined,
+		commit: "the",
+		deleteBefore: 3,
+	});
+	assert.equal(text.value, "I the\n");
+	assert.equal(text.selectionStart, 6);
 });

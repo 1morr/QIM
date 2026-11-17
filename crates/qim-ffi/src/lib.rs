@@ -203,7 +203,7 @@ impl Session {
 /// `input`、`segments`、`focus`。
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct Snapshot {
-    /// 為假時殼交還宿主。
+    /// 為假時殼交還宿主；有 `delete_before` 或 `commit` 時先照做再交還（英文模式 Enter 的自動修正，M4 票 25）。
     pub handled: bool,
     pub input: String,
     pub segments: Vec<Segment>,

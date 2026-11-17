@@ -30,7 +30,7 @@ pub const ENGLISH_COMPLETION_LIMIT: usize = 3;
 
 /// 串裡的字元：英文字母、數字與 email、縮寫常有的 `. _ % + - @ '`。送出去的字遇到其他字元，前面的
 /// 就是打完的一串。
-fn is_word_char(c: char) -> bool {
+pub(crate) fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '%' | '+' | '-' | '@' | '\'')
 }
 
@@ -282,6 +282,17 @@ impl EnglishUserWords {
                 count: self.count_on(key, today),
             })
             .filter(|w| w.count > 0)
+    }
+
+    /// 鍵是 `key`（小寫）、`today` 時一年內打過的詞（英文模式的自動修正：學過的串當成使用者要的字）。
+    pub(crate) fn used(&self, key: &str, today: Option<Date>) -> Option<UsedWord<'_>> {
+        let (key, w) = self.words.get_key_value(key)?;
+        let count = self.count_on(key, today);
+        (count > 0).then_some(UsedWord {
+            key,
+            text: &w.text,
+            count,
+        })
     }
 
     /// 寫法，依小寫排；殼的清單用。

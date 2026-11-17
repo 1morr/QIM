@@ -7,7 +7,7 @@ import { mountContext } from "./context.ts";
 import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
-import { hostDefault, insert } from "./host.ts";
+import { commitBeforeHost, hostDefault, insert } from "./host.ts";
 import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
 import { NeuralReranker } from "./neural-rerank.ts";
 import { mountPackSettings } from "./pack-settings.ts";
@@ -428,6 +428,8 @@ async function start(): Promise<void> {
 			: session.press(key.kind, key.value);
 		withSnapshot(pressed, (snapshot) => {
 			if (!snapshot.handled) {
+				// 英文模式 Enter 的自動修正：先換掉詞，瀏覽器接著照做 Enter 的預設動作。
+				commitBeforeHost(text, snapshot);
 				// 換成美式字元的鍵：瀏覽器會照配列插入 `key`，改由網頁插入核心收到的那個字元。
 				if (remapped.character !== undefined) {
 					event.preventDefault();
