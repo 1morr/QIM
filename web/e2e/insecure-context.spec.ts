@@ -15,6 +15,15 @@ test.beforeEach(async ({ context, baseURL }) => {
 	});
 });
 
+// 輸入框 ready 之後頁面還在背景載入停鍵層的 Worker（模組與 wasm）、跑線上更新檢查，測試先結束時上面的
+// handler 還在轉發，context 關掉就讓 `route.fetch` 丟錯，記成這條測試或「不屬於任何測試」的錯（flow-sync
+// 票 02b）。結束前拿掉轉發，轉發到一半的請求丟的錯不算：測試已經結束，沒有人看那些回應。不用
+// `behavior: "wait"`：拿掉轉發的當下剛進 handler 的請求會被 Playwright 自動放行，handler 接著 fulfill
+// 仍會丟「Route is already handled!」。
+test.afterEach(async ({ context }) => {
+	await context.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("非安全環境開網頁：產生裝置 id、照常載入能打字", async ({
 	page,
 }, testInfo) => {
