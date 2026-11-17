@@ -899,14 +899,7 @@ impl From<Inspection> for WebInspection {
             weight_probabilities: weights.iter().map(|&(_, p)| p).collect(),
             rerank_cached: i.rerank_cached,
             autocorrection: i.autocorrection,
-            field: match i.field {
-                FieldKind::Text => "text",
-                FieldKind::Email => "email",
-                FieldKind::Url => "url",
-                FieldKind::Number => "number",
-                FieldKind::Password => "password",
-            }
-            .into(),
+            field: i.field.name().into(),
             context_state: context_state.into(),
             context,
             preceding_kind: preceding_kind.into(),

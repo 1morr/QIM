@@ -29,5 +29,9 @@ test("密碼欄不論 inputmode 都是密碼", () => {
 
 test("不認得的值照一般欄", () => {
 	assert.equal(fieldKind("color", "none"), "text");
+});
+
+test("屬性值不分大小寫（HTML 的列舉屬性）", () => {
 	assert.equal(fieldKind("EMAIL", null), "email");
+	assert.equal(fieldKind(null, "Numeric"), "number");
 });

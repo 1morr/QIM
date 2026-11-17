@@ -49,10 +49,10 @@ export interface InspectedCandidate {
 /** debug 面板顯示的欄位類型名稱（`Inspection.field`）。 */
 const FIELD_NAMES: Record<string, string> = {
 	text: "一般",
-	email: "email（英文、不修正、不大寫）",
-	url: "網址（英文、不修正、不大寫）",
+	email: "email（英文直通，英文模式也不修正、不大寫）",
+	url: "網址（英文直通，英文模式也不修正、不大寫）",
 	number: "數字（開數字頁）",
-	password: "密碼（英文、不出建議、不學、不讀前文）",
+	password: "密碼（英文直通，英文模式也不出建議；不學、不讀前文）",
 };
 
 /** 綁定的 `Inspection` 讀成一般物件：綁定的 getter 每次都複製一份，讀一次、釋放完再畫。 */
@@ -376,7 +376,7 @@ export function mountDebugPanel(
 		return line;
 	};
 
-	// 欄位類型（M4 票 26）：email、網址、密碼欄預設英文、不自動修正，密碼欄另不出建議、不學。
+	// 欄位類型（M4 票 26）：email、網址、密碼欄預設英文直通、不自動修正，密碼欄另不出建議、不學。
 	const fieldLine = (inspection: Inspection): HTMLElement =>
 		make("p", `欄位：${FIELD_NAMES[inspection.field] ?? inspection.field}`, {
 			"data-testid": "debug-field",

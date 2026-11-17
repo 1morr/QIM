@@ -1,7 +1,7 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
 // 欄位類型（M4 票 26，brief〈英文模式與欄位類型〉）：工具列的「欄位」選單模擬宿主輸入框的 `type` / `inputmode`。
-// email、網址、密碼欄一聚焦就是英文模式（照 Trime、青簡），自動修正開著也不修；密碼欄另不出建議、不讀前文；
+// email、網址、密碼欄一聚焦就是英文直通（照 Trime、青簡），沒有建議、自動修正開著也不修；密碼欄另不讀前文；
 // 數字欄開數字頁；回到一般欄還原原本的中文。debug 面板讀回欄位類型與前文狀態。
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 const { defaultBrowserType: __, ...desktop } = devices["Desktop Chrome"];
@@ -59,7 +59,7 @@ for (const [label, kind] of [
 	["email（type=email）", "email"],
 	["網址（type=url）", "url"],
 ] as const) {
-	test(`${kind} 欄位預設英文、打 teh 不修正；回到一般欄是中文`, async ({
+	test(`${kind} 欄位預設英文直通、打 teh 不修正、沒有建議；回到一般欄是中文`, async ({
 		page,
 	}) => {
 		const { text, mode, items, field } = parts(page);
@@ -73,7 +73,8 @@ for (const [label, kind] of [
 		// 英文頁（地球鍵切過去的那頁）：小寫字母、第一排角標數字。
 		await expect(page.getByTestId("key-q")).toHaveText("q1");
 		await tapText(page, "teh");
-		await expect(items.first()).toHaveText("1the");
+		await expect(text).toHaveValue("teh");
+		await expect(items).toHaveCount(0);
 		await expect(page.getByTestId("debug-autocorrection")).toHaveAttribute(
 			"data-autocorrection",
 			"",
@@ -121,7 +122,7 @@ for (const [label, attribute] of [
 	});
 }
 
-test("密碼欄預設英文、沒有建議、不讀前文；使用者的無痕開關不動", async ({
+test("密碼欄預設英文直通、沒有建議、不讀前文；使用者的無痕開關不動", async ({
 	page,
 }) => {
 	const { text, mode, items, field } = parts(page);
@@ -159,7 +160,7 @@ test("一般欄位照舊：中文組字，打 a 首選是日", async ({ page }) 
 test.describe("實體鍵盤", () => {
 	test.use(desktop);
 
-	test("email 欄位預設英文、打 teh 空白不修正", async ({ page }) => {
+	test("email 欄位預設英文直通、打 teh 空白不修正", async ({ page }) => {
 		const { text, mode } = parts(page);
 		await turnOnAutocorrect(page);
 		await chooseField(page, "email（type=email）");

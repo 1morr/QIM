@@ -349,7 +349,6 @@ async function start(): Promise<void> {
 	// 欄位類型（M4 票 26）：換選項等於聚焦一個新的欄位；核心換了中英、可能學到上一個欄位打完的英文串。
 	mountFieldType(
 		element<HTMLSelectElement>("#field-type"),
-		text,
 		session,
 		(snapshot, field) => {
 			saveLearning();

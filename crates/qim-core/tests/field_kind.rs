@@ -1,7 +1,7 @@
 //! 欄位類型（M4 票 26，brief〈英文模式與欄位類型〉）：殼在輸入框聚焦時給 `Session::set_field`。email、網址、
-//! 密碼欄預設英文模式、離開時還原（照 Trime 的 `ascii_mode`，青簡對信箱、網址、密碼欄直通），不自動修正、不
-//! 自動大寫（AOSP LatinIME 的 `InputAttributes`）；密碼欄另不出建議、照無痕不學不讀前文（brief〈隱私與安全〉）。
-//! 數字欄的數字頁在殼與佈局，核心的中英不動。
+//! 密碼欄預設英文直通、離開時還原（照 Trime 的 `ascii_mode`，青簡對信箱、網址、密碼欄直通）；切到英文模式時
+//! 不自動修正、不自動大寫（AOSP LatinIME 的 `InputAttributes`），密碼欄也不出建議；密碼欄照無痕不學不讀前文
+//! （brief〈隱私與安全〉）。數字欄的數字頁在殼與佈局，核心的中英不動。
 
 mod common;
 
@@ -99,15 +99,16 @@ impl Ime {
     }
 }
 
-/// email、網址、密碼欄一聚焦就是英文模式：字母當場上屏、不組字。
+/// email、網址、密碼欄一聚焦就是英文直通：鍵交還宿主、不組字、沒有建議。
 #[test]
-fn email_url_and_password_fields_start_in_english_mode() {
+fn email_url_and_password_fields_start_in_english_pass_through() {
     for field in [FieldKind::Email, FieldKind::Url, FieldKind::Password] {
         let mut ime = Ime::new();
         assert!(ime.field(field).ascii, "{field:?}");
-        let typed = ime.press(Key::Letter('a'));
-        assert_eq!(typed.commit.as_deref(), Some("a"), "{field:?}");
+        let typed = ime.type_text("hel");
+        assert!(!typed.handled, "{field:?}");
         assert!(!ime.session.composing(), "{field:?}");
+        assert!(ime.suggestions().is_empty(), "{field:?}");
     }
 }
 
@@ -122,29 +123,40 @@ fn text_and_number_fields_keep_the_current_mode() {
     }
 }
 
-/// 離開 email 欄回到一般欄時還原進去之前的中英（Trime 離開欄位時還原 `ascii_mode`），在 email 欄切過也一樣；
-/// 原本就是英文模式的回來仍是英文。
+/// 離開 email 欄回到一般欄時還原進去之前的中文（Trime 離開欄位時還原 `ascii_mode`）。
 #[test]
-fn leaving_an_english_field_restores_the_mode_from_before() {
+fn leaving_an_english_field_restores_chinese() {
     let mut ime = Ime::new();
     ime.field(FieldKind::Email);
-    assert!(!ime.field(FieldKind::Text).ascii, "回到中文");
+    assert!(!ime.field(FieldKind::Text).ascii);
+    ime.press(Key::Letter('a'));
+    assert!(ime.session.composing());
+}
 
-    ime.field(FieldKind::Email);
-    assert!(!ime.press(Key::ToggleEnglish).ascii, "在 email 欄切回中文");
-    ime.field(FieldKind::Url);
-    assert!(
-        ime.press(Key::Letter('a')).commit.is_some(),
-        "換到另一個網址欄又是英文"
-    );
-    assert!(
-        !ime.field(FieldKind::Text).ascii,
-        "回到進 email 欄之前的中文"
-    );
-
+/// 原本就是英文模式的，離開密碼欄回到英文模式（字母核心吃下、當場上屏）。
+#[test]
+fn leaving_an_english_field_restores_english_mode() {
+    let mut ime = Ime::new();
     ime.press(Key::ToggleEnglish);
     ime.field(FieldKind::Password);
-    assert!(ime.field(FieldKind::Number).ascii, "原本是英文模式");
+    assert!(ime.field(FieldKind::Number).ascii);
+    assert_eq!(ime.press(Key::Letter('a')).commit.as_deref(), Some("a"));
+}
+
+/// 在 email 欄切回中文的不留到下一個要英文的欄位，離開時仍還原進第一個欄位之前的。
+#[test]
+fn a_switch_inside_an_english_field_stays_in_that_field() {
+    let mut ime = Ime::new();
+    ime.press(Key::ToggleEnglish);
+    ime.field(FieldKind::Email);
+    assert!(!ime.press(Key::ToggleEnglish).ascii, "在 email 欄切回中文");
+    assert!(ime.field(FieldKind::Url).ascii, "下一個網址欄又是英文");
+    ime.field(FieldKind::Text);
+    assert_eq!(
+        ime.press(Key::Letter('a')).commit.as_deref(),
+        Some("a"),
+        "回到進 email 欄之前的英文模式"
+    );
 }
 
 /// 組字中換欄位：組字留在上一個欄位，不帶過來。
@@ -158,43 +170,70 @@ fn a_new_field_drops_the_composition() {
     assert_eq!(snapshot.commit, None);
 }
 
-/// email、網址欄自動修正開著也不修、自動大寫開著也不開 Shift（LatinIME：沒有 AUTO_CORRECT 旗標、email 與網址
-/// 不大寫）；建議照出。
+/// 換欄位是打完了上一個欄位正在打的串：學成英文使用者詞（同離開欄位）。
 #[test]
-fn email_and_url_fields_neither_autocorrect_nor_capitalize() {
+fn a_new_field_finishes_the_string_typed_in_the_last_one() {
+    let mut ime = Ime::new();
+    ime.field(FieldKind::Email);
+    ime.type_text("me@example.com");
+    ime.field(FieldKind::Password);
+    assert_eq!(ime.user.english_user_words(), ["me@example.com"]);
+}
+
+/// email、網址欄切到英文模式時，自動修正開著也不修（LatinIME：沒有 AUTO_CORRECT 旗標）；一般欄照修。
+#[test]
+fn email_and_url_fields_do_not_autocorrect() {
+    let autocorrecting = Options {
+        autocorrect: true,
+        ..Options::default()
+    };
     for field in [FieldKind::Email, FieldKind::Url] {
         let mut ime = Ime::new();
-        ime.session.set_options(Options {
-            autocorrect: true,
-            auto_capitalize: true,
-            ..Options::default()
-        });
+        ime.session.set_options(autocorrecting);
         ime.field(field);
-        ime.session.set_context("");
-        assert!(!ime.session.auto_shift(), "{field:?}");
-        ime.type_text("hel");
-        assert!(
-            ime.suggestions().contains(&"hello".to_string()),
-            "{field:?}"
-        );
+        ime.press(Key::ToggleEnglish);
+        ime.press(Key::ToggleEnglish);
         let finished = ime.type_text("teh ");
         assert_eq!(finished.delete_before, 0, "{field:?}");
         assert_eq!(finished.commit.as_deref(), Some(" "), "{field:?}");
     }
-    // 一般欄照修，對照組。
     let mut ime = Ime::new();
-    ime.session.set_options(Options {
-        autocorrect: true,
-        ..Options::default()
-    });
+    ime.session.set_options(autocorrecting);
     ime.press(Key::ToggleEnglish);
     assert_eq!(ime.type_text("teh ").commit.as_deref(), Some("the "));
 }
 
-/// 密碼欄不出建議（LatinIME、Gboard 的密碼欄沒有建議列）、不學、不讀前文（brief〈隱私與安全〉），
-/// 不必殼另開無痕。
+/// email、網址欄切到英文模式時，句首自動大寫開著也不開 Shift（LatinIME、Gboard 在 email 與網址欄不大寫）。
 #[test]
-fn password_fields_show_no_suggestions_learn_nothing_and_read_no_context() {
+fn email_and_url_fields_do_not_capitalize() {
+    for field in [FieldKind::Email, FieldKind::Url] {
+        let mut ime = Ime::new();
+        ime.session.set_options(Options {
+            auto_capitalize: true,
+            ..Options::default()
+        });
+        ime.field(field);
+        ime.press(Key::ToggleEnglish);
+        ime.press(Key::ToggleEnglish);
+        ime.session.set_context("");
+        assert!(!ime.session.auto_shift(), "{field:?}");
+    }
+}
+
+/// 密碼欄切到英文模式也不出建議（LatinIME、Gboard 的密碼欄沒有建議列）。
+#[test]
+fn password_fields_show_no_suggestions_even_in_english_mode() {
+    let mut ime = Ime::new();
+    ime.field(FieldKind::Password);
+    ime.press(Key::ToggleEnglish);
+    ime.press(Key::ToggleEnglish);
+    ime.type_text("hel");
+    assert!(ime.suggestions().is_empty());
+}
+
+/// 密碼欄不讀前文（brief〈隱私與安全〉），殼不必另開無痕，使用者的無痕開關也不動。
+#[test]
+fn password_fields_read_no_context() {
     let mut ime = Ime::new();
     ime.field(FieldKind::Password);
     ime.session.set_context("my secret");
@@ -202,13 +241,18 @@ fn password_fields_show_no_suggestions_learn_nothing_and_read_no_context() {
         ime.session.inspect(&ime.engine, &ime.user).context,
         ContextState::Incognito
     );
-    ime.type_text("hel");
-    assert!(ime.suggestions().is_empty());
-    ime.type_text("lohello ");
-    ime.type_text("hellohello ");
+    assert!(ime.session.private());
+    assert!(!ime.session.options().incognito);
+}
+
+/// 密碼欄打的不學（brief〈隱私與安全〉）。
+#[test]
+fn password_fields_learn_nothing() {
+    let mut ime = Ime::new();
+    ime.field(FieldKind::Password);
+    ime.type_text("hunter2hunter2 ");
     ime.field(FieldKind::Text);
     assert!(ime.user.english_user_words().is_empty());
-    assert!(!ime.session.options().incognito, "使用者的無痕開關不動");
 }
 
 /// debug 面板讀得到現在的欄位類型。
@@ -226,17 +270,18 @@ fn inspection_shows_the_field_kind() {
     );
 }
 
-/// 綁定收字串：`text`、`email`、`url`、`number`、`password`。
+/// 綁定收與給的名字：`text`、`email`、`url`、`number`、`password`。
 #[test]
-fn field_kinds_parse_from_their_names() {
-    for (name, field) in [
-        ("text", FieldKind::Text),
-        ("email", FieldKind::Email),
-        ("url", FieldKind::Url),
-        ("number", FieldKind::Number),
-        ("password", FieldKind::Password),
+fn field_kinds_round_trip_through_their_names() {
+    for field in [
+        FieldKind::Text,
+        FieldKind::Email,
+        FieldKind::Url,
+        FieldKind::Number,
+        FieldKind::Password,
     ] {
-        assert_eq!(name.parse::<FieldKind>(), Ok(field));
+        assert_eq!(field.name().parse::<FieldKind>(), Ok(field));
     }
+    assert_eq!(FieldKind::Email.name(), "email");
     assert!("tel".parse::<FieldKind>().is_err());
 }

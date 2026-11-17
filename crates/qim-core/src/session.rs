@@ -177,38 +177,54 @@ pub enum FieldKind {
     /// 一般的文字欄。
     #[default]
     Text,
-    /// email：預設英文模式、不自動修正、不自動大寫。
+    /// email：預設英文直通；切到英文模式時不自動修正、不自動大寫。
     Email,
     /// 網址：同 email。
     Url,
     /// 數字（含電話）：殼開數字頁（佈局的 `numberPage`），核心的中英不動。
     Number,
-    /// 密碼：同 email，另外不出建議，照無痕不學、不讀前文（brief〈隱私與安全〉）。
+    /// 密碼：同 email，英文模式也不出建議，照無痕不學、不讀前文（brief〈隱私與安全〉）。
     Password,
 }
 
 impl std::str::FromStr for FieldKind {
     type Err = String;
 
-    /// 綁定用的名字：`text`、`email`、`url`、`number`、`password`。
+    /// 綁定用的名字（[`FieldKind::name`]）。
     fn from_str(name: &str) -> Result<Self, String> {
-        match name {
-            "text" => Ok(Self::Text),
-            "email" => Ok(Self::Email),
-            "url" => Ok(Self::Url),
-            "number" => Ok(Self::Number),
-            "password" => Ok(Self::Password),
-            _ => Err(format!(
-                "不認得的欄位類型：{name}（只有 text、email、url、number、password）"
-            )),
-        }
+        Self::ALL
+            .into_iter()
+            .find(|field| field.name() == name)
+            .ok_or_else(|| {
+                format!("不認得的欄位類型：{name}（只有 text、email、url、number、password）")
+            })
     }
 }
 
 impl FieldKind {
-    /// 聚焦時預設英文模式（照 Trime 在 email、密碼欄設 `ascii_mode`，青簡對信箱、網址、密碼欄直通），也不自動
-    /// 修正、不自動大寫（AOSP LatinIME 的 `InputAttributes`：這三種欄位不給建議、不修）。
-    fn starts_in_english(self) -> bool {
+    const ALL: [FieldKind; 5] = [
+        Self::Text,
+        Self::Email,
+        Self::Url,
+        Self::Number,
+        Self::Password,
+    ];
+
+    /// 綁定收與給的名字：`text`、`email`、`url`、`number`、`password`。
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Email => "email",
+            Self::Url => "url",
+            Self::Number => "number",
+            Self::Password => "password",
+        }
+    }
+
+    /// 要英文的欄位：聚焦時預設英文直通（照 Trime 在 email、密碼欄設 `ascii_mode`，青簡對信箱、網址、密碼欄直通，
+    /// 使用者 2026-11-17 定直通），使用者切到英文模式時也不自動修正、不自動大寫（AOSP LatinIME 的
+    /// `InputAttributes`：這三種欄位不給建議、不修）。
+    fn wants_english(self) -> bool {
         matches!(self, Self::Email | Self::Url | Self::Password)
     }
 }
@@ -535,7 +551,7 @@ pub struct Session {
     english: bool,
     /// 目前輸入框的種類（[`Session::set_field`]）。
     field: FieldKind,
-    /// 進預設英文的欄位（[`FieldKind::starts_in_english`]）之前的英文直通與英文模式（`ascii`, `english`）：離開到
+    /// 進要英文的欄位（[`FieldKind::wants_english`]）之前的英文直通與英文模式（`ascii`, `english`）：離開到
     /// 別種欄位時還原（Trime 離開欄位時還原 `ascii_mode`）。不在那種欄位時是 `None`。
     mode_before_field: Option<(bool, bool)>,
     /// 前文（plan〈介面〉，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
@@ -632,8 +648,9 @@ impl Session {
 
     /// 換到一個新的輸入框（M4 票 26，brief〈英文模式與欄位類型〉）：殼在聚焦時、給前文之前呼叫，每次聚焦都給
     /// （Android 的 `onStartInput`、iOS 的 `textDidChange` 讀 `keyboardType`）。上一個欄位的組字丟掉、正在打的串
-    /// 打完（同 [`Session::clear_context`]）；email、網址、密碼欄切到英文模式，離開到一般欄、數字欄時還原進去
-    /// 之前的中英（照 Trime 的 `ascii_mode`），在那種欄位裡切過的不留到下一個欄位。回傳的快照帶新的中英
+    /// 打完（同 [`Session::clear_context`]）；email、網址、密碼欄切到英文直通（同 Trime 的 `ascii_mode`、青簡直通，
+    /// 沒有建議列，桌面與觸控相同），離開到一般欄、數字欄時還原進去之前的中英（照 Trime），在那種欄位裡切過的
+    /// 不留到下一個欄位。回傳的快照帶新的中英
     /// （`ascii`），殼照它換頁；數字欄的數字頁由殼照佈局開。
     pub fn set_field(
         &mut self,
@@ -648,11 +665,11 @@ impl Session {
         self.clear_context(user);
         let was_private = self.private();
         self.field = field;
-        if field.starts_in_english() {
+        if field.wants_english() {
             self.mode_before_field
                 .get_or_insert((self.ascii, self.english));
-            self.ascii = false;
-            self.english = true;
+            self.ascii = true;
+            self.english = false;
         } else if let Some((ascii, english)) = self.mode_before_field.take() {
             self.ascii = ascii;
             self.english = english;
@@ -754,7 +771,7 @@ impl Session {
     pub fn auto_shift(&self) -> bool {
         self.english
             && self.options.auto_capitalize
-            && !self.field.starts_in_english()
+            && !self.field.wants_english()
             && self.sentence == Sentence::Start
     }
 
@@ -1730,7 +1747,7 @@ impl Session {
         (self.english
             && options.autocorrect
             && options.english_corrections
-            && !self.field.starts_in_english())
+            && !self.field.wants_english())
         .then(|| {
             english_mode::autocorrection(
                 engine,
