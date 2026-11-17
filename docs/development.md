@@ -331,7 +331,7 @@ cargo xtask check
 | `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | 跑 |
 | `test` | `cargo test --workspace` | 跳過 |
 | `audit` | 依賴漏洞掃描（`osv-scanner`，〈閘門〉），掃 `Cargo.lock` 與 `web/package-lock.json`，要連網路 | 跳過 |
-| `deps` | 依賴規則（`ARCHITECTURE.md`〈依賴規則〉）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
+| `deps` | 依賴規則（`ARCHITECTURE.md`〈依賴規則〉）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout`、`qim-neural` 的禁用 I/O | 跑 |
 | `docs` | 文件規則：跑 `python3 scripts/check_docs.py` 與它的測試（要 Python 3），規則寫在腳本開頭 | 跑 |
 | `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
 | `tsc` | `web/` 的 `tsc --noEmit`（`src/`），再對 `tsconfig.node.json`（Playwright 設定、`e2e/`、`test/`）與 `web/bench/` 各跑一次（`npm run typecheck`） | 跑 |

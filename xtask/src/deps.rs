@@ -32,6 +32,9 @@ const FORBIDDEN_NAMES: &[(&str, &str)] = &[("SystemTime", "std::time::SystemTime
 /// [`RULES`] 所在的檔案，違規說明裡指給人看。
 const RULES_FILE: &str = "xtask/src/deps.rs";
 
+/// 依賴規則的表所在的文件與節，違規說明裡指給人看。
+const RULES_DOC: &str = "ARCHITECTURE.md〈依賴規則〉";
+
 const RULES: &[Rule] = &[
     Rule {
         krate: "qim-core",
@@ -117,7 +120,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
         }
         let Some(rule) = RULES.iter().find(|rule| rule.krate == name) else {
             violations.push(format!(
-                "workspace 成員 {name} 不在 architecture〈依賴規則〉 的表上：先把它加進 architecture〈依賴規則〉 與 {RULES_FILE} 的 RULES"
+                "workspace 成員 {name} 不在 {RULES_DOC} 的表上：先把它加進 {RULES_DOC} 與 {RULES_FILE} 的 RULES"
             ));
             continue;
         };
@@ -127,7 +130,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
             if is_workspace_crate(dep) {
                 if !rule.workspace.contains(&dep) {
                     violations.push(format!(
-                        "{name} 不可以依賴 {dep}（{kind}）：architecture〈依賴規則〉 只允許 {name} 依賴這些 workspace crate：{}",
+                        "{name} 不可以依賴 {dep}（{kind}）：{RULES_DOC} 只允許 {name} 依賴這些 workspace crate：{}",
                         join_names(rule.workspace)
                     ));
                 }
@@ -136,7 +139,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
                 && !allowed.contains(&dep)
             {
                 violations.push(format!(
-                    "{name} 的{kind} {dep} 不在 architecture〈依賴規則〉 的白名單（{}）：要加先改 architecture〈依賴規則〉 與 {RULES_FILE} 的 RULES",
+                    "{name} 的{kind} {dep} 不在 {RULES_DOC} 的白名單（{}）：要加先改 {RULES_DOC} 與 {RULES_FILE} 的 RULES",
                     join_names(allowed)
                 ));
             }
@@ -186,7 +189,7 @@ fn scan_sources(
         let uses = forbidden_uses(&source).map_err(|error| format!("{label} 無法斷詞：{error}"))?;
         for (line, path) in uses {
             violations.push(format!(
-                "{label}:{line} 用了 {path}：architecture〈依賴規則〉 規定 {name} 不可以用 {forbidden_list}"
+                "{label}:{line} 用了 {path}：{RULES_DOC} 規定 {name} 不可以用 {forbidden_list}"
             ));
         }
     }
@@ -452,7 +455,7 @@ mod tests {
         add_crate(dir.path(), "qim-extra");
         assert_red(
             dir.path(),
-            &["qim-extra", "不在 architecture〈依賴規則〉 的表上"],
+            &["qim-extra", "不在 ARCHITECTURE.md〈依賴規則〉 的表上"],
         );
     }
 

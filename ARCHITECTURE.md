@@ -6,7 +6,7 @@
 
 ## 執行形態
 
-核心是 Rust 函式庫，各平台殼把它連進自己的程序（ADR 0002）：網頁經 WebAssembly（`qim-wasm`），Apple 與 Android 經 uniffi 產生的 Swift / Kotlin 綁定（`qim-ffi`），Windows 與 Linux 經 C ABI。Windows 依成熟做法傾向把核心放在獨立程序、TSF DLL 只轉傳（`docs/research/platform-frameworks.md` §6），M10 開工時定（roadmap〈平台里程碑（M7–M11）〉）。
+核心是 Rust 函式庫，各平台殼把它連進自己的程序（ADR 0002）：網頁經 WebAssembly（`qim-wasm`），Apple 與 Android 經 uniffi 產生的 Swift / Kotlin 綁定（`qim-ffi`），Windows 與 Linux 經 C ABI。Windows 的程序配置未定：依成熟做法傾向把核心放在獨立程序、TSF DLL 只轉傳（`docs/research/platform-frameworks.md` §6），兩種做法的比較見 roadmap〈平台里程碑（M7–M11）〉的 M10。
 
 ```mermaid
 flowchart LR
@@ -124,7 +124,7 @@ flowchart LR
 
 ## 主要依賴
 
-版本看 `rust-toolchain.toml`、`Cargo.lock`、`web/package-lock.json`。
+版本看 `rust-toolchain.toml`、`Cargo.lock`、`web/package-lock.json`；加依賴時用 `cargo add` / `npm install` 取當時的 stable，並在本表加一列。
 
 | 依賴 | 用途 | 理由 |
 | --- | --- | --- |
