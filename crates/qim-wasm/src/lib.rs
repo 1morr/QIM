@@ -560,7 +560,7 @@ impl WebSession {
         self.session.set_reranker_id(reranker_id.as_deref());
     }
 
-    /// debug 面板（plan〈網頁 prototype〉，M4 票 01）：核心為什麼這樣排（`Session::inspect`）。網頁只在面板開著時呼叫。
+    /// debug 面板（architecture〈平台殼〉，M4 票 01）：核心為什麼這樣排（`Session::inspect`）。網頁只在面板開著時呼叫。
     pub fn inspect(&self) -> WebInspection {
         self.session.inspect(&self.engine, &self.user).into()
     }
