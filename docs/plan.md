@@ -779,10 +779,10 @@ release 的 asset（`cargo xtask pack-release` 由 `build/packs/` 產生到 `bui
 M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；02：`deps`；03：commit-msg；04：progress 與 spec 閘門）：
 
 - `docs/development.md`：環境需求、安裝、建置、〈全部檢查〉，是開發指令的單一來源。
-- `cargo xtask check`：`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、`deps`（§1.3）、`docs`（下面的 progress 與 spec 閘門），以及網頁的 WebAssembly 綁定（`wasm`）、`tsc --noEmit`、`biome check` 與 Playwright（`e2e`，`--fast` 跳過）。
+- `cargo xtask check`：暫存區的密鑰掃描（`secrets`）、`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、依賴漏洞掃描（`audit`，要連網路，`--fast` 跳過）、`deps`（§1.3）、`docs`（下面的 progress 與 spec 閘門），以及網頁的 WebAssembly 綁定（`wasm`）、`tsc --noEmit`、`biome check` 與 Playwright（`e2e`，`--fast` 跳過）。
 - `.githooks/`：pre-commit 跑 `cargo xtask check --fast`；commit-msg 跑 `cargo xtask commit-msg`（Conventional Commits、subject ≤ 72 字元）。以 `git config core.hooksPath .githooks` 啟用，寫進 `docs/development.md`。commit-msg 檢查附雙向測試（違規會紅、無關改動不紅）。
 - 文件的閘門（`cargo xtask check` 的 `docs` 步驟）：跑 `python3 scripts/check_docs.py` 與它的測試（`scripts/tests/`），要 Python 3。它守 progress、decisions、roadmap、里程碑 spec 與票的格式，brief 的字元上限與不寫票號，以及程式碼不引用 brief、plan 的章節號；規則逐條寫在腳本開頭。里程碑目錄的 `issues/` 要有一張 `-close.md` 結尾的收尾票。
-- CI（M2 票 05）：`.github/workflows/ci.yml` 在 push 到 `main` 與每個 PR 時，於 GitHub Actions 的 Ubuntu 跑 `cargo xtask check --fast` 與 `cargo test --workspace`，等於少了 `e2e` 的 `check`。`cargo test` 不讀 `build/packs/`（用到資料包的測試在暫存目錄自建小資料包），CI 不必建資料包。`e2e` 與 `cargo xtask bench --check` 要資料包，建它要下載約 360 MB 的來源，CI 不跑，留在本機：`e2e` 在 `check`，`bench --check` 照〈首選字基準〉在改排序、資料或核心的票手動跑，不進 `check`（約 1 分鐘）。推到遠端仍要先問使用者。
+- CI（M2 票 05）：`.github/workflows/ci.yml` 在 push 到 `main` 與每個 PR 時，於 GitHub Actions 的 Ubuntu 跑 `cargo xtask check --fast`、`cargo test --workspace` 與 `audit` 步驟的依賴漏洞掃描，等於少了 `e2e` 的 `check`；另外全掃一次 git 歷史的密鑰（`check` 的 `secrets` 只看暫存區）。`cargo test` 不讀 `build/packs/`（用到資料包的測試在暫存目錄自建小資料包），CI 不必建資料包。`e2e` 與 `cargo xtask bench --check` 要資料包，建它要下載約 360 MB 的來源，CI 不跑，留在本機：`e2e` 在 `check`，`bench --check` 照〈首選字基準〉在改排序、資料或核心的票手動跑，不進 `check`（約 1 分鐘）。推到遠端仍要先問使用者。
 
 ## 7. 里程碑任務
 

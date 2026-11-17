@@ -22,6 +22,12 @@ pub enum Action {
     Cargo(&'static [&'static str]),
     /// 在 `web/` 跑 `npm run <script>`。
     NpmScript(&'static str),
+    /// 在 repo 根目錄跑另外裝的工具；找不到時印 `install`（見 `docs/development.md`〈環境需求〉）。
+    Tool {
+        program: &'static str,
+        args: &'static [&'static str],
+        install: &'static str,
+    },
     /// 依賴規則（plan〈依賴規則〉），見 [`crate::deps`]。
     Deps,
     /// progress 與里程碑 spec 的規則（plan〈開發環境與閘門〉），見 [`crate::docs`]。
@@ -33,6 +39,23 @@ pub enum Action {
 }
 
 const ALL: &[Step] = &[
+    // 只看暫存區，離線、不到一秒；歷史由 CI 另外全掃。
+    Step {
+        name: "secrets",
+        slow: false,
+        action: Action::Tool {
+            program: "gitleaks",
+            args: &[
+                "git",
+                "--pre-commit",
+                "--staged",
+                "--redact",
+                "--verbose",
+                "--no-banner",
+            ],
+            install: "brew install gitleaks，或從 https://github.com/gitleaks/gitleaks/releases 下載",
+        },
+    },
     Step {
         name: "fmt",
         slow: false,
@@ -54,6 +77,22 @@ const ALL: &[Step] = &[
         name: "test",
         slow: true,
         action: Action::Cargo(&["test", "--workspace"]),
+    },
+    // 要連 OSV.dev，不進 `--fast`。
+    Step {
+        name: "audit",
+        slow: true,
+        action: Action::Tool {
+            program: "osv-scanner",
+            args: &[
+                "scan",
+                "source",
+                "--config=osv-scanner.toml",
+                "--lockfile=Cargo.lock",
+                "--lockfile=web/package-lock.json",
+            ],
+            install: "brew install osv-scanner，或從 https://github.com/google/osv-scanner/releases 下載",
+        },
     },
     Step {
         name: "deps",
@@ -119,6 +158,11 @@ pub fn exec(step: &Step, root: &Path) -> bool {
             command.args(args).current_dir(root);
             command
         }
+        Action::Tool { program, args, .. } => {
+            let mut command = Command::new(program);
+            command.args(args).current_dir(root);
+            command
+        }
         Action::NpmScript(script) => {
             let Some(command) = npm(root, script) else {
                 return false;
@@ -141,7 +185,14 @@ pub fn exec(step: &Step, root: &Path) -> bool {
     match command.status() {
         Ok(status) => status.success(),
         Err(error) => {
-            eprintln!("無法執行 {}：{error}", step.name);
+            match step.action {
+                Action::Tool {
+                    program, install, ..
+                } if error.kind() == std::io::ErrorKind::NotFound => {
+                    eprintln!("找不到 {program}：{install}");
+                }
+                _ => eprintln!("無法執行 {}：{error}", step.name),
+            }
             false
         }
     }
@@ -193,17 +244,18 @@ mod tests {
         assert_eq!(
             names(&steps(false)),
             [
-                "fmt", "clippy", "test", "deps", "docs", "wasm", "tsc", "biome", "unit", "e2e"
+                "secrets", "fmt", "clippy", "test", "audit", "deps", "docs", "wasm", "tsc",
+                "biome", "unit", "e2e"
             ]
         );
     }
 
     #[test]
-    fn fast_check_skips_cargo_test_and_e2e() {
+    fn fast_check_skips_cargo_test_audit_and_e2e() {
         assert_eq!(
             names(&steps(true)),
             [
-                "fmt", "clippy", "deps", "docs", "wasm", "tsc", "biome", "unit"
+                "secrets", "fmt", "clippy", "deps", "docs", "wasm", "tsc", "biome", "unit"
             ]
         );
     }

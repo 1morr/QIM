@@ -1,0 +1,9 @@
+# gitleaks 設定：沿用內建規則，只放行查過的誤報。用法見 docs/development.md〈閘門〉。
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "研究筆記引用的 Android 鍵盤 XML：android:keyLabel 這類屬性名被 generic-api-key 當成 key"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''android:[A-Za-z]+="''']

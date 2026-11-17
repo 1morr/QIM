@@ -1,0 +1,10 @@
+# osv-scanner 設定（`cargo xtask check` 的 audit 步驟用 --config 指到本檔，Cargo.lock 與 web/package-lock.json 共用）。
+# 忽略一條要寫 reason：為什麼現在不修、誰在用它。用法見 docs/development.md〈閘門〉。
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+reason = "paste 已不維護，沒有修正版；經 candle-core 的 gemm 進來，是 proc-macro，只在編譯時展開、不進產出的程式；等 candle 換掉它"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0374"
+reason = "basic-toml 已不維護，沒有修正版；經 uniffi_bindgen 的 askama 巨集進來，只在 qim-ffi 開 bindgen feature 產生 Swift 綁定時編譯；等 uniffi 換掉它"
