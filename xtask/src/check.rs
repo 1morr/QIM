@@ -91,7 +91,7 @@ const ALL: &[Step] = &[
                 "--lockfile=Cargo.lock",
                 "--lockfile=web/package-lock.json",
             ],
-            install: "brew install osv-scanner，或 go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest",
+            install: "brew install osv-scanner，或從 https://github.com/google/osv-scanner/releases 下載",
         },
     },
     Step {
