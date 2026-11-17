@@ -52,3 +52,4 @@
 | 2026-11-15 | M4 28 | 句中英文混輸實驗不採用：test 純中文集退 1 題（首次跨→tumors），混輸句修正 −10.9%（口語 −1.7%）；brief 改不做、機制已刪；見票 28 | 新 session 下 `/implement .scratch/m4/issues/30-association-boost.md` |
 | 2026-11-15 | M4 30 | 聯想補強：做聯想的 emoji（照 macOS 排第 3 位、選了不學不接）；句首建議、量詞聯想和桌面數字鍵衝突、搶 M5 工具列的位置，不做、排進 M5 評估；bench 不變；見票 30 | 新 session 下 `/implement .scratch/m4/issues/23-touch-english-keyboard.md` |
 | 2026-11-17 | M4 23 | 觸控加地球鍵（點一下切中英、長按切換鍵盤選單）與英文頁、英文符號頁，格式加 `keyboardMenu`、`asciiPage`，網頁照中英狀態換頁；設計稿使用者確認；見票 23 | 新 session 下 `/implement .scratch/m4/issues/24-english-mode.md` |
+| 2026-11-17 | M4 24 | 英文模式接上：地球鍵進英文模式、逐字上屏、英文建議列（學過的加分後和詞典頻率合比）、句首自動大寫；名詞表加四條；見票 24 | 新 session 下 `/implement .scratch/m4/issues/25-autocorrect.md` |
