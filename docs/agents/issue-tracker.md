@@ -12,7 +12,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings); a finished ticket is `Status: done`
 - Blocking is a `Blocked by:` line under `Status:`, listing ticket numbers or `None`
 - A new ticket starts from `docs/agents/ticket-template.md`
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading; a finished ticket ends it with a dated `Session 紀錄：` line and one `決定：` line per choice it made. The ticket is the only record of these; `scripts/ticket_notes.py` prints them for a milestone
+- Comments and conversation history append to the bottom of the file under a `## Comments` heading; a finished ticket ends it with a dated `Session 紀錄：` line, one `決定：` line per choice it made, and one `變更：` line per user-visible change (`變更：無` when there is none). The ticket is the only record of these; `scripts/ticket_notes.py` prints them for a milestone
 - A ticket session that must stop for the user appends `等使用者：<the question>` under `## Comments`; the answer is recorded as a `決定：` line below it, which closes the question. `scripts/next_step.py` lists every open one
 
 ## When a skill says "publish to the issue tracker"

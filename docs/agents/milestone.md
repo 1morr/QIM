@@ -41,6 +41,8 @@
    - `## 決定`：`docs/decisions.md` 裡標著這個里程碑的條目搬過來，後面接同一個指令印的條目。
    - `## 使用者試`：spec 的使用者試清單逐項寫結果；代測的寫誰測、哪幾項沒有人親手試過。
 
+   `python3 scripts/ticket_notes.py <里程碑的目錄名> --changelog` 印的條目併進 `CHANGELOG.md` 的 `## [Unreleased]`，同一個分類的接在一起；同一個功能在這個里程碑裡先 Added 又 Changed 的，併成一條 Added。要不要發版先問使用者。
+
    票檔留在 `.scratch/` 不動。commit 之前跑 `python3 scripts/docs_moved_lines.py HEAD docs/progress.md docs/decisions.md -- docs/archive/<里程碑>.md`。同一個 commit 把 `docs/roadmap.md` 里程碑表的狀態改成「已驗收，封存在 `docs/archive/<里程碑>.md`」、下一個里程碑標成進行中，progress.md 加一列，「下一步」寫 `/1morr:checkpoint <封存的里程碑>`。
 
-完成條件：spec〈驗收〉每一條都有證據或使用者的回覆；每個發現都歸了位；`docs_moved_lines.py` 印「遺失 0」；`ticket_notes.py --archive` 印的每一行都在封存檔裡；progress.md 與 decisions.md 只剩下一個里程碑的。
+完成條件：spec〈驗收〉每一條都有證據或使用者的回覆；每個發現都歸了位；`docs_moved_lines.py` 印「遺失 0」；`ticket_notes.py --archive` 印的每一行都在封存檔裡，`--changelog` 印的每個功能都在 `CHANGELOG.md`；progress.md 與 decisions.md 只剩下一個里程碑的。
