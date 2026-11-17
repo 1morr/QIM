@@ -1,0 +1,28 @@
+# 依賴更新：每週一次，每個生態系的 minor 與 patch 併成一個 PR，major 各自一個。
+# 用法見 docs/development.md〈閘門〉。wasm-bindgen 升版時 CI 的 wasm 步驟會擋下，
+# 要同一個 PR 改 ci.yml 的 install-action 版本與 docs/development.md〈環境需求〉。
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]

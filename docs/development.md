@@ -10,6 +10,8 @@
 | `wasm-bindgen-cli` | 與 `Cargo.lock` 的 `wasm-bindgen` 相同（0.2.130） | 產生網頁的 JS 綁定；版本不同時 `cargo xtask web` 與 `check` 的 `wasm` 步驟會擋下並印安裝指令 |
 | Node.js | 26 LTS（開工時 26.12.0） | 附帶的 `npm` 管理 `web/` 的依賴 |
 | git | 任一近期版本 | hook 用 `core.hooksPath`，Windows 上由 Git for Windows 的 `sh` 執行 |
+| `gitleaks` | 8.30.1 | 密鑰掃描，`check` 的 `secrets` 步驟（pre-commit 也跑）；`brew install gitleaks` 或 [release](https://github.com/gitleaks/gitleaks/releases) |
+| `osv-scanner` | 2.7.1 | 依賴漏洞掃描，`check` 的 `audit` 步驟，要連網路；`brew install osv-scanner` 或 [release](https://github.com/google/osv-scanner/releases) |
 | Xcode | 27.1 起（含 `swiftc`） | 只有 Apple 平台的 Swift 綁定要（〈Swift 綁定〉）；`check` 不用 |
 
 ## 安裝
@@ -308,9 +310,9 @@ Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`
 | 型別 | Rust 由 `clippy` 編譯時擋；`npm run --prefix web typecheck`（`tsc --noEmit`） | 型別對不上 |
 | 單元測試 | `cargo test --workspace`、`npm test --prefix web` | 行為退化 |
 | 端到端冒煙 | `npm run --prefix web e2e`（Playwright，要資料包，只在本機跑） | 各模組都過、接起來卻跑不動 |
-| 密鑰掃描 | 待定，由 gates 的票補 | token、密碼被 commit 進去 |
-| 依賴漏洞 | 待定，由 gates 的票補 | 用到有已知漏洞的 crate 或 npm 套件 |
-| 依賴更新 | 待定，由 gates 的票補 | 依賴長期沒更新 |
+| 密鑰掃描 | `gitleaks git --pre-commit --staged`（暫存區，pre-commit）、`gitleaks git`（全部歷史，CI）；放行誤報寫在 `.gitleaks.toml` | token、密碼被 commit 進去 |
+| 依賴漏洞 | `osv-scanner scan source --config=osv-scanner.toml --lockfile=Cargo.lock --lockfile=web/package-lock.json`；不修的寫進 `osv-scanner.toml` 並附理由 | 用到有已知漏洞或已不維護的 crate 或 npm 套件 |
+| 依賴更新 | `.github/dependabot.yml`（Dependabot，cargo、npm、GitHub Actions 每週一次） | 依賴長期沒更新 |
 
 ## 全部檢查
 
@@ -324,9 +326,11 @@ cargo xtask check
 
 | 步驟 | 指令 | `--fast` |
 | --- | --- | --- |
+| `secrets` | 暫存區的密鑰掃描（`gitleaks git --pre-commit --staged`），離線 | 跑 |
 | `fmt` | `cargo fmt --all --check` | 跑 |
 | `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | 跑 |
 | `test` | `cargo test --workspace` | 跳過 |
+| `audit` | 依賴漏洞掃描（`osv-scanner`，〈閘門〉），掃 `Cargo.lock` 與 `web/package-lock.json`，要連網路 | 跳過 |
 | `deps` | 依賴規則（plan §1.3）：`cargo metadata` 比對白名單，並掃 `qim-core`、`qim-layout` 的禁用 I/O | 跑 |
 | `docs` | 文件規則：跑 `python3 scripts/check_docs.py` 與它的測試（要 Python 3），規則寫在腳本開頭 | 跑 |
 | `wasm` | 產生網頁的 WebAssembly 綁定（〈網頁〉第 1 步），`tsc` 要讀它的型別 | 跑 |
@@ -335,9 +339,9 @@ cargo xtask check
 | `unit` | `web/test/` 的單元測試（`npm test`，Node 內建的 `node --test`，直接跑 TypeScript） | 跑 |
 | `e2e` | 複製資料包（〈網頁〉第 2 步）後跑 Playwright（`npm run e2e`）；要先跑過 `cargo xtask data` | 跳過 |
 
-`cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test` 與 `e2e`：測試會隨碼表與性質測試變慢，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
+`cargo xtask check --fast` 是 pre-commit hook 跑的快速版，跳過 `test`、`audit` 與 `e2e`：測試會隨碼表與性質測試變慢，`audit` 要連網路，e2e 要起瀏覽器；其他步驟增量執行幾秒內完成。`clippy --all-targets` 仍會編譯測試碼，所以測試編不過也會被擋。
 
-CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `cargo xtask check --fast` 與 `cargo test --workspace`；`e2e` 與 `bench --check` 要資料包，只在本機跑（plan §6）。
+CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `gitleaks git`（全部歷史：`secrets` 步驟只看暫存區）、`cargo xtask check --fast`、`cargo test --workspace` 與 `audit` 步驟的 `osv-scanner`；`e2e` 與 `bench --check` 要資料包，只在本機跑（plan §6）。
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。
 
