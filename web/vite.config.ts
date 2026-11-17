@@ -11,8 +11,8 @@ const ASSET_NAME = /^[A-Za-z0-9._-]+$/;
 
 /**
  * 把網頁的 `/pack-updates/<檔名>` 轉給更新來源。GitHub 的 release 檔案（github.com 的轉址與
- * release-assets.githubusercontent.com）不帶 CORS 標頭，瀏覽器直接讀不了，所以經開發伺服器轉發，
- * 同 plan〈網頁 prototype〉 雲端 API 的做法。只有開發伺服器有，`vite build` 出的靜態頁沒有線上更新。
+ * release-assets.githubusercontent.com）不帶 CORS 標頭，瀏覽器直接讀不了，所以經開發伺服器轉發。
+ * 只有開發伺服器有，`vite build` 出的靜態頁沒有線上更新。
  */
 function packUpdates(): Plugin {
 	return {

@@ -263,7 +263,7 @@ cargo xtask bench --dev --set word_bonus=1.5 --set segment_penalty=0.5   # 暫�
 
 這些目錄都不進 git。改了 `qim-core`、`qim-layout` 或 `qim-wasm` 要重跑才看得到；`check` 的 `wasm` 步驟只做第 1 步，`e2e` 步驟先做第 2 步再跑 Playwright。
 
-網頁把學習資料（`# qim-userdict v3`，plan §2.4；仍讀得進 v1、v2）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。匯出檔頭的裝置 id 在 `qim.device`（第一次載入時產生）；今天的日期取瀏覽器的當地時間，Playwright 用 `page.clock` 換日。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。瀏覽器封鎖網站資料或存不下時，網頁只用內建的資料包、存不了的只留到關掉網頁，狀態列會說明（plan §3.1、§4.6）；`e2e/storage.spec.ts` 在網頁的程式跑之前換掉 `indexedDB.open` 與 `window.localStorage` 來試。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
+網頁把學習資料（`# qim-userdict v3`，plan §2.4；仍讀得進 v1、v2）存在 `localStorage` 的 `qim.userdict`，每次上屏後覆寫、載入時匯入；讀不進來的搬到 `qim.userdict.broken`。匯出檔頭的裝置 id 在 `qim.device`（第一次載入時產生）；今天的日期取瀏覽器的當地時間，Playwright 用 `page.clock` 換日。回報清單在 `qim.reports`。設定區「資料包」匯入的資料包存在 IndexedDB 的 `qim-packs` 庫，每種用哪份存在 `localStorage` 的 `qim.packs.active`（plan §4.6）。瀏覽器封鎖網站資料或存不下時，網頁只用內建的資料包、存不了的只留到關掉網頁，狀態列會說明（`web/src/storage.ts`、plan §4.6）；`e2e/storage.spec.ts` 在網頁的程式跑之前換掉 `indexedDB.open` 與 `window.localStorage` 來試。要從空白開始試打就在開發者工具清掉它們，或按網頁的「清空學習資料」、刪掉匯入的資料包。
 
 線上更新（plan §4.7）：網頁向開發伺服器的 `/pack-updates/<檔名>` 要更新索引與資料包，`web/vite.config.ts` 轉給更新來源，預設 `https://github.com/1morr/QIM/releases/download/packs/`（瀏覽器直接讀不了 GitHub 的 release，沒有 CORS 標頭）；環境變數 `QIM_PACK_UPDATE_URL`（結尾要有 `/`）換成別的來源，例如在本機試：
 
@@ -277,7 +277,9 @@ QIM_PACK_UPDATE_URL=http://localhost:8787/ npm run --prefix web dev
 
 e2e 的小詞庫在 `web/e2e/fixtures/` 並進 git，Biome 不碰它們：`e2e-lexicon/`（從檔案匯入用）、`e2e-update-lexicon/`（線上更新前先匯入的舊版）、`quick-lexicon-1.0.1/` 與 `quick-lexicon-1.0.2/`（和內建詞庫同 id 的兩版，驗下載版與內建版取較高的）、`pack-release/`（扮演 GitHub release 的 `index.json` 與新版）。`cargo test` 比對它們和現在的格式一致，格式改了會紅，照訊息重產：`pack-release/` 以外的由 `crates/qim-core/tests/web_fixture.rs` 產生（`QIM_UPDATE_FIXTURES=1 cargo test -p qim-core --test web_fixture`），`pack-release/` 由 `crates/qim-databuild/tests/release.rs` 照 `cargo xtask pack-release` 的路寫出（`QIM_UPDATE_FIXTURES=1 cargo test -p qim-databuild --test release`）。Playwright 另起一個本機靜態伺服器（`web/e2e/static-server.ts`）放 `pack-release/`，埠是 e2e 的埠加 10000，開發伺服器的 `QIM_PACK_UPDATE_URL` 指向它；被佔用時同樣直接失敗。手動試匯入時，一起選 `build/packs/<id>/` 裡的 `manifest.json` 與 `.pack` 也行。
 
-停鍵層（plan §3.1）：「重排」選單預設「神經模型」，停鍵後在 Web Worker 裡跑；沒有 `zh-hant-neural-rerank`（或從檔案匯入的模型資料包）時不重排。網址加 `?rerank-delay=<毫秒>` 讓結果回來後再等那麼久才套用，模擬慢的模型（e2e 驗舊結果不套用）。候選列的 `data-rerank-applied`、`-unchanged`、`-stale`、`-none` 是各種結果的次數，`data-rerank-ms` 是模型上次算了幾毫秒；工具列的「debug」打開 debug 面板，看得到每次重排的要求、各路徑的模型總分與結果、候選列是不是照停鍵結果快取排（`debug-rerank-cache` 的 `data-cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`），和每個候選的來源、路徑分（plan §3.1）。瀏覽器裡重排一次的延遲：`QIM_RERANK_LATENCY=1 npm run --prefix web e2e -- e2e/rerank-latency.spec.ts`（平常略過；合成 9 條 × 18 字與實打口語集前 200 題，印 p50、p95，只報不擋）。
+停鍵層（`web/src/rerank.ts`）：「重排」選單預設「神經模型」，停鍵後在 Web Worker 裡跑；沒有 `zh-hant-neural-rerank`（或從檔案匯入的模型資料包）時不重排。網址加 `?rerank-delay=<毫秒>` 讓結果回來後再等那麼久才套用，模擬慢的模型（e2e 驗舊結果不套用）。候選列的 `data-rerank-applied`、`-unchanged`、`-stale`、`-none` 是各種結果的次數，`data-rerank-ms` 是模型上次算了幾毫秒；工具列的「debug」打開 debug 面板，看得到每次重排的要求、各路徑的模型總分與結果、候選列是不是照停鍵結果快取排（`debug-rerank-cache` 的 `data-cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`），和每個候選的來源、路徑分（`web/src/debug-panel.ts`）。瀏覽器裡重排一次的延遲：`QIM_RERANK_LATENCY=1 npm run --prefix web e2e -- e2e/rerank-latency.spec.ts`（平常略過；合成 9 條 × 18 字與實打口語集前 200 題，印 p50、p95，只報不擋）。
+
+在手機上試手感：`npm run --prefix web dev -- --host`，手機連同一個區網，開 Vite 印出的 Network 網址。這仍只是測試頁，不能在其他 App 打字，和真正的鍵盤有差距；區網的 `http://` 不是安全環境，瀏覽器不給 `crypto.randomUUID`、`navigator.clipboard`（`web/e2e/insecure-context.spec.ts`）。
 
 Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 

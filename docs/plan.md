@@ -414,37 +414,19 @@ sentences = 3         # 候選列最多放幾條多段路徑
 
 ## 3. 平台殼
 
+已搬到 `ARCHITECTURE.md`〈平台殼〉；只和某個平台有關的打算搬到 roadmap〈平台里程碑（M7–M11）〉。
+
 ### 3.1 網頁 prototype（M0–M4）
 
-- 目的：手感驗證核心與佈局，並在平台殼開工前驗完所有核心功能；核心是真的，網頁 UI 不隨產品發佈，只有 `web/editor/` 佈局編輯器隨產品發佈（ADR 0002、ADR 0004）。但觸控鍵盤（候選列與工具列、各面板、鍵盤內設定頁）是平台殼照做的樣板（使用者 2026-11-12 決定，M5，roadmap〈M5 觸控鍵盤與設定〉）：使用者在手機瀏覽器確認過的樣子，平台照做，免得到平台才發現和想像的不同。
-- 限制：只是測試頁，不能在其他 App 打字；手機上的手感用區網開在手機瀏覽器試，和真正的鍵盤仍有差距。
-- 兩種模式：
-  - 實體鍵盤：照 brief §4.3 的鍵位。
-  - 觸控模擬：行動裝置尺寸的觸控鍵盤，照 brief §4.4。按鍵幾何由 `qim-layout` 算，網頁只畫。
-- 候選列、展開面板、無痕開關、簡繁開關；按鍵放大預覽、深色模式、直向與橫向的佈局版本。
-  - 改候選與組字行為的開關（核心選項與重排）集中在頁面下方的設定區，由 `web/src/settings.ts` 的一張表產生，新開關在表裡加一列；之後的設定（常用語、詞庫匯入、資料包管理）也放在這一區。畫面與觸控鍵盤的開關（觸控鍵盤、深色、數字列、字根提示版本）留在候選列下方（M3 票 01）。
-  - 資料包（M3 票 20，§4.6）：設定區的「資料包」一段列出種類、名稱、版本、大小、授權與來源，每種有兩份以上時可切換，匯入與下載的可刪，從檔案匯入（一起選 `manifest.json` 與 `.pack`）；「線上更新」開關與「檢查更新」鍵（M3 票 21，§4.7）。`web/src/packs.ts` 管儲存，`pack-update.ts` 管線上更新，`pack-settings.ts` 管畫面。
-  - 展開面板：候選列右側的展開鍵，桌面組字中 ↓ 打開、↑ 收起；Microsoft 速成的 ↓ 進候選窗、Tab 與 → 展開成表格，Tab 與 → 這裡已給字根提示與分段。選了字就收起（M1 票 23）。
-  - 匯入詞庫（M3 票 17）：設定區的「匯入詞庫」一段選詞表檔（`web/src/word-list.ts`），先在頁面上列出格式、會加幾個詞、略過的列與原因，確認後才加；沒有可加的詞時不問。
-  - 常用語（M3 票 14）：設定區的「常用語」一段新增、編輯、刪除（`web/src/phrases.ts`）；候選列右側在沒有組字時有「常用語」鍵，叫出清單點一條就上屏，組字中藏起（和展開鍵不同時出現）。觸控與桌面共用，照 Gboard 工具列在沒有候選時給功能鍵、微信輸入法的常用語面板。
-  - 英文使用者詞（M4 票 14）：設定區的「英文使用者詞」一段列出核心學到的英文串（沒到出現門檻的也列）、可逐條刪（`web/src/english-user-words.ts`），開關「英文使用者詞」在設定表裡。學習資料除了上屏後存，交還瀏覽器的空白、標點、Enter、Tab 與失焦之後也存：核心這時可能剛學到打完的英文串。
-  - 欄位類型（M4 票 26，`web/src/field.ts`）：工具列的「欄位」選單模擬宿主的輸入框，選項是它的 `type`、`inputmode`（一般、email、網址、數字的 `type=number` 與 `inputmode=numeric`、密碼）；換選項等於聚焦新的欄位：`setField`、照回傳的中英換頁、數字欄開數字頁，再聚焦輸入框給前文。輸入框本身仍是同一個 `textarea`：`type=email` 與 `type=number` 的 `input` 沒有游標 API（`selectionStart`、`setRangeText`），上屏的路徑用不了。
-  - 上下文（M3 票 05，`web/src/context.ts`）：輸入框聚焦、`input`、`selectionchange` 時把游標前最多 `contextLimit()` 字交給 `setContext`、失焦時 `clearContext`，另外每個實體鍵送進核心前（沒有組字時）再給一次：交還瀏覽器的鍵讓核心作廢前文，游標沒動（結尾按 End）時不會有 `selectionchange` 補給。無痕時不給，改完設定區的開關後重給一次。
-  - 候選列左邊顯示中英狀態；「重排」選單是停鍵重排的開關（brief §7，預設開）：神經模型（預設）、關，與測試用的兩個假實作：原樣、最後一條路徑提前（測插入與上限用：最後一條路徑多半不在候選列，核心把它插到第 2 位，M3 票 11c）。「組字中單按 Shift」選單對應 `Options.shift_switch`（M1 票 25）。
-  - 停鍵層（M3 票 11e，§2.7）：`web/src/rerank.ts` 在停鍵 80 ms（青簡在 macOS 的值，`docs/research/facts-products.md`）後取 `rerankRequest` 交給模型，同時只有一個在算，算的時候又停鍵了就等它回來再取最新的；結果經 `applyRerank` 套用，過期的由核心丟掉。神經模型在 Web Worker（`rerank-worker.ts`）裡跑，和主執行緒用同一份 `qim-wasm`（`Reranker` 包 `qim-neural`），各自一個 WebAssembly 實例。模型資料包（種類 `model`）不交給 `Session`：主執行緒先建一次 `Reranker` 核對（不收就照 §4.6 退回），再把 manifest 與位元組交給 Worker；Worker 正在用哪份、載入失敗報不報由 `web/src/neural-rerank.ts` 的 `NeuralReranker` 管，換模型 A→B 時 A 晚失敗不報（M4 票 02）；沒有模型時不重排、打字與候選照常。開始、改設定、換資料包、模型載入失敗之後把重排識別交給 `Session.setRerankerId`（§2.7 停鍵結果快取）。candle 讓 WebAssembly 多 1.84 MB（gzip 多 0.40 MB）；開 SIMD128 後 Chrome 裡重排一次，9 條 × 18 字、前文 50 字 p95 27 ms，實打口語集 p50 25 ms、p95 45 ms（數字與量法在票 11e 的 Comments）。
-- debug 面板（M4 票 01，使用者 2026-11-12 要求）：工具列的「debug」開關，預設關；開著時每次重畫、給前文、改設定之後問核心 `Session::inspect`，關著時不問（每鍵不多花時間；`#debug` 的 `data-inspect-count` 是問過幾次，e2e 守它）。核心給前文的三種狀態（有前文、不知道前文、無痕不讀）、組字開頭接的前一字與前一個字詞、切段、每個候選的種類（字詞、英文、emoji、英文使用者詞、聯想）、各段的來源（碼表、詞庫、使用者詞）與有沒有學習計數、個人 bigram、萬用鍵實際對到的碼（M4 票 11），路徑分（各段照 lattice 接前一段重算，`Engine::inspect_path`）與其中的學習加分、排定它的排位規則、停鍵重排放上來的是第幾條路徑（插入或移上）、最近一個字母鍵的按鍵機率（觸控或實體鍵盤，M4 票 06、07，`Inspection::key_weights`，面板 `debug-weights`）、鄰鍵讀法換了哪幾碼與空間懲罰（M4 票 09c，`InspectedCandidate::neighbor`，面板標「鄰鍵」）；不進 `Snapshot`，`qim-ffi` 沒有。停鍵重排的要求（前文、各路徑與路徑分）、模型總分（`Reranker::rank_scored`，`路徑分 + λ·神經分`）、毫秒與結果（套用、名次沒變、作廢、沒有結果）由網頁記（`web/src/debug-panel.ts`）；候選列是否照停鍵結果快取排（`Inspection::rerank_cached`）與模型跑過幾次（`#debug` 的 `data-rerank-requests`）也在這一段（M4 票 03）。面板最高半個畫面、在裡面捲。之後的票加了新的排序原因，在 `Inspection` 與面板加一欄，測試用面板讀回原因。
-- 撤銷學習（M4 票 16，§2.4）：組字中 Shift+Delete 或 Ctrl+Delete 呼叫 `Session.forget` 清目前頁的第一個（翻頁前是首選）、存檔；沒有組字時照常交還瀏覽器。debug 面板每個候選列的 `data-learning` 是它的學習加分，e2e 讀它看清掉後歸零（`e2e/forget.spec.ts`）。
-- 使用者資料存 `localStorage`（經 `web/src/storage.ts`）；瀏覽器封鎖網站資料或存不下時，第一次出錯起寫入只留在記憶體、照樣能打字，狀態列說明學習資料與設定這次不會存（M4 票 02）。提供匯出、匯入。匯入是合併（§2.4〈跨裝置合併〉，M4 票 17）：先在複本上合併，在頁面上寫出會新增、更新、刪除幾筆、請使用者確認，不用瀏覽器原生對話框（使用者決定，M1 票 14）；載入時讀回 `localStorage` 的存檔用 `loadUserDict`（取代）。「從備份還原」是另一個鍵（`restoreUserDict`，同樣先確認），取代目前的並留清空記號；「清空學習資料」也同步到別台，兩個鍵旁各有一句說明。網頁沒有傳輸層，兩個瀏覽器設定檔的同步是各自匯出、匯入對方的檔（`e2e/sync.spec.ts`）。
-- LLM：M1 只有 `rerank_request` / `apply_rerank` 的介面，加一個延遲後原樣回傳的假實作；M3 的模型階梯沒讓雲端 LLM 過門檻、暫不做（§2.7），停鍵層改接 1.4M 神經模型（上面的「停鍵層」）。瀏覽器呼叫不了 Apple Foundation Models，端上 LLM 到平台殼才接。雲端重評後要在網頁接時（票 22 的重評條件）：API key 只放開發機環境變數、由 Vite 開發伺服器轉發（同線上更新，§4.7），不寫進瀏覽器儲存空間。
-- 驗證：Playwright。實體鍵盤用 `page.keyboard.type`，觸控用行動裝置 viewport 加 `tap`；讀回輸入框文字與候選列並截圖。
+各殼都要守的搬到 `ARCHITECTURE.md`〈平台殼〉，在手機上試的步驟搬到 `docs/development.md`〈網頁〉；網頁自己的行為由 `web/src/` 與 `web/e2e/` 說明。
 
 ### 3.2 macOS（M7）
 
-InputMethodKit，Swift，經 `qim-ffi`（uniffi）呼叫核心。使用者資料存在輸入法自己的 Application Support。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證（`AGENTS.md`〈驗收輸入行為〉）。沒有付費帳號，先用本機簽章（brief §10）。
+已搬到 roadmap〈平台里程碑（M7–M11）〉的 M7。
 
 ### 3.3 之後的平台
 
-iOS（M8）、Android（M9）、Windows（M10）、Linux（M11）各在里程碑開頭補一節：框架、安裝與註冊、怎麼接核心、怎麼實跑驗證。iOS 的硬限制見 `docs/research/facts-platforms.md`。
+已搬到 roadmap〈平台里程碑（M7–M11）〉。
 
 ## 4. 碼表與資料管線
 
