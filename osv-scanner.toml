@@ -1,5 +1,6 @@
 # osv-scanner 設定（`cargo xtask check` 的 audit 步驟用 --config 指到本檔，Cargo.lock 與 web/package-lock.json 共用）。
 # 忽略一條要寫 reason：為什麼現在不修、誰在用它。用法見 docs/development.md〈閘門〉。
+# 套件還有人維護、修正版可能會出的，加 ignoreUntil：到期後閘門再紅，回來查有沒有修正版。
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
@@ -8,3 +9,8 @@ reason = "paste 已不維護，沒有修正版；經 candle-core 的 gemm 進來
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0374"
 reason = "basic-toml 已不維護，沒有修正版；經 uniffi_bindgen 的 askama 巨集進來，只在 qim-ffi 開 bindgen feature 產生 Swift 綁定時編譯；等 uniffi 換掉它"
+
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2027-02-18
+reason = "picomatch 到 4.0.7（npm 最新）都受影響，沒有修正版；vite 8.3.8 與 8.4 beta 都直接要 ^4.0.7，overrides 換不掉。dev 依賴，經 vite 與其 tinyglobby、fdir 進來，只在開發伺服器與建置時跑，比對的 glob 是 vite 預設與我們自己寫的，不進產出的網頁；picomatch 出修正版就升級並刪掉這條，到期再查一次"
