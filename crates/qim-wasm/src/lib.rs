@@ -3,8 +3,8 @@
 use qim_core::{
     CandidateKind, CangjieVersion, ContextState, Date, Engine, Imported, IndexEntry,
     InspectedNeighbor, Inspection, Key, Manifest, ModelPack, Options, Pack, PackIndex,
-    PrecedingChar, RadicalHintPack, RadicalHints, Scheme, SegmentSource, Session, ShiftKey,
-    Shortcuts, Snapshot, Swap, UserModel, Weights, WordListReport,
+    PrecedingChar, RadicalHintPack, RadicalHints, Scheme, SegmentSource, Session, Shortcuts,
+    Snapshot, Swap, UserModel, Weights, WordListReport,
 };
 use qim_layout::{Action, Keyboard, Output, PhysicalModel, Target, Touch, When};
 use wasm_bindgen::prelude::*;
@@ -420,6 +420,20 @@ impl WebSession {
         self.session.refresh(&self.engine, &self.user).into()
     }
 
+    /// 英文模式的句首自動大寫（M4 票 24，brief〈設定與同步〉），預設關：句子開頭時快照的 `autoShift` 為真，
+    /// 觸控鍵盤自動開 Shift。不影響候選。
+    #[wasm_bindgen(js_name = setAutoCapitalize)]
+    pub fn set_auto_capitalize(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.auto_capitalize = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
+    /// 觸控鍵盤要不要自動開 Shift（`Session::auto_shift`）：給前文之後讀，聚焦空的欄位時沒有快照。
+    #[wasm_bindgen(getter, js_name = autoShift)]
+    pub fn auto_shift(&self) -> bool {
+        self.session.auto_shift()
+    }
+
     /// 數字後的 `.` `:` 用半形（M1 票 26，brief〈英文模式與欄位類型〉），預設開。只影響下一個標點，組字不必重列。
     #[wasm_bindgen(js_name = setDigitSeparators)]
     pub fn set_digit_separators(&mut self, on: bool) {
@@ -591,7 +605,8 @@ impl WebSession {
             Output::Space => self.handle(Key::Space),
             Output::Backspace => self.handle(Key::Backspace),
             Output::Enter => self.handle(Key::Enter),
-            Output::ToggleAscii => self.handle(Key::ToggleAscii(ShiftKey::Right)),
+            // 地球鍵切英文模式（ADR 0008）；實體鍵盤的單按 Shift 才是英文直通。
+            Output::ToggleAscii => self.handle(Key::ToggleEnglish),
             // 開選單只改鍵盤的畫面，對核心同切頁；網頁照 `action` 畫選單。
             Output::KeyboardMenu | Output::Modifier => self.handle(Key::Modifier),
         };
@@ -645,12 +660,15 @@ pub struct WebSnapshot {
     /// `commit` 的繁體原文；「回報」用。
     #[wasm_bindgen(readonly, js_name = commitOriginal)]
     pub commit_original: Option<String>,
-    /// 英文直通（單按 Shift 切換）；候選列旁顯示目前狀態。
+    /// 英文（英文直通、英文模式或臨時英文）；候選列旁顯示目前狀態。
     #[wasm_bindgen(readonly)]
     pub ascii: bool,
     /// 每次候選變動加一；和上次要求重排時不同，才再要求（plan〈模型分層〉）。
     #[wasm_bindgen(readonly)]
     pub generation: u64,
+    /// 觸控鍵盤要自動開 Shift（句首自動大寫，核心的 `auto_shift`，M4 票 24）；交給 [`WebLayout::set_auto_shift`]。
+    #[wasm_bindgen(readonly, js_name = autoShift)]
+    pub auto_shift: bool,
 }
 
 /// 給背景模型的重排要求（`qim_core::RerankRequest`）。JS 端叫 `RerankRequest`。
@@ -921,6 +939,7 @@ impl From<Snapshot> for WebSnapshot {
             commit_original: s.commit_original,
             ascii: s.ascii,
             generation: s.generation,
+            auto_shift: s.auto_shift,
         }
     }
 }
@@ -1181,6 +1200,13 @@ impl WebLayout {
     #[wasm_bindgen(js_name = setAscii)]
     pub fn set_ascii(&mut self, ascii: bool, composing: bool) -> bool {
         self.keyboard.set_ascii(ascii, composing)
+    }
+
+    /// 核心的句首自動大寫（`Snapshot.autoShift`）：每次拿到結果、給了前文之後就給，見
+    /// [`Keyboard::set_auto_shift`]。回傳 Shift 有沒有變，變了要重畫標籤。
+    #[wasm_bindgen(js_name = setAutoShift)]
+    pub fn set_auto_shift(&mut self, on: bool) -> bool {
+        self.keyboard.set_auto_shift(on)
     }
 
     /// 目前頁的 id；切頁鍵按下後網頁比對它決定要不要重畫。

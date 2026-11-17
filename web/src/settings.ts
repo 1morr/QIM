@@ -108,6 +108,14 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setEnglishUserWords(on),
 	},
 	{
+		// 英文模式（觸控地球鍵）在句子開頭自動開 Shift，照 Gboard；預設關（brief〈設定與同步〉，M4 票 24）。
+		kind: "checkbox",
+		id: "auto-capitalize",
+		label: "句首自動大寫",
+		checked: false,
+		apply: (session, on) => session.setAutoCapitalize(on),
+	},
+	{
 		// 容錯：觸控點一下的鄰鍵字母換進輸入碼，換出來的讀法從候選列第 2 格起插、不搶首選；實體鍵盤不換（M4 票 09c）。
 		kind: "checkbox",
 		id: "neighbor-readings",

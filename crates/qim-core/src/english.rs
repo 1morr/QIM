@@ -51,6 +51,21 @@ impl EnglishWords {
         self.find(code).map(|&(_, f)| f)
     }
 
+    /// 鍵以 `prefix`（小寫）開頭的詞與頻率，依鍵排序（英文模式的建議列，M4 票 24）。
+    pub(crate) fn starting_with<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Iterator<Item = (&'a str, u8)> + 'a {
+        let start = self
+            .words
+            .partition_point(|(w, _)| key(w).lt(prefix.chars()));
+        let n = prefix.chars().count();
+        self.words[start..]
+            .iter()
+            .take_while(move |(w, _)| key(w).take(n).eq(prefix.chars()))
+            .map(|(w, f)| (w.as_str(), *f))
+    }
+
     pub fn len(&self) -> usize {
         self.words.len()
     }

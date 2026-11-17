@@ -8,6 +8,7 @@ mod date;
 mod emoji;
 mod engine;
 mod english;
+mod english_mode;
 mod english_user;
 mod language_model;
 mod lattice;

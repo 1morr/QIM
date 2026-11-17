@@ -9,6 +9,7 @@ export type Key =
 	| { kind: "toggleAscii"; value: ShiftKey }
 	| {
 			kind:
+				| "toggleEnglish"
 				| "space"
 				| "enter"
 				| "backspace"
@@ -83,12 +84,13 @@ const MODIFIERS = new Set([
  * 吃下，否則 Cmd+V 貼進輸入框而組字還在（brief〈桌面鍵盤操作〉）。
  * 單按修飾鍵（Ctrl、Cmd、Alt、CapsLock…，事件本身也帶 `ctrlKey` 這類旗標）是 `modifier`。
  * 其他沒有對應的鍵是 `other`：組字中核心吃下，免得 Tab、Delete、方向鍵改到輸入框。
- * `inlineAscii`（臨時英文，組字中單按留碼的 Shift）時 `-` / `=` 是字元，接在英文後面。
+ * `ascii`（`Snapshot.ascii`：英文直通、英文模式與臨時英文）時 `-` / `=` 是字元：臨時英文接在英文後面，
+ * 英文模式由核心上屏，英文直通交還瀏覽器照打。
  */
 export function toKey(
 	event: KeyEvent,
 	composing = false,
-	inlineAscii = false,
+	ascii = false,
 ): Key | null {
 	if (event.isComposing) {
 		return null;
@@ -99,7 +101,7 @@ export function toKey(
 	if (event.ctrlKey || event.metaKey || event.altKey) {
 		return composing ? { kind: "other" } : null;
 	}
-	if (inlineAscii && (event.key === "-" || event.key === "=")) {
+	if (ascii && (event.key === "-" || event.key === "=")) {
 		return { kind: "punct", value: event.key };
 	}
 	if (Object.hasOwn(NAMED, event.key)) {

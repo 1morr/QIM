@@ -216,6 +216,7 @@ async function start(): Promise<void> {
 		candidateBar.setMode(snapshot.ascii);
 		// 觸控鍵盤照中英狀態換頁（地球鍵、實體鍵盤的 Shift 都一樣；臨時英文留在速成頁，M4 票 23）。
 		touchKeyboard?.setAscii(snapshot.ascii, shown.composing);
+		touchKeyboard?.setAutoShift(snapshot.autoShift);
 		candidateBar.show(
 			snapshot.candidates,
 			snapshot.candidatesOriginal,
@@ -313,6 +314,8 @@ async function start(): Promise<void> {
 			if (!shown.composing && session.allCandidates().length === 0) {
 				candidateBar.show([], [], false);
 			}
+			// 聚焦空的欄位、游標移到句子開頭：沒有快照，句首自動大寫照給了前文之後的狀態。
+			touchKeyboard?.setAutoShift(session.autoShift);
 			debugPanel.refresh();
 		},
 		saveLearning,
@@ -395,7 +398,7 @@ async function start(): Promise<void> {
 		}
 		// 中文模式整個當美式鍵盤：字母與標點照實體鍵位（M4 票 07）；英文直通與臨時英文照配列。
 		const remapped = usKeyEvent(event, shown.ascii);
-		const key = toKey(remapped.event, shown.composing, shown.inlineAscii);
+		const key = toKey(remapped.event, shown.composing, shown.ascii);
 		if (!key) {
 			// 留給瀏覽器的組合鍵（Cmd+V、Ctrl+B…）可能改字或移游標：照樣告訴核心游標前不知道是什麼了，
 			// 無痕時（不給前文）數字後半形才不會看錯（brief〈英文模式與欄位類型〉）。沒有組字時核心不吃、不動作，但也收起
