@@ -106,8 +106,8 @@ M2 票 04，2026-11-10。實驗程式、量法、指標的定義與完整輸出�
 
 - **鍵盤擴充略過 Schema 驗證。**
   - 理由：整條 `validate` 讓執行檔多 3.1 MB；驗證一次，footprint 多約 3 MB 而且不退。佈局在主 App 與編輯器存檔時已經驗過，擴充只讀。
-  - 做法：`qim-layout` 加一個 feature 關掉 `jsonschema`，只留型別與引用檢查（plan §8 那列）。現在的 `Layout::from_json` 一定會走 `validate`，擴充需要一條不經 Schema 的讀法。
-  - 依 spec，這個決定由票 09 寫回 plan §1.3、§1.4。
+  - 做法：`qim-layout` 加一個 feature 關掉 `jsonschema`，只留型別與引用檢查（`docs/roadmap.md`〈平台里程碑（M7–M11）〉的 M8）。現在的 `Layout::from_json` 一定會走 `validate`，擴充需要一條不經 Schema 的讀法。
+  - 依 spec，這個決定由票 09 寫回 `ARCHITECTURE.md`〈依賴規則〉〈主要依賴〉。
 - **最可能要改格式的是詞庫，其次是字根提示。**
   - 詞庫：改成 mmap 友善的格式，例如用 `fst` 存碼、詞放成一整塊字串加位移索引。常駐量會接近檔案大小（約 5 MB），而且是乾淨的檔案映射頁，推論不算 footprint。
   - 字根提示：只給殼顯示用。可以同樣改格式，或在擴充裡等使用者打開字根提示才載入。
@@ -135,11 +135,11 @@ M2 票 10，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keybo
 - **連續請求約 190 ms。** 同一串裡緊接著的請求 15 次都在 185–194 ms（中位數 189 ms）。
 - **停頓後的第一個請求不穩：** 12 次裡 8 次在 0.29–0.87 s，4 次要 6–15 s（6.1、9.1、11.0、15.5 s）。慢的那幾次跟閒置長短（2–40 s）沒有明顯關係，送出前 1 秒呼叫 `prewarm()` 也擋不住（40 s 那次 prewarm 後仍 11.0 s）。原因沒查出來，見〈限制〉。
 - **擴充自己的記憶體漲得少。** 程序 11622 從 `viewDidAppear` 到按 FM 前 +2.6 MB（查可用性、載入框架，中間 iphone-use 也讓畫面重建過），每輪 6 個請求再 +0.8–1.2 MB，三輪共 10.27 → 15.31 MB；漲幅裡有多少來自畫面重建分不出來。推論模型不在擴充的程序裡跑（官方沒寫）。對 177 MB 的上限（上一節）可以忽略。
-- 對 QIM：停鍵層（plan §2.7）在 iOS 可以用 Foundation Models 重排，連續請求的延遲夠用；但停頓後第一個請求可能等十幾秒，重排結果一定要能晚到、晚到時丟掉（只認目前的 `generation`，ADR 0005）。
+- 對 QIM：停鍵層（ADR 0005）在 iOS 可以用 Foundation Models 重排，連續請求的延遲夠用；但停頓後第一個請求可能等十幾秒，重排結果一定要能晚到、晚到時丟掉（只認目前的 `generation`，ADR 0005）。
 
 ### 量法
 
-擴充上的「FM」鍵每按一次依序送 6 個請求；「間隔」鍵在同一個程序裡隔 0、2、5、10、20、40 秒各送 1 個，再隔 10、20、40 秒各送 1 個「先 `prewarm()`、等 1 秒才送」的請求。每個請求都新開 `LanguageModelSession`（同 IME 每次停鍵送一個獨立請求），提示照 plan §7.8：上下文、輸入碼 `anr`、前 10 個候選，要求只回序號，正解是 3（門口）；`GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 4)`。延遲是 `respond(to:options:)` 前後的 `ContinuousClock` 差，不含建立 session。記憶體同上一節的 `phys_footprint`。
+擴充上的「FM」鍵每按一次依序送 6 個請求；「間隔」鍵在同一個程序裡隔 0、2、5、10、20、40 秒各送 1 個，再隔 10、20、40 秒各送 1 個「先 `prewarm()`、等 1 秒才送」的請求。每個請求都新開 `LanguageModelSession`（同 IME 每次停鍵送一個獨立請求），提示照 `.scratch/m3/spec.md`〈模型階梯實驗〉：上下文、輸入碼 `anr`、前 10 個候選，要求只回序號，正解是 3（門口）；`GenerationOptions(samplingMode: .greedy, maximumResponseTokens: 4)`。延遲是 `respond(to:options:)` 前後的 `ContinuousClock` 差，不含建立 session。記憶體同上一節的 `phys_footprint`。
 
 ### 結果
 
@@ -165,7 +165,7 @@ M2 票 10，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keybo
 - 只有一台旗艦機、一個 iOS 版本；Core Advanced 只在 iPhone 18 Pro 系列與 iPhone Duo，其他支援的機型跑 Core 變體，延遲可能不同。
 - 量不到「系統第一次把模型載入記憶體」：程序 11622 之前別的程序已經用過模型，655 ms 只代表這個擴充程序的第一次。
 - iphone-use 每次點擊或截圖，鍵盤的 view controller 都會重建（同一個程序，`viewDidLoad` 再跑一次）；「間隔」那輪中途鍵盤還被收起一次（10 s 那格可能受影響）。慢的請求是不是因為擴充在那一刻被系統當成背景，沒辦法從這裡分辨。產品要再量時，改用手指操作並在 Console.app 看 `qim.exp` 的 log。
-- 只試了一種提示、一種輸出長度（序號）；正確率留給 M3 模型階梯（plan §7.8）。
+- 只試了一種提示、一種輸出長度（序號）；正確率留給 M3 模型階梯（`.scratch/m3/spec.md`〈模型階梯實驗〉）。
 
 ### 官方說法（2026-11-10 查）
 
@@ -189,7 +189,7 @@ M2 票 10，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keybo
 - **Safari（網頁的 `<textarea>`）：句中只有游標所在句，最多 100 字。** 句中只給本句（39 字），句首或文末給前一句（49–50 字）；段首例外，給 35 字、從上一句中間切；長段裡前後各 100 字。
 - **剛 `insertText` 之後讀到的是暫時的值。** 備忘錄文末插入 3000 字後立刻讀是 499 字，游標移開再移回就變回 300 字。量長度時要先讓宿主同步（移一下游標或等 `textDidChange`）。
 - 空白文件的 `before`、`after` 與文末的 `after` 都是 `nil`，沒有遇到空字串。全部測試文字都在 BMP，字數與 UTF-16 長度相同。
-- 對 QIM：brief §8 的「游標前最多 200 字」在 iOS 可能常拿不到。每句 50 字的測試文字只讀到一兩句，Safari 最多 100 字，備忘錄只有長句才到 300；真實文字的句長不同，這是推論。plan §7.8 量「上下文 200 字」的結果在 iOS 上只對沒標點的長句有意義；iOS 要更多上下文得自己記住這次編輯裡上屏過的字，是否值得留給 M3 決定。
+- 對 QIM：brief §8 的「游標前最多 200 字」在 iOS 可能常拿不到。每句 50 字的測試文字只讀到一兩句，Safari 最多 100 字，備忘錄只有長句才到 300；真實文字的句長不同，這是推論。`.scratch/m3/spec.md`〈模型階梯實驗〉量「上下文 200 字」的結果在 iOS 上只對沒標點的長句有意義；iOS 要更多上下文得自己記住這次編輯裡上屏過的字，是否值得留給 M3 決定。
 
 ### 量法
 
@@ -392,10 +392,10 @@ M2 票 11，2026-11-10。量測程式、模型形狀、量法與完整結果：`
 - **iOS 會還回釋放的大塊配置，macOS 不會。** iPhone 上推論的暫存跑完就退出 footprint，模型丟掉後 footprint 回到開始時的水準；Mac 上停在峰值。上限看的是峰值，所以 iPhone 的數字以 `ledger_phys_footprint_peak` 為準。
 - 對 QIM：
   - 停鍵層在 iOS 可以用 1.4M 級的模型，成本幾乎是零。
-  - 23M 級只能用 q8；票 09 據此把 M3 模型的峰值增量上限定為 ≤ 60 MB、資料包格式不改（plan §7.8、§8）。
-  - 兩種都還沒有正確率數字，值不值得留給 M3 模型階梯（plan §7.8）。
-  - 依 plan §8，放不進才寫回 brief §1.5；23M q8 在這台放得進，所以不改 brief §1.5。
-  - M3 實作停鍵層的神經模型時要做前綴快取，否則延遲會是這裡的 3–5 倍（plan §7.8）。
+  - 23M 級只能用 q8；票 09 據此把 M3 模型的峰值增量上限定為 ≤ 60 MB、資料包格式不改（`.scratch/m3/spec.md`〈模型階梯實驗〉、`ARCHITECTURE.md`〈風險與回寫點〉）。
+  - 兩種都還沒有正確率數字，值不值得留給 M3 模型階梯（`.scratch/m3/spec.md`〈模型階梯實驗〉）。
+  - 依 `ARCHITECTURE.md`〈風險與回寫點〉，放不進才寫回 brief §1.5；23M q8 在這台放得進，所以不改 brief §1.5。
+  - M3 實作停鍵層的神經模型時要做前綴快取，否則延遲會是這裡的 3–5 倍（`.scratch/m3/spec.md`〈模型階梯實驗〉）。
   - 6 條 × 8 字是近似。M3 票 07 定了 N = 9 條、路徑長度口語 p50 7 字、p95 18 字，在 Mac 上交替重量後照倍數推估 iPhone：23M q8 上下文 200 字、9 × 18 字 p95 約 105–110 ms（超過 80 ms 的防抖），峰值增量約 62 MB（貼近或超過 60 MB 的上限）；9 × 7 字約 60 ms；1.4M q8 約 18 ms。量時 Mac 很忙，只看倍數；票 09 在 iPhone 重量。`scripts/experiments/model-ladder/README.md`〈N 與路徑長度〉。
   - M3 票 09 在同一台 iPhone（iOS 27.2，Debug 擴充、Rust release、2 條執行緒、沒有完整取用）實量 9 條 × 18 字，每個模型一個新程序（2026-11-11）：23M q8 上下文 0／50／200 字 p95 30.8／43.4／84.2 ms，峰值增量 +75.39 MB；第二個程序 31.0／44.8／84.3 ms、+74.44 MB。比票 07 推估的延遲低（84 對 105–110 ms），峰值比推估高（+75 對 +62 MB），超過 M3 的 60 MB 上限，也超過 80 ms。1.4M q8 是 6.6／7.7／10.7 ms、+2.03 MB。23M q8 的峰值比 6 × 8（+46.9 MB）多約 28 MB，推測是候選那一輪把前綴的 K、V 與注意力暫存展開成每條路徑一份（沒查配置點）。`scripts/experiments/neural-rerank/README.md`〈成本〉，截圖 `.scratch/m3/evidence/09-iphone-{G8-9x18,G8-9x18-run2,L8-9x18}.png`。
 
@@ -460,7 +460,7 @@ nc-after footprint=13.63MB available=163.4MB wall=2.7s
 - Mac 的數字會隨負載飄：code-review 時在機器較忙時重跑，23M 的峰值高了 3–10 MB、延遲也較高（`scripts/experiments/neural-cost/README.md`〈上次結果〉）。iPhone 一次樣本的記憶體也可能有同樣幅度的差，合計的數字（例如 23M f32 離上限約 3 MB）要看成大約的數。
 - 權重是隨機的、形狀有近似，正確率與真正的青簡、Gboard 模型無關；開銷只看形狀。
 - 只試了 candle 的 CPU 後端：沒試 `accelerate`、`metal` feature，也沒試 Core ML。青簡在 M1 Mac 上量過 Metal 比 Accelerate 快一倍、Accelerate 比 gemm 快一倍（青簡 `docs/notes/neural-rescoring.md`）。鍵盤擴充能不能用 Metal 沒查。
-- 候選路徑固定 6 條、每條 8 字；8 字是自訂的近似（plan §7.8 沒定路徑長度），真實的路徑長短不一，延遲大致隨字數增加。
+- 候選路徑固定 6 條、每條 8 字；8 字是自訂的近似（`.scratch/m3/spec.md`〈模型階梯實驗〉沒定路徑長度），真實的路徑長短不一，延遲大致隨字數增加。
 - 擴充是 Debug 組態（Swift 部分），數字都在 Rust 的 release 靜態庫裡，Swift 的組態不影響推論；擴充的基線與票 06 同為 Debug。
 - 量測時擴充的畫面被 iphone-use 重建過幾次，開始時的 footprint（12.6–12.8 MB）比 `viewDidAppear`（約 10.9 MB）高；表上都是對開始時的增量。
 
@@ -506,11 +506,11 @@ M2 票 09，2026-11-10。實驗程式在 `scripts/experiments/ios-keyboard/Keybo
 
 模型的峰值是在沒載入核心的程序裡量的，同一個程序時 malloc 可能互相重用頁，實際合計可能稍低，不會更高。
 
-### 決定（寫回 plan）
+### 決定（當時寫回計劃書）
 
-- **M3 模型上限：iOS 鍵盤擴充裡，模型的 footprint 峰值增量 ≤ 60 MB。** 理由是核心加資料包加模型要在記憶體警告線（約 142 MB）以下，不靠警告後釋放來保命。23M 級只能用 q8（+47 MB），f32 不行。寫進 plan §7.8。
-- **資料包格式不改。** 核心加資料包用了上限的 45%，放進 23M q8 後還在警告線下。mmap 友善的格式（詞庫優先，見〈Mac 上的資料包記憶體〉〈建議〉）留到低階機的上限量出來、放不下時再做（plan §4、§8）。票 04 的兩項「不改格式也能壓低峰值」不另開票：iOS 的 malloc 重用釋放的頁，`Engine::new` 的暫存在 iPhone 上只有 +0.1–0.3 MB，讀檔緩衝區也沒有留在 footprint 裡（〈鍵盤擴充接上核心〉）。
-- **鍵盤擴充略過 Schema 驗證。** 佈局在主 App 與編輯器存檔時已驗過，擴充只讀。驗證讓執行檔多 3.1 MB、footprint 多約 3 MB（Mac），佔掉警告線前餘裕的 5%，但沒有保護作用。`qim-layout` 的 `jsonschema` 改成 feature，鍵盤擴充用不驗證 Schema、只做型別與引用檢查的讀法。實作留給 M8（iOS 殼要讀佈局時，`qim-ffi` 同時加佈局介面）。寫回 plan §1.3、§1.4、§8。
+- **M3 模型上限：iOS 鍵盤擴充裡，模型的 footprint 峰值增量 ≤ 60 MB。** 理由是核心加資料包加模型要在記憶體警告線（約 142 MB）以下，不靠警告後釋放來保命。23M 級只能用 q8（+47 MB），f32 不行。寫進 `.scratch/m3/spec.md`〈模型階梯實驗〉。
+- **資料包格式不改。** 核心加資料包用了上限的 45%，放進 23M q8 後還在警告線下。mmap 友善的格式（詞庫優先，見〈Mac 上的資料包記憶體〉〈建議〉）留到低階機的上限量出來、放不下時再做（`ARCHITECTURE.md`〈資料包〉〈風險與回寫點〉）。票 04 的兩項「不改格式也能壓低峰值」不另開票：iOS 的 malloc 重用釋放的頁，`Engine::new` 的暫存在 iPhone 上只有 +0.1–0.3 MB，讀檔緩衝區也沒有留在 footprint 裡（〈鍵盤擴充接上核心〉）。
+- **鍵盤擴充略過 Schema 驗證。** 佈局在主 App 與編輯器存檔時已驗過，擴充只讀。驗證讓執行檔多 3.1 MB、footprint 多約 3 MB（Mac），佔掉警告線前餘裕的 5%，但沒有保護作用。`qim-layout` 的 `jsonschema` 改成 feature，鍵盤擴充用不驗證 Schema、只做型別與引用檢查的讀法。實作留給 M8（iOS 殼要讀佈局時，`qim-ffi` 同時加佈局介面）。寫回 `ARCHITECTURE.md`〈依賴規則〉〈主要依賴〉〈風險與回寫點〉。
 
 ### 原始輸出摘要
 

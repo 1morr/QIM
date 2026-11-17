@@ -1,6 +1,6 @@
 # 規則 4 的英文候選出現幾題
 
-回答的問題（M4 票 22）：英文資料包從 ESDB 的 `scowl-en-us`（85,959 詞）換成 AOSP LatinIME 的 `aosp-en-us`，詞多了，中文狀態第 2 位被英文候選（plan §2.4 規則 4）搶走的題會不會變多？`cargo xtask bench --check` 只看首選與修正次數，看不到這個數。
+回答的問題（M4 票 22）：英文資料包從 ESDB 的 `scowl-en-us`（85,959 詞）換成 AOSP LatinIME 的 `aosp-en-us`，詞多了，中文狀態第 2 位被英文候選（`ARCHITECTURE.md`〈候選的排位順序〉 規則 4）搶走的題會不會變多？`cargo xtask bench --check` 只看首選與修正次數，看不到這個數。
 
 ## 跑法
 

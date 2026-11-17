@@ -1,6 +1,6 @@
 import { devices, expect, type Page, test } from "@playwright/test";
 
-// 上下文（M3 票 05，plan〈介面〉）：網頁把輸入框游標前的文字交給核心，候選照前文排；數字後半形看
+// 上下文（M3 票 05，architecture〈核心對殼〉）：網頁把輸入框游標前的文字交給核心，候選照前文排；數字後半形看
 // 前文；無痕時不給（brief〈隱私與安全〉）。輸入框是空的或游標在開頭時前文是空字串，接句首。
 
 async function ready(page: Page) {

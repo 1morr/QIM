@@ -1,4 +1,4 @@
-// 裝置 id（plan〈學習與排位〉）：匯出檔頭帶著它，跨裝置合併靠它分各台的次數。
+// 裝置 id：匯出檔頭帶著它，跨裝置合併靠它分各台的次數。
 
 /** 產生裝置 id 用到的 `crypto`：`randomUUID` 只在安全環境（HTTPS、localhost）才有，區網 http 沒有。 */
 export interface DeviceIdCrypto {

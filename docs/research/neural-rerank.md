@@ -38,7 +38,7 @@ repo 裡**沒有訓練程式碼**。證據：
 已知的訓練相關資訊：
 
 - 評測集與通变訓練語料不重疊，不是記憶效應（`neural-rescoring.md:159`）。
-- 通变要按當前詞庫重標拼音重訓：舊詞庫沒有 嗯／诶／囧，字表就沒有，帶這些字的路徑整批不進重排（Q `docs/plan/todo.md:83`）。
+- 通变要按當前詞庫重標拼音重訓：舊詞庫沒有 嗯／诶／囧，字表就沒有，帶這些字的路徑整批不進重排（Q `docs/` 下的 `plan/todo.md:83`）。
 - 個人微調（LoRA 掛在凍結基模上）列為待辦，先在 train 倉庫驗證（`todo.md:81`）。
 
 ### 1.3 重排幾條、什麼不進
@@ -81,12 +81,12 @@ repo 裡**沒有訓練程式碼**。證據：
 
 - 工具：`--eval-text`、`--replay`、`--eval-cold`、`--eval-details`（逐句 JSONL，可配對比較）（`crate-notes.md:383-388`、`neural-rescoring.md:164`）。
 - 整句集 `sentences.tsv` 8322 句：取使用者自己寫的中文（本倉庫 `docs/` 加個人技術筆記），按標點切成 3–20 字小句，按詞庫讀音轉成無分隔全拼，冷啟動餵引擎，看整句首選是否等於原句；前文 = 同段前面真實文本末 64 字。不上屏、不學習（`neural-rescoring.md:42-44`）。這個集偏技術行話：基線整體 37.6%，`docs/` 部分 27.8%、個人筆記 46.5%（`:60-62`）。
-- 回放日誌 4867 條：詞首選與整句首選分開報；日誌裡「選了」的整句多半是當時按空白接受的基線輸出，基線天然占便宜，**不能量整句**。逐條對賬：變差 43、變好 45，變差裡一大批是模型對、日誌錯（`neural-rescoring.md:32-38`；`docs/plan/model-eval.md:67-69`）。
+- 回放日誌 4867 條：詞首選與整句首選分開報；日誌裡「選了」的整句多半是當時按空白接受的基線輸出，基線天然占便宜，**不能量整句**。逐條對賬：變差 43、變好 45，變差裡一大批是模型對、日誌錯（`neural-rescoring.md:32-38`；`docs/` 下的 `plan/model-eval.md:67-69`）。
 - 指標：整句首選、前三／前五、字準確率、查詢平均／最慢 ms；配對比較報翻好／翻壞（λ 0.5 前文 64：翻好 382、翻壞 54）與 McNemar（χ² = 81.1）；同一批句子上生成對重排互補（只有生成對 16.5%、只有重排對 6.9%）（`neural-rescoring.md:46-70,150`）。
 - 冷啟動字詞：`--eval-cold <樣本.jsonl>` 強制預設設定與記憶體學習器，不給上文、不上屏，解析失敗也算分母；樣本欄位 `id/text/keys/source/category`（`crate-notes.md:383-386`）。
 - 子集：2081 句 = 全集每 4 句取 1（`neural-rescoring.md:126`）。
 - 開發集（devA、devC、social、項目文件、新聞）：來源與句數查不到（`data/` 不入庫）。
-- 作者設的規則：每個模型假設先寫指標與基線，基線算不出來的不立項；改完在**同一份凍結日誌**上比；P2C 準確率贏但延遲不達標一樣不立項（`docs/plan/model-eval.md:4,12`）。延遲門檻：整句重解碼 Metal < 100 ms、CPU < 150 ms，每鍵增量 < 10 ms，載入 < 500 ms（`model-eval.md:54-58`）。延遲只在目標設備量，租的卡量不了（`model-eval.md:51`）。
+- 作者設的規則：每個模型假設先寫指標與基線，基線算不出來的不立項；改完在**同一份凍結日誌**上比；P2C 準確率贏但延遲不達標一樣不立項（`docs/` 下的 `plan/model-eval.md:4,12`）。延遲門檻：整句重解碼 Metal < 100 ms、CPU < 150 ms，每鍵增量 < 10 ms，載入 < 500 ms（`model-eval.md:54-58`）。延遲只在目標設備量，租的卡量不了（`model-eval.md:51`）。
 
 ### 1.7 作者記下的坑與失敗的嘗試
 
@@ -232,7 +232,7 @@ HEAD 已有自己的解碼器 CyLM（`app/src/main/jni/cylm/cylm.cpp`，1618 行
 
 ## 4. 未查證
 
-- 青簡訓練：步數、batch、學習率、硬體、時間、通变與知意的參數量、知意的訓練語料與步數。查過 `crates/`、`tools/`（無 `lm-train`、無 `training`、`scripts`）、`docs/notes/`、`docs/plan/`、`CHANGELOG.md`、`git log --all -- tools/lm-train`、`git log -S"lm-train"`，並 grep 過 `epoch`、`batch`、`学习率`、`LoRA`、`A100`、`4090`；只在 `71e1c577` 的提交說明找到「遷出到 train 仓库」。
+- 青簡訓練：步數、batch、學習率、硬體、時間、通变與知意的參數量、知意的訓練語料與步數。查過 `crates/`、`tools/`（無 `lm-train`、無 `training`、`scripts`）、`docs/notes/`、`docs/` 下的 `plan/`、`CHANGELOG.md`、`git log --all -- tools/lm-train`、`git log -S"lm-train"`，並 grep 過 `epoch`、`batch`、`学习率`、`LoRA`、`A100`、`4090`；只在 `71e1c577` 的提交說明找到「遷出到 train 仓库」。
 - 青簡：`data/eval/` 與各開發集的樣本與句數（`data/` 不入庫）；知意與通变在同一個集合上的直接對照；檢查點編號的意義。
 - CyIME：`docs/CYLM_PHONE_DESIGN.md`、`docs/CYLM_TYPO.md`、`tools/cylm/`（程式碼註解引用，repo 無）；CyLM 各檔位（`cy1-p1e-7`、`cy1-p4e-7`）的大小與正確率；字級 reranker（`rs`）的層數與參數量，只知是 int8 ONNX；`D:/CyIME-Data`、`.codex-artifacts` 下的原始結果（不公開）。
 - CyIME：2026-10-31 之後 `docs/development/` 的新內容（HEAD 沒有）；以及兩個專案有沒有「修正次數」類指標（只找到首選命中、前 N、加權分，沒找到按鍵數／修正次數的定義）。

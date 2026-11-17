@@ -1,4 +1,4 @@
-//! 預設 Gboard 速成佈局：由按鍵排列算出畫布上每個鍵的位置（plan〈佈局：畫布模型〉、ADR 0004）。
+//! 預設 Gboard 速成佈局：由按鍵排列算出畫布上每個鍵的位置（architecture〈佈局格式〉、ADR 0004）。
 //!
 //! 排列以「鍵寬」為單位，一排十個鍵寬；每個鍵占一格，四周留縫，點在縫上由點擊判定取最近的鍵。
 //! 手機直向與橫向兩個佈局版本用同一份排列，只有畫布、排高與縫不同；數字列打開時是另一份佈局
@@ -45,7 +45,7 @@ struct Geometry {
     radius: f64,
 }
 
-/// 直向：畫布寬是 iPhone 直向的點數寬（plan〈佈局：畫布模型〉 的例子）；其餘照 Gboard 在 411 dp 寬的實測
+/// 直向：畫布寬是 iPhone 直向的點數寬；其餘照 Gboard 在 411 dp 寬的實測
 /// 等比例縮成 390（排距 58.9 dp、鍵距 40.8 dp、縫 5.3 × 11.8 dp、左右多留 2 dp、圓角 6 dp）。
 const PORTRAIT: Geometry = Geometry {
     orientation: Orientation::Portrait,

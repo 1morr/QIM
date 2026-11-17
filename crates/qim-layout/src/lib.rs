@@ -1,5 +1,5 @@
 //! 佈局：畫布模型的資料格式 `qim-layout/1`、JSON Schema 與兩級驗證、點擊判定、觸控空間模型與實體鍵盤的鄰鍵先驗
-//!（plan〈佈局：畫布模型〉、ADR 0004）。
+//!（architecture〈佈局格式〉、ADR 0004）。
 //!
 //! 純邏輯，不做 I/O；依賴規則見 architecture〈依賴規則〉。
 

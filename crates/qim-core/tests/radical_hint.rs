@@ -1,4 +1,4 @@
-//! 字根提示（plan〈輸入方案〉 `radical_hint`、〈速成碼表〉 步驟 5）：字 → 倉頡三代 / 五代碼，只給提示，不進 lattice。
+//! 字根提示（`radical_hint`，`crates/qim-core/src/scheme.rs`）：字 → 倉頡三代 / 五代碼，只給提示，不進 lattice。
 
 use std::collections::BTreeMap;
 
@@ -115,7 +115,7 @@ fn other_packs_are_not_radical_hint_packs() {
     );
 }
 
-/// 方案指名的是預設的字根提示資料包，可以換成另一份（plan〈資料包 manifest〉）；方案沒指名時不給提示。
+/// 方案指名的是預設的字根提示資料包，可以換成另一份（architecture〈資料包〉）；方案沒指名時不給提示。
 #[test]
 fn hints_are_only_given_to_a_scheme_that_wants_them() {
     assert_eq!(

@@ -1,4 +1,4 @@
-//! 上下文（plan〈介面〉〈排序：同一把尺〉）：組字開頭的字接前一個字的 bigram。前一個字是選定的分段的最後一字，
+//! 上下文（architecture〈核心對殼〉〈候選的排位順序〉）：組字開頭的字接前一個字的 bigram。前一個字是選定的分段的最後一字，
 //! 沒有選定的分段時看 `Session::set_context` 給的前文：以字結尾時是那個字，以標點、空白結尾
 //! 或是空的時是句首（[`CLAUSE_START`]）；沒給前文與無痕（brief〈隱私與安全〉）時照舊用 unigram。
 
@@ -131,7 +131,7 @@ fn incognito_ignores_the_context() {
     assert_eq!(top_after(Some("今天"), incognito, "a"), "甲");
 }
 
-/// 選了開頭一段後，剩下輸入碼的第一個字接選定分段的最後一字（plan〈排序：同一把尺〉），不再用 unigram。
+/// 選了開頭一段後，剩下輸入碼的第一個字接選定分段的最後一字（architecture〈候選的排位順序〉），不再用 unigram。
 #[test]
 fn after_selecting_a_leading_segment_the_rest_follows_its_last_character() {
     let engine = engine();
@@ -160,7 +160,7 @@ fn context_set_while_composing_is_used_by_the_next_composition() {
     assert_eq!(snapshot.candidates[0].text, "乙");
 }
 
-/// 殼沒給前文時，核心自己上屏的字就是前文（同 librime 的 commit history，plan〈介面〉）。
+/// 殼沒給前文時，核心自己上屏的字就是前文（同 librime 的 commit history，architecture〈核心對殼〉）。
 #[test]
 fn without_context_from_the_host_the_next_composition_follows_the_last_commit() {
     let engine = engine();
@@ -341,7 +341,7 @@ fn top_with_simplifier(before: &str, options: Options, input: &str) -> String {
 }
 
 /// 簡體模式下殼給的前文是簡體字，語言模型是繁體：最後一字轉回繁體再接 bigram（同停鍵層的
-/// 前文，plan〈模型分層〉），首選和繁體模式下對應的繁體前文相同。一對多的取 unigram 最高的（干 → 乾）。
+/// 前文，ADR 0005），首選和繁體模式下對應的繁體前文相同。一對多的取 unigram 最高的（干 → 乾）。
 #[test]
 fn simplified_context_is_turned_back_into_traditional() {
     assert_eq!(top_with_simplifier("後", Options::default(), "a"), "乙");

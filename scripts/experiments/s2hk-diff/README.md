@@ -1,6 +1,6 @@
 # s2hk 換掉了哪些字
 
-回答的問題（M1 票 17b）：語料前處理的 OpenCC `s2hk` 在四份語料裡把哪些字換成別的字，各幾次。結論寫在票 17b 的 Comments 與 plan §4.3。
+回答的問題（M1 票 17b）：語料前處理的 OpenCC `s2hk` 在四份語料裡把哪些字換成別的字，各幾次。結論寫在票 17b 的 Comments 與 `docs/research/lexicon-and-model-tuning.md`。
 
 ## 跑法
 

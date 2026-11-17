@@ -1,4 +1,4 @@
-//! 由倉頡碼推導速成碼表（plan〈速成碼表〉 步驟 1–4、ADR 0003）。
+//! 由倉頡碼推導速成碼表（ADR 0003）。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -29,7 +29,7 @@ struct Character {
 ///
 /// 每個速成碼的字序：連打字集在前、擴展區在後；同一區內有年級的字依年級排在前面，
 /// 其餘與同年級的字依排序值，排序值為 0 的排在後面，最後依碼位，讓結果不受來源列序影響。
-/// M1 的字頻接在年級之前（plan〈速成碼表〉）。
+/// M1 的字頻接在年級之前。
 pub fn code_table(
     rows: &[Row],
     grades: &BTreeMap<char, u8>,

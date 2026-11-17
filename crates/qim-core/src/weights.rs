@@ -1,4 +1,4 @@
-//! 觸控一下的各字母機率（`Key::Weighted`，plan〈介面〉，M4 票 06）。
+//! 觸控一下的各字母機率（`Key::Weighted`，architecture〈核心對殼〉，M4 票 06）。
 //!
 //! 機率由殼經 `qim-layout` 依點擊位置與按鍵幾何算出，核心不知道佈局（architecture〈依賴規則〉）。
 

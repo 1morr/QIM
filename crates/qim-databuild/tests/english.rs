@@ -35,8 +35,7 @@ fn each_word_line_becomes_a_word_with_its_frequency_and_bigrams_are_skipped() {
     assert_eq!(counts.words, 2);
 }
 
-/// 英文模式也用這份詞表（ADR 0008），`z` 開頭、撇號、連字號的詞都收；`z` 只在中文組字比對時濾掉
-/// （plan〈英文、簡繁與 emoji〉）。
+/// 英文模式也用這份詞表（ADR 0008），`z` 開頭、撇號、連字號的詞都收；`z` 只在中文組字比對時濾掉。
 #[test]
 fn words_with_z_apostrophes_and_hyphens_are_kept() {
     let (words, _) = build(&[

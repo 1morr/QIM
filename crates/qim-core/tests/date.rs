@@ -1,4 +1,4 @@
-//! 今天的日期（architecture〈依賴規則〉、plan〈學習與排位〉）：殼交給核心，核心不讀系統時間；學習資料的匯出寫成 `YYYY-MM-DD`。
+//! 今天的日期（architecture〈依賴規則〉〈核心對殼〉）：殼交給核心，核心不讀系統時間；學習資料的匯出寫成 `YYYY-MM-DD`。
 
 use qim_core::Date;
 

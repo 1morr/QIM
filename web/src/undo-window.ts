@@ -1,4 +1,4 @@
-// 退格撤銷的時限（plan〈學習與排位〉〈退格撤銷〉）：核心不讀時間，殼計時。照 librime 的 3 秒
+// 退格撤銷的時限（architecture〈核心對殼〉）：核心不讀時間，殼計時。照 librime 的 3 秒
 // （`UserDictionary::RevertRecentTransaction`，`docs/research/facts-rime.md`）：核心可能學到東西之後（上屏、交還瀏覽器的
 // 空白與標點讓英文串打完）重新計時，3 秒到了叫核心讓撤銷紀錄失效（`Session.expireUndo`），之後的退格只刪字。
 

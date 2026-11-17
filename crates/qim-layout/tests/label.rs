@@ -1,4 +1,4 @@
-//! 按鍵標籤與動作（plan〈佈局：畫布模型〉）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母；
+//! 按鍵標籤與動作（architecture〈佈局格式〉）：有寫 `label` 就固定顯示；省略時字母鍵用方案的字根，沒有字根用字母；
 //! 組字中改用 `composing` 寫的標籤與動作。
 
 use qim_layout::{Action, KeyState, Layout};

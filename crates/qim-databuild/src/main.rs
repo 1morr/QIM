@@ -1,8 +1,8 @@
 //! `qim-databuild [--verify]`：在 repo 根目錄建資料包；平常由 `cargo xtask data` 呼叫。
 //! `qim-databuild --pack-release [--previous <index.json>]`：把建好的資料包整理成線上更新的 release
-//! 目錄（plan〈線上更新〉）；平常由 `cargo xtask pack-release` 呼叫。
+//! 目錄（`docs/development.md`〈線上更新的 release〉）；平常由 `cargo xtask pack-release` 呼叫。
 //! `qim-databuild --neural-import <訓練目錄> --lambda <λ>`：把 `train.py` 訓練好的停鍵層模型匯入
-//! `data/neural-rerank/`（plan〈模型分層〉）；平常由 `cargo xtask neural-import` 呼叫。
+//! `data/neural-rerank/`（ADR 0005）；平常由 `cargo xtask neural-import` 呼叫。
 
 use std::path::Path;
 use std::process::ExitCode;

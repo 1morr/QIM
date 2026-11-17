@@ -1,4 +1,4 @@
-//! 預設 Gboard 速成佈局（plan〈佈局：畫布模型〉）：由排列算出，經 `qim-layout` 讀回與點擊。
+//! 預設 Gboard 速成佈局（architecture〈佈局格式〉）：由排列算出，經 `qim-layout` 讀回與點擊。
 
 use qim_databuild::gboard;
 use qim_layout::{
@@ -368,7 +368,7 @@ fn tapping_the_gap_between_two_keys_hits_one_of_them() {
     assert_eq!(hit, Some("a"));
 }
 
-/// 標籤是符號的刪除、Enter 給文字的無障礙標籤，讀屏不會唸「⌫」「↵」（plan〈佈局：畫布模型〉，M1 票 24）。
+/// 標籤是符號的刪除、Enter 給文字的無障礙標籤，讀屏不會唸「⌫」「↵」（architecture〈佈局格式〉，M1 票 24）。
 #[test]
 fn glyph_labelled_edit_keys_have_spoken_accessibility_labels_on_every_page() {
     for variant in &layout().variants {

@@ -1,4 +1,4 @@
-//! 學習與排位（plan〈學習與排位〉、brief〈學習與排位〉）經公開介面的行為：上屏的字詞記進 `UserModel`，
+//! 學習與排位（brief〈學習與排位〉）經公開介面的行為：上屏的字詞記進 `UserModel`，
 //! 之後的候選依它前移。
 
 mod common;
@@ -318,7 +318,7 @@ fn ri_yue() -> Data<'static> {
     }
 }
 
-/// 規則 2 只算整串輸入碼就是那個碼的上屏（使用者決定，plan〈學習與排位〉）：連打句中用過的段只進
+/// 規則 2 只算整串輸入碼就是那個碼的上屏（使用者決定，architecture〈候選的排位順序〉）：連打句中用過的段只進
 /// `personal`。
 #[test]
 fn a_character_used_in_sentences_does_not_count_towards_the_twice_chosen_rule() {
@@ -364,7 +364,7 @@ fn yi_toi() -> Data<'static> {
     }
 }
 
-/// 自動造詞（plan〈學習與排位〉、brief〈學習與排位〉）：分段選字上屏後學成使用者詞，下次排第 2，再選一次成首選。
+/// 自動造詞（brief〈學習與排位〉）：分段選字上屏後學成使用者詞，下次排第 2，再選一次成首選。
 #[test]
 fn choosing_segment_by_segment_learns_a_word_that_is_second_then_top_after_one_more_choice() {
     let mut ime = Ime::new(&yi_toi());
@@ -589,7 +589,7 @@ fn a_trigger_on_top_leaves_the_once_committed_candidate_where_it_was() {
     );
 }
 
-/// 規則 1 已把觸發詞釘在首選時，選兩次的候選照「至少首選」的放法退到第 2 位（plan〈學習與排位〉 的
+/// 規則 1 已把觸發詞釘在首選時，選兩次的候選照「至少首選」的放法退到第 2 位（architecture〈候選的排位順序〉 的
 /// 「那些位置都排定了才移到最前面的空位」）：本來排第 3 的「丙」排到「甲」前面。
 #[test]
 fn a_trigger_on_top_puts_the_twice_chosen_candidate_second() {
@@ -659,7 +659,7 @@ fn changing_a_later_segment_before_committing_also_learns_an_auto_phrase() {
     assert_eq!(texts(&shown)[1], "日肉");
 }
 
-// 學習的時限（plan〈學習與排位〉，M4 票 13）：殼交今天的日期，一年是 365 天。2026 年不是閏年，
+// 學習的時限（architecture〈核心對殼〉，M4 票 13）：殼交今天的日期，一年是 365 天。2026 年不是閏年，
 // 2026-01-01 之後 365 天是 2027-01-01、366 天是 2027-01-02。
 
 fn date(text: &str) -> Date {
@@ -787,7 +787,7 @@ fn entries_unused_for_over_a_year_stop_affecting_ranking_but_stay_in_the_data() 
     assert_eq!(ime.top_of(&mut user, "jj"), "早晨", "常用語照樣有效");
 }
 
-/// 停用的學習計數不再給個人分：學過的詞在連打裡加分（plan〈排序：同一把尺〉），一年沒用就不加，日期改回來又加。
+/// 停用的學習計數不再給個人分：學過的詞在連打裡加分（docs/research/ranking-parameters.md），一年沒用就不加，日期改回來又加。
 #[test]
 fn an_expired_count_gives_no_personal_score_until_the_date_comes_back() {
     let mut ime = Ime::new(&men_kou());
@@ -856,7 +856,7 @@ fn a_date_jump_years_ahead_and_back_keeps_the_entries_and_they_work_again() {
     assert_eq!(ime.top_of(&mut user, "ab"), "丙");
 }
 
-/// 沒有日期的條目（殼沒給過日期時學到的）不算過期（plan〈學習與排位〉 的日期契約）。
+/// 沒有日期的條目（殼沒給過日期時學到的）不算過期（architecture〈核心對殼〉 的日期契約）。
 #[test]
 fn entries_learned_before_the_shell_gave_a_date_do_not_expire() {
     let mut ime = Ime::new(&ab());

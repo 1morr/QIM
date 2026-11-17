@@ -1,4 +1,4 @@
-//! 連打的 lattice（plan〈資料流〉〈排序：同一把尺〉）：位置是輸入碼的字母邊界，邊是碼表的字與詞庫的詞，
+//! 連打的 lattice（architecture〈候選的排位順序〉）：位置是輸入碼的字母邊界，邊是碼表的字與詞庫的詞，
 //! Viterbi + beam 逐鍵往右補一個位置。做法參考 libime（`docs/research/libime-lattice.md`）。
 
 use std::collections::{BTreeMap, HashSet};
@@ -74,7 +74,7 @@ impl From<NeighborEdge> for ColumnEdge {
     }
 }
 
-/// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（plan〈排序：同一把尺〉）。
+/// 組字（或選定的分段之後剩下的輸入碼）前面是什麼（architecture〈候選的排位順序〉）。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Preceding {
     /// 前一個字：開頭的字接它的字級 bigram；`None` 是用 unigram。
@@ -114,10 +114,10 @@ pub(crate) struct CandidateSpan {
     pub text: String,
     pub len: usize,
     /// 組成它的各段（碼與字詞），依輸入碼的順序、碼接起來是它蓋住的輸入碼、字詞接起來是
-    /// `text`；選定與上屏時用（plan〈學習與排位〉）。
+    /// `text`；選定與上屏時用。
     pub segments: Vec<Segment>,
     pub kind: SpanKind,
-    /// 排定它位置的排位規則（1–5，plan〈學習與排位〉）；沒有是 `None`。第 2 位起由規則排定的候選，停鍵重排的
+    /// 排定它位置的排位規則（1–5，architecture〈候選的排位順序〉）；沒有是 `None`。第 2 位起由規則排定的候選，停鍵重排的
     /// 路徑排在它們後面（M3 票 11c）；debug 面板也顯示它。
     pub rule: Option<u8>,
     /// 鄰鍵讀法（M4 票 09c）插進來的；`segments` 的碼是換過的，學習記它。
@@ -143,9 +143,9 @@ pub(crate) enum SpanKind {
     English,
     /// 整串輸入碼剛好是英文使用者詞（排位規則 4，詞典沒有、打過兩次的）。
     EnglishUserWord,
-    /// 接在字詞後面的 emoji（plan〈學習與排位〉）。
+    /// 接在字詞後面的 emoji（architecture〈候選的排位順序〉）。
     Emoji,
-    /// 英文使用者詞的前綴補完（排位規則 5，plan〈學習與排位〉）。
+    /// 英文使用者詞的前綴補完（排位規則 5，architecture〈候選的排位順序〉）。
     EnglishCompletion,
     /// 英文模式建議列的拼錯修正（英文容錯，M4 票 25）：英文詞典的詞或過了出現門檻的英文使用者詞。
     EnglishCorrection,
@@ -524,7 +524,7 @@ impl Lattice {
     }
 }
 
-/// 候選列（plan〈排序：同一把尺〉）：
+/// 候選列（architecture〈候選的排位順序〉）：
 /// 1. 蓋滿整串輸入碼的：碼表的字、詞庫的詞，與分數最高的幾條多段路徑（方案的
 ///    `ranking.sentences`），依分數排；簡體字排後（[`Listing::simplified_last`]）時簡體字排在它們之後；
 /// 2. 整串輸入碼是擴展區的字的碼時，那些字；
@@ -767,7 +767,7 @@ fn completions<'a>(
         .flatten()
 }
 
-/// 蓋滿整串的字詞後面接上它的 emoji（rime-emoji 的做法，plan〈學習與排位〉），依候選列的順序、整列最多
+/// 蓋滿整串的字詞後面接上它的 emoji（rime-emoji 的做法，architecture〈候選的排位順序〉），依候選列的順序、整列最多
 /// [`EMOJI_LIMIT`] 個，和前面的候選文字重複的不接。查的是繁體原文，簡體模式也一樣。在排位規則
 /// 之前接上，所以規則排定的位置（英文候選的第 2 位）照舊；emoji 不在 lattice、沒有學習計數，
 /// 規則不會移動它。
@@ -798,7 +798,7 @@ fn with_emoji(
     out
 }
 
-/// 排位規則（plan〈學習與排位〉），依序套用；前面的規則排定的位置後面的規則不動。
+/// 排位規則（architecture〈候選的排位順序〉），依序套用；前面的規則排定的位置後面的規則不動。
 const RULES: [fn(&mut Ranked); 5] = [
     triggered_first,
     chosen_twice_first,
@@ -822,7 +822,7 @@ struct Ranked<'a> {
     before: &'a Preceding,
     /// 查碼表、詞庫與觸發詞的碼：`input` 去掉結尾的分隔記號。
     lookup_code: &'a str,
-    /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（plan〈學習與排位〉）。
+    /// `input` 去掉全部分隔記號：學習計數記的碼，規則 2、3 比對它（architecture〈候選的排位順序〉）。
     user_code: String,
     /// 還沒排定的候選，依原本的順序。
     free: Vec<CandidateSpan>,

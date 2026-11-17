@@ -1,7 +1,7 @@
-//! 停鍵層的神經重排（plan〈模型分層〉、ADR 0005）：Gboard 級的字級 CIFG-LSTM（約 1.4M 參數）給 lattice
+//! 停鍵層的神經重排（ADR 0005）：Gboard 級的字級 CIFG-LSTM（約 1.4M 參數）給 lattice
 //! 的前幾條路徑打分，照 `路徑分 + λ·神經分` 回名次。
 //!
-//! 模型與字表由殼以位元組交進來（模型資料包，plan〈資料包 manifest〉），不碰檔案、不開執行緒；殼在背景執行緒或
+//! 模型與字表由殼以位元組交進來（模型資料包，architecture〈資料包〉），不碰檔案、不開執行緒；殼在背景執行緒或
 //! Web Worker 呼叫。實作從模型階梯的實驗（`scripts/experiments/model-ladder/src/neural.rs`）搬來，
 //! 只留採用的 LSTM。依賴規則見 architecture〈依賴規則〉。
 

@@ -38,7 +38,7 @@ pub struct LayoutVariant {
 }
 
 impl Layout {
-    /// 選佈局版本（plan〈佈局：畫布模型〉）：裝置與方向都符合的；其次方向符合的；再其次第一個版本，
+    /// 選佈局版本（architecture〈佈局格式〉）：裝置與方向都符合的；其次方向符合的；再其次第一個版本，
     /// 等比例縮放並給警告。回傳版本在 `variants` 的位置。
     pub fn select(&self, wanted: When) -> (usize, Option<Warning>) {
         let find = |matches: &dyn Fn(&When) -> bool| {
@@ -64,7 +64,7 @@ impl LayoutVariant {
         }
     }
 
-    /// 換到這個版本時要顯示的頁：有 `id` 這頁就是它，否則是一開始的頁（轉向時留在同一頁，plan〈佈局：畫布模型〉）。
+    /// 換到這個版本時要顯示的頁：有 `id` 這頁就是它，否則是一開始的頁（轉向時留在同一頁，architecture〈佈局格式〉）。
     pub fn page_index_or_initial(&self, id: Option<&str>) -> Option<usize> {
         id.and_then(|id| self.page_index(id))
             .or_else(|| self.initial_page_index())

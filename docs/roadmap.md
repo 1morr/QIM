@@ -6,11 +6,11 @@
 
 | 里程碑 | 目標 | 拆票前讀 | 狀態 |
 | --- | --- | --- | --- |
-| M0 骨架 | 閘門、資料管線 v0、核心 tracer bullet：在網頁打出第一個字 | brief §3、§5、§6；plan §0、§1、§4.1、§4.5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 已驗收，[已封存](archive/M0.md) |
-| M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | brief §1.5、§4、§5、§9；plan §2–§5、〈M1 網頁 prototype〉；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 已驗收，[已封存](archive/M1.md) |
-| M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | brief §9、§11、`docs/research/facts-platforms.md`；plan §1.4、§3、〈M2 平台可行性實驗〉；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 已驗收，[已封存](archive/M2.md) |
-| M3 智慧候選 | 模型階梯實驗（雲端 LLM 量過不做）；上下文、詞級 trigram、停鍵層神經重排、個人 bigram、聯想、記住常打字串、詞庫擴充、資料包 manifest 與線上更新 | brief §1.5、§7、§8、`docs/research/facts-platforms.md`；plan §2.3、§2.7、〈M3 智慧候選〉、〈M3 的模型階梯實驗〉；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 已驗收，[已封存](archive/M3.md) |
-| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、〈M4 輸入增強〉、〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 已驗收，[已封存](archive/M4.md) |
+| M0 骨架 | 閘門、資料管線 v0、核心 tracer bullet：在網頁打出第一個字 | brief §3、§5、§6；ADR 0001–0003；`.scratch/m0/spec.md` | 已驗收，[已封存](archive/M0.md) |
+| M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | brief §1.5、§4、§5、§9；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 已驗收，[已封存](archive/M1.md) |
+| M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | brief §9、§11、`docs/research/facts-platforms.md`；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 已驗收，[已封存](archive/M2.md) |
+| M3 智慧候選 | 模型階梯實驗（雲端 LLM 量過不做）；上下文、詞級 trigram、停鍵層神經重排、個人 bigram、聯想、記住常打字串、詞庫擴充、資料包 manifest 與線上更新 | brief §1.5、§7、§8、`docs/research/facts-platforms.md`；〈M3 的模型階梯實驗〉；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 已驗收，[已封存](archive/M3.md) |
+| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 已驗收，[已封存](archive/M4.md) |
 | M5 觸控鍵盤與設定 | 網頁觸控鍵盤做到平台樣板：Gboard 觸控功能盤點、候選列與工具列接在鍵盤頂端、鍵盤內設定頁、emoji 與文字編輯等面板、滑動輸入與空白鍵移游標（〈M5 觸控鍵盤與設定〉） | 開工時定 | 未開工，排在 arch-diet 之後（M4 回顧 2026-11-17 定）；拆票前讀 `.scratch/m4/issues/31-m4-close.md` 的 Comments |
 | M6 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 開工時定 | 未開工 |
 | M7 macOS | 第一個平台殼，一次接上全部已完成的功能 | 開工時定 | 未開工 |
@@ -18,7 +18,7 @@
 | M9 Android | InputMethodService | 開工時定 | 未開工 |
 | M10 Windows | TSF | 開工時定 | 未開工 |
 | M11 Linux | Fcitx5 或 IBus | 開工時定 | 未開工 |
-| arch-diet 架構文檔瘦身 | `docs/plan.md` 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 進行中（2026-11-18 起），已拆 6 張票；之後拆 M5 |
+| arch-diet 架構文檔瘦身 | 實作計劃縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 進行中（2026-11-18 起），已拆 6 張票；之後拆 M5 |
 | flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 已驗收（2026-11-18），票 01、02 與修復票 02b、02c 做完 |
 | gates 補齊閘門 | 補密鑰掃描、依賴漏洞、依賴更新三道閘門，接進 `cargo xtask check` 與 CI | `.scratch/gates/spec.md` | 已驗收（2026-11-17），票 01 做完 |
 
@@ -82,14 +82,15 @@ M1–M4 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 - 排除指定 App：拿得到宿主識別的平台才接，拿不到的在設定頁註明。
 - 無障礙：按鍵與候選讓 VoiceOver、TalkBack、Narrator 讀得到，實際開啟讀回。
 - 觸控平台：震動與按鍵音（可關）。開工先查證系統限制（iOS 是否需要完整取用權限）。
-- 觸控平台的實體鍵盤：偵測到實體鍵盤時收起螢幕鍵盤，只留跟隨游標的候選列，按鍵照 brief §4.3。開工先查證平台是否把實體鍵事件交給輸入法。
+- 觸控平台的實體鍵盤：偵測到實體鍵盤時收起螢幕鍵盤，只留跟隨游標的候選列，按鍵照 brief §4.3。開工先查證平台是否把實體鍵事件交給輸入法（iOS 鍵盤擴充收不收得到，目前只有 2017 年的第三方說法）；收不到的平台不做實體鍵盤模式，設定頁註明，寫回 brief §1.5。
 - 核心給殼的介面先整理（M4 票 31 的 code-review，M7 開工時做，之後各平台照同一份接）：`Snapshot.ascii` 也含英文模式，改名或改成狀態列舉（對外介面，先問使用者）；`Session` 的 `ascii`、`english`、`mode_before_field` 用幾個 bool 表示互斥的模式，改成一個列舉；`set_options` 自己判斷要不要重列，綁定層不再每個 setter 各寫一次 `refresh`；`session.rs`（約 2,600 行）把英文模式的狀態拆到 `session/`；各台次數加墓碑表的 `tally_mut`、`delete`、`digest` 在 `Bigrams`、`SchemeModel`、`EnglishUserWords` 各一份；英文的小寫鍵有四種寫法；`TouchSurface` 在 `qim-databuild`、`qim-bench` 各一份；網頁 `afterHostKey` 由按鍵種類猜核心有沒有學到，改由 Snapshot 回報。M4 回顧補的：鄰鍵讀法的碼與懲罰散在 `ColumnEdge`、`Node`、`NeighborSpan`，`tapped` 與 `key_weights` 成對、wasm 用三條平行陣列（M4 票 09c）；`Output::ToggleAscii` 實際送 `ToggleEnglish`（票 24）；`Session::private()` 與 `TypedRun.private` 同名不同義、`mode_before_field` 是 `(bool, bool)`（票 26）。
 - 組字中換資料包（背景線上更新）：`Session::refresh` 只重列候選、不重建 lattice 的欄，多段路徑仍是舊資料包算的；組字中殼改了學習資料又沒呼叫 `refresh` 時開頭各段照舊（M4 票 18b）。平台殼背景更新資料包時先處理。
 - 欄位類型的邊角（M4 票 26，網頁沒查證）：使用者在 email、網址欄自己切到英文模式時，點建議仍補空白、建議列仍列拼錯的修正（LatinIME `shouldInsertSpacesAutomatically`）；`inputmode=text` 會不會蓋掉 `type=email` 沒查證（M4 回顧補）；各平台照自己的欄位屬性對應 `FieldKind` 時一起定。
+- 內嵌的網頁佈局編輯器在手機主 App 手感不佳時（M8、M9 開工時實測）：只把手感差的操作改原生；要全改原生時記一條決定。
 - 桌面平台接實體鍵盤（M4 票 07 留下，網頁驗不到）：ISO 鍵盤的 `Backquote` 與 `IntlBackslash` 在 macOS 可能對調、dead key 換了字元攔下後系統的 dead key 狀態有沒有取消，用系統的實體鍵位實機驗；Dvorak、AZERTY 等真實配列也在這時實打。
 
 - **M7 macOS**：`qim-ffi` 完整版、IMK 殼（InputMethodKit、Swift，經 `qim-ffi` 的 uniffi 綁定接核心）、使用者資料存檔（存在輸入法自己的 Application Support）、設定視窗（含學習資料管理、API key、內嵌佈局編輯器）。定外觀主題格式，鍵盤與桌面候選窗共用一份（參考青簡 `theme.json`：一個主題一個目錄、可繼承、按淺深色給變數、可帶圖片，`docs/research/qingjian.md` §7），接上候選窗；之後各平台殼接上同一份。依 〈M3 的模型階梯實驗〉 的結果接端上 LLM。定同步的傳輸方式（要能跨 Apple 與 Android，內容含自訂佈局；WebDAV 列入候選，CyIME 用它同步剪貼簿與備份）；接剪貼簿歷史與可選的崩潰回報（預設關，brief §8）。沒有付費帳號，先用本機簽章（brief §10）。用 `orca computer` 在「文字編輯」與一個瀏覽器實打驗證。
-- **M8 iOS**：鍵盤擴充與主 App（設定、學習資料管理、使用者詞匯入匯出、內嵌佈局編輯器，開工時實測內嵌的手感）。iOS 的硬限制見 `docs/research/facts-platforms.md`。開工先查證鍵盤擴充拿不拿得到宿主 App 的識別。鍵盤擴充讀佈局時略過 Schema 驗證（M2 票 09 決定）：佈局在主 App 與編輯器存檔時驗過，擴充只讀，驗一次 footprint 多約 3 MB、執行檔多 3.1 MB（Mac）；殼要讀佈局、`qim-ffi` 加佈局介面時，`qim-layout` 的 `jsonschema` 改成預設開的 feature，關掉時只留型別與引用檢查的讀法，`qim-ffi` 給鍵盤擴充的建置關掉它；`ARCHITECTURE.md`〈依賴規則〉的表不用改（關掉時 `jsonschema` 仍是可選依賴）。另外的完成標準：沒開完整取用權限時打字與學習照常；與 macOS 互相同步一個新使用者詞與一筆剪貼簿並讀回。做完後評估多端檔案傳輸，結論寫回 brief。
+- **M8 iOS**：鍵盤擴充與主 App（設定、學習資料管理、使用者詞匯入匯出、內嵌佈局編輯器，開工時實測內嵌的手感）。iOS 的硬限制見 `docs/research/facts-platforms.md`。開工先查證鍵盤擴充拿不拿得到宿主 App 的識別。鍵盤擴充讀佈局時略過 Schema 驗證（M2 票 09 決定）：佈局在主 App 與編輯器存檔時驗過，擴充只讀，驗一次 footprint 多約 3 MB、執行檔多 3.1 MB（Mac）；殼要讀佈局、`qim-ffi` 加佈局介面時，`qim-layout` 的 `jsonschema` 改成預設開的 feature，關掉時只留型別與引用檢查的讀法，`qim-ffi` 給鍵盤擴充的建置關掉它；`ARCHITECTURE.md`〈依賴規則〉的表不用改（關掉時 `jsonschema` 仍是可選依賴）。端上 LLM：鍵盤擴充裡 Foundation Models 能用，但停頓後第一個請求偶爾要 6–15 s（事實 P12）；要接時太慢就 iOS 只用雲端 LLM（要完整取用權限）。另外的完成標準：沒開完整取用權限時打字與學習照常；與 macOS 互相同步一個新使用者詞與一筆剪貼簿並讀回。做完後評估多端檔案傳輸，結論寫回 brief。
 - **M9 Android**：InputMethodService 殼與設定 App（內嵌佈局編輯器）。開工先查證 Gemini Nano 能否在輸入法內使用，並讀 CyIME 的實體鍵盤與懸浮鍵盤做法（`docs/research/cyime.md` §4，GPL，只取做法）。做懸浮鍵盤（拖曳、調大小、半透明；iOS 不能畫到鍵盤外，不做）。評估語音輸入，結論寫回 brief（iOS 鍵盤擴充沒有麥克風）。另外的完成標準：與 macOS、iOS 互相同步並讀回。
 - **M10 Windows**、**M11 Linux**：平台殼。M10 開工先比較核心直接載入 TSF DLL 與「薄 DLL 加程序外引擎」（`docs/research/xsime.md` §2.1）：前者引擎崩潰會拖垮宿主、x86 宿主要另建，後者多一層 IPC 與冷啟動等待。
 
@@ -103,7 +104,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 ## M3 的模型階梯實驗
 
-已細化進 `.scratch/m3/spec.md`〈模型階梯實驗〉（2026-11-11），別處引用「plan 〈M3 的模型階梯實驗〉」的都指那一段。
+已細化進 `.scratch/m3/spec.md`〈模型階梯實驗〉（2026-11-11），別處引用 roadmap〈M3 的模型階梯實驗〉的都指那一段。
 
 ## M5 觸控鍵盤與設定
 
@@ -116,7 +117,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - 面板：emoji 面板（分類、最近用過、搜尋）、文字編輯面板（方向鍵、選取、全選、複製、貼上）、剪貼簿（瀏覽器讀不到系統剪貼簿歷史，開工時查限制，做得到的範圍先做）。
 - 調整鍵盤高度。
 - 從 M4 移來（使用者 2026-11-12 同意，觸控手勢放在重做鍵盤的這個里程碑）：空白鍵滑動移游標、英文滑動輸入（開工讀 FlorisBoard v0.5.2 與 AnySoftKeyboard，`docs/research/facts-products.md`）、評估中文滑動輸入（結論寫回 brief）。滑動的解碼用 `qim-layout` 的按鍵幾何，不寫死 QWERTY；和佈局裡按鍵自己的滑動動作（flick）怎麼分，開工時定，研究建議照青簡的方向扇形（`docs/research/spatial-correction-swipe.md` §5）；形碼的滑行沒有先例，先用模擬軌跡量首選率再決定做不做畫面。
-- 從 M4 來的觸控入口（使用者 2026-11-12 同意）：撤銷學習的手勢跟重做的候選列一起定；長按候選目前是字根提示（brief §4.4）。撤銷學習的手勢要能指定任一個候選（`Session::forget` 收任何位置）：桌面只清得到首選，釘在第 2 位的自動造詞要靠它（M4 票 16，§2.4）。簡體模式兩個原文轉成同一個簡體字時候選去重只留第一個，撤銷學習只清得到它（M4 票 16），重做候選列時一起定。觸控鍵盤的 `z` 鍵照 Gboard 標「重」、點了是萬用鍵，盤點 Gboard 時實測它在速成的行為，定要不要改標「＊」（M4 票 11）。
+- 從 M4 來的觸控入口（使用者 2026-11-12 同意）：撤銷學習的手勢跟重做的候選列一起定；長按候選目前是字根提示（brief §4.4）。撤銷學習的手勢要能指定任一個候選（`Session::forget` 收任何位置）：桌面只清得到首選，釘在第 2 位的自動造詞要靠它（M4 票 16）。簡體模式兩個原文轉成同一個簡體字時候選去重只留第一個，撤銷學習只清得到它（M4 票 16），重做候選列時一起定。觸控鍵盤的 `z` 鍵照 Gboard 標「重」、點了是萬用鍵，盤點 Gboard 時實測它在速成的行為，定要不要改標「＊」（M4 票 11）。
 - 評估空輸入的句首建議與數字、標點後的量詞聯想（iOS 速成有，黑箱 T8、T18）：和沒有組字時的工具列搶同一個位置，跟重做的候選列一起定；量詞要另整理資料（M4 票 30）：句首建議可用字級 bigram 的句首（`CLAUSE_START`），dev 切分的句子第一字落在 train 句首最常見 9 字的比例口語 27–33%、維基 14–26%；量詞沒有資料，語料前處理丟掉了含阿拉伯數字的句子，bigram 裡沒有「數字 → 字」，要另整理量詞表或重訓。桌面上兩者都要在沒有組字時開候選窗，數字鍵這時要嘛選候選、要嘛照打，每次聚焦、打數字都會跳出候選窗。
 - 評估英文建議列的下一個詞（空白之後就出建議，Gboard 與 LatinIME 都有）：要英文 bigram 資料包、英文的個人 bigram 與空白後的建議列，跟重做的候選列一起定（協調者 2026-11-15 定不在 M4 做，ADR 0008）。
 - 盤點時使用者勾的其他項目。平台才有的（按鍵音、震動、語音、懸浮鍵盤）只在設定頁留位置與說明。
@@ -130,10 +131,12 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 驗收與回顧時留下、沒有排進任何里程碑的項目，每條一行、附出處。有 repro 或使用者要求再開票。
 
 - 譯詞（打中文時候選旁顯示英文、可上屏，例「發票」旁的 invoice）：使用者暫不需要，2026-11-15 移出 M4。來源、授權與 LLM 生成費用的研究在 `docs/research/translation-sources.md`；要做時重開資料包的票（原 M4 票 29）。出處：M4 票 20。
-- plan 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字）：已拆成 `.scratch/arch-diet/` 的 6 張票，隨時可以用 `/1morr:ticket-coordinator .scratch/arch-diet/issues` 跑。出處：2026-11-13 流程對齊。
 - 容錯重評時要補的：四種修正沒過門檻（M4 票 09），重評時照票 10 列的四項與 `docs/research/tolerance.md` 補；空間模型的「上層加成 2」、σ、鄰鍵先驗 0.9／σ 0.5 沒有來源也沒調；重排開著時觸控集合的修正次數量不了（model-ladder 沒有觸控的路，M4 票 09c）。出處：M4 票 06–10、09c、18。
 - e2e 在高負載下偶發紅、單獨重跑會過：`pack-update.spec.ts`「sha256 不符時拒絕，保留舊版」（M4 票 13）、`touch-features` 長按切頁（M4 票 21）、單按 Shift 的計時（M4 票 26）。再紅一次就用 `mattpocock-skills:diagnosing-bugs` 開修復票。出處：M4 票 13、21、26 與票 31。
 - 雲端 LLM 重評通過、要在網頁接時（M3 票 22 的重評條件）：API key 只放開發機的環境變數、由 Vite 開發伺服器轉發（同線上更新的 `/pack-updates/`），不寫進瀏覽器儲存空間；平台殼的 key 照〈平台里程碑（M7–M11）〉存系統的安全儲存。出處：M3 票 22。
 - e2e 開跑前不檢查資料包建好了沒：網頁要載的資料包少一個（例如主 checkout 沒重跑 `cargo xtask data`），整批測試在等就緒時逾時，看不出原因；要做時讓 e2e 步驟先比對網頁要載的資料包，少了就印出要跑 `cargo xtask data`。再踩到或做 gates 時順手加再開票。出處：M4 回顧（2026-11-17）。
 - 個人句子檔 `bench/personal/sentences.txt`（選填，只在本機）：使用者提供的真實句子一行一句，由 `qim-databuild` 轉碼進個人集，英文段落切開不算；`corpus::clauses` 會丟掉含英文的整句，要另外切。等使用者提供句子（M1 票 04）。
+- 口語語料太小：HKCanCor 加 Common Voice 約 5.6 萬句 train、2,630 句 test；字級 bigram 的口語權重加到 256 仍在進步，停鍵層的神經模型也先用現有語料訓練（使用者定），資料量是瓶頸。先靠個人集；再不足時請使用者決定其他來源（例如自存一份 Tatoeba），寫回 brief §5.2。出處：M1 票 03、12，M3 票 09。
+- Wikimedia 的 XML dump 預告 2027-01 停用，粵語維基的釘選可能下載不到：2027-01 前改用 archive.org 的存檔或新的 MediaWiki Content File Exports，重釘 `data/sources.toml`（`docs/research/facts-tables.md`）。
+- 維基語料（CC BY-SA）訓練的模型怎麼散布：上架前由使用者判斷（brief §11 的待決項）。
 - 簡體模式逐個分段轉換，跨兩段的詞可能轉錯（「乾」「隆」分在兩段時成了「干隆」）；常見詞在詞庫裡本身就是一段，所以罕見。等使用者回報再改：整串一起轉換，再依字數切回各段。出處：M1 票 16。

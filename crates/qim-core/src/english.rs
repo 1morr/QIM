@@ -1,11 +1,11 @@
-//! 英文詞表（plan〈英文、簡繁與 emoji〉）：輸入碼（小寫）→ 要顯示的拼法與頻率。中文狀態的英文候選（plan〈學習與排位〉
+//! 英文詞表（architecture〈資料包〉）：輸入碼（小寫）→ 要顯示的拼法與頻率。中文狀態的英文候選（architecture〈候選的排位順序〉
 //! 規則 4）與英文模式（ADR 0008）共用。
 
 use serde::{Deserialize, Serialize};
 
 /// 英文詞表：每個小寫的鍵一個拼法與它的頻率。同一個鍵有幾種大小寫時取全小寫的（`may` 不取 `May`），
 /// 沒有全小寫的取字典序最前的（`english` → `English`、`nasa` → `NASA`），頻率是留下的那種寫法的。
-/// 頻率照 AOSP 詞表的 `f`（0–255，頻率的對數，大的常見；plan〈英文、簡繁與 emoji〉），給英文模式的建議列排序。
+/// 頻率照 AOSP 詞表的 `f`（0–255，頻率的對數，大的常見；architecture〈資料包〉），給英文模式的建議列排序。
 ///
 /// 存成依鍵排序的（拼法, 頻率）清單；從位元組讀回時重新整理，不靠資料包的順序。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

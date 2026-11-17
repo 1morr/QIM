@@ -1,4 +1,4 @@
-//! 聯想（plan〈介面〉〈排序：同一把尺〉，M3 票 13）：上屏之後、還沒打下一個字時，候選列出現接下來可能要打的
+//! 聯想（architecture〈核心對殼〉〈候選的排位順序〉，M3 票 13）：上屏之後、還沒打下一個字時，候選列出現接下來可能要打的
 //! 字詞；選了就上屏，接著出下一輪。按鍵照 macOS 速成：數字鍵或點選選、空白不選、Esc 收起，
 //! 打字母直接開始新的組字。
 
@@ -207,7 +207,7 @@ fn escape_only_closes_the_association() {
     assert!(!typing.key(Key::Escape).handled);
 }
 
-/// 有聯想時退格交還宿主刪字、聯想同時收起（plan〈介面〉）。
+/// 有聯想時退格交還宿主刪字、聯想同時收起（architecture〈核心對殼〉）。
 #[test]
 fn backspace_closes_the_association_and_passes_to_the_host() {
     let mut typing = Typing::new();

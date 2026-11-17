@@ -1,6 +1,6 @@
 # QIM 架構
 
-> 狀態：從 `docs/plan.md` 搬移中。風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
+> 這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
 >
 > 寫法：只寫現況，改了就改寫原句，舊說法留給 git；票號與「某日改」不寫進來。只寫打開程式碼看不出來的：模組的分工、誰能依賴誰、跨模組的資料與契約。單一模組內的行為由測試與程式碼說明；操作步驟（建置、在裝置上驗、排除故障）寫在 `docs/development.md`；選型與取捨的理由寫 ADR，這裡連過去。節用標題引用、不編號。全檔上限 15,000 字元，`scripts/check_docs.py` 強制。
 
@@ -129,9 +129,9 @@ flowchart LR
 - `Engine` 是方案加資料包、不可變，殼建一個給各輸入框的 `Session` 共用；`UserModel` 是學習資料，存檔歸殼；`Session` 是一個輸入框的組字狀態。
 - 殼把鍵碼轉成 `Key`；綁定收不了帶資料的列舉時用 `Key::parse` 收「種類 + 值」。觸控與實體鍵盤的按鍵機率由 `qim-layout` 算、殼轉交，`qim-core` 不知道佈局。只改殼畫面、不動組字的鍵由殼攔下。
 - `Snapshot.handled` 為假時殼把鍵交還宿主，有 `delete_before`、`commit` 時先照做：先刪游標前 `delete_before` 個 Unicode scalar，再上屏 `commit`（ADR 0008）。
-- 殼給的狀態：聚焦時 `set_field`（欄位類型不在 `Options` 裡）；聚焦、移游標、上屏後 `set_context` 給游標前的文字，失焦而給不出時 `clear_context`；改設定是讀 `options()` 改一項再 `set_options`，組字中接著 `refresh`；裝置 id 用 `UserModel::set_device`，一次安裝一個。
+- 殼給的狀態：欄位類型用 `set_field`（不在 `Options` 裡），游標前的文字用 `set_context`、給不出時 `clear_context`，何時給見〈平台殼〉；改設定是讀 `options()` 改一項再 `set_options`，組字中接著 `refresh`；裝置 id 用 `UserModel::set_device`，一次安裝一個。
 - 核心不讀時鐘，時間由殼給：每次使用者操作前 `UserModel::set_today`（當地日曆日，第一次學習前一定要給）；可能學到東西的動作後從頭計 3 秒，到了呼叫 `expire_undo`；每個按鍵、點擊之前（不送字元的修飾鍵除外）從頭計 1100 ms，到了呼叫 `expire_double_space`；使用者點輸入框時兩個都呼叫。
-- 停鍵重排：殼在事件後取 `rerank_request`，在背景執行緒或 Web Worker 交給 `qim-neural`，再經 `apply_rerank` 送回；核心只收目前 `generation` 的結果，重排的候選最高到第 2 位、首選不動（ADR 0005）。換模型或重排模式時給 `set_reranker_id`，沒給就不快取。
+- 停鍵重排：殼在事件後取 `rerank_request`，在背景執行緒或 Web Worker 交給 `qim-neural`，再經 `apply_rerank` 送回；核心只收目前 `generation` 的結果，重排的候選最高到第 2 位、首選不動（ADR 0005）。殼沒給 `set_reranker_id` 時不快取停鍵結果。
 
 ### 候選的排位順序
 
@@ -149,7 +149,7 @@ flowchart LR
 
 - 加列的種類或改欄位就升 v4；匯入一直收 v1、v2 與依欄數認的 v3 草稿。
 - metadata 行 `#@/key<Tab>value` 只能在檔頭。每列第一欄是種類：不認得的略過並警告，已知種類有一列不合就整份不收、錯誤帶行號。
-- 同步是各台匯出快照、匯入時 `UserModel::merge`，合併有交換律、結合律、冪等（ADR 0007）；平台殼只做傳輸。殼讀回自己的存檔用 `replace_learning`，從備份還原用 `restore`。
+- 同步是各台匯出快照、匯入時 `UserModel::merge`，合併有交換律、結合律、冪等（ADR 0007）；平台殼只做傳輸。殼讀回自己的存檔用 `replace_learning`；從備份還原用 `restore`、清空用 `clear`，兩者都留清空記號，合併時傳到別台。
 
 ### 佈局格式
 
@@ -175,8 +175,8 @@ flowchart LR
 
 - 前文：聚焦、改字、移游標時，與沒有組字時送鍵前 `set_context`，失焦 `clear_context`；無痕與密碼欄不給。
 - 換欄位：`set_field`，照回傳換中英與數字頁，再給前文。
-- 存學習資料：上屏後、交還宿主的鍵（字母、數字除外）之後、失焦與換欄位時；讀回存檔用 `replace_learning`，匯入先預覽再 `merge`。存不了時照樣能打字，告訴使用者這次不會存。
-- 停鍵層：停鍵後在背景執行緒算，同時只算一個，經 `apply_rerank` 套用；模型資料包先核對，沒有可用的就不重排；啟動、換模型或設定、模型載入失敗後 `set_reranker_id`。
+- 存學習資料：上屏後、交還宿主的鍵（字母、數字除外）之後、失焦與換欄位時；匯入先預覽再 `merge`。存不了時照樣能打字，告訴使用者這次不會存。
+- 停鍵層：同時只算一個；模型資料包先核對，沒有可用的就不重排；啟動、換模型或設定、模型載入失敗後 `set_reranker_id`。
 - `Session::inspect` 只給網頁的 debug 面板。
 
 ## 主要依賴
@@ -217,4 +217,11 @@ flowchart LR
 
 ## 風險與回寫點
 
-還在 plan〈風險與回寫點〉。
+還沒排除、確認了會改到上面的分工或格式的風險。只和某個平台的做法有關的寫在 roadmap 那個里程碑。
+
+| 風險 | 何時確認 | 確認了怎麼辦 |
+| --- | --- | --- |
+| 低階 iPhone 的鍵盤擴充放不下核心加資料包（旗艦機 79 MB，上限 177 MB；`docs/research/ios-feasibility.md`〈記憶體上限〉） | M8 | 詞庫先改成 mmap 友善的格式（例如 `fst`），改〈資料包〉〈主要依賴〉 |
+| 停鍵層的模型在低階手機太慢或太佔記憶體（1.4M q8 在旗艦機 +2 MB、p95 11 ms） | M8、M9 | 只在桌面與 Android 用，或不做，寫回 brief §1.5 |
+| 每鍵延遲超過預算（brief §9；旗艦機的鍵盤擴充 p95 64 µs，低階機沒量） | 每次 `cargo xtask bench --check` | 調 beam 或剪枝 bigram，記 baseline |
+| 網頁驗不到的平台差異（真實宿主的行為、讀前文、手機延遲） | 各平台實打 | 修平台殼；要動核心時記決定並重跑首選字基準 |

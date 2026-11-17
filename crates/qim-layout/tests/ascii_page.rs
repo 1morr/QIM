@@ -1,5 +1,5 @@
 //! 切中英時換頁（頁的 `asciiPage`，Trime 的 `ascii_keyboard`）與開切換鍵盤選單的動作 `keyboardMenu`
-//! （M4 票 23，plan〈佈局：畫布模型〉）。
+//! （M4 票 23，architecture〈佈局格式〉）。
 
 use qim_layout::{Device, Keyboard, Layout, Orientation, Output, When};
 

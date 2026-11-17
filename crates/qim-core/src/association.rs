@@ -1,6 +1,6 @@
-//! 聯想（plan〈介面〉〈排序：同一把尺〉，M3 票 13）：上屏之後給接下來可能要打的字詞。
+//! 聯想（architecture〈核心對殼〉〈候選的排位順序〉，M3 票 13）：上屏之後給接下來可能要打的字詞。
 //!
-//! 來源有四種，用連打的同一把尺排（plan〈排序：同一把尺〉）：分數是接上這個聯想的路徑比不接時多出多少。
+//! 來源有四種，用連打的同一把尺排（architecture〈候選的排位順序〉）：分數是接上這個聯想的路徑比不接時多出多少。
 //!
 //! - 補完詞庫的詞：剛上屏的最後幾段接起來是詞庫裡某個更長的詞的開頭（上屏「門」，詞庫有「門口」，
 //!   給「口」）。分數是那幾段換成整個詞的路徑分數減原本那幾段的：靜態機率照 lattice 的邊算，
@@ -178,7 +178,7 @@ fn words(engine: &Engine, user: &UserModel, segments: &[String]) -> Vec<String> 
         .collect()
 }
 
-/// 一段 `text` 接在 `prev` 後面的 ln 靜態機率（同 lattice 的邊，plan〈排序：同一把尺〉）與它是不是詞庫的詞：
+/// 一段 `text` 接在 `prev` 後面的 ln 靜態機率（同 lattice 的邊，docs/research/ranking-parameters.md）與它是不是詞庫的詞：
 /// 詞庫的詞是首字 bigram 加詞頻換算的詞內機率；其他（單字、學過的字詞）詞內一字接一字用字級 bigram。
 fn segment_static(engine: &Engine, prev: Option<char>, text: &str) -> (f64, bool) {
     let lm = engine.language_model();

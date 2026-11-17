@@ -40,7 +40,7 @@ export function mountTheme(): void {
 	});
 }
 
-/** 兩份預設佈局的 JSON（plan〈佈局：畫布模型〉）。 */
+/** 兩份預設佈局的 JSON（architecture〈佈局格式〉）。 */
 export interface Layouts {
 	plain: string;
 	/** 字母頁上方多一排數字；「數字列」打開時用（brief〈手機觸控鍵盤〉）。 */
@@ -76,7 +76,7 @@ export function mountTouch(
 	};
 	let layout = readLayout();
 	const mounted = mountKeyboard(keyboard, layout, session, apply, hostDefault);
-	// 轉向時重選佈局版本（plan〈佈局：畫布模型〉），留在同一頁。
+	// 轉向時重選佈局版本（architecture〈佈局格式〉），留在同一頁。
 	window
 		.matchMedia("(orientation: landscape)")
 		.addEventListener("change", () => {

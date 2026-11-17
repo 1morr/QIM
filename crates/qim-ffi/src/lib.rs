@@ -1,7 +1,7 @@
 //! Apple 與 Android 殼用的綁定（uniffi，architecture〈執行形態〉）：只把呼叫轉給 `qim-core`，不放邏輯（architecture〈依賴規則〉）。
 //!
 //! 殼先把各資料包的位元組解開成 [`SchemePack`] 等物件、建一個 [`Engine`]，每個輸入框一個
-//! [`Session`] 共用它（plan〈介面〉）；`Session` 帶著 `UserModel` 與核心的 `Session`。按鍵經
+//! [`Session`] 共用它（architecture〈核心對殼〉）；`Session` 帶著 `UserModel` 與核心的 `Session`。按鍵經
 //! [`Session::press`] 一個入口（`Key::parse`，uniffi 沒有 `char`，收不了核心的 `Key`）。
 
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -77,7 +77,7 @@ pack!(
     LanguageModelPack
 );
 pack!(
-    /// 方案指名的詞級 trigram 資料包（同步層的語言模型，plan〈字級 bigram 與詞級 trigram〉）。
+    /// 方案指名的詞級 trigram 資料包（同步層的語言模型，architecture〈資料包〉）。
     WordTrigramPack
 );
 pack!(
@@ -89,7 +89,7 @@ pack!(
     EnglishPack
 );
 
-/// 字根提示資料包（plan〈速成碼表〉 步驟 5），不給 `Engine`。目前只能解開：鍵盤擴充用它量記憶體
+/// 字根提示資料包，不給 `Engine`。目前只能解開：鍵盤擴充用它量記憶體
 /// （M2 票 09）；查詢與顯示的介面由殼要顯示字根提示時的票加。
 #[derive(uniffi::Object)]
 pub struct RadicalHintPack(
@@ -107,7 +107,7 @@ impl RadicalHintPack {
     }
 }
 
-/// 核心的 `Engine`：不可變，多個 [`Session`] 共用（plan〈介面〉）。
+/// 核心的 `Engine`：不可變，多個 [`Session`] 共用（architecture〈核心對殼〉）。
 #[derive(uniffi::Object)]
 pub struct Engine(qim_core::Engine);
 

@@ -1,4 +1,4 @@
-//! 佈局檔的驗證（plan〈佈局：畫布模型〉、architecture〈測試策略〉）：JSON Schema 與兩級驗證。
+//! 佈局檔的驗證（architecture〈佈局格式〉〈測試策略〉）：JSON Schema 與兩級驗證。
 //! 錯誤（不能存檔）每一種都造出來會紅；只有警告時可以存檔。
 
 use qim_layout::{Layout, Target, validate};
@@ -542,7 +542,7 @@ fn key_covered_except_for_a_thin_strip_is_not_covered() {
 
 #[test]
 fn switching_variants_keeps_the_page_with_the_same_id_or_falls_back_to_the_initial_page() {
-    // 轉向時重選佈局版本（plan〈佈局：畫布模型〉）：新版本有同 id 的頁就留在那頁。
+    // 轉向時重選佈局版本（architecture〈佈局格式〉）：新版本有同 id 的頁就留在那頁。
     let value = json!({ "format": "qim-layout/1", "variants": [{
         "when": { "device": "phone", "orientation": "portrait" },
         "canvas": { "width": 400, "height": 10 },

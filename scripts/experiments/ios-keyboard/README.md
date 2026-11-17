@@ -108,7 +108,7 @@ App Group（沒有完整取用）：
 | 長文 | 插入 9 段的測試長文：每段 40 個 10 字單元 `[段.序]天地玄` 加「，」（每第 5 個是「。」），第 4、5 段之間空一行 |
 | 長段 | 插入 3000 字、沒有標點與換行的一段：300 個 `[序號]天地玄黃` |
 | 讀 | 重讀游標前後文（`viewDidAppear`、`textDidChange`、`selectionDidChange` 也會讀） |
-| FM | 依序送 6 個請求，每個新開 `LanguageModelSession`；提示照 plan §7.8（上下文 + `anr` + 10 個候選，只回序號，正解 3） |
+| FM | 依序送 6 個請求，每個新開 `LanguageModelSession`；提示照 `.scratch/m3/spec.md`〈模型階梯實驗〉（上下文 + `anr` + 10 個候選，只回序號，正解 3） |
 | 間隔 | 同一個程序裡隔 0、2、5、10、20、40 秒各送 1 個請求，再隔 10、20、40 秒各送 1 個先 `prewarm()`、等 1 秒才送的請求；整輪約 2.5 分鐘 |
 | ←1000 … →100 | `adjustTextPosition(byCharacterOffset:)` 移游標，0.3 秒後重讀 |
 | ⇤ | 往前移 `before` 的字數，連按就一句一句往前走 |

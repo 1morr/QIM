@@ -1,6 +1,6 @@
 # 排序的參數：詞內用詞頻、個人分照 libime 內插、β γ beam 照 dev 切分
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈排序：同一把尺〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。公式本身寫在 `crates/qim-core/src/engine.rs`（`word_edge`、`edge_score_parts`）與 `crates/qim-core/src/user.rs`（`personal_bonus`），`crates/qim-core/tests/viterbi.rs` 照同一個式子窮舉對照；這裡記的是為什麼選這些、沒選別的；每個參數試過的另一個值寫在該條裡，量測紀錄在 `.scratch/m1/issues/` 的 11–13 與 `.scratch/m3/issues/` 的 07、12 這幾張票的 Comments。
+> 排序參數的取捨與調參。公式本身寫在 `crates/qim-core/src/engine.rs`（`word_edge`、`edge_score_parts`）與 `crates/qim-core/src/user.rs`（`personal_bonus`），`crates/qim-core/tests/viterbi.rs` 照同一個式子窮舉對照；這裡記的是為什麼選這些、沒選別的；每個參數試過的另一個值寫在該條裡，量測紀錄在 `.scratch/m1/issues/` 的 11–13 與 `.scratch/m3/issues/` 的 07、12 這幾張票的 Comments。
 
 同一把尺（ADR 0001）的分數由四部分組成：段間的字級 bigram、段內的詞頻、β（詞庫的詞加分）與 γ（每段扣分），再加個人分。各部分的取捨：
 

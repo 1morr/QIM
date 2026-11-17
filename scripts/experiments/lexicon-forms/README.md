@@ -1,6 +1,6 @@
 # 詞庫裡和常見寫法不同的字
 
-回答的問題（M1 票 17c）：rime-essay 用 OpenCC 標準寫法（「羣組」「觀衆」「喫飯」），哪些字和常見寫法不同、各影響幾個詞、兩種寫法同不同碼。結論寫在票 17c 的 Comments 與 plan §4.2、§4.3。
+回答的問題（M1 票 17c）：rime-essay 用 OpenCC 標準寫法（「羣組」「觀衆」「喫飯」），哪些字和常見寫法不同、各影響幾個詞、兩種寫法同不同碼。結論寫在票 17c 的 Comments 與 `docs/research/lexicon-and-model-tuning.md`。
 
 ## 跑法
 

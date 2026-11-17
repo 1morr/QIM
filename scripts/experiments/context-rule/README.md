@@ -5,7 +5,7 @@
 - 三種規則：
   - 不給前文：照舊用字頻 unigram。
   - 跨過標點：略過結尾的標點，接上一句的最後一字的 bigram（票 04 先試過的做法）。
-  - 接句首：接 bigram 裡的句首 `CLAUSE_START`（每句的第一字學出的一列，plan §4.3），現行的 `Engine::context_char`。
+  - 接句首：接 bigram 裡的句首 `CLAUSE_START`（每句的第一字學出的一列，`docs/research/lexicon-and-model-tuning.md`），現行的 `Engine::context_char`。
 - 量法：`cargo xtask data` 寫的 dev 切分「有前文」題（`build/corpus/<名>/dev-context.tsv`，取法同 test 的 `bench/*/context/`：前文是來源同一行裡前兩句與中間的標點，每語料最多 1,000 題），用 `qim-bench --dev` 的修正次數模擬打。「跨過標點」不改核心，把前文結尾的標點拿掉再打（見 `run.sh`）。
 
 ```sh
@@ -35,4 +35,4 @@ scripts/experiments/context-rule/run.sh
 
 - 接句首的合計答錯與修正都最少；逐語料的修正次數都比不給前文少，答錯只有 zh-wiki 多 3 題。
 - 跨過標點的合計比不給前文還差（答錯 +47、修正 +61），四個語料的修正次數都較多。
-- 和 test 切分（票 04 Comments）的結論相同：test 上接句首合計答錯 1789 對不給 1803、修正 6876 對 6944；跨過標點四個語料都比不給差。規則照現狀（plan §2.3）。
+- 和 test 切分（票 04 Comments）的結論相同：test 上接句首合計答錯 1789 對不給 1803、修正 6876 對 6944；跨過標點四個語料都比不給差。規則照現狀（`ARCHITECTURE.md`〈核心對殼〉）。

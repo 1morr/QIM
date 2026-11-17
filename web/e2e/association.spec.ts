@@ -2,7 +2,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 
 // 聯想（M3 票 13）：上屏之後候選列給接下來可能要打的字詞，數字鍵或點選選了就上屏、接著出下一輪；
 // 空白不選、Esc 只收起、退格刪字並收起（M4 票 18c）、打字母照常組字，設定區的「聯想」關掉時沒有
-// （plan〈介面〉）。剛上屏的字詞的 emoji 排在前兩個聯想後面，選了上屏、不接下一輪（M4 票 30）。
+// （architecture〈核心對殼〉）。剛上屏的字詞的 emoji 排在前兩個聯想後面，選了上屏、不接下一輪（M4 票 30）。
 
 function ui(page: Page) {
 	return {
