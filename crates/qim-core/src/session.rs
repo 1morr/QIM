@@ -619,6 +619,8 @@ impl Session {
     pub fn expire_undo(&mut self, user: &mut UserModel) {
         user.expire_undo(self.undo_owner);
         self.last_sent = None;
+        // 自動修正的還原跟著失效：過了時限撤銷不了修正字學到的，還原就會留下它（M4 票 25）。
+        self.corrected = None;
     }
 
     /// 游標不在剛打的字後面了（Enter、Tab、方向鍵這類交還宿主的鍵，或離開欄位）：正在打的串打完，
@@ -978,11 +980,10 @@ impl Session {
             }
             // 不送字元的修飾鍵不算夾在中間：下一個鍵還能撤銷。其他鍵（含單按 Shift 切中英、Esc
             // 收起聯想）都算夾在中間。
-            // 剛點的建議與剛修正的詞也留著。
+            // 剛修正的詞也留著，退格照樣還原。
             Key::Modifier => {
                 user.keep_undo(action.pending);
-                self.picked = self.picked.take().or(action.picked);
-                self.corrected = self.corrected.take().or(action.corrected);
+                self.corrected = action.corrected;
             }
             _ => {
                 let sent = if snapshot.handled {
@@ -1150,7 +1151,7 @@ impl Session {
         let word = self.typed.word();
         self.autocorrection = word.and_then(|word| self.autocorrection(engine, user, word));
         let spans = word.map_or_else(Vec::new, |word| {
-            let listing = english_mode::Listing {
+            let listing = english_mode::Sources {
                 user_words: self.options.english_user_words,
                 corrections: self.options.english_corrections,
                 autocorrection: self.autocorrection.as_deref(),
@@ -1533,6 +1534,7 @@ impl Session {
 
     /// 收起英文模式的建議列。
     fn drop_suggestions(&mut self) {
+        self.autocorrection = None;
         if !self.candidates.is_empty() {
             self.candidates.clear();
             self.page = 0;
@@ -1567,7 +1569,7 @@ impl Session {
                 let Some(corrected) = self.autocorrect(engine, user, "\n") else {
                     return self.snapshot(engine, false, None);
                 };
-                let deleted = corrected.typed.chars().count();
+                let deleted = corrected.original.chars().count();
                 return Snapshot {
                     handled: false,
                     ..self.commit_after_deleting(engine, deleted, Commit::plain(corrected.word))
@@ -1591,7 +1593,7 @@ impl Session {
         let Some(corrected) = self.autocorrect(engine, user, &commit.text) else {
             return self.commit_after_deleting(engine, deleted, commit);
         };
-        let deleted = deleted + corrected.typed.chars().count();
+        let deleted = deleted + corrected.original.chars().count();
         let commit = Commit {
             text: format!("{}{}", corrected.word, commit.text),
             original: format!("{}{}", corrected.word, commit.original),
@@ -1612,11 +1614,11 @@ impl Session {
         if !trigger.starts_with(|c: char| !is_word_char(c)) {
             return None;
         }
-        let typed = self.typed.word()?.to_string();
-        let word = self.autocorrection(engine, user, &typed)?;
-        self.typed.retract(typed.chars().count());
+        let original = self.typed.word()?.to_string();
+        let word = self.autocorrection(engine, user, &original)?;
+        self.typed.retract(original.chars().count());
         Some(Corrected {
-            typed,
+            original,
             word,
             trigger: trigger.to_string(),
             before: self.typed.clone(),
@@ -1639,8 +1641,8 @@ impl Session {
             .flatten()
     }
 
-    /// 剛自動修正完緊接著退格（brief〈英文模式與欄位類型〉的「退格可還原」）：殼刪掉修正字與觸發的字元，換回打的
-    /// 詞。修正那一下學到的（修正字）撤銷，這個 Session 之後不再修這個詞。觸發的是空白時空白一起拿掉、游標回到
+    /// 剛自動修正完緊接著退格（brief〈英文模式與欄位類型〉的「退格可還原」，時限同退格撤銷，[`Session::expire_undo`]）：
+    /// 殼刪掉修正字與觸發的字元，換回打的詞。修正那一下學到的（修正字）撤銷，這個 Session 之後不再修這個詞。觸發的是空白時空白一起拿掉、游標回到
     /// 打的詞後面，同 Gboard 的「Undo auto-correct on backspace」（事實 M47），接著打的接在詞後面；觸發的是句讀
     /// 時留著它，同 LatinIME 的 `revertCommit`，句讀讓詞打完，學的是打的詞。
     fn revert_correction(
@@ -1654,7 +1656,7 @@ impl Session {
             user.revert(std::mem::take(&mut action.pending));
         }
         self.kept
-            .insert(corrected.typed.trim_end_matches(['.', '\'']).to_lowercase());
+            .insert(english_mode::kept_key(&corrected.original));
         // 正在打的串回到打這個詞之前，再接上換回的字（`Session::finish`）；緊接著的退格從這裡重算。
         self.typed = corrected.before.clone();
         action.restart = Some(corrected.before.clone());
@@ -1664,7 +1666,7 @@ impl Session {
         } else {
             corrected.trigger.as_str()
         };
-        let text = format!("{}{trigger}", corrected.typed);
+        let text = format!("{}{trigger}", corrected.original);
         self.commit_after_deleting(engine, deleted, Commit::plain(text))
     }
 
@@ -2294,7 +2296,7 @@ struct Action {
 #[derive(Debug, Clone)]
 struct Corrected {
     /// 打的詞（去掉開頭的 `.` `'`，含詞尾的）。
-    typed: String,
+    original: String,
     /// 換成的字（含詞尾的 `.` `'`）。
     word: String,
     /// 讓詞打完的字元（空白、句讀、換行）。

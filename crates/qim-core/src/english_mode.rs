@@ -68,9 +68,9 @@ fn history_probability(count: u64) -> f64 {
     255.0 + PROBABILITY_SCALE * (count as f64 / 8192.0).log2() - 32.0
 }
 
-/// 建議列怎麼列（[`suggestions`]）。
+/// 建議列從哪些來源列（[`suggestions`]）。
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Listing<'a> {
+pub(crate) struct Sources<'a> {
     /// 英文使用者詞開著（[`crate::Options::english_user_words`]）：學過的加分、過了出現門檻的列。
     pub(crate) user_words: bool,
     /// 英文容錯開著（[`crate::Options::english_corrections`]）：也列一處拼錯的修正。
@@ -98,7 +98,7 @@ pub(crate) fn suggestions(
     engine: &Engine,
     user: &UserModel,
     typed: &str,
-    listing: Listing<'_>,
+    listing: Sources<'_>,
 ) -> Vec<CandidateSpan> {
     let prefix = typed.to_lowercase();
     let dictionary = engine.english_words();
@@ -288,15 +288,15 @@ fn corrections<'a>(
 
 /// 自動修正要贏過次一個修正多少分：機率至少 4 倍（刻度兩倍）。差不多常見的（`peice` 的 piece 137、peace 135；
 /// `helo` 扣分後的 held 149 與 help 140）不修，留在建議列給使用者選。沒有空間模型，`helo` 的 o 換成遠處的 d 和換成
-/// 鄰鍵 p 扣一樣的分，所以門檻要高：AOSP 詞表常用的 3,000 詞隨機造一處錯字，2 倍時修對 61.2%、修錯 9.0%，
-/// 4 倍時 58.9%、6.6%（M4 票 25 Comments）。
+/// 鄰鍵 p 扣一樣的分，所以門檻要高：AOSP 詞表常用的 3,000 詞隨機造一處錯字，2 倍時修對 61.2%、修錯 9.1%，
+/// 4 倍時 58.9%、6.7%（`scripts/experiments/autocorrect-threshold/`）。
 const AUTOCORRECT_MARGIN: f64 = 2.0 * PROBABILITY_SCALE;
 
 /// 自動修正至少幾個字元（去掉詞尾的 `.` `'`）：兩個字母的詞一處拼錯幾乎都讀得通好幾個詞（`os` 是 of、is、on）。
 const AUTOCORRECT_MIN_CHARS: usize = 3;
 
 /// 正在打的詞 `typed`（[`crate::english_user::TypedRun::word`]）打完時要換成的字（含原本的詞尾 `.` `'`）；不修時
-/// 是 `None`。照 LatinIME（`Suggest.java`）對原樣讀得通的保守：
+/// 是 `None`。照 LatinIME 對原樣讀得通的保守（事實 M51）：
 ///
 /// - 只修去掉詞尾 `.` `'` 後全是字母、中間可有 `'` `-`、至少 [`AUTOCORRECT_MIN_CHARS`] 個字元的詞；含數字、`@`
 ///   這類 email 字元、中間有 `.` 的不修（ADR 0008）。大寫字母超過一個的不修（LatinIME 的 `isMostlyCaps`，
@@ -323,31 +323,33 @@ pub(crate) fn autocorrection(
     if !fits {
         return None;
     }
-    let key = core.to_lowercase();
+    let key = kept_key(typed);
     let valid = engine.english_words().lookup(&key).is_some()
         || (user_words && user.english_used(&key).is_some())
         || kept.contains(&key);
     if valid {
         return None;
     }
-    let mut found: Vec<Correction> = corrections(engine, user, &key, user_words)
+    // 扣過拼錯的分，高的在前。
+    let mut found: Vec<(f64, &str)> = corrections(engine, user, &key, user_words)
         .into_iter()
         .filter(|c| c.edit != Edit::Extra)
+        .map(|c| (c.score - c.edit.penalty(), c.text))
         .collect();
-    found.sort_by(|a, b| {
-        (b.score - b.edit.penalty())
-            .total_cmp(&(a.score - a.edit.penalty()))
-            .then_with(|| a.text.cmp(b.text))
-    });
-    let score = |c: &Correction| c.score - c.edit.penalty();
-    let best = found.first()?;
-    let runner_up = found.get(1).map_or(f64::NEG_INFINITY, score);
+    found.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(b.1)));
+    let &(best_score, best) = found.first()?;
+    let runner_up = found.get(1).map_or(f64::NEG_INFINITY, |c| c.0);
     let apostrophe_elsewhere =
-        !best.text.contains('\'') && found.iter().any(|c| c.text.contains('\''));
-    if score(best) - runner_up < AUTOCORRECT_MARGIN || apostrophe_elsewhere {
+        !best.contains('\'') && found.iter().any(|(_, text)| text.contains('\''));
+    if best_score - runner_up < AUTOCORRECT_MARGIN || apostrophe_elsewhere {
         return None;
     }
-    Some(Case::of(core).apply(best.text) + suffix)
+    Some(Case::of(core).apply(best) + suffix)
+}
+
+/// 打的詞 `typed` 當成「原樣是詞」比對時的鍵：去掉詞尾的 `.` `'`、轉小寫（[`autocorrection`] 與還原過的詞共用）。
+pub(crate) fn kept_key(typed: &str) -> String {
+    typed.trim_end_matches(['.', '\'']).to_lowercase()
 }
 
 /// 打的詞的大小寫，建議跟著它（Gboard 句中首字大寫的詞，修正也保留大寫，事實 M47）：第一個字母大寫時建議的

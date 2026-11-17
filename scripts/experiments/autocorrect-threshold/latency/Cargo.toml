@@ -1,0 +1,11 @@
+[package]
+name = "autocorrect-latency"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+qim-core = { path = "../../../../crates/qim-core" }
+
+# 實驗的 crate 不進 repo 的 workspace（M4 spec〈共同規則〉）。
+[workspace]

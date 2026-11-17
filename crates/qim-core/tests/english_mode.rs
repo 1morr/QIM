@@ -548,6 +548,9 @@ const TYPOS: &[(&str, u8)] = &[
     ("hello", 120),
     ("held", 158),
     ("help", 149),
+    ("her", 176),
+    ("don't", 185),
+    ("font", 120),
     ("of", 214),
 ];
 
@@ -743,4 +746,49 @@ fn a_modifier_between_does_not_stop_the_revert() {
         (reverted.delete_before, reverted.commit.as_deref()),
         (4, Some("teh"))
     );
+}
+
+/// 修正排在補完之間要再扣分：`hel` 的補完 held、help、hello 在前，一處拼錯的 her 雖然常見也排在它們後面。
+#[test]
+fn corrections_rank_behind_completions_unless_far_more_common() {
+    let mut ime = Ime::with_words(TYPOS);
+    ime.globe();
+    assert_eq!(
+        ime.suggestions("hel")[..4],
+        ["held", "help", "hello", "her"]
+    );
+}
+
+/// 漏打撇號不扣分：`dont` 修成 don't，不是 font。
+#[test]
+fn a_missing_apostrophe_is_the_cheapest_fix() {
+    let mut ime = Ime::autocorrecting();
+    assert_eq!(ime.last("dont "), (4, Some("don't ".into())));
+}
+
+/// 過了出現門檻的英文使用者詞也是修正的對象（Gboard 學到的字也會成為修正目標，事實 M47）。
+#[test]
+fn a_learned_string_past_the_threshold_is_a_correction_target() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("qimzorb qimzorb ");
+    assert_eq!(ime.last("qimzorv "), (7, Some("qimzorb ".into())));
+}
+
+/// 還原的時限同退格撤銷：殼呼叫 `expire_undo`（3 秒到了）之後，退格只刪字，修正字學到的照留。
+#[test]
+fn the_revert_expires_with_the_undo_window() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("recieve ");
+    ime.session.expire_undo(&mut ime.user);
+    assert!(!ime.press(Key::Backspace).handled);
+    assert_eq!(ime.user.english_user_words(), ["receive"]);
+}
+
+/// Enter 修的不還原：Enter 交還了宿主，核心不知道宿主有沒有換行，退格照常交還宿主。
+#[test]
+fn an_enter_autocorrection_is_not_reverted() {
+    let mut ime = Ime::autocorrecting();
+    ime.type_text("teh");
+    ime.press(Key::Enter);
+    assert!(!ime.press(Key::Backspace).handled);
 }
