@@ -19,7 +19,7 @@
 | M10 Windows | TSF | 開工時定 | 未開工 |
 | M11 Linux | Fcitx5 或 IBus | 開工時定 | 未開工 |
 | arch-diet 架構文檔瘦身 | `docs/plan.md` 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 未開工，排在 flow-sync 之後；已拆 6 張票 |
-| flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 進行中（2026-11-17 起），已拆 2 張票；之後 arch-diet，再拆 M5 |
+| flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 進行中（2026-11-17 起），已拆 2 張票，另插修復票 02b（e2e 紅燈）；之後 arch-diet，再拆 M5 |
 | gates 補齊閘門 | 補密鑰掃描、依賴漏洞、依賴更新三道閘門，接進 `cargo xtask check` 與 CI | `.scratch/gates/spec.md` | 已驗收（2026-11-17），票 01 做完 |
 
 狀態只寫一句，進行中的那一個以「進行中」開頭，驗收後換成 `docs/archive/<里程碑>.md` 的連結。
