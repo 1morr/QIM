@@ -1,6 +1,6 @@
 # 31: M4 收尾
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 09b, 09c, 11, 12, 13, 14, 15, 16, 17, 18, 18b, 18c, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31b（之後補的票也擋；10 依票 09 的結論 wontfix；29 因譯詞移出 M4 wontfix）
 讀: spec 全部；`docs/progress.md`〈寫法與封存〉；各票的 Comments
 
@@ -18,12 +18,12 @@ Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 09b, 09c, 11, 12, 13, 14, 15, 16
 
 ## 驗收
 
-- [ ] 里程碑 code-review 的發現已處理或註明去處。
-- [ ] 乾淨 checkout 重驗 spec〈驗收〉每一條，證據附在 Comments。
-- [ ] v3 定稿寫進 plan §2.4。
-- [ ] 使用者試用第二期並回覆，progress〈偏差與決定〉記一條。
-- [ ] 各票 Comments 沒處理的發現逐條註明去處。
-- [ ] M4 封存到 `docs/archive/M4.md`，M5 進行中；`cargo xtask check` 綠燈。
+- [x] 里程碑 code-review 的發現已處理或註明去處。
+- [x] 乾淨 checkout 重驗 spec〈驗收〉每一條，證據附在 Comments。
+- [x] v3 定稿寫進 plan §2.4。
+- [x] 使用者試用第二期並回覆，progress〈偏差與決定〉記一條（progress 已沒有這段，記在 `docs/decisions.md` 並封存到 `docs/archive/M4.md`〈決定〉）。
+- [x] 各票 Comments 沒處理的發現逐條註明去處。
+- [x] M4 封存到 `docs/archive/M4.md`，M5 進行中；`cargo xtask check` 綠燈。
 
 ## Comments
 
@@ -50,3 +50,18 @@ Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 09b, 09c, 11, 12, 13, 14, 15, 16
 - 2026-11-17 `scripts/check_docs.py` 放寬 plan 章節號規則的修改要回饋到 project-init 範本（待使用者）：QIM 這份是從範本換來的，下次同步可能被舊版蓋回，用同一份範本的專案也還沒有這個修正。
 - 2026-11-17 commit 後在本分支跑完整的 `cargo xtask check`（`2b00449`）：e2e `323 passed (1.2m)`、`2 skipped`、`check 通過`。
 - 2026-11-17 使用者試用時，手機用區網 IP（http）開網頁載入失敗：`web/src/user-dict.ts` 的 `ensureDeviceId` 呼叫 `crypto.randomUUID`，非安全環境沒有它（TypeError）。使用者決定插修復票 31b。等 31b 修好後請使用者在手機試用（使用者 2026-11-17 決定）；試用與封存都還沒做。
+- 2026-11-17 31b 合併後（`git merge main`，`docs/plan.md` 的衝突兩邊都留）在本分支開區網開發伺服器（`--host`，電腦 localhost、手機區網 http），使用者試用第二期七項，手機另按「複製全部」，回覆「都可以，封存 M4」（使用者定）；decisions.md 記一條，跟著封存。
+- 2026-11-17 範例 email 的殘留（舊截圖、`remembered-prefix`、`autocorrect-threshold` 兩支實驗腳本、已封存的 M3 票、git 歷史）：等使用者（協調者轉交）；本票不改寫 git 歷史。
+- 2026-11-17 封存：M4 的 43 列 session 紀錄（含 31b）與 167 條決定（〈紀錄〉10 條含試用那條、〈搬移前的紀錄〉157 條原樣）移到 `docs/archive/M4.md`，逐列逐條比對都在；`docs/archive/M4.md` 加〈使用者試〉；roadmap 的 M4 連到封存檔、M5 進行中、M4 一節縮成連結；plan 開頭的狀態行改成 M0–M4 完成、M5 進行中；progress.md 只留本 session 一列，下一步 `/1morr:checkpoint M4`。gates 的狀態仍寫「排在 M4 之後」，和 M5 誰先由 checkpoint 定。
+
+- 2026-11-17 封存後的 `cargo xtask check`：e2e `325 passed (1.1m)`、`2 skipped`、`check 通過`。
+
+Session 紀錄：里程碑 code-review（修鄰鍵讀法沒 refresh 的重列、章節號檢查）、乾淨 checkout 重驗、v3 定稿（metadata 限檔頭）、發現逐條歸位、使用者試用第二期通過，M4 封存、M5 進行中。
+決定：規則 4 不加頻率門檻（使用者同意）
+決定：v3 的 metadata 行只能寫在檔頭（使用者同意）
+決定：名詞表加「欄位類型」「智慧標點」、改「emoji 候選」，不收「列的種類」（使用者同意）
+決定：範例 email 換成 `jean.test@example.com`（使用者同意）
+決定：試用第二期通過、封存 M4（使用者定）
+決定：組字中途開無痕不重建 lattice，不修（Agent 定）
+決定：code-review 的核心介面整理延到 M7 開工、網頁整理延到 M5（Agent 定）
+決定：`check_docs.py` 章節號規則放寬；回饋 project-init 範本待使用者（Agent 定）

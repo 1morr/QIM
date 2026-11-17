@@ -10,8 +10,8 @@
 | M1 網頁 prototype | 競品黑箱基線；速成連打、學習、英文候選、佈局；三個 Rime 案例首選正確 | brief §1.5、§4、§5、§9；plan §2–§5、〈M1 網頁 prototype〉；ADR 0004–0006；`.scratch/m0/issues/09-m0-close.md` 的 Comments（留給 M1 各票的發現） | 已驗收，[已封存](archive/M1.md) |
 | M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | brief §9、§11、`docs/research/facts-platforms.md`；plan §1.4、§3、〈M2 平台可行性實驗〉；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 已驗收，[已封存](archive/M2.md) |
 | M3 智慧候選 | 模型階梯實驗（雲端 LLM 量過不做）；上下文、詞級 trigram、停鍵層神經重排、個人 bigram、聯想、記住常打字串、詞庫擴充、資料包 manifest 與線上更新 | brief §1.5、§7、§8、`docs/research/facts-platforms.md`；plan §2.3、§2.7、〈M3 智慧候選〉、〈M3 的模型階梯實驗〉；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 已驗收，[已封存](archive/M3.md) |
-| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、〈M4 輸入增強〉、〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 進行中，已拆 31 張票（第一期 01–18、第二期 19–30、收尾 31） |
-| M5 觸控鍵盤與設定 | 網頁觸控鍵盤做到平台樣板：Gboard 觸控功能盤點、候選列與工具列接在鍵盤頂端、鍵盤內設定頁、emoji 與文字編輯等面板、滑動輸入與空白鍵移游標（〈M5 觸控鍵盤與設定〉） | 開工時定 | 未開工 |
+| M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；plan §2.1、§2.3、§2.4、§2.6、§3.1、§4.4、〈M4 輸入增強〉、〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 已驗收，[已封存](archive/M4.md) |
+| M5 觸控鍵盤與設定 | 網頁觸控鍵盤做到平台樣板：Gboard 觸控功能盤點、候選列與工具列接在鍵盤頂端、鍵盤內設定頁、emoji 與文字編輯等面板、滑動輸入與空白鍵移游標（〈M5 觸控鍵盤與設定〉） | 開工時定 | 進行中（2026-11-17 起），還沒拆票；拆票前讀 `.scratch/m4/issues/31-m4-close.md` 的 Comments |
 | M6 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 開工時定 | 未開工 |
 | M7 macOS | 第一個平台殼，一次接上全部已完成的功能 | 開工時定 | 未開工 |
 | M8 iOS | 鍵盤擴充與主 App；多端檔案傳輸評估 | 開工時定 | 未開工 |
@@ -24,7 +24,7 @@
 
 狀態只寫一句，進行中的那一個以「進行中」開頭，驗收後換成 `docs/archive/<里程碑>.md` 的連結。
 
-M1–M3 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md`、`.scratch/m2/issues/12-m2-close.md` 與 `.scratch/m3/issues/23-m3-close.md` 的 Comments，里程碑開工細化 spec 時讀屬於它的那幾條。
+M1–M4 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m1/issues/24-m1-close.md`、`.scratch/m2/issues/12-m2-close.md`、`.scratch/m3/issues/23-m3-close.md` 與 `.scratch/m4/issues/31-m4-close.md` 的 Comments（M4 的已寫進下面接手的各節），里程碑開工細化 spec 時讀屬於它的那幾條。
 
 編號（2026-11-12）：插入 M5 觸控鍵盤與設定，原本的 M5–M10 各往後順延一號（佈局編輯器 M6、macOS M7、iOS M8、Android M9、Windows M10、Linux M11）。M0–M3 的票、spec、封存與上面三張收尾票的 Comments 寫的是舊編號（舊 M5 = 新 M6，依此類推），沒有改。
 
@@ -48,7 +48,7 @@ M1–M3 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 
 ## M4 輸入增強
 
-進行中（2026-11-12 開工）：目標、範圍、共同規則、驗收與票序見 `.scratch/m4/spec.md`；這一節原本的細節（兩期、各功能已定的做法、完成標準）搬進 spec〈細節〉。
+已完成（2026-11-17）：目標、範圍、共同規則、驗收與票序見 `.scratch/m4/spec.md`，session 紀錄與決定封存在 `docs/archive/M4.md`；容錯沒採用的量法在 `docs/research/tolerance.md`，重驗的證據與各票發現的去處在 `.scratch/m4/issues/31-m4-close.md` 的 Comments。
 
 ## M6 佈局編輯器
 

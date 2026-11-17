@@ -14,46 +14,4 @@
 
 | 日期 | 票 | 結果 | 下一步 |
 | --- | --- | --- | --- |
-| 2026-11-12 | M4 封存 M3 | 票 23：里程碑 code-review（修匯出 tick、補個人 bigram e2e 等）、乾淨 checkout 重驗 spec〈驗收〉、匯出 v2 定稿；M3 封存到 `docs/archive/M3.md`；見票 23 | 新 session 下 `/to-tickets docs/plan.md 拆 M4 的票` |
-| 2026-11-12 | M4 檢視 | 回顧 M3、畫架構與流程圖；子代理審查與研究（兩份筆記）；使用者同意 D1–D8，roadmap 的 M4 一節重寫成兩期、加 M5 一節、brief §4.5 已改 | 新 session 下 `/to-tickets docs/plan.md 拆 M4 的票` |
-| 2026-11-12 | M4 拆票 | roadmap 的 M4 一節細化成 `.scratch/m4/spec.md`（每鍵延遲上限、細節搬進 spec〈細節〉）；使用者同意切法，31 張票 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
-| 2026-11-12 | M4 12 | 殼給日期（`set_today`，沒給不寫假日期）、匯出 v3（種類欄、`last_used`、裝置 id）、v1/v2 照收；plan §2.4 改成 v3 草稿；見票 12 | 新 session 下 `/implement .scratch/m4/issues/13-learning-expiry.md` |
-| 2026-11-12 | M4 05 | `bench --check` 擋原生每鍵 p95（空白、學過兩組），WebAssembly 只報；數字與翻頁 e2e 的既有競態見票 05 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
-| 2026-11-12 | M4 04 | 簡體模式的前文轉回繁體再接字級 bigram、詞級 trigram 與個人 bigram（剛上屏那段取原文）；bench 與 --learning 前後相同；見票 04 | 新 session 下 `/implement .scratch/m4/issues/01-debug-panel.md` |
-| 2026-11-12 | M4 01 | debug 面板：核心 `Session::inspect`（不進 Snapshot）、網頁面板與重排模型總分；bench、--learning 前後逐行相同，延遲高負載下交替量在雜訊內；見票 01 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
-| 2026-11-12 | M4 13 | 一年時限（整串上屏另記日期、規則 2、3 只看一年內、一年沒用的停用不刪）、條目上限 2 萬列／3 萬組（LatinIME 1.2 倍）；v3 entry 12 欄；見票 13 | 新 session 下 `/implement .scratch/m4/issues/14-english-user-words.md` |
-| 2026-11-12 | M4 06 | `Key::Weighted` 與 `qim-layout` 的空間模型（到形狀的距離加 2D Gaussian、點中的鍵一定最高）；網頁觸控送機率、面板顯示；bench 前後相同；見票 06 | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
-| 2026-11-12 | M4 11 | 萬用鍵 `z`：每個代一碼、任一位置，學習記實際的碼，面板標萬用鍵；整句首選約原樣七成、單字 1–2%（票 18 評估）；bench 前後相同；見票 11 | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
-| 2026-11-12 | M4 05b | `qim_bench::run` 收 `Timers`，`run.rs` 改用數字固定的假原生計時器，load 61 下連跑三次都綠；補 `--check` 延遲接線與真實計時形狀的測試；見票 05b | 新 session 下 `/implement .scratch/m4/issues/05c-page-turn-e2e-race.md` |
-| 2026-11-12 | M4 05c | 翻頁 e2e 的競態是測試的問題（重排翻頁中回來照 plan 延到第一頁）：兩個翻頁測試關掉重排，補翻頁中途回來的 e2e；見票 05c | 新 session 下 `/implement .scratch/m4/issues/02-web-hardening.md` |
-| 2026-11-12 | M4 06b | 平手點都在鍵外（點擊判定照直線距離、Gaussian 各軸 σ 不同），照設計提到平手；測試格子補 Shift、刪除，種子進 repo 並加固定測試，產品沒改；見票 06b | 新 session 下 `/implement .scratch/m4/issues/07-physical-geometry.md` |
-| 2026-11-12 | M4 14 | 英文使用者詞取代記住的字串：4 字元起都學、門檻 2／3 次、規則 4、5 改寫、v3 種類 `english`；bench 不變；見票 14 | 新 session 下 `/implement .scratch/m4/issues/15-backspace-undo.md` |
-| 2026-11-12 | M4 02 | 換模型競態與模型載入搬進 `NeuralReranker`、`snapshot.free()` 收一處；IndexedDB 或 `localStorage` 打不開照樣能打字（只留記憶體、狀態列說明）；見票 02 | 新 session 下 `/implement .scratch/m4/issues/03-rerank-cache.md` |
-| 2026-11-12 | M4 07 | 實體鍵盤送 `code`，`qim-layout` 的鄰鍵先驗轉成 `Weighted`；中文模式整個當美式鍵盤（使用者決定）；名詞改成按鍵機率；bench 前後相同；見票 07 | 新 session 下 `/implement .scratch/m4/issues/08-typo-bench.md` |
-| 2026-11-12 | M4 15 | 退格撤銷：撤銷紀錄 `Undo` 以動作為單位，中英共用；照 librime 的 3 秒由殼計時（`expire_undo`）；Session 分開、無痕不撤銷；bench 不變；見票 15 | 新 session 下 `/implement .scratch/m4/issues/16-forget-candidate.md` |
-| 2026-11-12 | M4 03 | 停鍵結果快取放核心：鍵是重排要求、上限 32；殼給 `set_reranker_id`，漏給只是沒快取；退格回算過的碼不等停鍵；見票 03 | 新 session 下 `/implement .scratch/m4/issues/16-forget-candidate.md` |
-| 2026-11-12 | M4 16 | 撤銷學習：核心 `Session::forget`、網頁組字中 Shift+Delete／Ctrl+Delete 清目前頁第一個；個人 bigram 只清現在前文那組；第 2 位的自動造詞桌面清不到，留給 M5；見票 16 | 新 session 下 `/implement .scratch/m4/issues/17-sync-merge.md` |
-| 2026-11-12 | M4 08 | 口語的「含打錯碼」「觸控模擬」集合（test、dev，決定性）、改錯比例（票 10 前是 0）、不容錯基線；〈容錯採用門檻〉使用者確認；見票 08 | 新 session 下 `/implement .scratch/m4/issues/09-tolerance-experiment.md` |
-| 2026-11-13 | M4 17 | 跨裝置合併：各台次數相加、墓碑只存雜湊、版本取大、tick 對齊、清空也同步；匯入改合併，網頁說明合併幾筆；ADR 0007；收 7ad01da 草稿；見票 17 | 新 session 下 `/implement .scratch/m4/issues/09-tolerance-experiment.md` |
-| 2026-11-13 | M4 09 | 容錯實驗：四種修正合起來沒過〈容錯採用門檻〉（修正次數、改錯、沒打錯退步、延遲），速成不做、票 10 wontfix；機制量完刪掉；見票 09 | 等使用者：期中檢查（票 18）試用第一期 |
-| 2026-11-13 | M4 18 | 期中檢查：bench --check、--learning、check 全綠；使用者試用第一期可開第二期；插修復票 18b（萬用鍵延遲進閘門）、18c（聯想時退格就刪字）；見票 18 | 新 session 下 `/implement .scratch/m4/issues/18b-wildcard-latency.md` |
-| 2026-11-13 | M4 18c | 有聯想時退格交還宿主刪字、聯想收起，照〈退格撤銷〉撤銷這次上屏；Esc 照舊；plan §2.1、§2.4、brief §4.5 與事實檔已改；bench 不變；見票 18c | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-13 | M4 18b | 含萬用鍵的輸入每鍵延遲：候選列重用開頭各段的 span、字頻排序只查一次，空白全部 p95 961→237 µs；`bench --check` 加這批輸入、同一組上限；見票 18b | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-13 | M4 流程 | 對齊 project-init：roadmap、事實編號、決策紀錄、票留 Session 紀錄由合併的人寫本檔、收尾票加使用者試；文件檢查換成 `scripts/check_docs.py` | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-13 | M4 流程 | 里程碑表的狀態改成固定詞開頭（已驗收），`arch-diet` 佔一列；`scripts/check_docs.py` 換成新版：有票的目錄要列在表裡、票要有 `## 驗收` | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-14 | M4 09b | Gboard 式鄰鍵讀法：觸控修正 −12.5%，點對鍵時 +5.6–8.4%，延遲在上限內；機制已刪；另修 hook 寫壞 index；使用者決定採用（票 09c）；見票 09b | 新 session 下 `/implement .scratch/m4/issues/09c-touch-neighbor-readings.md` |
-| 2026-11-14 | M4 09c | 觸控鄰鍵讀法進核心、預設開（`Key::Physical` 分來源）；bench 重打點觸控、兩條閘門；修正 −12.5%、第一頁 35.5% 同 09b；見票 09c | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-14 | M4 流程 | 對齊 project-init：`AGENTS.md` 加〈公開 repo〉〈UI〉、合併與撞號規則，票 23 先出設計稿；票上紀錄與 CHANGELOG 排到 M4 驗收後（flow-sync） | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-15 | M4 流程 | 對齊 project-init：roadmap 狀態寫排在誰之後、加 `next_step.py`、加〈閘門〉；缺的三道開成 `.scratch/gates/`，排在 flow-sync 前 | 新 session 下 `/implement .scratch/m4/issues/19-gboard-english-blackbox.md` |
-| 2026-11-15 | M4 19 | 在自建的 Android 模擬器上黑箱實測 Gboard 18.5.10 英文鍵盤，事實 M47、M48、P24；Gboard 不配對成對符號、email 欄不切英文，票 26、27 依據要另找；見票 19 | 新 session 下 `/implement .scratch/m4/issues/20-translation-sources.md` |
-| 2026-11-15 | M4 20 | 查譯詞來源授權與 LLM 生成費用，寫成研究與事實 T34–T38；使用者決定譯詞移出 M4，票 29 wontfix；見票 20 | 新 session 下 `/implement .scratch/m4/issues/21-english-mode-adr.md` |
-| 2026-11-15 | M4 21 | ADR 0008 定英文模式逐字上屏與 `delete_before`，事實 P25–P28，`Snapshot` 加欄位、網頁照做；協調者代答 7 題；見票 21 | 新 session 下 `/implement .scratch/m4/issues/22-aosp-english-pack.md` |
-| 2026-11-15 | M4 22 | 英文資料包改用 AOSP LatinIME en_US 詞表（協調者定，T39），156,636 詞帶頻率；規則 4 觸發 54→87 題、bench 不退步；見票 22 | 新 session 下 `/implement .scratch/m4/issues/28-inline-english-experiment.md` |
-| 2026-11-15 | M4 28 | 句中英文混輸實驗不採用：test 純中文集退 1 題（首次跨→tumors），混輸句修正 −10.9%（口語 −1.7%）；brief 改不做、機制已刪；見票 28 | 新 session 下 `/implement .scratch/m4/issues/30-association-boost.md` |
-| 2026-11-15 | M4 30 | 聯想補強：做聯想的 emoji（照 macOS 排第 3 位、選了不學不接）；句首建議、量詞聯想和桌面數字鍵衝突、搶 M5 工具列的位置，不做、排進 M5 評估；bench 不變；見票 30 | 新 session 下 `/implement .scratch/m4/issues/23-touch-english-keyboard.md` |
-| 2026-11-17 | M4 23 | 觸控加地球鍵（點一下切中英、長按切換鍵盤選單）與英文頁、英文符號頁，格式加 `keyboardMenu`、`asciiPage`，網頁照中英狀態換頁；設計稿使用者確認；見票 23 | 新 session 下 `/implement .scratch/m4/issues/24-english-mode.md` |
-| 2026-11-17 | M4 24 | 英文模式接上：地球鍵進英文模式、逐字上屏、英文建議列（學過的加分後和詞典頻率合比）、句首自動大寫；名詞表加四條；見票 24 | 新 session 下 `/implement .scratch/m4/issues/25-autocorrect.md` |
-| 2026-11-17 | M4 25 | 英文容錯（預設開）與自動修正（預設關）：打完詞時修、Enter 也修、3 秒內退格還原、學過的不修；門檻 4 倍；名詞表加三條；見票 25 | 新 session 下 `/implement .scratch/m4/issues/26-field-types.md` |
-| 2026-11-17 | M4 26 | 欄位類型：email、網址、密碼欄聚焦進英文直通、離開還原（使用者定），數字欄開數字頁，殼經 `Session::set_field` 告訴核心；見票 26 | 新 session 下 `/implement .scratch/m4/issues/27-smart-punctuation.md` |
-| 2026-11-17 | M4 27 | 智慧標點：中文 `"` `'` 照 Rime 左右輪流、英文模式 1.1 秒內兩下空白出「. 」，三項各一開關預設開（使用者定）；見票 27 | 新 session 下 `/implement .scratch/m4/issues/31-m4-close.md` |
-| 2026-11-17 | M4 31b | 區網 http 開網頁：裝置 id 沒有 `crypto.randomUUID` 時改用 `getRandomValues`，「複製全部」沒有剪貼簿時選取清單；見票 31b | 新 session 下 `/implement .scratch/m4/issues/31-m4-close.md` |
+| 2026-11-17 | M5 封存 M4 | 票 31：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉、v3 定稿、使用者試用第二期通過（31b 修區網 http）；M4 封存到 `docs/archive/M4.md`；見票 31 | 新 session 下 `/1morr:checkpoint M4` |

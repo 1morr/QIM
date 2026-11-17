@@ -1,6 +1,6 @@
 # QIM 實作計劃
 
-> 狀態：M0–M3 完成（`.scratch/m0/spec.md`–`.scratch/m3/spec.md`，封存 `docs/archive/M0.md`–`docs/archive/M3.md`）；M4 進行中（還沒拆票）；還沒開工的里程碑只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
+> 狀態：M0–M4 完成（`.scratch/m0/spec.md`–`.scratch/m4/spec.md`，封存 `docs/archive/M0.md`–`docs/archive/M4.md`）；M5 進行中（還沒拆票）；還沒開工的里程碑只有目標、範圍與完成標準。本檔只寫現況：決定改了就直接改寫，不留「原寫」「取代原」「某日改」；舊版與理由記在 progress〈偏差與決定〉，影響架構的寫 ADR。里程碑開工時，它在〈里程碑任務〉的那一節細化成 `.scratch/<里程碑>/spec.md`，這裡縮成一行連結；拆票後以票為準。需求與決定見 `docs/design-brief.md`，名詞見 `GLOSSARY.md`。
 
 ## 0. 工程慣例
 
