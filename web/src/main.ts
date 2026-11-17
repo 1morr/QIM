@@ -419,7 +419,7 @@ async function start(): Promise<void> {
 		if (event.key === "Shift") {
 			return;
 		}
-		// 組字中 ↓ 打開展開面板、↑ 收起（事實 M18）；核心本來就吃下不動作，不必轉給它。
+		// 組字中 ↓ 打開展開面板、↑ 收起（Microsoft 的 ↓ 進候選窗，事實 M18；Tab 與 → 這裡已給字根提示與分段）；核心本來就吃下不動作，不必轉給它。
 		if (
 			plain &&
 			composingChinese() &&
