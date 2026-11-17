@@ -1,6 +1,6 @@
 # QIM 架構
 
-> 狀態：從 `docs/plan.md` 搬移中。核心、碼表與資料管線、測試策略、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
+> 狀態：從 `docs/plan.md` 搬移中。核心、碼表與資料管線、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
 >
 > 寫法：只寫現況，改了就改寫原句，舊說法留給 git；票號與「某日改」不寫進來。只寫打開程式碼看不出來的：模組的分工、誰能依賴誰、跨模組的資料與契約。單一模組內的行為由測試與程式碼說明；操作步驟（建置、在裝置上驗、排除故障）寫在 `docs/development.md`；選型與取捨的理由寫 ADR，這裡連過去。節用標題引用、不編號。全檔上限 15,000 字元，`scripts/check_docs.py` 強制。
 
@@ -164,7 +164,9 @@ flowchart LR
 
 ## 測試策略
 
-還在 plan〈測試策略〉。
+- 核心與 `qim-layout`：`cargo test` 的單元與性質測試；佈局驗證雙向測（每種錯誤會紅、只有警告不紅），內建佈局另過 `qim_layout::check_builtin`。
+- 網頁：Playwright e2e，實體鍵盤與觸控都測；原生殼在真的宿主程式裡打字讀回（`AGENTS.md`〈驗收輸入行為〉）。
+- 首選字基準（`qim-bench`）擋排序與資料的退步：固定題、維基與口語語料的 test 切分（含有前文、打錯碼、觸控模擬）、本機的個人集；按鍵照殼的做法經 `qim-layout` 轉成機率。`--check` 要固定題全過，各集合答錯數與修正次數不超過 baseline，原生每鍵延遲 p95 在上限內。調參只看 dev 切分；測試句不得出現在訓練語料；個人集的內容不進 repo、不送雲端。指令與量法見 `docs/development.md`〈首選字基準〉。
 
 ## 風險與回寫點
 

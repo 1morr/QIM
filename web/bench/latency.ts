@@ -1,4 +1,4 @@
-// WebAssembly 的每鍵延遲（plan〈首選字基準〉）：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈首選字基準〉。
+// WebAssembly 的每鍵延遲：由 `qim-bench` 用 Node 跑，量法見 `docs/development.md`〈每鍵延遲〉。
 //
 // 用法：node bench/latency.ts [--user-dict <學習資料>] <資料包路徑>…，stdin 一行一個輸入碼。給了學習資料
 // （`exportUserDict` 的文字檔）時，建好 Session 後先 `loadUserDict`（不計入載入），各輸入共用它。每份資料包旁要有它的 manifest.json

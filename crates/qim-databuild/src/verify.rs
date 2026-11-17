@@ -64,7 +64,7 @@ pub enum CheckId {
     Manifests,
     /// 語料的基準句與訓練切分每句都轉得了碼，基準句的碼與轉碼結果相同。
     CorpusTranscodes,
-    /// 基準句沒有一句原樣出現在任何語料的 train（plan〈首選字基準〉 的防洩漏；bigram 用所有 train 訓練）。
+    /// 基準句沒有一句原樣出現在任何語料的 train（architecture〈測試策略〉 的防洩漏；bigram 用所有 train 訓練）。
     CorpusNoLeak,
     /// 同樣的來源建兩次，基準句、訓練切分與字頻的 sha256 相同。
     CorpusDeterministic,

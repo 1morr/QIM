@@ -36,7 +36,7 @@ cargo run --release -- context-stats [--split test]
 ```
 
 - `eval` 印 Markdown 表，逐題結果寫到 `build/model-ladder/<切分>/<模型名>/<集合>.tsv`（只有行號與數字，個人集也一樣）。
-- `export` 把每題的重排要求寫成 `build/model-ladder/<切分>/requests/<集合>.jsonl`（下面〈給實驗票〉），不含答案。個人集要加 `--include-personal` 才匯出；它的內容只在本機、不送雲端，雲端實驗要跑個人集每次先問使用者（plan §5.2）。
+- `export` 把每題的重排要求寫成 `build/model-ladder/<切分>/requests/<集合>.jsonl`（下面〈給實驗票〉），不含答案。個人集要加 `--include-personal` 才匯出；它的內容只在本機、不送雲端，雲端實驗要跑個人集每次先問使用者（`docs/development.md`〈個人集〉）。
 - `compare` 比兩個逐題結果目錄裡同名的集合：首選、前 2 名、可動首選各報翻好／翻壞與 McNemar 精確檢定（雙尾）的 p 值。
 - `by-length`（票 25）把幾個逐題結果目錄（各一個模型）依答案字數分成 1–4、5–8、9–14、15 字以上，各組列首選、前 2 名與題數；組是口語、維基、個人與口語長前文的三種前文長度（「有前文」兩組不分）。逐題結果檔的最後一欄是答案字數，票 25 前寫的檔沒有這欄，要重跑。
 - `context-stats`（票 25）印長前文題與口語長前文題的前文長度：p50、到 50 字與到 200 字的比例。
@@ -54,7 +54,7 @@ cargo run --release -- context-stats [--split test]
 | 口語長前文 | `hkcancor·對話·前文0`、`·前文50`、`·前文200`（票 25） | `build/corpus/hkcancor/dev-dialogue.tsv`（968 題） | `test-dialogue.tsv`（988 題） |
 | 個人 | personal | 不切（下面〈調參與報數〉） | `bench/personal/rime-userdb.tsv` |
 
-- 有前文：和基準的「有前文」集合同一批題，前文改用同一段裡前面最多 200 字（`cargo xtask data` 寫的長前文題，plan §5.2）。`·前文0` 不給前文（同基準的 `·前文·不給`），`·前文50`、`·前文200` 給最後 50、200 字。核心只看前文的最後一字（plan §2.3），所以基線的 50 與 200 一樣；給重排模型的前文才有差別。長前文有多長：維基段落常超過 50 字，口語多半只有一兩句（test 的長前文 p50 是 8–79 字，見下面〈限制〉）。
+- 有前文：和基準的「有前文」集合同一批題，前文改用同一段裡前面最多 200 字（`cargo xtask data` 寫的長前文題，`docs/development.md`〈資料建置〉）。`·前文0` 不給前文（同基準的 `·前文·不給`），`·前文50`、`·前文200` 給最後 50、200 字。核心只看前文的最後一字（plan §2.3），所以基線的 50 與 200 一樣；給重排模型的前文才有差別。長前文有多長：維基段落常超過 50 字，口語多半只有一兩句（test 的長前文 p50 是 8–79 字，見下面〈限制〉）。
 - 每題用新的 `Session` 與空白的 `UserModel`，同首選字基準。
 
 ### 指標
@@ -311,7 +311,7 @@ cargo run --release -- context-stats [--split test]
 
 ### 口語長前文題
 
-HKCanCor 一段錄音是一段對話，語料管線把每個話輪當一段，「有前文」與長前文都不跨話輪。`cargo xtask data` 另寫 `build/corpus/hkcancor/{test,dev}-dialogue.tsv`（plan §5.2）：test、dev 切分裡有前文的句子，前文是同一段對話裡前面的話輪接起來的最後 200 字（話輪結尾不是標點時補空格），切分與丟句同語料管線，答案句是 dev、test 切分的句子，不在 train（神經模型的 train 也不含）；前文的話輪可能在 train 裡，同長前文題。集合名 `hkcancor·對話·前文0／50／200`，組名「口語長前文」。
+HKCanCor 一段錄音是一段對話，語料管線把每個話輪當一段，「有前文」與長前文都不跨話輪。`cargo xtask data` 另寫 `build/corpus/hkcancor/{test,dev}-dialogue.tsv`（`docs/development.md`〈資料建置〉）：test、dev 切分裡有前文的句子，前文是同一段對話裡前面的話輪接起來的最後 200 字（話輪結尾不是標點時補空格），切分與丟句同語料管線，答案句是 dev、test 切分的句子，不在 train（神經模型的 train 也不含）；前文的話輪可能在 train 裡，同長前文題。集合名 `hkcancor·對話·前文0／50／200`，組名「口語長前文」。
 
 前文長度（`context-stats`）：
 
