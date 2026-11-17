@@ -145,7 +145,8 @@ cargo xtask data                                     # 建模型資料包
 ```
 
 - `train.py`（PyTorch，PEP 723 的 inline 依賴，`train.py.lock` 釘版本，`uv run --script` 跑）在權重旁寫 `reference.json`：幾組前文與路徑和 PyTorch 算的分數。`neural-import` 用 candle 的 f32 重算，差超過 0.0001 nat 就不寫檔（模型結構或權重名和 `qim-neural` 對不上），過了才量化成 q8（`qim_neural::to_gguf`，同樣的權重得到同樣的位元組）。
-- λ 只在 dev 切分上挑（`scripts/experiments/model-ladder` 的 `neural --lambdas`），不看 test 與個人集；換了模型要照 plan §2.7 跑模型階梯報 test 的數字，`cargo xtask bench` 不跑重排。
+- λ 只在 dev 切分上挑（`scripts/experiments/model-ladder` 的 `neural --lambdas`），不看 test 與個人集；換了模型要照下一條跑模型階梯報 test 的數字。
+- `cargo xtask bench` 只跑同步層，不跑停鍵層的重排：`bench --check` 的個人集 baseline 守不到重排把哪些詞翻好或翻壞。換掉或重訓停鍵層的模型時，要跑 `scripts/experiments/model-ladder/` 的 `neural --split test` 與 `compare`（README〈怎麼重跑〉），報口語、維基、個人集的前 2 名與翻盤數；個人集只列數字與題號、只報不擋（`.scratch/m3/spec.md`〈採用門檻〉，M3 票 25）。1.4M 在新基線上個人集前 2 名 85.76% → 85.23%（`docs/research/model-ladder.md`〈停鍵層在新基線重量〉）。
 - `qim-neural` 的單元測試用 `train.py fixture` 產生的極小模型（`crates/qim-neural/tests/fixtures/`）核對 PyTorch 的分數，CI 也跑；本機有 `build/neural-rerank/lstm-c0.5/` 時另比真的模型。改了 `train.py` 的模型結構要重產這組檔。
 - 重排一次的延遲：`cargo run --release -p qim-neural --example latency`（9 條路徑 × 18 字、前文 50 字，2 條執行緒）。
 - 模型資料包和其他資料包一起進 `cargo xtask pack-release` 的索引（〈線上更新的 release〉）。

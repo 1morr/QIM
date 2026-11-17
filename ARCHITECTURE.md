@@ -1,6 +1,6 @@
 # QIM 架構
 
-> 狀態：從 `docs/plan.md` 搬移中。核心、平台殼、碼表與資料管線、測試策略、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
+> 狀態：從 `docs/plan.md` 搬移中。平台殼、碼表與資料管線、測試策略、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
 >
 > 寫法：只寫現況，改了就改寫原句，舊說法留給 git；票號與「某日改」不寫進來。只寫打開程式碼看不出來的：模組的分工、誰能依賴誰、跨模組的資料與契約。單一模組內的行為由測試與程式碼說明；操作步驟（建置、在裝置上驗、排除故障）寫在 `docs/development.md`；選型與取捨的理由寫 ADR，這裡連過去。節用標題引用、不編號。全檔上限 15,000 字元，`scripts/check_docs.py` 強制。
 
@@ -120,7 +120,42 @@ flowchart LR
 
 ## 跨模組的資料與契約
 
-核心對殼的介面、學習資料與資料包的格式還在 plan〈核心〉〈碼表與資料管線〉。
+資料包的格式還在 plan〈碼表與資料管線〉。單一模組內的行為看各 crate 的 `tests/`，依功能分檔。
+
+### 核心對殼
+
+殼把事件交給 `Session`、拿回一份完整的 `Snapshot`，只負責畫（同 librime 的 `RimeApi`、fcitx5 的 InputContext）。
+
+- `Engine` 是方案加資料包、不可變，殼建一個給各輸入框的 `Session` 共用；`UserModel` 是學習資料，存檔歸殼；`Session` 是一個輸入框的組字狀態。
+- 殼把鍵碼轉成 `Key`；綁定收不了帶資料的列舉時用 `Key::parse` 收「種類 + 值」。觸控與實體鍵盤的按鍵機率由 `qim-layout` 算、殼轉交，`qim-core` 不知道佈局。只改殼畫面、不動組字的鍵由殼攔下。
+- `Snapshot.handled` 為假時殼把鍵交還宿主，有 `delete_before`、`commit` 時先照做：先刪游標前 `delete_before` 個 Unicode scalar，再上屏 `commit`（ADR 0008）。
+- 殼給的狀態：聚焦時 `set_field`（欄位類型不在 `Options` 裡）；聚焦、移游標、上屏後 `set_context` 給游標前的文字，失焦而給不出時 `clear_context`；改設定是讀 `options()` 改一項再 `set_options`，組字中接著 `refresh`；裝置 id 用 `UserModel::set_device`，一次安裝一個。
+- 核心不讀時鐘，時間由殼給：每次使用者操作前 `UserModel::set_today`（當地日曆日，第一次學習前一定要給）；可能學到東西的動作後計 3 秒呼叫 `expire_undo`，英文模式的空白後計 1100 ms 呼叫 `expire_double_space`，使用者點輸入框時兩個都呼叫。
+- 停鍵重排：殼在事件後取 `rerank_request`，在背景執行緒或 Web Worker 交給 `qim-neural`，再經 `apply_rerank` 送回；核心只收目前 `generation` 的結果，重排的候選最高到第 2 位、首選不動（ADR 0005）。換模型或重排模式時給 `set_reranker_id`，沒給就不快取。
+
+### 候選的排位順序
+
+全部候選用同一個函式打分（ADR 0001），之後依序：
+
+1. 候選列：蓋滿整串的字詞與多段路徑依分數，繁體模式的簡體字、擴展區的字、只蓋開頭一段的字詞依序排在後面。
+2. emoji 接在它的字詞後面。
+3. 排位規則：觸發詞 → 選兩次的成首選 → 用過的使用者詞至少第 2 → 英文候選第 2 → 英文使用者詞的前綴補完。前面排定的位置後面不動。
+4. 停鍵重排的路徑放第 2 位，規則排在第 2 位起的候選在它前面。
+5. 觸控鄰鍵讀法再從第 2 格起插。
+
+### 學習資料的格式
+
+`UserModel::export` 寫 `# qim-userdict v3`：UTF-8、Tab 分隔的純文字，是對外格式（brief〈版本與更新〉）。
+
+- 加列的種類或改欄位就升 v4；匯入一直收 v1、v2。
+- metadata 行 `#@/key<Tab>value` 只能在檔頭。每列第一欄是種類：不認得的略過並警告，已知種類有一列不合就整份不收、錯誤帶行號。
+- 同步是各台匯出快照、匯入時 `UserModel::merge`，合併有交換律、結合律、冪等（ADR 0007）；平台殼只做傳輸。殼讀回自己的存檔用 `replace_learning`，從備份還原用 `restore`。
+
+### 佈局格式
+
+`qim-layout/1` 的 JSON Schema 在 `crates/qim-layout/schema/`、型別在 `crates/qim-layout/src/model.rs`，兩邊同時改（ADR 0004）。加選填欄位只加不改、不升版本；改既有的欄位要升 `qim-layout/2` 並提供轉換。
+
+觸控鍵盤的手勢門檻（放開才做動作、按住 400 ms 出長按清單、同一鍵 300 ms 內第二下算快速點兩下）各平台殼照網頁的 `web/src/touch.ts`。
 
 ## 主要依賴
 
