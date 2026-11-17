@@ -6,8 +6,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 const { defaultBrowserType: __, ...desktop } = devices["Desktop Chrome"];
 test.use(pixel);
-
-const EVIDENCE = "../.scratch/m4/evidence";
+// 截圖寫到 Playwright 的輸出目錄：`.scratch/m4/evidence/26-field-*.png` 是票 26 留下的證據，e2e 不改寫。
 
 /** 頁面拋出的錯誤；每個測試結尾要是空的。 */
 let errors: Error[] = [];
@@ -61,7 +60,7 @@ for (const [label, kind] of [
 ] as const) {
 	test(`${kind} 欄位預設英文直通、打 teh 不修正、沒有建議；回到一般欄是中文`, async ({
 		page,
-	}) => {
+	}, testInfo) => {
 		const { text, mode, items, field } = parts(page);
 		await page.getByRole("button", { name: "debug" }).click();
 		await turnOnAutocorrect(page);
@@ -82,7 +81,7 @@ for (const [label, kind] of [
 		await tapText(page, " ");
 		await expect(text).toHaveValue("teh ");
 		await page.screenshot({
-			path: `${EVIDENCE}/26-field-${kind}.png`,
+			path: testInfo.outputPath(`field-${kind}.png`),
 			fullPage: true,
 		});
 
@@ -101,7 +100,7 @@ for (const [label, attribute] of [
 ] as const) {
 	test(`數字欄（${attribute}）打開是數字頁，中英不動；回到一般欄是字母頁`, async ({
 		page,
-	}) => {
+	}, testInfo) => {
 		const { text, mode, field } = parts(page);
 		await page.getByRole("button", { name: "debug" }).click();
 		await chooseField(page, label);
@@ -112,7 +111,7 @@ for (const [label, attribute] of [
 		await expect(text).toHaveValue("7");
 		if (attribute === "type=number") {
 			await page.screenshot({
-				path: `${EVIDENCE}/26-field-number.png`,
+				path: testInfo.outputPath("field-number.png"),
 				fullPage: true,
 			});
 		}
@@ -124,7 +123,7 @@ for (const [label, attribute] of [
 
 test("密碼欄預設英文直通、沒有建議、不讀前文；使用者的無痕開關不動", async ({
 	page,
-}) => {
+}, testInfo) => {
 	const { text, mode, items, field } = parts(page);
 	await page.getByRole("button", { name: "debug" }).click();
 	await chooseField(page, "密碼（type=password）");
@@ -143,7 +142,7 @@ test("密碼欄預設英文直通、沒有建議、不讀前文；使用者的�
 			.getByRole("checkbox", { name: "無痕" }),
 	).not.toBeChecked();
 	await page.screenshot({
-		path: `${EVIDENCE}/26-field-password.png`,
+		path: testInfo.outputPath("field-password.png"),
 		fullPage: true,
 	});
 });

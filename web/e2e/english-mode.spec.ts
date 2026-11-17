@@ -6,7 +6,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 test.use(pixel);
 
-const EMAIL = "ivan.test@example.com";
+const EMAIL = "jean.test@example.com";
 
 /** 頁面拋出的錯誤；每個測試結尾要是空的（例如用到已釋放的 WebAssembly 物件）。 */
 let errors: Error[] = [];
@@ -106,7 +106,7 @@ test("v2 匯入的 email 打開頭的字母，英文建議列就有它；點了�
 	await text.focus();
 	await page.getByTestId("key-globe").tap();
 
-	await tapText(page, "iv");
+	await tapText(page, "je");
 	await expect(items.filter({ hasText: EMAIL })).toHaveCount(1);
 	await expect(row(EMAIL)).toHaveAttribute("data-kind", "englishUserWord");
 	await page.screenshot({

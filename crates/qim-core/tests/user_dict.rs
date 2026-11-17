@@ -389,6 +389,27 @@ fn a_device_id_is_short_ascii_and_a_bad_one_in_a_file_is_an_error() {
     );
 }
 
+/// v3 的 metadata 行（`#@/…`）只能寫在檔頭、第一筆資料列之前（M4 票 31 定稿），寫在後面整份不收、錯在那一行；
+/// v1、v2 照舊哪裡都收。
+#[test]
+fn v3_metadata_after_the_first_row_is_an_error_and_v1_v2_still_take_it_anywhere() {
+    for line in ["#@/device\tdevice-a", "#@/tick\t1", "#@/tick/quick\t1"] {
+        let moved = format!(
+            "{}{line}\n",
+            ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD.replace(&format!("{line}\n"), "")
+        );
+        assert_eq!(line_of(&moved), moved.lines().count(), "{line}");
+    }
+    for extra in ["#@/english_tick\t0", "#@/cleared\t1\t\t"] {
+        let appended = format!("{ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD}{extra}\n");
+        assert_eq!(line_of(&appended), appended.lines().count(), "{extra}");
+    }
+    for (legacy, line) in [(V1_FILE, "#@/tick/quick\t1"), (V2_FILE, "#@/tick\t1")] {
+        let moved = format!("{}{line}\n", legacy.replace(&format!("{line}\n"), ""));
+        assert!(import(&moved, "2026-11-12").is_ok(), "{moved}");
+    }
+}
+
 #[test]
 fn a_bad_bigram_row_is_an_error_with_its_line() {
     let v2 = "# qim-userdict v2\n";
@@ -601,7 +622,7 @@ fn the_v3_draft_of_7ad01da_imports_into_the_new_format() {
     assert_eq!(user.phrases(&engine).len(), 1);
     assert_eq!(
         user.english_user_words(),
-        ["ivan.test@example.com", "rrrrrr"]
+        ["jean.test@example.com", "rrrrrr"]
     );
 
     let exported = user.export();
@@ -617,7 +638,7 @@ fn the_v3_draft_of_7ad01da_imports_into_the_new_format() {
         "entry\tquick\t九龍\\n3 樓\t\t0:1:0:0:\t\t\t\t\t\t\t\tphrase\tmir\t1\t2026-11-11".to_string(),
         "entry\tquick\t口口\trr\t0:1:0:0:\t\t\t\t\t\t\t\tmanual\tkk\t1\t2026-11-11".to_string(),
         "bigram\t一\t台\t0:1\t\t\t1\t1\t1\t2026-11-10".to_string(),
-        "english\tivan.test@example.com\t0:2:0:2026-11-12\t\t\t2\t1.990049833749168\t3\t2026-11-12"
+        "english\tjean.test@example.com\t0:2:0:2026-11-12\t\t\t2\t1.990049833749168\t3\t2026-11-12"
             .to_string(),
     ] {
         assert!(exported.lines().any(|l| l == line), "沒有「{line}」：\n{exported}");

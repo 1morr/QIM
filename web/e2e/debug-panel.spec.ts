@@ -4,7 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 // 輸入碼的切段、首選的路徑分與學習加分、每個候選的來源，與停鍵重排的要求和結果。關著時網頁不問核心
 // （`data-inspect-count` 不動）。
 
-const EMAIL = "ivan.test@example.com";
+const EMAIL = "jean.test@example.com";
 
 function ui(page: Page) {
 	// 關著時是 hidden，用角色找不到；`data-inspect-count` 要在關著時也讀得到。
@@ -218,7 +218,7 @@ test("候選的來源每種都讀得到", async ({ page }, testInfo) => {
 	await page.keyboard.press("Shift");
 	await page.keyboard.type(`${EMAIL} ${EMAIL} ${EMAIL} `);
 	await page.keyboard.press("Shift");
-	await page.keyboard.type("iva");
+	await page.keyboard.type("jea");
 	await expect(sources(EMAIL)).toHaveAttribute("data-kind", "englishUserWord");
 	await expect(sources(EMAIL)).toContainText("英文使用者詞");
 	await page.screenshot({ path: testInfo.outputPath("debug-sources.png") });

@@ -70,7 +70,7 @@ const shown = {
 	composing: false,
 	/** 臨時英文（組字中單按留碼的 Shift）：組字是英文，沒有候選、字根提示與展開面板。 */
 	inlineAscii: false,
-	/** 英文（`Snapshot.ascii`：英文直通或臨時英文）：實體字母鍵照配列打，不照實體鍵位送機率。 */
+	/** 英文（`Snapshot.ascii`：英文直通、英文模式或臨時英文）：實體字母鍵照配列打，不照實體鍵位送機率。 */
 	ascii: false,
 	/** 候選列目前頁，點候選時換算成全部候選的位置。 */
 	page: 0,

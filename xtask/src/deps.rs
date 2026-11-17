@@ -1,4 +1,4 @@
-//! `deps` 步驟：依賴規則（`docs/plan.md` §1.3）。
+//! `deps` 步驟：依賴規則（plan〈依賴規則〉）。
 //!
 //! [`RULES`] 是 plan〈依賴規則〉 表的程式版，改表時兩邊同一 commit 改；`cargo test` 比對兩邊。
 

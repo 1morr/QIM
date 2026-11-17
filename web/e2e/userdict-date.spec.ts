@@ -5,7 +5,7 @@ import { devices, expect, type Page, test } from "@playwright/test";
 // 「失焦時把正在打的串學成英文使用者詞」也是學習的路徑；後者可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。
 // 用 `page.clock` 換日。
 
-const EMAIL = "ivan.test@example.com";
+const EMAIL = "jean.test@example.com";
 
 /** `localStorage` 存的學習資料裡，第一欄是 `kind`、第三欄起是 `key` 的那列，拆成欄。 */
 async function storedRow(

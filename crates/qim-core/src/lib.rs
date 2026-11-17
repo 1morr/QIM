@@ -1,6 +1,6 @@
 //! QIM 的核心：輸入方案、資料包讀取（碼表、詞庫、字級 bigram 與詞級 trigram、字根提示、簡繁、英文與 emoji）、候選與 `Session`。
 //!
-//! 純邏輯，不做 I/O；依賴規則見 `docs/plan.md` §1.3。
+//! 純邏輯，不做 I/O；依賴規則見 plan〈依賴規則〉。
 
 mod association;
 mod code_table;

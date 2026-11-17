@@ -209,6 +209,23 @@ fn backspace_after_the_period_only_deletes_the_space() {
     assert_eq!(ime.text, "hi.");
 }
 
+/// 自動修正後接著兩下空白：第二下空白丟掉修正的還原，之後的退格只刪空白，不把修正還原（票 27 只用臨時腳本驗過）。
+#[test]
+fn backspace_after_an_autocorrection_and_the_period_only_deletes_the_space() {
+    let mut ime = Ime::english();
+    ime.session.set_options(qim_core::Options {
+        autocorrect: true,
+        ..ime.session.options()
+    });
+    ime.type_text("helo ");
+    assert_eq!(ime.text, "hello ");
+    ime.press(Key::Space);
+    assert_eq!(ime.text, "hello. ");
+    let back = ime.press(Key::Backspace);
+    assert!(!back.handled);
+    assert_eq!(ime.text, "hello.");
+}
+
 /// 關掉開關後兩下空白照打。
 #[test]
 fn turning_the_option_off_keeps_both_spaces() {

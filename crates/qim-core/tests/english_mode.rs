@@ -343,12 +343,12 @@ fn an_imported_email_is_suggested_from_its_first_letters() {
 #@/tick\t1
 # scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger
 # \t\tstring\tdecayed\tlast_tick
-\t\tivan.test@example.com\t1\t1
+\t\tjean.test@example.com\t1\t1
 ";
     ime.user = UserModel::import(v2, None).unwrap().user;
     ime.globe();
-    assert_eq!(ime.suggestions("iv"), ["ivan.test@example.com"]);
-    assert_eq!(ime.suggestions("an.t"), ["ivan.test@example.com"]);
+    assert_eq!(ime.suggestions("je"), ["jean.test@example.com"]);
+    assert_eq!(ime.suggestions("an.t"), ["jean.test@example.com"]);
 }
 
 impl Ime {

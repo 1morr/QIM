@@ -246,7 +246,7 @@ pub enum ShiftKey {
 }
 
 impl Options {
-    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選、簡體字排後與英文使用者詞影響候選，
+    /// 兩份選項列出的候選相同：只有簡體、英文候選、emoji 候選、簡體字排後、英文使用者詞與鄰鍵讀法影響候選，
     /// 無痕、學習、Shift、數字後半形都不影響。
     fn lists_like(&self, other: &Options) -> bool {
         self.simplified == other.simplified
@@ -254,6 +254,7 @@ impl Options {
             && self.emoji_candidates == other.emoji_candidates
             && self.simplified_after_traditional == other.simplified_after_traditional
             && self.english_user_words == other.english_user_words
+            && self.neighbor_readings == other.neighbor_readings
     }
 }
 
@@ -487,8 +488,8 @@ pub struct Snapshot {
     pub commit: Option<String>,
     /// `commit` 後處理前的原文（繁體），回報用；簡體模式以外和 `commit` 相同。
     pub commit_original: Option<String>,
-    /// 英文：沒有組字時是英文直通，鍵都交還宿主；組字中是臨時英文（[`ShiftSwitch`]），
-    /// 最後一段是 `raw` 的分段。
+    /// 英文：沒有組字時是英文直通（鍵都交還宿主）或英文模式（ADR 0008）；組字中是臨時英文（[`ShiftSwitch`]），
+    /// 最後一段是 `raw` 的分段。名字沿用 M1 的英文直通，含英文模式。
     pub ascii: bool,
     /// 每次候選變動加一，非同步重排用。
     pub generation: u64,
