@@ -21,3 +21,8 @@
 - 2026-11-17 M5（使用者同意）：換範本新版 `next_step.py`、pre-commit 開頭清 `GIT_*`；範本新版 `check_docs.py` 的新規則點名進 flow-sync 票 01，不另開票。
 - 2026-11-17 M5（使用者同意）：先跑 gates、flow-sync、arch-diet 三批流程票，再拆 M5；gates 進行中，M5 排在 arch-diet 之後。M4 回顧，`docs/roadmap.md`
 - 2026-11-17 M5（使用者同意）：M5 分兩期，第一期盤點、設計稿、候選列與工具列、設定頁；期界在盤點勾完後定。M4 回顧，roadmap〈M5 觸控鍵盤與設定〉
+- 2026-11-17 M5 gates（Agent 定）：密鑰掃描用 gitleaks 8.30.1，不用後繼 betterleaks（v2 還在 rc）或會連網驗證的 trufflehog；betterleaks v2 穩定後再評估。事實 M54
+- 2026-11-17 M5 gates（Agent 定）：依賴漏洞用 osv-scanner 一個工具掃 Cargo.lock 與 web/package-lock.json，不用 cargo-audit 加 npm audit：npm audit 不能忽略單一公告。事實 M55
+- 2026-11-17 M5 gates（Agent 定）：依賴更新用 Dependabot 不用 Renovate；每週一次，minor 與 patch 併一個 PR，wasm-bindgen 一家另開。事實 M56
+- 2026-11-17 M5 gates（Agent 定）：沒有修正版的已不維護公告寫進 `osv-scanner.toml` 忽略並附理由，不設到期日，`check` 維持綠燈。
+- 2026-11-17 M5 gates（Agent 定）：`secrets` 步驟只看暫存區（pre-commit 用），CI 另全掃 git 歷史，擋用 `--no-verify` 跳過 hook 的 commit。
