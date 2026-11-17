@@ -83,6 +83,9 @@ M1–M3 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 - 無障礙：按鍵與候選讓 VoiceOver、TalkBack、Narrator 讀得到，實際開啟讀回。
 - 觸控平台：震動與按鍵音（可關）。開工先查證系統限制（iOS 是否需要完整取用權限）。
 - 觸控平台的實體鍵盤：偵測到實體鍵盤時收起螢幕鍵盤，只留跟隨游標的候選列，按鍵照 brief §4.3。開工先查證平台是否把實體鍵事件交給輸入法。
+- 核心給殼的介面先整理（M4 票 31 的 code-review，M7 開工時做，之後各平台照同一份接）：`Snapshot.ascii` 也含英文模式，改名或改成狀態列舉（對外介面，先問使用者）；`Session` 的 `ascii`、`english`、`mode_before_field` 用幾個 bool 表示互斥的模式，改成一個列舉；`set_options` 自己判斷要不要重列，綁定層不再每個 setter 各寫一次 `refresh`；`session.rs`（約 2,600 行）把英文模式的狀態拆到 `session/`；各台次數加墓碑表的 `tally_mut`、`delete`、`digest` 在 `Bigrams`、`SchemeModel`、`EnglishUserWords` 各一份；英文的小寫鍵有四種寫法；`TouchSurface` 在 `qim-databuild`、`qim-bench` 各一份；網頁 `afterHostKey` 由按鍵種類猜核心有沒有學到，改由 Snapshot 回報。
+- 組字中換資料包（背景線上更新）：`Session::refresh` 只重列候選、不重建 lattice 的欄，多段路徑仍是舊資料包算的；組字中殼改了學習資料又沒呼叫 `refresh` 時開頭各段照舊（M4 票 18b）。平台殼背景更新資料包時先處理。
+- 欄位類型的邊角（M4 票 26，網頁沒查證）：使用者在 email、網址欄自己切到英文模式時，點建議仍補空白、建議列仍列拼錯的修正（LatinIME `shouldInsertSpacesAutomatically`）；各平台照自己的欄位屬性對應 `FieldKind` 時一起定。
 - 桌面平台接實體鍵盤（M4 票 07 留下，網頁驗不到）：ISO 鍵盤的 `Backquote` 與 `IntlBackslash` 在 macOS 可能對調、dead key 換了字元攔下後系統的 dead key 狀態有沒有取消，用系統的實體鍵位實機驗；Dvorak、AZERTY 等真實配列也在這時實打。
 
 - **M7 macOS**：`qim-ffi` 完整版、IMK 殼、使用者資料存檔、設定視窗（含學習資料管理、API key、內嵌佈局編輯器）。定外觀主題格式，鍵盤與桌面候選窗共用一份（參考青簡 `theme.json`：一個主題一個目錄、可繼承、按淺深色給變數、可帶圖片，`docs/research/qingjian.md` §7），接上候選窗；之後各平台殼接上同一份。依 〈M3 的模型階梯實驗〉 的結果接端上 LLM。定同步的傳輸方式（要能跨 Apple 與 Android，內容含自訂佈局；WebDAV 列入候選，CyIME 用它同步剪貼簿與備份）；接剪貼簿歷史與可選的崩潰回報（預設關，brief §8）。
@@ -93,6 +96,7 @@ M1–M3 留給之後各里程碑的發現（每條註明去處）在 `.scratch/m
 M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - M7：開工先問使用者粵典詞庫在平台 App 要內建還是可選下載（brief §11），照決定接資料包管理。
 - M7：用 `codesign -d -r-` 讀回 Personal Team 簽章的 requirement，重建兩次確認輔助功能授權仍在（§4）；以 root 註冊輸入源、更新前切走輸入源、只換執行檔的開發迴圈（§2.2）。
+- M8：需要鍵盤自己放切換鍵的機型，地球鍵長按的切換鍵盤選單是否照 Apple 改成換系統鍵盤，選單裡的系統鍵盤現在只是占位，iOS、Android 殼接系統的清單（M4 票 23，使用者同意）；事實 P25 `deleteBackward()` 刪的單位實機量（M4 票 21，核心只刪單一 scalar 的字，不依賴它）。
 - M8：Full Access 只閘控網路與剪貼簿、App Group 只由主 App 寫、Keychain group 寫成固定字串（未簽章的 CI archive 前綴為空）、冷啟動高度、用 `phys_footprint` 量記憶體（§2.3）。
 - M9：測試宿主 App 涵蓋一般、密碼、WebView、`TYPE_NULL` 欄位（§2.4）。
 
@@ -114,6 +118,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - 評估空輸入的句首建議與數字、標點後的量詞聯想（iOS 速成有，黑箱 T8、T18）：和沒有組字時的工具列搶同一個位置，跟重做的候選列一起定；量詞要另整理資料（M4 票 30，plan §2.1）。
 - 評估英文建議列的下一個詞（空白之後就出建議，Gboard 與 LatinIME 都有）：要英文 bigram 資料包、英文的個人 bigram 與空白後的建議列，跟重做的候選列一起定（協調者 2026-11-15 定不在 M4 做，ADR 0008）。
 - 盤點時使用者勾的其他項目。平台才有的（按鍵音、震動、語音、懸浮鍵盤）只在設定頁留位置與說明。
+- 從 M4 收尾來的網頁整理（M4 票 31）：e2e 各 spec 各抄一份的 helper（`ready`、`ui`、`shown`、`place`、讀面板機率）收成共用模組；用完就 `free()` 的寫法收成一種（`withSnapshot`、`using`、手寫 try/finally 各有）；`undoWindow` 也當兩下空白的計時器，改成通用的名字；debug 面板開著又打過字後，第一次點「無痕」勾選框沒反應（M4 票 16，先寫成會紅的 Playwright 測試）；觸控鍵盤靠標籤 `🌐` 認要畫成圖示的鍵、`touch.ts` 另存一份中英狀態（M4 票 23）；觸控刪除鍵的退格撤銷只在核心驗過（M4 票 18c）；觸控點擊的按鍵機率接進英文修正（現在英文容錯不看鍵位鄰近），接上後重量自動修正的 4 倍門檻（M4 票 25）。
 - 完成標準：
   - Playwright 用手機 viewport 讀回候選列在鍵盤頂端、工具列與各面板開得了、設定頁改了會生效，截圖存證，平台里程碑拿它當對照。
   - 使用者在手機瀏覽器試用後回覆同意（progress〈偏差與決定〉記一條）。
@@ -124,3 +129,5 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 
 - 譯詞（打中文時候選旁顯示英文、可上屏，例「發票」旁的 invoice）：使用者暫不需要，2026-11-15 移出 M4。來源、授權與 LLM 生成費用的研究在 `docs/research/translation-sources.md`；要做時重開資料包的票（原 M4 票 29）。出處：M4 票 20。
 - plan 縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字）：已拆成 `.scratch/arch-diet/` 的 6 張票，隨時可以用 `/1morr:ticket-coordinator .scratch/arch-diet/issues` 跑。出處：2026-11-13 流程對齊。
+- 容錯重評時要補的：四種修正沒過門檻（M4 票 09），重評時照票 10 列的四項與 `docs/research/tolerance.md` 補；空間模型的「上層加成 2」、σ、鄰鍵先驗 0.9／σ 0.5 沒有來源也沒調；重排開著時觸控集合的修正次數量不了（model-ladder 沒有觸控的路，M4 票 09c）。出處：M4 票 06–10、09c、18。
+- e2e 在高負載下偶發紅、單獨重跑會過：`pack-update.spec.ts`「sha256 不符時拒絕，保留舊版」（M4 票 13）、`touch-features` 長按切頁（M4 票 21）、單按 Shift 的計時（M4 票 26）。再紅一次就用 `mattpocock-skills:diagnosing-bugs` 開修復票。出處：M4 票 13、21、26 與票 31。
