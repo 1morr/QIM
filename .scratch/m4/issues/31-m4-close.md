@@ -48,6 +48,7 @@ Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 09b, 09c, 11, 12, 13, 14, 15, 16
   - 不做：組字中途開無痕，面板寫「不讀前文」但開頭接「句首」（票 01）：lattice 是開無痕前建的，無痕在下一次組字才完全生效；學習在上屏時看無痕、不受影響，平台殼的無痕多由聚焦密碼欄觸發，那時沒有組字；時鐘錯時的未來日期、條目計數 58 µs、墓碑只在合併時回收（票 12、13、17，條件式，票 18 已判不修）。
   - 等使用者：規則 4 要不要只出頻率 ≥ 90 的英文詞（票 22）→ 使用者同意維持全收。
 - 2026-11-17 `scripts/check_docs.py` 放寬 plan 章節號規則的修改要回饋到 project-init 範本（待使用者）：QIM 這份是從範本換來的，下次同步可能被舊版蓋回，用同一份範本的專案也還沒有這個修正。
+  - 2026-11-17 已回饋：skills repo `8ba45e6`（`fix(project-init): catch plan section refs behind backticks or titles`，未 push），規則與測試同 QIM；新規則掃 QIM、FMP、Berth 都沒多抓到違規（使用者定）。
 - 2026-11-17 commit 後在本分支跑完整的 `cargo xtask check`（`2b00449`）：e2e `323 passed (1.2m)`、`2 skipped`、`check 通過`。
 - 2026-11-17 使用者試用時，手機用區網 IP（http）開網頁載入失敗：`web/src/user-dict.ts` 的 `ensureDeviceId` 呼叫 `crypto.randomUUID`，非安全環境沒有它（TypeError）。使用者決定插修復票 31b。等 31b 修好後請使用者在手機試用（使用者 2026-11-17 決定）；試用與封存都還沒做。
 - 2026-11-17 31b 合併後（`git merge main`，`docs/plan.md` 的衝突兩邊都留）在本分支開區網開發伺服器（`--host`，電腦 localhost、手機區網 http），使用者試用第二期七項，手機另按「複製全部」，回覆「都可以，封存 M4」（使用者定）；decisions.md 記一條，跟著封存。
