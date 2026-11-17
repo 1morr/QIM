@@ -288,8 +288,13 @@ impl UserModel {
         let mut ticks: BTreeMap<&str, u64> = BTreeMap::new();
         let mut shared_tick: Option<u64> = None;
         let mut english_tick: Option<u64> = None;
+        // v3 的 metadata 行只在檔頭（M4 票 31 定稿）：裝置表與草稿列的裝置都要先讀到，解析才不看行的位置。
+        let mut rows_started = false;
         for (line, number) in lines {
             let error = |reason: &str| ImportError::at(number, reason.to_string());
+            if rows_started && line.starts_with("#@/") {
+                return Err(error("metadata 行（#@/）要寫在檔頭，第一筆資料列之前"));
+            }
             // v1、v2 沒有裝置 id 與裝置表，這兩種行照其他 `#` 開頭的行是註解。
             if let Some(id) = line.strip_prefix(DEVICE_KEY)
                 && version == Version::V3
@@ -370,6 +375,7 @@ impl UserModel {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
+            rows_started = version == Version::V3;
             let kind = if version == Version::V3 {
                 let (kind, fields) = line.split_once('\t').unwrap_or((line, ""));
                 match kind {
