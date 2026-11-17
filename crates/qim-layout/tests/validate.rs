@@ -1,4 +1,4 @@
-//! 佈局檔的驗證（plan〈佈局：畫布模型〉〈佈局〉）：JSON Schema 與兩級驗證。
+//! 佈局檔的驗證（plan〈佈局：畫布模型〉、architecture〈測試策略〉）：JSON Schema 與兩級驗證。
 //! 錯誤（不能存檔）每一種都造出來會紅；只有警告時可以存檔。
 
 use qim_layout::{Layout, Target, validate};

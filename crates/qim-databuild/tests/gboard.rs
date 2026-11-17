@@ -28,7 +28,7 @@ fn key<'a>(page: &'a Page, id: &str) -> &'a qim_layout::Key {
     page.keys.iter().find(|k| k.id == id).unwrap()
 }
 
-/// 內建佈局的嚴格檢查（plan〈佈局〉）：含有直向與橫向的版本、每個鍵都有淺色與深色。
+/// 內建佈局的嚴格檢查（architecture〈測試策略〉）：含有直向與橫向的版本、每個鍵都有淺色與深色。
 #[test]
 fn passes_the_strict_check_for_builtin_layouts_including_portrait_and_landscape() {
     assert_eq!(check_builtin(&gboard::layout().to_json()), []);

@@ -1,4 +1,4 @@
-//! 首選字基準（plan〈首選字基準〉）：用核心實際打 `bench/` 的每一題，量首選正確率並擋退步。
+//! 首選字基準（`docs/development.md`〈首選字基準〉）：用核心實際打 `bench/` 的每一題，量首選正確率並擋退步。
 //!
 //! 只透過 `qim-core` 的公開介面打字；讀檔在這裡做，核心不碰 I/O（architecture〈依賴規則〉）。
 //!
@@ -64,12 +64,12 @@ pub const FIXED: &str = "bench/fixed.tsv";
 /// 維基防退步，口語是品質判斷的主要依據（brief〈效能與品質指標〉）；目錄不存在就當沒有集合。
 pub const CORPUS_DIRS: [&str; 2] = ["bench/corpus", "bench/colloquial"];
 pub const BASELINE: &str = "bench/baseline.json";
-/// 「有前文」的題目目錄（plan〈首選字基準〉），依序跑：每個 `<名>.tsv` 是一批題，集合名在這些目錄間不能重複。
+/// 「有前文」的題目目錄（`docs/development.md`〈首選字基準〉），依序跑：每個 `<名>.tsv` 是一批題，集合名在這些目錄間不能重複。
 pub const CONTEXT_DIRS: [&str; 2] = ["bench/corpus/context", "bench/colloquial/context"];
 /// 「有前文」的一批題 `<名>` 打兩次，集合名是 `<名>` 接這些字尾：給前文、不給前文。
 /// 學習模式只打給前文的。
 pub const CONTEXT_SUFFIXES: [&str; 2] = ["·前文", "·前文·不給"];
-/// 「含打錯碼」的題目目錄（M4 票 08，plan〈首選字基準〉），每個 `<名>.tsv` 是一批題，集合名是 `<名>` 接
+/// 「含打錯碼」的題目目錄（M4 票 08，`docs/development.md`〈首選字基準〉），每個 `<名>.tsv` 是一批題，集合名是 `<名>` 接
 /// [`TYPO_SUFFIX`]。只有口語（維基的長句每句都有好幾處錯，量不出容錯的差別）。
 pub const TYPO_DIRS: [&str; 1] = ["bench/colloquial/typo"];
 pub const TYPO_SUFFIX: &str = "·打錯";
@@ -123,7 +123,7 @@ pub fn dev_dialogue_items(name: &str) -> String {
 pub const SHORT_INPUTS: [&str; 2] = ["·單字", "·詞"];
 /// [`SHORT_INPUTS`] 的詞最長幾個字：個人集幾乎都在 4 字以內。
 pub const SHORT_WORD_CHARS: usize = 4;
-/// 個人集的題目，由 `cargo xtask data` 從 [`PERSONAL_USERDB`] 轉出；只在本機（plan〈首選字基準〉）。
+/// 個人集的題目，由 `cargo xtask data` 從 [`PERSONAL_USERDB`] 轉出；只在本機（`docs/development.md`〈個人集〉）。
 pub const PERSONAL: &str = "bench/personal/rime-userdb.tsv";
 /// 使用者放的 Rime 學習資料；基準不直接讀它，只在題目還沒轉出時提示。
 pub const PERSONAL_USERDB: &str = "bench/personal/rime-userdb.txt";
@@ -704,7 +704,7 @@ fn load_sets(
     Ok(sets)
 }
 
-/// 學習模式（`--learning`，plan〈首選字基準〉）的結果。
+/// 學習模式（`--learning`，`docs/development.md`〈學習模式〉）的結果。
 #[derive(Debug)]
 pub struct Learning {
     pub packs: Vec<LoadedPack>,

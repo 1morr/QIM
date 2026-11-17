@@ -1,4 +1,4 @@
-//! 把句子機械轉成速成碼：首選字基準的語料與個人集共用（plan〈首選字基準〉）。
+//! 把句子機械轉成速成碼：首選字基準的語料與個人集共用（`docs/development.md`〈語料〉）。
 
 use std::collections::HashMap;
 

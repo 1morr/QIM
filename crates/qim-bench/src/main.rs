@@ -86,7 +86,7 @@ fn main() -> ExitCode {
     }
 }
 
-/// 學習模式（plan〈首選字基準〉）：只報不擋。
+/// 學習模式（`docs/development.md`〈學習模式〉）：只報不擋。
 fn learning() -> ExitCode {
     match qim_bench::run_learning(Path::new(".")) {
         Ok(learning) => {

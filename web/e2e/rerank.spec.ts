@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// 重排的假實作（plan〈網頁 prototype〉、ADR 0005，M1 票 23、M3 票 11c）：延遲後回傳 lattice 路徑的名次，核心
+// 重排的假實作（ADR 0005，M1 票 23、M3 票 11c）：延遲後回傳 lattice 路徑的名次，核心
 // 把排出的路徑放到第 2 位，候選列沒有就插入。過期的結果丟掉由核心測試驗（`crates/qim-core/tests/rerank.rs`）。
 
 function ui(page: Page) {

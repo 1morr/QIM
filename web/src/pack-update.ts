@@ -2,7 +2,7 @@
 // `PackLibrary.install` 核對後換上。在背景跑，失敗或斷網時照用現有的（brief〈隱私與安全〉：打字不依賴網路）。
 //
 // 更新來源是 GitHub Releases，但 release 的檔案不帶 CORS 標頭，瀏覽器讀不了，所以網頁一律向自己的
-// `/pack-updates/` 要，由 Vite 開發伺服器轉發（`vite.config.ts`，同雲端 API 的做法，plan〈網頁 prototype〉）。
+// `/pack-updates/` 要，由 Vite 開發伺服器轉發（`vite.config.ts`）。
 
 import { message } from "./dom.ts";
 import type { PackLibrary } from "./packs.ts";

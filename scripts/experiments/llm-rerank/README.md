@@ -56,7 +56,7 @@ python3 $L tail-stats build/llm-rerank/fm/tail.jsonl
 python3 $L tail-stats build/llm-rerank/fm/tail-cold.jsonl
 ```
 
-- `cloud` 沒有 `DEEPSEEK_API_KEY` 時印一行就結束（跳過雲端）；拒收個人集的提示，除非加 `--allow-personal`（每次先問使用者，plan §5.2）。續跑時已有回答的題不重送，出錯的列丟掉重送。`fm-rerank run` 的出錯（安全過濾）每次都一樣，算做過、不重送。
+- `cloud` 沒有 `DEEPSEEK_API_KEY` 時印一行就結束（跳過雲端）；拒收個人集的提示，除非加 `--allow-personal`（每次先問使用者，`docs/development.md`〈個人集〉）。續跑時已有回答的題不重送，出錯的列丟掉重送。`fm-rerank run` 的出錯（安全過濾）每次都一樣，算做過、不重送。
 - 調參那批題只是 dev 的一部分，`eval` 的各集合列會把沒送的題照原順序算進去，所以 `score.sh` 最後用 `subset` 只比提示檔裡的題（下面〈dev 調參〉）。
 - 付費：每次真的呼叫前把估計的請求數與費用告訴使用者（spec〈共同規則〉）；`estimate` 用字數保守估，第一批送完改用 `stats --model` 的實測每千次費用。
 
@@ -155,7 +155,7 @@ spec 的寫法：上下文 + 輸入碼 + 編號的選項，只回序號（afm-im
 
 首選與修正次數不變（重排不動首選，見 `../model-ladder/README.md`〈指標〉）。前 2 名的翻好／翻壞（`model-ladder compare`）：`common-voice-yue` 213/8、`hkcancor` 88/17（口語合計 301/25，p < 0.001）、`yue-wiki` 225/9、`zh-wiki` 219/14。
 
-個人集沒送：使用者 2026-11-11 決定不把個人集送 DeepSeek（plan §5.2）。
+個人集沒送：使用者 2026-11-11 決定不把個人集送 DeepSeek（`docs/development.md`〈個人集〉）。
 
 延遲與費用（`stats --by context --model deepseek-flash`；每千次照高峰價算，spec〈採用門檻〉照高峰價）：
 

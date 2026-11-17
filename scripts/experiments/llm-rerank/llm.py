@@ -173,7 +173,7 @@ def cost_per_thousand(usages, model):
 
 
 def check_personal(rows, allow):
-    """個人集不送雲端，除非使用者這次同意（plan〈首選字基準〉）。"""
+    """個人集不送雲端，除非使用者這次同意（`docs/development.md`〈個人集〉）。"""
     if not allow and any(r["set"] == PERSONAL for r in rows):
         sys.exit("提示裡有個人集：要送雲端得先問使用者，同意後加 --allow-personal")
 
