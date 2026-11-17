@@ -41,6 +41,14 @@ export function mountReportPanel(
 		afterAdd();
 	});
 	element<HTMLButtonElement>("#copy-reports").addEventListener("click", () => {
+		// 非安全環境（區網 http）沒有 `navigator.clipboard`：選取整份清單，讓使用者自己複製。
+		if (!navigator.clipboard) {
+			reports.focus();
+			reports.select();
+			status.textContent =
+				"這個網址不是 HTTPS 或 localhost，瀏覽器不給網頁寫剪貼簿：已選取回報清單，請自己複製";
+			return;
+		}
 		navigator.clipboard.writeText(reports.value).catch((error: unknown) => {
 			status.textContent = `複製失敗：${String(error)}`;
 		});
