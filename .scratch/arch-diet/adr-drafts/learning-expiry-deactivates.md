@@ -10,8 +10,7 @@
 
 ## Considered Options
 
-- 過期就刪（LatinIME 在 GC 時移除 300 天沒用的，`docs/research/learning-forgetting-sync.md` §2.2）：資料小，但時鐘錯一次就丟光。
-- 只用 tick（librime 沒有日曆時間只有 tick）：不必殼給日期，但量不出「一年」。
+- 過期就刪（LatinIME 在 GC 時移除 300 天沒用的，`docs/research/learning-forgetting-sync.md` §2.2）：時鐘錯了再改回來也救不回。
 
 ## Consequences
 

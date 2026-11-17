@@ -130,7 +130,7 @@ flowchart LR
 - 殼把鍵碼轉成 `Key`；綁定收不了帶資料的列舉時用 `Key::parse` 收「種類 + 值」。觸控與實體鍵盤的按鍵機率由 `qim-layout` 算、殼轉交，`qim-core` 不知道佈局。只改殼畫面、不動組字的鍵由殼攔下。
 - `Snapshot.handled` 為假時殼把鍵交還宿主，有 `delete_before`、`commit` 時先照做：先刪游標前 `delete_before` 個 Unicode scalar，再上屏 `commit`（ADR 0008）。
 - 殼給的狀態：聚焦時 `set_field`（欄位類型不在 `Options` 裡）；聚焦、移游標、上屏後 `set_context` 給游標前的文字，失焦而給不出時 `clear_context`；改設定是讀 `options()` 改一項再 `set_options`，組字中接著 `refresh`；裝置 id 用 `UserModel::set_device`，一次安裝一個。
-- 核心不讀時鐘，時間由殼給：每次使用者操作前 `UserModel::set_today`（當地日曆日，第一次學習前一定要給）；可能學到東西的動作後計 3 秒呼叫 `expire_undo`，英文模式的空白後計 1100 ms 呼叫 `expire_double_space`，使用者點輸入框時兩個都呼叫。
+- 核心不讀時鐘，時間由殼給：每次使用者操作前 `UserModel::set_today`（當地日曆日，第一次學習前一定要給）；可能學到東西的動作後從頭計 3 秒，到了呼叫 `expire_undo`；每個按鍵、點擊之前（不送字元的修飾鍵除外）從頭計 1100 ms，到了呼叫 `expire_double_space`；使用者點輸入框時兩個都呼叫。
 - 停鍵重排：殼在事件後取 `rerank_request`，在背景執行緒或 Web Worker 交給 `qim-neural`，再經 `apply_rerank` 送回；核心只收目前 `generation` 的結果，重排的候選最高到第 2 位、首選不動（ADR 0005）。換模型或重排模式時給 `set_reranker_id`，沒給就不快取。
 
 ### 候選的排位順序
@@ -140,14 +140,14 @@ flowchart LR
 1. 候選列：蓋滿整串的字詞與多段路徑依分數，繁體模式的簡體字、擴展區的字、只蓋開頭一段的字詞依序排在後面。
 2. emoji 接在它的字詞後面。
 3. 排位規則：觸發詞 → 選兩次的成首選 → 用過的使用者詞至少第 2 → 英文候選第 2 → 英文使用者詞的前綴補完。前面排定的位置後面不動。
-4. 停鍵重排的路徑放第 2 位，規則排在第 2 位起的候選在它前面。
-5. 觸控鄰鍵讀法再從第 2 格起插。
+4. 觸控鄰鍵讀法從第 2 格起插。
+5. 停鍵重排的路徑放第 2 位：規則排在第 2 位起的候選在它前面，鄰鍵讀法往後一格。
 
 ### 學習資料的格式
 
 `UserModel::export` 寫 `# qim-userdict v3`：UTF-8、Tab 分隔的純文字，是對外格式（brief〈版本與更新〉）。
 
-- 加列的種類或改欄位就升 v4；匯入一直收 v1、v2。
+- 加列的種類或改欄位就升 v4；匯入一直收 v1、v2 與依欄數認的 v3 草稿。
 - metadata 行 `#@/key<Tab>value` 只能在檔頭。每列第一欄是種類：不認得的略過並警告，已知種類有一列不合就整份不收、錯誤帶行號。
 - 同步是各台匯出快照、匯入時 `UserModel::merge`，合併有交換律、結合律、冪等（ADR 0007）；平台殼只做傳輸。殼讀回自己的存檔用 `replace_learning`，從備份還原用 `restore`。
 

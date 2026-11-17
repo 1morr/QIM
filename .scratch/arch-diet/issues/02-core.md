@@ -1,6 +1,6 @@
 # 02: plan §2〈核心〉歸位
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 讀: `.scratch/arch-diet/spec.md`；plan §2 全文（約 52,000 字，分小節讀）；`crates/qim-core/` 的公開介面
 
@@ -10,16 +10,16 @@ Blocked by: 01
 
 ## 驗收
 
-- [ ] `ARCHITECTURE.md`〈跨模組的資料與契約〉有核心對殼的契約與匯出格式的版本規則。
-- [ ] §2 每個小節在對照表裡都有去處；刪掉的每一段都指得到一個測試或程式檔。
-- [ ] Comments 有對照表：這張票負責的 plan 每一段 → 新位置或刪掉的理由。
-- [ ] `cargo xtask check --fast` 綠燈。
+- [x] `ARCHITECTURE.md`〈跨模組的資料與契約〉有核心對殼的契約與匯出格式的版本規則。
+- [x] §2 每個小節在對照表裡都有去處；刪掉的每一段都指得到一個測試或程式檔。
+- [x] Comments 有對照表：這張票負責的 plan 每一段 → 新位置或刪掉的理由。
+- [x] `cargo xtask check --fast` 綠燈。
 
 ## Comments
 
 ### 對照表（plan §2 → 新位置或刪掉的理由）
 
-縮寫：`T/` 是 `crates/qim-core/tests/`，`S/` 是 `crates/qim-core/src/`，`L/` 是 `crates/qim-layout/`，「草稿 x」是 `.scratch/arch-diet/adr-drafts/x.md`，〈契約〉是 `ARCHITECTURE.md`〈跨模組的資料與契約〉。每列的檔由子代理逐段找、我抽查過主要的幾個；完整的證據表（含測試函式名）在這個 session 的 scratchpad，沒進 repo。
+縮寫：`T/` 是 `crates/qim-core/tests/`，`S/` 是 `crates/qim-core/src/`，`L/` 是 `crates/qim-layout/`，「草稿 x」是 `.scratch/arch-diet/adr-drafts/x.md`，〈契約〉是 `ARCHITECTURE.md`〈跨模組的資料與契約〉。每列的檔由子代理逐段找、我抽查過主要的幾個；完整的證據表（含測試函式名、缺口）在 `.scratch/arch-diet/02-evidence/`，行號是 `4832a21:docs/plan.md` 的。
 
 | plan 的段落 | 去處 |
 | --- | --- |
@@ -63,7 +63,7 @@ Blocked by: 01
 | §2.1「無痕（brief §8…」 | 刪：`T/context.rs`、`T/digit_separators.rs`、`T/inspect.rs`；用滑鼠移游標的代價進草稿 `preceding-text-from-shell-then-own-commits` |
 | §2.1「組字中修改」與「`Composition.focus`」「改選第 i 段」「移到某一段時空白」三條 | 刪：`T/continuous.rs`、`T/session.rs`、`T/rerank.rs` |
 | §2.1「按鍵機率（M4 票 06、07、09c…」 | `qim-layout` 算、殼轉交、核心不知道佈局進〈核心對殼〉；兩種變體由殼選、整個當美式鍵盤的理由進草稿 `key-probabilities`；其餘刪：`T/key.rs`、`T/inspect.rs`、`S/weights.rs`、`L/tests/physical.rs`、`web/test/keys.test.ts` |
-| §2.1「觸控鄰鍵讀法（M4 票 09c…」 | 刪：`T/neighbor_readings.rs`、`S/neighbor.rs` 的常數；在候選列的位置在〈候選的排位順序〉 |
+| §2.1「觸控鄰鍵讀法（M4 票 09c…」 | 刪：`T/neighbor_readings.rs`、`S/neighbor.rs` 的常數；在候選列的位置在〈候選的排位順序〉第 4 步 |
 | §2.1「欄位類型（M4 票 26…」與「`set_field` 先照換欄位」「email、網址、密碼欄切到英文」「使用者在這三種欄位切到英文模式時」「密碼欄」「數字欄」「debug 面板顯示」六條 | `set_field` 進〈核心對殼〉；理由與代價進草稿 `field-kinds`；行為刪：`T/field_kind.rs`、`L/tests/number_page.rs`、`web/test/field.test.ts`、`S/session.rs` 的 `wants_english` |
 | §2.1「重排：`apply_rerank` 只接受目前的 `generation`…」 | 〈核心對殼〉最後一條；ADR 0005 |
 | §2.1「以路徑為單位」 | 理由與數字進草稿 `rerank-by-paths-after-rules`；行為刪：`T/rerank.rs` |
@@ -93,10 +93,10 @@ Blocked by: 01
 | §2.3「候選列：蓋滿整串的字、詞與…」 | 順序進〈候選的排位順序〉第 1 步；其餘刪：`S/lattice.rs` 的 `candidates`、`T/continuous.rs`、`T/simplified_characters.rs`；簡體字不扣分與多段路徑放 3 條的理由進草稿 `ranking-parameters` |
 | §2.4「學習計數以『(輸入方案, 輸入碼, 候選文字)』為鍵…」 | 刪：`T/properties.rs`、`T/personal_bigram.rs`、`T/learning.rs`、`S/user.rs` 的 `DECAY_STEP` |
 | §2.4「選了觸控鄰鍵讀法時學的是換過的碼」 | 刪：`T/neighbor_readings.rs` |
-| §2.4「觸控鄰鍵讀法與停鍵重排都從候選列第 2 格起插…」 | 順序進〈候選的排位順序〉第 4、5 步；理由進草稿 `rerank-by-paths-after-rules`；`web/e2e/neighbor-readings.spec.ts` |
+| §2.4「觸控鄰鍵讀法與停鍵重排都從候選列第 2 格起插…」 | 順序進〈候選的排位順序〉第 4、5 步（程式先插鄰鍵讀法，`apply_rerank` 再把重排的路徑插到它前面）；理由進草稿 `rerank-by-paths-after-rules`；`web/e2e/neighbor-readings.spec.ts` |
 | §2.4「上屏時記兩種」與「整串上屏」「衰減值」兩條 | 刪：`T/learning.rs`、`S/user.rs` 的 `SchemeModel::learn` 註解 |
 | §2.4「排位規則依序套用在 Viterbi 結果上…」與規則 1–5、「排定的候選釘在它的位置」 | 順序進〈候選的排位順序〉第 3 步；細節刪：`S/lattice.rs` 的 `RULES`、`Ranked`，`T/learning.rs`、`T/english.rs`、`T/english_user_words.rs`；規則 5 的誤觸量測在 `S/english_user.rs` 的 `ENGLISH_COMPLETION_POOL` 註解與 `scripts/experiments/remembered-prefix/` |
-| §2.4「停鍵重排在排位規則之後套用…」 | 〈候選的排位順序〉第 4 步；使用者定的理由進草稿 `rerank-by-paths-after-rules`；`T/rerank.rs` |
+| §2.4「停鍵重排在排位規則之後套用…」 | 〈候選的排位順序〉第 5 步；使用者定的理由進草稿 `rerank-by-paths-after-rules`；`T/rerank.rs` |
 | §2.4「emoji 候選（M3 票 16…」 | 〈候選的排位順序〉第 2 步；其餘刪：`T/emoji.rs`、`S/emoji.rs` 的 `EMOJI_LIMIT` 註解 |
 | §2.4「使用者詞像詞庫的詞一樣進 lattice…」 | 刪：`S/engine.rs` 的使用者詞邊的註解、`T/learning.rs` |
 | §2.4「手動加詞」「觸發詞剛好是整串時」 | 刪：`T/learning.rs`、`S/user.rs` 的 `SchemeUser::triggered` |
@@ -154,7 +154,9 @@ Blocked by: 01
 | §2.7「模型的來源：`scripts/neural-rerank/train.py`…」 | 刪：已在 `docs/development.md`〈停鍵層的模型〉 |
 | §2.7「各層的模型由 M3 模型階梯定…」 | 刪：`docs/research/model-ladder.md`（採用表與〈停鍵層在新基線重量〉）、`data/neural-rerank/model.toml`（λ） |
 
-### 矛盾（spec 共同規則 5；照程式碼寫、沒改程式）
+### 矛盾（spec 共同規則 5；請使用者確認）
+
+照 `AGENTS.md`〈事實與查證〉「現況以 repo 為準」處理：plan 那段照樣歸位或刪掉，沒改程式。使用者要以 plan 為準的，原文在 `git show 4832a21:docs/plan.md`，改程式另開票。
 
 1. §2.1〈delete_before〉寫「M4 票 21 只加欄位，核心一直送 0」，現在點建議、自動修正、連按兩下空白都送非 0（`T/english_mode.rs`、`T/smart_punctuation.rs`）。這句是過時的歷史，刪了。
 2. §2.1〈簡體模式〉寫「`qim-ffi` 加換選項時，綁定的 `set_options` 同時呼叫 `refresh`」，`crates/qim-ffi/src/lib.rs` 還沒有 `set_options`；網頁是每項一個方法（`setSimplified`…）各自回快照。〈核心對殼〉只寫核心的規則（改設定後組字中要 `refresh`），綁定怎麼包留給 `qim-ffi` 加換選項的票。
@@ -172,3 +174,16 @@ Blocked by: 01
 4. **契約與實作細節分不清、沒放進 `ARCHITECTURE.md` 的**（淨增預算 2,200 字，已用約 1,800）：英文模式 Enter 自動修正時各平台怎麼「先刪字、上屏，再交還 Enter」（Android 先 `commitText` 再送 Enter 的 `KeyEvent`、iOS 先 `insertText` 再 `insertText("\n")`、macOS 先 `insertText` 再讓 `handle` 回 false）。〈核心對殼〉只寫了「先照做 `delete_before`、`commit` 再交還」；平台的做法建議在各平台里程碑開工時寫進它的 spec。
 5. **數字只留在票上的**：µs 量測（詞級 trigram 雜湊 31 → 64 → 45 µs、停鍵結果快取 154 → 161 µs）原本就是從票抄來的，沒搬，票留在 `.scratch/m3/`、`.scratch/m4/`。
 6. 指向 plan §2 的引用（程式註解約 150 處，如 `plan〈介面〉〈上下文〉`）沒改：plan 的節標題還在、點過去是「已搬到」一行；照票 06 的範圍一次改，免得和票 03–05 平行改同一行註解。
+
+### Code review
+
+兩軸都看過（`git diff 4832a21...HEAD`）。已改：Spec 指出〈核心對殼〉的 1100 ms 計時起點寫錯（是每個按鍵、點擊之前從頭計）、〈候選的排位順序〉鄰鍵讀法與重排的先後寫反、漏了 v3 草稿的相容規則、plan〈資料流〉的「已刪」行沒提搬到 roadmap 的已知限制；Standards 指出 ADR 草稿有幾處 plan 沒寫的利弊或後果（已刪或改回 plan 原句）、`association` 與 `ranking-parameters` 的〈Considered Options〉不是替代做法（併進正文）、`key-probabilities` 與 `rerank-by-paths-after-rules` 補上 plan 有提的替代做法、roadmap 新條目不再指向 plan、證據表從 scratchpad 移進 `.scratch/arch-diet/02-evidence/`、〈矛盾〉改寫成請使用者確認。沒改的：roadmap 兩處與指到研究筆記的刪除理由（上面「給使用者決定」2、3）；`ARCHITECTURE.md` 的觸控門檻和 `web/src/touch.ts` 數字重複，是給其他平台殼的契約，留著；`new-schemes-share-models` 寫的是還沒有的第二個方案，是 plan 原有的打算，交使用者看要不要留。
+
+- Session 紀錄：2026-11-18 plan §2 歸位：契約、排位順序、格式版本寫進 `ARCHITECTURE.md`，理由寫成 10 份 ADR 草稿，其餘逐段指到測試或程式檔
+- 決定：取捨的理由依功能拆成 10 份 ADR 草稿，不併成一份（Agent 定）
+- 決定：「不做句首建議」的資料併進 roadmap M5 原有那條，簡繁逐段轉換的已知限制放〈不排里程碑〉（Agent 定）
+- 決定：plan 和程式碼對不上的 7 處照 repo 現況寫，列給使用者確認（Agent 定）
+- 決定：觸控手勢門檻用一句話放進〈佈局格式〉、指向 `web/src/touch.ts`，當給各平台殼的契約（Agent 定）
+- 決定：指向 plan §2 的程式註解（約 150 處）留給票 06 一次改，不和票 03–05 平行改同一行（Agent 定）
+- 決定：逐段的證據表進 `.scratch/arch-diet/02-evidence/`，給票 06 與使用者查（Agent 定）
+- 變更：無

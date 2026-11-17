@@ -4,7 +4,7 @@
 
 殼每次聚焦輸入框時呼叫 `Session::set_field(FieldKind)`。它是每個欄位的資訊、不是使用者的設定，所以不放在 `Options`：殼改設定時讀出 `options()` 改一項，放進去就分不出「換了欄位」。分法照 Android `EditorInfo.inputType` 的類別與變體（事實 P24）：`Text`、`Email`、`Url`、`Number`、`Password`；iOS 對應 `keyboardType`（`.emailAddress`、`.URL`、數字類）與 `isSecureTextEntry`；網頁照 Chrome 轉給 Android 的規則從 `input` 的 `type` 與 `inputmode` 讀。
 
-- **email、網址、密碼欄切到英文直通**，離開到一般欄、數字欄時還原進去之前的中英；在那種欄位裡切過的不留到下一個欄位。依據：Trime 在 email 與密碼欄設 `ascii_mode`、離開時還原（`KeyboardWindow.kt` `onStartInput`，commit `2e2b4d5` L340–393）；青簡 Android 對信箱、網址、密碼欄直通（`docs/research/qingjian.md`）；AOSP LatinIME 在這三種欄位不給建議（`InputAttributes` 的 `mShouldShowSuggestions`）。不用英文模式：桌面的英文是直通，核心分不出殼是觸控還是桌面。
+- **email、網址、密碼欄切到英文直通**，離開到一般欄、數字欄時還原進去之前的中英；在那種欄位裡切過的不留到下一個欄位。依據：Trime 在 email 與密碼欄設 `ascii_mode`、離開時還原（`KeyboardWindow.kt` `onStartInput`，commit `2e2b4d5` L340–393）；青簡 Android 對信箱、網址、密碼欄直通（`docs/research/qingjian.md`）；AOSP LatinIME 在這三種欄位不給建議（`InputAttributes` 的 `mShouldShowSuggestions`）。不用英文模式：桌面的英文是直通，核心分不出殼是觸控還是桌面（見下面〈Considered Options〉）。
 - 使用者在這三種欄位切到英文模式時，也不自動修正、不句首自動大寫（LatinIME `InputAttributes`；Gboard 在 email 與網址欄不修不大寫，事實 M48）；email、網址欄照出建議。
 - **密碼欄**照無痕不學、不讀前文，英文模式也不出建議（LatinIME、Gboard 的密碼欄沒有建議列）；使用者的 `Options.incognito` 不動，速成的輸入碼與候選不會顯示在畫面上。
 - **數字欄**核心的中英不動，殼開佈局的 `numberPage`（照 Trime 換 `number` 鍵盤、fcitx5-android 換數字鍵盤）。
@@ -12,7 +12,7 @@
 ## Considered Options
 
 - 照 Gboard：Gboard 在粵語速成下不切英文（事實 M48），不照它。
-- 在這三種欄位用英文模式（有建議列）：觸控好用，但桌面沒有英文模式，核心要分觸控與桌面。
+- 在這三種欄位用英文模式：桌面的英文是直通，核心分不出殼是觸控還是桌面。
 
 ## Consequences
 

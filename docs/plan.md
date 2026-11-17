@@ -36,7 +36,7 @@
 
 ### 2.2 資料流
 
-已刪：由 `crates/qim-core/src/lattice.rs`、`session.rs` 說明。
+已刪：由 `crates/qim-core/src/lattice.rs`、`session.rs` 說明；已知限制（簡繁逐段轉換）搬到 roadmap〈不排里程碑〉。
 
 ### 2.3 排序：同一把尺
 

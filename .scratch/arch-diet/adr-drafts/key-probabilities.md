@@ -6,6 +6,10 @@
 - **實體鍵盤的中文模式整個當美式鍵盤**（使用者定）：網頁照實體鍵位（`KeyboardEvent.code`）換成美式鍵盤上的字元，換 Dvorak、AZERTY 時中文模式的手感跟美式一樣；英文直通與臨時英文照配列打。
 - **實體鍵盤的鄰鍵先驗不拿觸控的 `Page` 幾何算**：實體鍵之間沒有縫、鍵中心距離比到形狀的距離更分得出錯位，而且觸控的 σ 是手指在玻璃上的精度，不是按錯鍵的機率。libime 只取同排左右（`docs/research/ranking-techniques.md` §5.2），這裡照各排錯位取鄰鍵。
 
+## Considered Options
+
+- 鄰鍵先驗只取同排左右（libime）：這裡照各排錯位，F 的鄰鍵除了同排的 D、G，還有上排的 R、T 與下排的 C、V。
+
 ## Consequences
 
 - 平台殼接實體鍵盤時再定怎麼把系統的實體鍵位（macOS 的 keyCode、Windows 的掃描碼）交給 `PhysicalModel`。

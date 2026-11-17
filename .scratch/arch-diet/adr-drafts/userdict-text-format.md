@@ -18,7 +18,7 @@
 
 ## Considered Options
 
-- 照抄 librime 的 `c= d= t=`：能直接讀 Rime 的檔，但整串上屏的次數與 tick 放不進去，各台分開的次數也放不進去。
+- 照 librime 用 `c= d= t=`：要多記整串上屏的次數與 tick，升版本時本來就要改 parser。
 
 ## Consequences
 
