@@ -90,7 +90,7 @@ pub struct Set {
     pub group: Group,
     /// 前文長度（字），只有「有前文」的集合不是 0。
     pub context_chars: usize,
-    /// 個人集：輸出只有數字與行號（plan〈首選字基準〉）。
+    /// 個人集：輸出只有數字與行號（`docs/development.md`〈首選字基準〉）。
     pub private: bool,
     pub items: Vec<Item>,
 }

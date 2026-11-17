@@ -98,6 +98,7 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - M7：用 `codesign -d -r-` 讀回 Personal Team 簽章的 requirement，重建兩次確認輔助功能授權仍在（§4）；以 root 註冊輸入源、更新前切走輸入源、只換執行檔的開發迴圈（§2.2）。
 - M8：需要鍵盤自己放切換鍵的機型，地球鍵長按的切換鍵盤選單是否照 Apple 改成換系統鍵盤，選單裡的系統鍵盤現在只是占位，iOS、Android 殼接系統的清單（M4 票 23，使用者同意）；事實 P25 `deleteBackward()` 刪的單位實機量（M4 票 21，核心只刪單一 scalar 的字，不依賴它）。
 - M8：Full Access 只閘控網路與剪貼簿、App Group 只由主 App 寫、Keychain group 寫成固定字串（未簽章的 CI archive 前綴為空）、冷啟動高度、用 `phys_footprint` 量記憶體（§2.3）。
+- M8：iOS 的預設佈局要不要放地球鍵（`needsInputModeSwitchKey` 只在部分機型為真）開工時定；內建佈局的嚴格檢查（`qim_layout::check_builtin`）現在固定用不需要切換鍵盤鍵的 `Target`（M1 票 19）。
 - M9：測試宿主 App 涵蓋一般、密碼、WebView、`TYPE_NULL` 欄位（§2.4）。
 
 ## M3 的模型階梯實驗
@@ -133,3 +134,4 @@ M7–M9 開工時另讀 `docs/research/xsime.md` 對應小節，列入任務：
 - 容錯重評時要補的：四種修正沒過門檻（M4 票 09），重評時照票 10 列的四項與 `docs/research/tolerance.md` 補；空間模型的「上層加成 2」、σ、鄰鍵先驗 0.9／σ 0.5 沒有來源也沒調；重排開著時觸控集合的修正次數量不了（model-ladder 沒有觸控的路，M4 票 09c）。出處：M4 票 06–10、09c、18。
 - e2e 在高負載下偶發紅、單獨重跑會過：`pack-update.spec.ts`「sha256 不符時拒絕，保留舊版」（M4 票 13）、`touch-features` 長按切頁（M4 票 21）、單按 Shift 的計時（M4 票 26）。再紅一次就用 `mattpocock-skills:diagnosing-bugs` 開修復票。出處：M4 票 13、21、26 與票 31。
 - e2e 開跑前不檢查資料包建好了沒：網頁要載的資料包少一個（例如主 checkout 沒重跑 `cargo xtask data`），整批測試在等就緒時逾時，看不出原因；要做時讓 e2e 步驟先比對網頁要載的資料包，少了就印出要跑 `cargo xtask data`。再踩到或做 gates 時順手加再開票。出處：M4 回顧（2026-11-17）。
+- 個人句子檔 `bench/personal/sentences.txt`（選填，只在本機）：使用者提供的真實句子一行一句，由 `qim-databuild` 轉碼進個人集，英文段落切開不算；`corpus::clauses` 會丟掉含英文的整句，要另外切。等使用者提供句子（M1 票 04）。

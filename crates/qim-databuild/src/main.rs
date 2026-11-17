@@ -65,7 +65,7 @@ fn build(verify: bool) -> ExitCode {
             for skipped in &outcome.skipped {
                 eprintln!("警告：{skipped}");
             }
-            // 個人集只印數字（plan〈首選字基準〉）。
+            // 個人集只印數字（`docs/development.md`〈個人集〉）。
             match outcome.personal {
                 Some(c) => println!(
                     "個人集：{} 轉出 {} 題（略過 c < 1 的 {} 列、轉不了碼的 {} 列，合併重複 {} 列）",
