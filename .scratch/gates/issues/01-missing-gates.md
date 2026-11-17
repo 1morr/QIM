@@ -70,7 +70,7 @@ check 通過
 - `exec` 裡 `Action::Tool` 與 `Action::Cargo` 兩個分支形狀相同，只差程式名，沒合併。
 - 改了 `docs/plan.md`〈開發環境與閘門〉兩句（`check` 的步驟列表、CI 跑什麼），只同步事實、不改決定，合併時請留意。
 
-Session 紀錄：補上 gitleaks 密鑰掃描（`secrets`，進 pre-commit 與 CI 全歷史）、osv-scanner 依賴漏洞掃描（`audit`，完整 check 與 CI）、Dependabot 設定；事實 M54–M56。
+Session 紀錄：2026-11-17 補上 gitleaks 密鑰掃描（`secrets`，進 pre-commit 與 CI 全歷史）、osv-scanner 依賴漏洞掃描（`audit`，完整 check 與 CI）、Dependabot 設定；事實 M54–M56。
 決定：密鑰掃描用 gitleaks 8.30.1，不用後繼 betterleaks（v2 還在 rc）或會連網驗證的 trufflehog；betterleaks v2 穩定後再評估換（Agent 定）
 決定：依賴漏洞用 osv-scanner 一個工具掃 Cargo.lock 與 web/package-lock.json，不用 cargo-audit 加 npm audit：npm audit 沒有忽略單一公告的機制（Agent 定）
 決定：依賴更新用 Dependabot 不用 Renovate：GitHub 內建、不必裝 app；每週一次，minor 與 patch 併成一個 PR，wasm-bindgen 一家另開（Agent 定）

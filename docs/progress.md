@@ -1,13 +1,14 @@
 # 進度
 
-工作單位是票（`.scratch/<里程碑>/issues/NN-slug.md`），狀態在票的 `Status:` 行。這裡只記進行中里程碑的 session 紀錄；里程碑的順序、狀態與閱讀指引在 `docs/roadmap.md`，決定在 `docs/decisions.md`。
+工作單位是票（`.scratch/<里程碑>/issues/NN-slug.md`），狀態與做票的 session 紀錄都在票上（`python3 scripts/ticket_notes.py <里程碑的目錄名>` 印出來）。這裡只記進行中里程碑裡不是做票的 session（訪談、規劃、開工、驗收、流程調整）；里程碑的順序、狀態與閱讀指引在 `docs/roadmap.md`，決定在 `docs/decisions.md`。
 
 ## 寫法與封存
 
-- 做票的分支不改本檔：票的 Comments 留 `Session 紀錄：` 行，合併的人在主分支抄成這裡的一列（`AGENTS.md`〈每個 session 的流程〉）。
-- 一列不超過 200 字元；細節在票的 `## Comments`，這裡只放指向它的一句話。
-- 「票」欄標里程碑（`M0 01`），封存時靠它分。
-- 里程碑驗收時（步驟在 `docs/agents/milestone.md`〈收尾票〉），把它的 session 紀錄移到 `docs/archive/<里程碑>.md` 的 `## Session 紀錄`、`docs/decisions.md` 裡它的決定移到同一個檔的 `## 決定`，逐列逐條比對沒有遺失，`docs/roadmap.md` 里程碑表的狀態換成那個檔的連結。同一個 commit 把下一個里程碑標成進行中，「下一步」寫 `/1morr:checkpoint <封存的里程碑>`。本檔只留進行中的里程碑。
+- 一列不超過 200 字元；細節在票、spec 或 brief，這裡只放指向它的一句話。
+- 「票」欄標里程碑（`M0 開工`），封存時靠它分。
+- 里程碑驗收時，它的列搬到 `docs/archive/<里程碑>.md`，步驟在 `docs/agents/milestone.md`〈驗收票〉。本檔只留進行中的里程碑。
+- 「下一步」只在沒有票可做的階段（訪談、寫架構、拆票、回顧）決定下一步；有票可做時 `python3 scripts/next_step.py` 從票的狀態算，這一欄只有以 `等使用者：` 開頭時才照樣列出。
+- 〈Session 紀錄〉裡到 2026-11-17 gates 01 為止的做票列是舊做法留下的：那時合併的人照票抄一列進來。
 - `python3 scripts/check_docs.py`（`cargo xtask check` 的 `docs` 步驟會跑它）強制的規則列在腳本開頭；本檔的是：兩個 `##` 段的順序、session 紀錄是一整張表、每列的長度、最後一列的下一步。
 
 ## Session 紀錄
