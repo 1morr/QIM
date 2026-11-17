@@ -345,7 +345,7 @@ CI（`.github/workflows/ci.yml`）在 push 到 `main` 與每個 PR 時跑 `gitle
 
 `deps` 失敗時每條違規印一行，說明是哪個 crate、違反 plan §1.3 的哪一條；禁用路徑附 `檔案:行號`。
 
-`docs` 失敗時每條違規印一行 `檔案:行號：說明`，規則在 `scripts/check_docs.py` 開頭。做票的分支不改 `docs/progress.md` 與 `docs/decisions.md`，由合併的人在主分支寫（`AGENTS.md`〈每個 session 的流程〉）。
+`docs` 失敗時每條違規印一行 `檔案:行號：說明`，規則在 `scripts/check_docs.py` 開頭。做票的 session 紀錄與決定只寫在票的 `## Comments`，`docs/progress.md` 與 `docs/decisions.md` 留給不是做票的 session（`AGENTS.md`〈每個 session 的流程〉）；`python3 scripts/ticket_notes.py <里程碑的目錄名>` 印出一個里程碑各票的紀錄。
 
 格式自動修正：`cargo fmt --all`、`npm run --prefix web lint -- --write`。
 
