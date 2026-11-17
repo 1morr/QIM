@@ -173,3 +173,19 @@ test("實體鍵盤單按 Shift 照舊是英文直通：字母交還瀏覽器、�
 	await expect(text).toHaveValue("hel-lo");
 	await expect(items).toHaveCount(0);
 });
+
+test("用真的英文資料包：打過一次的 helmet 打 hel 時在前 3 格；打過一次的 tumors 不擠進 t 的前 3 格", async ({
+	page,
+}) => {
+	const { items } = parts(page);
+	await page.getByTestId("key-globe").tap();
+	await tapText(page, "hel");
+	await expect(items.first()).toBeVisible();
+	await expect(items.filter({ hasText: /^[123]helmet$/ })).toHaveCount(0);
+	await tapText(page, "met tumors ");
+	await tapText(page, "hel");
+	await expect(items.filter({ hasText: /^[123]helmet$/ })).toHaveCount(1);
+	await tapText(page, " t");
+	await expect(items.first()).toBeVisible();
+	await expect(items.filter({ hasText: /^[123]tumors$/ })).toHaveCount(0);
+});

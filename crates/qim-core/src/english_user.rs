@@ -176,8 +176,6 @@ pub(crate) struct UsedWord<'a> {
     pub(crate) key: &'a str,
     /// 最後打的寫法。
     pub(crate) text: &'a str,
-    /// 衰減到現在的衰減值：誰最近常打。
-    pub(crate) used: f64,
     /// 一年內打過的次數（各台相加）：出現門檻用。
     pub(crate) count: u64,
 }
@@ -281,7 +279,6 @@ impl EnglishUserWords {
             .map(move |(key, w)| UsedWord {
                 key,
                 text: &w.text,
-                used: w.decayed.at(self.tick),
                 count: self.count_on(key, today),
             })
             .filter(|w| w.count > 0)

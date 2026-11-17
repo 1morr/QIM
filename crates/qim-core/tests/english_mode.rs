@@ -71,8 +71,12 @@ struct Ime {
 
 impl Ime {
     fn new() -> Self {
+        Self::with_words(WORDS)
+    }
+
+    fn with_words(words: &[(&str, u8)]) -> Self {
         Self {
-            engine: engine(WORDS),
+            engine: engine(words),
             session: Session::default(),
             user: UserModel::default(),
         }
@@ -218,13 +222,61 @@ fn a_string_not_in_the_dictionary_is_suggested_after_it_is_typed_twice() {
     );
 }
 
-/// 詞典有的詞不受門檻管：打過一次就排到沒打過的詞前面，學得多的在前。
+/// AOSP LatinIME 詞表（英文資料包 `aosp-en-us` 的來源）裡這些詞的 `f`，學過的加分和它合比時照真實的差距測。
+const AOSP_WORDS: &[(&str, u8)] = &[
+    ("held", 158),
+    ("help", 149),
+    ("helped", 142),
+    ("helping", 128),
+    ("helps", 124),
+    ("hello", 120),
+    ("helicopter", 120),
+    ("helmet", 111),
+    ("helium", 102),
+    ("the", 222),
+    ("to", 215),
+    ("this", 200),
+    ("that", 192),
+    ("they", 174),
+    ("tumors", 103),
+];
+
+/// 打過一次的詞典詞進建議列前 3 格（Gboard 打過一次就出在建議列，事實 M47）：helmet 原本排第 8。
 #[test]
-fn learned_dictionary_words_come_before_the_rest_and_the_most_used_first() {
-    let mut ime = Ime::new();
+fn a_dictionary_word_typed_once_moves_into_the_first_three() {
+    let mut ime = Ime::with_words(AOSP_WORDS);
     ime.globe();
-    ime.type_text("helmet held held ");
-    assert_eq!(ime.suggestions("hel"), ["held", "helmet", "hello", "help"]);
+    assert_eq!(ime.suggestions("hel")[7], "helmet");
+    ime.type_text(" helmet ");
+    let shown = ime.suggestions("hel");
+    assert!(shown[..3].contains(&"helmet".to_string()), "{shown:?}");
+}
+
+/// 只打過一次的冷門詞不壓過常用詞：學過的加分和詞典頻率合比（照 LatinIME 的刻度，事實 M50），不是學過的一律排前。
+#[test]
+fn a_rare_word_typed_once_stays_behind_common_words() {
+    let mut ime = Ime::with_words(AOSP_WORDS);
+    ime.globe();
+    ime.type_text("tumors ");
+    let shown = ime.suggestions("t");
+    assert_eq!(
+        shown[..5],
+        ["the", "to", "this", "that", "they"],
+        "{shown:?}"
+    );
+}
+
+/// 常打的詞往前：打得越多加分越多。
+#[test]
+fn words_typed_more_often_move_further_up() {
+    let mut ime = Ime::with_words(AOSP_WORDS);
+    ime.globe();
+    ime.type_text("helium ");
+    let once = ime.suggestions("hel");
+    assert_ne!(once[0], "helium", "{once:?}");
+    ime.type_text("ium helium helium helium ");
+    let often = ime.suggestions("hel");
+    assert_eq!(often[0], "helium", "{once:?} → {often:?}");
 }
 
 /// 英文使用者詞關掉時不學也不給，詞典照樣補完。
