@@ -1,6 +1,6 @@
 # QIM 架構
 
-> 狀態：從 `docs/plan.md` 搬移中。碼表與資料管線、風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
+> 狀態：從 `docs/plan.md` 搬移中。風險與回寫點還在 plan 的同名節，搬完後刪掉 plan。這裡是模組地圖與跨模組的規則，給第一次進這個 repo 的人和 agent 讀；需求與決定在 `docs/design-brief.md`，里程碑的順序與範圍在 `docs/roadmap.md`，名詞在 `GLOSSARY.md`。
 >
 > 寫法：只寫現況，改了就改寫原句，舊說法留給 git；票號與「某日改」不寫進來。只寫打開程式碼看不出來的：模組的分工、誰能依賴誰、跨模組的資料與契約。單一模組內的行為由測試與程式碼說明；操作步驟（建置、在裝置上驗、排除故障）寫在 `docs/development.md`；選型與取捨的理由寫 ADR，這裡連過去。節用標題引用、不編號。全檔上限 15,000 字元，`scripts/check_docs.py` 強制。
 
@@ -120,7 +120,7 @@ flowchart LR
 
 ## 跨模組的資料與契約
 
-資料包的格式還在 plan〈碼表與資料管線〉。單一模組內的行為看各 crate 的 `tests/`，依功能分檔。
+單一模組內的行為看各 crate 的 `tests/`，依功能分檔。
 
 ### 核心對殼
 
@@ -156,6 +156,18 @@ flowchart LR
 `qim-layout/1` 的 JSON Schema 在 `crates/qim-layout/schema/`、型別在 `crates/qim-layout/src/model.rs`，兩邊同時改（ADR 0004）。加選填欄位只加不改、不升版本；改既有的欄位要升 `qim-layout/2` 並提供轉換。
 
 觸控鍵盤的手勢門檻（放開才做動作、按住 400 ms 出長按清單、同一鍵 300 ms 內第二下算快速點兩下）各平台殼照網頁的 `web/src/touch.ts`。
+
+### 資料包
+
+`qim-databuild` 建、核心讀的單位，一份一個目錄 `<id>/`：`<id>.pack`（postcard，整份解開進記憶體；格式在 `crates/qim-core/src/pack.rs`）、`manifest.json`、`LICENSE`、`NOTICE`。授權檔不跨資料包共用，各寫它用到的來源；manifest 的 `license` 是那些來源的 SPDX 以 ` AND ` 接起。
+
+- manifest 是對外格式（`crates/qim-core/src/manifest.rs`）：一種 `kind` 對一個 `Pack` 型別；不認得的欄位略過，欄位的意思改了才加 `manifest_version`；`version` 是 semver、內容改了就加；`min_core_version` 是讀得了它的最舊 `qim-core`。
+- 殼只做 I/O 與儲存，交 manifest 加位元組給核心；核心核對格式、核心版本、種類、大小、sha256，解開後再核對 id（`Pack::open`）。一組交給 `Engine::open` 時，同種兩份、給了字根提示或模型、沒有方案資料包都拒絕。
+- 方案 `[packs]` 指名的是預設；同一種可以裝好幾份，殼選一份交給核心，核心只核對方案要不要那種、不核對 id；建出的預設是不是指名的那份由 `cargo xtask data --verify` 擋。
+- 字頻在詞庫資料包：速成資料包不帶語料衍生的資料，`Engine` 載入兩份時才依字頻排字序。字頻與字級 bigram 用同一組語料權重，屬於共用的語言模型、不寫在方案檔。
+- 詞級 trigram 的段是用預設詞庫、字級 bigram 與方案的 β、γ 切的：改了其中一樣，詞級 trigram 要一起重建、一起發佈；對不上不會打錯，只是首選的進步變小。
+- 線上更新讀 GitHub release（固定 tag `packs`）上的 `index.json`（`crates/qim-core/src/pack_index.rs`）：每項是一份 manifest 加相對於索引的 `url`；只換裝著的、同 id 同種類、版本較大、核心讀得了的那份，下載後一樣經 `Pack::open` 核對。
+- 同 id 的內建版與下載版取版本較高的，同版用內建的；從檔案匯入的一律取代內建的。
 
 ## 平台殼
 
