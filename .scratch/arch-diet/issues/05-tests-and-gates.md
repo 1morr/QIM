@@ -80,7 +80,7 @@ Blocked by: 01
 
 ### 給協調者（合併時）
 
-- ARCH 開頭的狀態句仍寫「測試策略…還在 plan 的同名節」：票 02–04 同時在改同一句，這張票沒動它免得撞；合併後或票 06 拿掉「測試策略」。
+- ARCH 開頭的狀態句：協調者要求先合併 main（票 03）再拿掉「測試策略」，已做。
 - `plan〈佈局〉` 在 `crates/qim-layout/src/validate.rs`、`crates/qim-layout/tests/hit_properties.rs`、`crates/qim-databuild/tests/gboard.rs` 指的是 §5.3（嚴格檢查、點擊性質測試），這張票改成 `architecture〈測試策略〉`；`crates/qim-layout/tests/hit.rs`、`spatial.rs`、`validate.rs` 開頭的 `plan〈佈局：畫布模型〉〈佈局〉` 只改了後半（〈佈局：畫布模型〉是票 02 的）。票 02 若把它們當成 §2.6 改，合併時兩邊都留。
 
 ### Code review
