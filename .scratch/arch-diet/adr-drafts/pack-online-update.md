@@ -13,5 +13,5 @@
 
 ## Consequences
 
-- 各資料包各自發版。詞級 trigram 的段是用預設詞庫與當時的打分參數切的，更新詞庫或語言模型時詞級 trigram 要同一批重建、一起發，不然切法對不上；對不上不會打錯，只是首選的進步變小。manifest 要不要記訓練用的詞庫 id 與版本、讓殼或建置端擋掉對不上的組合，還沒做。
+- 各資料包各自發版，詞級 trigram 要和預設詞庫、語言模型同一批發（`ARCHITECTURE.md`〈資料包〉）。manifest 要不要記訓練用的詞庫 id 與版本、讓殼或建置端擋掉對不上的組合，還沒做。
 - 真的在 GitHub 建 release 會公開資料包，先問使用者（`docs/development.md`〈線上更新的 release〉）。

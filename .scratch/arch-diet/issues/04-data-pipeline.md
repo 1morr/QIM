@@ -1,6 +1,6 @@
 # 04: plan §4〈碼表與資料管線〉歸位
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 讀: `.scratch/arch-diet/spec.md`；plan §4 全文（約 21,000 字）；`docs/development.md`〈資料建置〉；`data/sources.toml`
 
@@ -10,9 +10,9 @@ Blocked by: 01
 
 ## 驗收
 
-- [ ] 資料包格式與 manifest 的契約在 `ARCHITECTURE.md`；建置與發佈步驟在 `docs/development.md`，搬移逐行比對沒丟。
-- [ ] Comments 有對照表：這張票負責的 plan 每一段 → 新位置或刪掉的理由。
-- [ ] `cargo xtask check --fast` 綠燈。
+- [x] 資料包格式與 manifest 的契約在 `ARCHITECTURE.md`；建置與發佈步驟在 `docs/development.md`，搬移逐行比對沒丟。
+- [x] Comments 有對照表：這張票負責的 plan 每一段 → 新位置或刪掉的理由。
+- [x] `cargo xtask check --fast` 綠燈。
 
 ## Comments
 
@@ -69,7 +69,7 @@ Blocked by: 01
 | §4.6 欄位表「內容」欄 | 摘要在 ARCH；細節刪：CORE `manifest.rs` 的 `MANIFEST_VERSION`、`PackKind`、`check_format`，`crates/qim-core/tests/manifest.rs` 的 `kind_names_match_the_manifest_json` |
 | §4.6 欄位表「採用的慣例」欄 | 草稿 pack-format-and-manifest |
 | §4.6「不認得的欄位略過…」 | ARCH；`crates/qim-core/tests/manifest.rs` 的 `unknown_fields_are_ignored_and_missing_ones_rejected`、`malformed_fields_are_rejected` |
-| §4.6「載入：殼交一組 manifest…」 | 核對順序與殼的分工：ARCH；`Engine::open` 的拒絕條件、`Pack::from_bytes`：刪，CORE `engine.rs`、`pack.rs`，`crates/qim-core/tests/engine_open.rs`；網頁的路：`crates/qim-wasm/src/lib.rs`、`web/src/packs.ts`；`qim-ffi` 之後改同一條路：草稿 pack-format-and-manifest |
+| §4.6「載入：殼交一組 manifest…」 | 核對順序、殼的分工、`Engine::open` 的拒絕條件：ARCH，CORE `engine.rs`、`crates/qim-core/tests/engine_open.rs`；字根提示經 `RadicalHintPack::open`、模型經 `ModelPack::open`、不知道種類時用 `Manifest::verify`、`Pack::from_bytes` 不核對：刪，CORE `pack.rs`、`manifest.rs`，`crates/qim-core/tests/manifest.rs` 的 `model_packs_round_trip_and_open_by_manifest`；網頁的路：`crates/qim-wasm/src/lib.rs`、`web/src/packs.ts`；`qim-ffi` 之後改同一條路：草稿 pack-format-and-manifest |
 | §4.6「不照研究建議把 manifest 塞進 `.pack` 檔頭…」 | 草稿 pack-format-and-manifest |
 | §4.6「使用中的資料包…」 | ARCH；`Engine::new`、`RadicalHints::for_scheme` 的 doc 與 `crates/qim-core/tests/` 的 `lexicon.rs`、`word_trigram.rs` 等；「推翻 M1」是歷史，刪 |
 | §4.6「網頁（plan §3.1）：內建的從 `/packs/<id>/` fetch…」 | 行為：刪，`web/src/packs.ts`（`DB_NAME`、`ACTIVE_KEY`、`change`）、`pack-choice.ts`、`main.ts`，`web/e2e/packs.spec.ts`、`storage.spec.ts`；用 IndexedDB 的理由、Firefox：草稿 pack-format-and-manifest |
@@ -101,9 +101,21 @@ plan §4 的段落都是一整行、拆給好幾處，`scripts/docs_moved_lines.
 
 ### 給使用者決定（spec 共同規則 4、5；照 spec 先留著，交給票 06 的使用者試一起看）
 
-1. **`ARCHITECTURE.md` 的預算**：協調者給這張票淨增 1,100 字，用了 957 字。契約與實作細節分不清、因為字數沒放進 `ARCHITECTURE.md` 的：manifest 各欄位的格式（id 的字元、sha256 的寫法、`kind` 的九種）、`Engine::open` 拒絕的條件（同種兩份、給了字根提示或模型、沒有方案資料包）、網頁存資料包的規則（先在記憶體換、核心收下才寫進 IndexedDB；核心不收時只用內建的）。現在指向 `manifest.rs`、`engine.rs`、`web/src/packs.ts`。要哪一條進 `ARCHITECTURE.md`？
-2. **plan 與程式碼對不上，照程式碼寫**：(a) plan §4.5 與 development.md 說「`anr` 的『門口』經 `Engine` 查」，`verify.rs` 的 `MenKouForAnr` 其實直接查詞庫（首選由 `bench/fixed.tsv` 擋）；development.md 已照程式碼改。(b) plan §4.5「決定性」列十份資料包，`build_packs` 實際還有停鍵層模型（有粵典時共 11 份）；那段刪了，以 `build_packs` 為準。
+1. **`ARCHITECTURE.md` 的預算**：協調者給這張票淨增 1,100 字。契約與實作細節分不清的，照規則 4 先放進去的是 `Engine::open` 拒絕的條件；剩下的字放不下另外兩條，沒放：manifest 各欄位的格式（id 的字元、sha256 的寫法、`kind` 的九種，在 `manifest.rs`）、網頁存資料包的規則（先在記憶體換、核心收下才寫進 IndexedDB；核心不收時只用內建的，在 `web/src/packs.ts`）。要不要進 `ARCHITECTURE.md`、換掉哪一條？
+2. **plan 與程式碼對不上，照程式碼寫**：(a) plan §4.5 與 development.md 說「`anr` 的『門口』經 `Engine` 查」，`verify.rs` 的 `MenKouForAnr` 其實直接查詞庫（首選由 `bench/fixed.tsv` 擋）；development.md 已照程式碼改：這是文件寫錯程式的行為，不是設計上的兩種選擇，照 `AGENTS.md`〈事實與查證〉「現況以指令為準」與票 01 的先例；要照 spec 規則 5 退回原句也可以。(b) plan §4.5「決定性」列十份資料包，`build_packs` 實際還有停鍵層模型（有粵典時共 11 份）；那段刪了，以 `build_packs` 為準。
 3. **程式註解和量到的數字對不上，這張票沒改（不改程式碼行為以外的內容）**：`crates/qim-databuild/src/word_trigram.rs` 的 `LARGE` 註解寫「常駐估計 35 MB」，iPhone 實測是留下 +23.4 MB、峰值 +71.3 MB；`verify.rs` 的 `CheckId::Decodes` 註解漏了詞級 trigram 的方案指名檢查。另外 plan 說「舊核心讀到不認得的種類拒絕載入」，行為來自 serde，沒有專門的測試。要不要開修復票？
 4. **刪掉的理由不是程式檔的幾段**：常見寫法引 brief §4.1、語料授權引 brief §11、口語詞表的詞數引詞表本身、幾條來源的理由引 `data/sources.toml` 的註解（程式讀的資料檔，不是程式碼）；「推翻 M1」「票 21 時只授權推 `main`」是歷史，直接刪。spec 只認測試或程式檔，要使用者確認可以。
 5. **四份 ADR 草稿**：pack-format-and-manifest、pack-online-update、data-sources-and-licenses、lexicon-and-model-tuning。最後一份是調參的數字與已知限制，不像一個決定；也可以改放 `docs/research/` 的實驗紀錄（spec 沒列這個去處）。
 6. **引用留給票 06**：程式註解、`data/sources.toml`、`GLOSSARY.md`、brief、`docs/research/` 裡指向 plan §4 各節的引用沒改（點過去是一行「已搬走」，還連得到）；只改了 development.md 的引用，和 `data/sources.toml` 裡叫人「更新 plan〈詞庫〉的詞數」的那句（那個數字已經不在文件裡）。`crates/qim-databuild/src/lexicon.rs` 的 `CORPUS_WORD_FREQUENCY`、`HEADWORD_FREQUENCY` 註解寫「見 plan〈詞庫〉」，票 06 編號後要改指 ADR。
+
+### Code review
+
+兩軸都看過，已改：`ARCHITECTURE.md` 補上解開後核對 id、照規則 4 放進 `Engine::open` 的拒絕條件（淨增 1,009 字）；對照表 §4.6「載入」補 `RadicalHintPack::open`、`ModelPack::open`、`Manifest::verify`；草稿 pack-format-and-manifest 改指 `ARCHITECTURE.md`〈風險與回寫點〉；草稿 pack-online-update 不再重述詞級 trigram 同批發的規則，改指 `ARCHITECTURE.md`。沒改、留給使用者的：「門口」照程式碼改（上面第 2 題）、刪掉理由不是程式檔的幾段（第 4 題）、tuning 草稿不像一個決定（第 5 題）、`data/sources.toml` 改了一句註解的內容（第 6 題）、草稿裡的 repo 名 `1morr/QIM`（從 plan 原樣搬來，plan 與 development.md 本來就有）。
+
+- Session 紀錄：2026-11-18 plan §4 歸位：資料包契約進 `ARCHITECTURE.md`〈資料包〉、三句操作步驟進 development.md、理由寫成四份 ADR 草稿，其餘指出程式檔後刪掉
+- 決定：選型理由與調參數字分成四份 ADR 草稿（資料包格式、線上更新、取材與授權、調參），沒合成一份（Agent 定）
+- 決定：只改 development.md 與 `data/sources.toml` 一句的 plan §4 引用，程式註解、GLOSSARY、brief、research 的留給票 06（Agent 定）
+- 決定：development.md 說「門口」經 `Engine` 查，照 `verify.rs` 改成直接查詞庫，列給使用者（Agent 定）
+- 決定：`ARCHITECTURE.md` 預算內放 `Engine::open` 的拒絕條件，manifest 欄位格式與網頁儲存規則留在程式碼、列給使用者（Agent 定）
+- 決定：plan 的「現在 N 字／詞／組」這類建置輸出不搬，以 `verify.rs` 的報告為準（Agent 定）
+- 變更：無

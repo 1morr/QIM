@@ -22,7 +22,7 @@
 
 ## Consequences
 
-- 低階機量出來放不下時，先把詞庫改成 mmap 友善的格式（例如 `fst` 存碼、詞放成一整塊字串加位移索引），見 plan〈風險與回寫點〉與 `docs/research/ios-feasibility.md`〈記憶體上限〉。
+- 低階機量出來放不下時，先把詞庫改成 mmap 友善的格式（例如 `fst` 存碼、詞放成一整塊字串加位移索引），見 `ARCHITECTURE.md`〈風險與回寫點〉與 `docs/research/ios-feasibility.md`〈記憶體上限〉。
 - 載入的峰值比留下的多：詞級 trigram 放寬版留下 +23.4 MB、峰值 +71.3 MB，差的 48 MB 推論是解開途中的暫存（檔案位元組、`qim-ffi` 複製進 Rust 的那份、差值格式的中間陣列，沒逐項量）。要改用放寬版當預設，得先把解開改成就地轉換、再在 iPhone 量一次（數字見〈詞庫與語言模型的取捨與調參〉草稿）。
 - 網頁經 `qim-wasm` 已走 manifest 加位元組這條路；`qim-ffi` 還是只收位元組，M7 起的平台殼接資料包管理時改成同一條路。
 - `version` 靠人加；發佈 release 時 `cargo xtask pack-release --previous` 拿上一版索引比，補上這個檢查（〈資料包的線上更新〉草稿）。

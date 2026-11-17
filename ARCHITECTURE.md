@@ -127,7 +127,7 @@ flowchart LR
 `qim-databuild` 建、核心讀的單位，一份一個目錄 `<id>/`：`<id>.pack`（postcard，整份解開進記憶體；格式在 `crates/qim-core/src/pack.rs`）、`manifest.json`、`LICENSE`、`NOTICE`。授權檔不跨資料包共用，各寫它用到的來源；manifest 的 `license` 是那些來源的 SPDX 以 ` AND ` 接起。
 
 - manifest 是對外格式（`crates/qim-core/src/manifest.rs`）：一種 `kind` 對一個 `Pack` 型別；不認得的欄位略過，欄位的意思改了才加 `manifest_version`；`version` 是 semver、內容改了就加；`min_core_version` 是讀得了它的最舊 `qim-core`。
-- 殼只做 I/O 與儲存，交 manifest 加位元組給核心；核心依序核對格式、核心版本、種類、大小、sha256 才解開（`Pack::open`）。
+- 殼只做 I/O 與儲存，交 manifest 加位元組給核心；核心核對格式、核心版本、種類、大小、sha256，解開後再核對 id（`Pack::open`）。一組交給 `Engine::open` 時，同種兩份、給了字根提示或模型、沒有方案資料包都拒絕。
 - 方案 `[packs]` 指名的是預設；同一種可以裝好幾份，殼選一份交給核心，核心只核對方案要不要那種、不核對 id；建出的預設是不是指名的那份由 `cargo xtask data --verify` 擋。
 - 字頻在詞庫資料包：速成資料包不帶語料衍生的資料，`Engine` 載入兩份時才依字頻排字序。字頻與字級 bigram 用同一組語料權重，屬於共用的語言模型、不寫在方案檔。
 - 詞級 trigram 的段是用預設詞庫、字級 bigram 與方案的 β、γ 切的：改了其中一樣，詞級 trigram 要一起重建、一起發佈；對不上不會打錯，只是首選的進步變小。
