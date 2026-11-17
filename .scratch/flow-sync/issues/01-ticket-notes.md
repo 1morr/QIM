@@ -35,3 +35,4 @@ Session 紀錄：2026-11-17 做票的紀錄改成只留在票上：換範本新�
 決定：AGENTS.md〈目錄〉的 `scripts/` 列補上 `next_step.py`、`ticket_notes.py`、`docs_moved_lines.py`，雖是 QIM 自己的段落，不補就和 repo 不符（Agent 定）
 決定：plan〈文件的閘門〉那句改成要 `-acceptance.md` 驗收票（`-close.md` 也算），只同步 `check_docs.py` 的行為，改名本身是 spec 已定的（Agent 定）
 決定：issue-tracker.md〈Conventions〉的 `讀:` 例子與 milestone.md 寫架構的步驟仍寫 plan，留給 arch-diet 改（Agent 定）
+變更：無

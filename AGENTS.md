@@ -12,6 +12,7 @@
 - **下一步**不靠記：`python3 scripts/next_step.py` 從 roadmap、票的狀態與 progress.md 最後一列算出等使用者決定的事、現在要下的指令、後面排著什麼。使用者問接下來做什麼，就跑它。
 - `docs/decisions.md`：進行中里程碑裡不是做票時定的決定，一條一行，標決定者；驗收後跟著封存。
 - `.scratch/<里程碑>/spec.md`：該里程碑的目標、範圍、共同規則、驗收（Agent 驗、使用者試）與票序；由下面〈Skills〉的里程碑開工步驟建立。`issues/` 是票，執行單位，狀態在票的 `Status:` 行。做票的 session 紀錄與決定留在票上，`python3 scripts/ticket_notes.py <里程碑的目錄名>` 印出整個里程碑的。
+- `CHANGELOG.md`：使用者拿到什麼、改了什麼，依功能記。做票時寫在票的 `變更：` 行，驗收票組進 `[Unreleased]`。
 - `docs/development.md`：開發指令的單一來源；`docs/agents/`：給工程 skill 讀的票與里程碑慣例；`docs/archive/`：已驗收里程碑的紀錄。
 - 上面這些檔名與位置是固定的，別的 skill 靠它們找檔。`docs/` 第一層每多一個檔或資料夾，就在這一段加一行說明它是什麼（`scripts/check_docs.py` 擋）；不再維護的搬進 `docs/legacy/`。
 - `docs/design/`：畫面的設計稿，使用者確認過的定稿（〈UI〉）。
@@ -48,12 +49,12 @@
 2. `/implement <票路徑>`：tdd、定期 typecheck、結尾從開工時的 commit 起跑 `mattpocock-skills:code-review`、commit。
 3. 驗證：`docs/development.md`〈全部檢查〉加 test；貼指令輸出。
 4. 影響架構的決定另寫 ADR；要推翻已定的決定照〈使用者確認〉。
-5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；Comments 最後加一行 `Session 紀錄：<YYYY-MM-DD> <做了什麼，一句>`，做票時定的每個選擇各加一行 `決定：<一句>（<決定者>）`；commit。票就是這些紀錄唯一的來源：做票的分支把 progress.md 與 decisions.md 留給不平行的 session，平行的票才不會互撞。
+5. 票的 `Status:` 改為 `done`、勾掉驗收條件、code-review 未處理的發現記到票的 `## Comments`；Comments 最後加一行 `Session 紀錄：<YYYY-MM-DD> <做了什麼，一句>`，做票時定的每個選擇各加一行 `決定：<一句>（<決定者>）`，使用者看得到的每個改動各加一行 `變更：<分類>｜<功能>｜<使用者看得懂的一句>`（分類是 Added、Changed、Deprecated、Removed、Fixed、Security 之一；`<功能>` 沿用 `CHANGELOG.md` 與 `GLOSSARY.md` 已有的名字；沒有這種改動寫 `變更：無`）；commit。票就是這些紀錄唯一的來源：做票的分支把 progress.md、decisions.md 與 `CHANGELOG.md` 留給不平行的 session，平行的票才不會互撞。
 6. 合併由**開這個 session 的人**做：使用者自己開的 session，做完在主分支 `git merge --no-ff <票分支>`（訊息 `merge: ticket NN <slug>`）；`/1morr:ticket-coordinator` 開的 session 只在自己的分支 commit，合併與 push 留給協調者。
 7. 事實編號這類全專案遞增的號，票在分支上先用當時的下一號；合併時撞號，合併的人把後合併的那張改成下一個空號，連同引用它的地方。
-8. 驗收票被其他所有票擋、不會平行：它自己改 progress.md 與 decisions.md，封存時把各票的紀錄組進封存檔（`docs/agents/milestone.md`〈驗收票〉）。
+8. 驗收票被其他所有票擋、不會平行：它自己改 progress.md 與 decisions.md，封存時把各票的紀錄組進封存檔與 `CHANGELOG.md`（`docs/agents/milestone.md`〈驗收票〉）。
 
-完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、Comments 有帶日期的 `Session 紀錄：`、已 commit。缺一就還沒完成。
+完成標準：票上每個驗收條件打勾、全部檢查與 test 綠燈、Comments 有帶日期的 `Session 紀錄：` 與至少一行 `變更：`、已 commit。缺一就還沒完成。
 
 **所有 session 的結尾**（做票、訪談、寫架構、里程碑開工都算），依序：
 
