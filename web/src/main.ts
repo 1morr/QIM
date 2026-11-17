@@ -7,6 +7,7 @@ import { mountContext } from "./context.ts";
 import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
+import { mountFieldType } from "./field.ts";
 import { commitBeforeHost, hostDefault, insert } from "./host.ts";
 import { LoneShift, physicalCode, toKey, usKeyEvent } from "./keys.ts";
 import { NeuralReranker } from "./neural-rerank.ts";
@@ -344,6 +345,18 @@ async function start(): Promise<void> {
 			render(snapshot);
 			afterHostKey(snapshot.action);
 		},
+	);
+	// 欄位類型（M4 票 26）：換選項等於聚焦一個新的欄位；核心換了中英、可能學到上一個欄位打完的英文串。
+	mountFieldType(
+		element<HTMLSelectElement>("#field-type"),
+		session,
+		(snapshot, field) => {
+			saveLearning();
+			render(snapshot);
+			touchKeyboard?.setNumberField(field === "number");
+			touchKeyboard?.refresh();
+		},
+		focusText,
 	);
 	// 換資料包：核心換上新的那組（學習資料與開關留著），組字重列，字根提示跟著換。
 	mountPackSettings(

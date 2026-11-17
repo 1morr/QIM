@@ -30,6 +30,10 @@ pub struct LayoutVariant {
     /// 一開始顯示的頁面；省略時是第一頁。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_page: Option<String>,
+    /// 數字欄聚焦時開的頁（M4 票 26，Trime 數字欄換的 `number` 鍵盤，[`crate::Keyboard::set_number_field`]）；
+    /// 省略時數字欄不換頁。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number_page: Option<String>,
     pub pages: Vec<Page>,
 }
 

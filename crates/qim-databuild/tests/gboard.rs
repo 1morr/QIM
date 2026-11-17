@@ -483,6 +483,16 @@ fn chinese_pages_name_their_english_counterparts() {
     }
 }
 
+/// 數字欄開數字鍵盤（`numberPage`，M4 票 26）：兩份佈局的每個版本都一樣。
+#[test]
+fn number_fields_open_the_number_pad() {
+    for layout in [layout(), gboard::number_row_layout()] {
+        for variant in &layout.variants {
+            assert_eq!(variant.number_page.as_deref(), Some(gboard::NUMBERS));
+        }
+    }
+}
+
 /// 英文頁照 Gboard English (US)（事實 M49）：QWERTY 小寫，第一排角標 1–0、長按打數字（使用者 2026-11-17 同意），
 /// 逗號、句號半形，句號長按 16 個半形符號、預設逗號。
 #[test]

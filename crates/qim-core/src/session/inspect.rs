@@ -3,7 +3,7 @@
 //!
 //! [`Snapshot`]: super::Snapshot
 
-use super::{Session, ShownCandidate};
+use super::{FieldKind, Session, ShownCandidate};
 use crate::lattice::{Preceding, SpanKind};
 use crate::{CLAUSE_START, Engine, Segment, UserModel, Weights};
 
@@ -27,6 +27,8 @@ pub struct Inspection {
     pub rerank_cached: bool,
     /// 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）：建議列的第一個；不修時是 `None`。
     pub autocorrection: Option<String>,
+    /// 目前輸入框的種類（[`Session::set_field`]，M4 票 26）。
+    pub field: FieldKind,
 }
 
 /// 核心記著的前文是什麼。
@@ -36,7 +38,7 @@ pub enum ContextState {
     Known(String),
     /// 不知道前文：殼沒給、也還沒上屏過，或交還宿主的鍵、換欄位讓它作廢。
     Unknown,
-    /// 無痕：不讀前文（brief〈隱私與安全〉）。
+    /// 無痕或密碼欄（[`Session::private`]）：不讀前文（brief〈隱私與安全〉）。
     Incognito,
 }
 
@@ -147,7 +149,7 @@ pub enum SegmentSource {
 impl Session {
     /// 給網頁 debug 面板看的排序原因（plan〈網頁 prototype〉）。不改組字；殼只在面板開著時呼叫。
     pub fn inspect(&self, engine: &Engine, user: &UserModel) -> Inspection {
-        let context = match (&self.context, self.options.incognito) {
+        let context = match (&self.context, self.private()) {
             (_, true) => ContextState::Incognito,
             (Some(context), false) => ContextState::Known(context.clone()),
             (None, false) => ContextState::Unknown,
@@ -176,6 +178,7 @@ impl Session {
             key_weights: self.key_weights.clone(),
             rerank_cached: self.cached_at == Some(self.generation),
             autocorrection: self.autocorrection.clone().filter(|_| self.english),
+            field: self.field,
         }
     }
 }

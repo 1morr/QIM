@@ -19,6 +19,8 @@ export interface Keyboard {
 	 * Shift 開一次、由真變假時關掉，Shift 變了就重畫標籤。
 	 */
 	setAutoShift(on: boolean): void;
+	/** 輸入框是不是數字欄（M4 票 26）：是就開佈局的 `numberPage`，不是而在那頁時回到一開始的頁。 */
+	setNumberField(on: boolean): void;
 }
 
 /** 按住多久算長按。 */
@@ -480,6 +482,10 @@ export function mountKeyboard(
 		},
 		setAutoShift(on) {
 			layout.setAutoShift(on);
+			followPage();
+		},
+		setNumberField(on) {
+			layout.setNumberField(on);
 			followPage();
 		},
 	};

@@ -709,6 +709,7 @@ fn variant(geometry: &Geometry, number_row: NumberRow) -> LayoutVariant {
         },
         grid: None,
         initial_page: None,
+        number_page: Some(NUMBERS.into()),
         pages: vec![
             with_ascii_page(
                 page(LETTERS, place_rows(letters), letter_rows, geometry, height),

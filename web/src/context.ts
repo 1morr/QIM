@@ -1,6 +1,6 @@
 // 上下文（plan〈介面〉）：把輸入框游標前的文字交給核心（`Session.setContext`），候選照前文排、數字後半形
 // 看前文。聚焦、移動游標（點擊、方向鍵、選取）、輸入框內容改了（上屏、宿主打的字、刪字）之後都給，
-// 失焦時叫核心忘掉；無痕時不給（brief〈隱私與安全〉）。
+// 失焦時叫核心忘掉；無痕與密碼欄時不給（brief〈隱私與安全〉）。
 
 import type { Session } from "./wasm/qim_wasm.js";
 
@@ -32,7 +32,7 @@ export function mountContext(
 ): () => void {
 	// 不比對上次給的：核心在交還宿主的退格、方向鍵後會忘掉前文，重給同一段也要給。
 	const sync = (): void => {
-		if (!session.incognito) {
+		if (!session.private) {
 			session.setContext(textBefore(text.value, text.selectionStart, limit));
 			changed();
 		}

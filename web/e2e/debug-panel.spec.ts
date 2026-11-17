@@ -137,7 +137,7 @@ test("前文的三種狀態：有前文、失焦後不知道前文、無痕不�
 	await page.getByRole("checkbox", { name: "無痕" }).check();
 	await text.focus();
 	await expect(context).toHaveAttribute("data-state", "incognito");
-	await expect(contextText).toHaveText("無痕：不讀前文");
+	await expect(contextText).toHaveText("無痕或密碼欄：不讀前文");
 	await page.keyboard.type("of");
 	await expect(preceding).toHaveAttribute("data-kind", "unigram");
 });

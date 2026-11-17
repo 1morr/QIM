@@ -23,6 +23,16 @@
 				<button id="dark-toggle" type="button" aria-pressed="false">深色</button>
 				<button id="debug-toggle" type="button" aria-pressed="false" aria-controls="debug">debug</button>
 				<label><input type="checkbox" id="number-row" /> 數字列</label>
+				<label title="模擬宿主的輸入框：選項是它的 input 屬性">欄位
+					<select id="field-type">
+						<option selected>一般（type=text）</option>
+						<option data-type="email">email（type=email）</option>
+						<option data-type="url">網址（type=url）</option>
+						<option data-type="number">數字（type=number）</option>
+						<option data-type="text" data-inputmode="numeric">數字（inputmode=numeric）</option>
+						<option data-type="password">密碼（type=password）</option>
+					</select>
+				</label>
 				<label>字根提示
 					<select id="hint-version">
 						<option value="cangjie5" selected>倉頡五代</option>
