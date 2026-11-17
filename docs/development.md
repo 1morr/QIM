@@ -311,7 +311,7 @@ Swift 端的用法：每份資料包的位元組各自解開成 `SchemePack`、`
 | 單元測試 | `cargo test --workspace`、`npm test --prefix web` | 行為退化 |
 | 端到端冒煙 | `npm run --prefix web e2e`（Playwright，要資料包，只在本機跑） | 各模組都過、接起來卻跑不動 |
 | 密鑰掃描 | `gitleaks git --pre-commit --staged`（暫存區，pre-commit）、`gitleaks git`（全部歷史，CI）；放行誤報寫在 `.gitleaks.toml` | token、密碼被 commit 進去 |
-| 依賴漏洞 | `osv-scanner scan source --config=osv-scanner.toml --lockfile=Cargo.lock --lockfile=web/package-lock.json`；不修的寫進 `osv-scanner.toml` 並附理由 | 用到有已知漏洞或已不維護的 crate 或 npm 套件 |
+| 依賴漏洞 | `osv-scanner scan source --config=osv-scanner.toml --lockfile=Cargo.lock --lockfile=web/package-lock.json`；不修的寫進 `osv-scanner.toml` 並附理由；套件還有人維護的加 `effectiveUntil`，到期後閘門會再紅 | 用到有已知漏洞或已不維護的 crate 或 npm 套件 |
 | 依賴更新 | `.github/dependabot.yml`（Dependabot，cargo、npm、GitHub Actions 每週一次） | 依賴長期沒更新 |
 
 ## 全部檢查
