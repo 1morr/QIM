@@ -1,4 +1,4 @@
-//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（plan〈依賴規則〉）。
+//! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（architecture〈依賴規則〉）。
 
 use qim_core::{
     CandidateKind, CangjieVersion, ContextState, Date, Engine, FieldKind, Imported, IndexEntry,
@@ -287,7 +287,7 @@ impl WebSession {
     }
 
     /// 今天的日期 `YYYY-MM-DD`（使用者當地的日曆日）：網頁在第一次學習前、之後每次使用者操作前給
-    /// （plan〈學習與排位〉 殼的日期契約），學到的條目記成最後使用的日期；核心不讀系統時間（plan〈依賴規則〉）。
+    /// （plan〈學習與排位〉 殼的日期契約），學到的條目記成最後使用的日期；核心不讀系統時間（architecture〈依賴規則〉）。
     #[wasm_bindgen(js_name = setToday)]
     pub fn set_today(&mut self, today: &str) -> Result<(), JsError> {
         self.user

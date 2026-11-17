@@ -1,5 +1,5 @@
 // 網頁的組裝：載入資料包（`packs.ts`）、建核心，接上各區的模組與輸入框的鍵盤事件。畫面與互動各在自己的模組，
-// 核心的排序與組字一律經綁定（plan〈依賴規則〉）。
+// 核心的排序與組字一律經綁定（architecture〈依賴規則〉）。
 
 import { mountCandidateBar } from "./candidate-bar.ts";
 import { mountComposition } from "./composition.ts";

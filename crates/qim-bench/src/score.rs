@@ -1,4 +1,4 @@
-//! 用核心實際打每一題、算分數：只經 `Session::handle`，不重寫排序（plan〈依賴規則〉）。
+//! 用核心實際打每一題、算分數：只經 `Session::handle`，不重寫排序（architecture〈依賴規則〉）。
 //!
 //! 每題打兩次，都用新的 `Session` 與空白的 `UserModel`，題與題互不影響（plan〈首選字基準〉；
 //! 學習模式 [`learning`] 例外）；有前文的題先給前文（`Session::set_context`）：

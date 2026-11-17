@@ -28,7 +28,7 @@ pub enum Action {
         args: &'static [&'static str],
         install: &'static str,
     },
-    /// 依賴規則（plan〈依賴規則〉），見 [`crate::deps`]。
+    /// 依賴規則（architecture〈依賴規則〉），見 [`crate::deps`]。
     Deps,
     /// progress 與里程碑 spec 的規則（plan〈開發環境與閘門〉），見 [`crate::docs`]。
     Docs,

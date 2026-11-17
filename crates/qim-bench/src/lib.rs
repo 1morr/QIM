@@ -1,9 +1,9 @@
 //! 首選字基準（plan〈首選字基準〉）：用核心實際打 `bench/` 的每一題，量首選正確率並擋退步。
 //!
-//! 只透過 `qim-core` 的公開介面打字；讀檔在這裡做，核心不碰 I/O（plan〈依賴規則〉）。
+//! 只透過 `qim-core` 的公開介面打字；讀檔在這裡做，核心不碰 I/O（architecture〈依賴規則〉）。
 //!
 //! `qim-databuild` 寫、這裡讀的路徑與檔頭（[`CORPUS_DIRS`]、[`dev_items`]、個人集的 [`PERSONAL`]、
-//! [`PERSONAL_USERDB`]、[`PERSONAL_SOURCE_HEADER`]）在兩個 crate 各有一份（plan〈依賴規則〉 不讓本 crate
+//! [`PERSONAL_USERDB`]、[`PERSONAL_SOURCE_HEADER`]）在兩個 crate 各有一份（architecture〈依賴規則〉 不讓本 crate
 //! 依賴 `qim-databuild`），`xtask/tests/shared_paths.rs` 比對兩邊。
 
 mod baseline;

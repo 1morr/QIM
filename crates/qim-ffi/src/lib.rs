@@ -1,4 +1,4 @@
-//! Apple 與 Android 殼用的綁定（uniffi，plan〈執行形態〉）：只把呼叫轉給 `qim-core`，不放邏輯（plan〈依賴規則〉）。
+//! Apple 與 Android 殼用的綁定（uniffi，architecture〈執行形態〉）：只把呼叫轉給 `qim-core`，不放邏輯（architecture〈依賴規則〉）。
 //!
 //! 殼先把各資料包的位元組解開成 [`SchemePack`] 等物件、建一個 [`Engine`]，每個輸入框一個
 //! [`Session`] 共用它（plan〈介面〉）；`Session` 帶著 `UserModel` 與核心的 `Session`。按鍵經
@@ -44,7 +44,7 @@ macro_rules! pack {
 
         #[uniffi::export]
         impl $name {
-            /// 由資料包檔的位元組解開；讀檔是殼的事（plan〈依賴規則〉）。
+            /// 由資料包檔的位元組解開；讀檔是殼的事（architecture〈依賴規則〉）。
             #[uniffi::constructor]
             pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, QimError> {
                 let pack = qim_core::$name::from_bytes(&bytes).map_err(core_error)?;
@@ -99,7 +99,7 @@ pub struct RadicalHintPack(
 
 #[uniffi::export]
 impl RadicalHintPack {
-    /// 由資料包檔的位元組解開；讀檔是殼的事（plan〈依賴規則〉）。
+    /// 由資料包檔的位元組解開；讀檔是殼的事（architecture〈依賴規則〉）。
     #[uniffi::constructor]
     pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, QimError> {
         let pack = qim_core::RadicalHintPack::from_bytes(&bytes).map_err(core_error)?;
