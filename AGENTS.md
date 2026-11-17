@@ -6,7 +6,7 @@
 
 - `docs/design-brief.md`：需求與決定。決定衝突時以它為準。
 - `docs/research/`：一層、不分資料夾，檔名三種：`facts-<主題>.md` 是查證過的外部事實（每條有編號與來源，索引在 brief〈事實索引〉）；`<主題>.md` 是會更新的主題整理；`<主題>-<YYYY-MM-DD>.md` 是寫完就凍結的調查或實驗紀錄。
-- `docs/plan.md`：架構、依賴規則、測試策略（`.scratch/arch-diet/` 做完後縮成根目錄的 `ARCHITECTURE.md`）。
+- `ARCHITECTURE.md`（根目錄）：執行形態、模組地圖、依賴規則、主要依賴；`docs/plan.md`：還沒搬進 `ARCHITECTURE.md` 的核心、平台殼、資料管線、測試策略（`.scratch/arch-diet/` 做完後刪掉）。
 - `docs/roadmap.md`：里程碑的順序、狀態與閱讀指引；還沒開工的里程碑各有一小節，開工後縮成一行連到它的 spec；〈不排里程碑〉收沒人接的遺留。
 - `docs/progress.md`：進行中里程碑裡不是做票的 session（訪談、規劃、開工、驗收）的紀錄。
 - **下一步**不靠記：`python3 scripts/next_step.py` 從 roadmap、票的狀態與 progress.md 最後一列算出等使用者決定的事、現在要下的指令、後面排著什麼。使用者問接下來做什麼，就跑它。
@@ -22,7 +22,7 @@
 
 | 路徑 | 內容 |
 | --- | --- |
-| `crates/` | Rust crate；各 crate 的職責與依賴規則見 plan §1.2、§1.3 |
+| `crates/` | Rust crate；各 crate 的職責與依賴規則見 `ARCHITECTURE.md`〈模組地圖〉〈依賴規則〉 |
 | `data/` | 方案檔、來源清單 `sources.toml`、自行整理的詞表 `lexicon/`、進資料包的授權全文 `licenses/`、停鍵層採用的模型 `neural-rerank/`；建置方式見 `docs/development.md`〈資料建置〉〈停鍵層的模型〉 |
 | `bench/` | 首選字基準的題目與語料（plan §5.2）；`corpus/`、`colloquial/` 由 `cargo xtask data` 產生，`personal/` 只在本機 |
 | `xtask/` | 閘門與開發指令（`cargo xtask check`），用法見 `docs/development.md` |

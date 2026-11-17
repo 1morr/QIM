@@ -382,7 +382,7 @@ pub fn build_dir(root: &Path, name: &str) -> PathBuf {
 }
 
 /// 語料 `name` 的 dev 調參題（`build/corpus/<名>/dev.tsv`）；`qim_bench::dev_items` 讀同一個路徑
-/// （plan〈依賴規則〉 不讓 `qim-bench` 依賴本 crate），`xtask` 的 `shared_paths` 測試比對兩邊。
+/// （architecture〈依賴規則〉 不讓 `qim-bench` 依賴本 crate），`xtask` 的 `shared_paths` 測試比對兩邊。
 pub fn dev_items_path(root: &Path, name: &str) -> PathBuf {
     build_dir(root, name).join("dev.tsv")
 }

@@ -1,13 +1,13 @@
-//! `deps` 步驟：依賴規則（plan〈依賴規則〉）。
+//! `deps` 步驟：依賴規則（architecture〈依賴規則〉）。
 //!
-//! [`RULES`] 是 plan〈依賴規則〉 表的程式版，改表時兩邊同一 commit 改；`cargo test` 比對兩邊。
+//! [`RULES`] 是 architecture〈依賴規則〉 表的程式版，改表時兩邊同一 commit 改；`cargo test` 比對兩邊。
 
 use std::path::{Path, PathBuf};
 
 use cargo_metadata::{DependencyKind, MetadataCommand};
 use proc_macro2::{Delimiter, Group, Spacing, TokenStream, TokenTree};
 
-/// plan〈依賴規則〉 表的一列。
+/// architecture〈依賴規則〉 表的一列。
 struct Rule {
     krate: &'static str,
     /// 可以依賴的 workspace crate（任何種類的依賴都適用）。
@@ -18,7 +18,7 @@ struct Rule {
     no_io: bool,
 }
 
-/// plan〈依賴規則〉 禁止 [`Rule::no_io`] 為真的 crate 用的 std 路徑。
+/// architecture〈依賴規則〉 禁止 [`Rule::no_io`] 為真的 crate 用的 std 路徑。
 const FORBIDDEN_PATHS: &[&[&str]] = &[
     &["std", "fs"],
     &["std", "net"],
@@ -31,6 +31,9 @@ const FORBIDDEN_NAMES: &[(&str, &str)] = &[("SystemTime", "std::time::SystemTime
 
 /// [`RULES`] 所在的檔案，違規說明裡指給人看。
 const RULES_FILE: &str = "xtask/src/deps.rs";
+
+/// 依賴規則的表所在的文件與節，違規說明裡指給人看。
+const RULES_DOC: &str = "ARCHITECTURE.md〈依賴規則〉";
 
 const RULES: &[Rule] = &[
     Rule {
@@ -77,7 +80,7 @@ const RULES: &[Rule] = &[
     },
 ];
 
-/// 開發工具，不受 plan〈依賴規則〉 管。
+/// 開發工具，不受 architecture〈依賴規則〉 管。
 const EXEMPT: &[&str] = &["xtask"];
 
 /// 跑 [`run`] 並把違規印到終端機；回傳是否通過。
@@ -117,7 +120,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
         }
         let Some(rule) = RULES.iter().find(|rule| rule.krate == name) else {
             violations.push(format!(
-                "workspace 成員 {name} 不在 plan〈依賴規則〉 的表上：先把它加進 plan〈依賴規則〉 與 {RULES_FILE} 的 RULES"
+                "workspace 成員 {name} 不在 {RULES_DOC} 的表上：先把它加進 {RULES_DOC} 與 {RULES_FILE} 的 RULES"
             ));
             continue;
         };
@@ -127,7 +130,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
             if is_workspace_crate(dep) {
                 if !rule.workspace.contains(&dep) {
                     violations.push(format!(
-                        "{name} 不可以依賴 {dep}（{kind}）：plan〈依賴規則〉 只允許 {name} 依賴這些 workspace crate：{}",
+                        "{name} 不可以依賴 {dep}（{kind}）：{RULES_DOC} 只允許 {name} 依賴這些 workspace crate：{}",
                         join_names(rule.workspace)
                     ));
                 }
@@ -136,7 +139,7 @@ pub fn run(root: &Path) -> Result<Vec<String>, String> {
                 && !allowed.contains(&dep)
             {
                 violations.push(format!(
-                    "{name} 的{kind} {dep} 不在 plan〈依賴規則〉 的白名單（{}）：要加先改 plan〈依賴規則〉 與 {RULES_FILE} 的 RULES",
+                    "{name} 的{kind} {dep} 不在 {RULES_DOC} 的白名單（{}）：要加先改 {RULES_DOC} 與 {RULES_FILE} 的 RULES",
                     join_names(allowed)
                 ));
             }
@@ -186,7 +189,7 @@ fn scan_sources(
         let uses = forbidden_uses(&source).map_err(|error| format!("{label} 無法斷詞：{error}"))?;
         for (line, path) in uses {
             violations.push(format!(
-                "{label}:{line} 用了 {path}：plan〈依賴規則〉 規定 {name} 不可以用 {forbidden_list}"
+                "{label}:{line} 用了 {path}：{RULES_DOC} 規定 {name} 不可以用 {forbidden_list}"
             ));
         }
     }
@@ -450,7 +453,10 @@ mod tests {
     fn workspace_member_off_the_table_is_red() {
         let dir = copy_repo();
         add_crate(dir.path(), "qim-extra");
-        assert_red(dir.path(), &["qim-extra", "不在 plan〈依賴規則〉 的表上"]);
+        assert_red(
+            dir.path(),
+            &["qim-extra", "不在 ARCHITECTURE.md〈依賴規則〉 的表上"],
+        );
     }
 
     fn assert_green(dir: &Path) {
@@ -627,11 +633,12 @@ pub const BYTES: &[u8] = b"std::net";
             .collect()
     }
 
-    /// plan〈依賴規則〉 表裡第一欄全是 `qim-*` 的列，依表上的順序：(這列的 crate, 各欄)。
+    /// architecture〈依賴規則〉 表裡第一欄全是 `qim-*` 的列，依表上的順序：(這列的 crate, 各欄)。
     /// `web/` 那類不是 crate。
-    fn crate_rows(plan: &str) -> Vec<(Vec<String>, Vec<&str>)> {
-        plan.split("\n### ")
-            .find(|section| section.starts_with("1.3 "))
+    fn crate_rows(architecture: &str) -> Vec<(Vec<String>, Vec<&str>)> {
+        architecture
+            .split("\n## ")
+            .find(|section| section.starts_with("依賴規則\n"))
             .into_iter()
             .flat_map(str::lines)
             .filter_map(|line| {
@@ -644,9 +651,9 @@ pub const BYTES: &[u8] = b"std::net";
             .collect()
     }
 
-    /// plan〈依賴規則〉 表裡每個 crate 的「可以依賴」欄：(crate, 欄內反引號包住的名字, 外部 crate 是否不限)。
-    fn documented_rules(plan: &str) -> Vec<(String, Vec<String>, bool)> {
-        let mut rules: Vec<_> = crate_rows(plan)
+    /// architecture〈依賴規則〉 表裡每個 crate 的「可以依賴」欄：(crate, 欄內反引號包住的名字, 外部 crate 是否不限)。
+    fn documented_rules(architecture: &str) -> Vec<(String, Vec<String>, bool)> {
+        let mut rules: Vec<_> = crate_rows(architecture)
             .into_iter()
             .filter_map(|(crates, cells)| {
                 let allowed_cell = *cells.get(1)?;
@@ -683,29 +690,32 @@ pub const BYTES: &[u8] = b"std::net";
         rules
     }
 
-    const PLAN_MD: &str = include_str!("../../docs/plan.md");
+    const ARCHITECTURE_MD: &str = include_str!("../../ARCHITECTURE.md");
 
     #[test]
-    fn plan_table_matches_coded_rules() {
-        assert_eq!(documented_rules(PLAN_MD), coded_rules());
+    fn architecture_table_matches_coded_rules() {
+        assert_eq!(documented_rules(ARCHITECTURE_MD), coded_rules());
     }
 
     /// 把 `text` 裡的 `from` 換成 `to`；`from` 不在就讓測試失敗，免得變異沒有生效。
     fn mutate(text: &str, from: &str, to: &str) -> String {
-        assert!(text.contains(from), "變異的原文已不在 plan：{from:?}");
+        assert!(
+            text.contains(from),
+            "變異的原文已不在 ARCHITECTURE.md：{from:?}"
+        );
         text.replace(from, to)
     }
 
     #[test]
-    fn drift_between_plan_table_and_rules_is_caught() {
-        let dropped = mutate(PLAN_MD, "| `serde`、`postcard`、", "| `serde`、");
+    fn drift_between_architecture_table_and_rules_is_caught() {
+        let dropped = mutate(ARCHITECTURE_MD, "| `serde`、`postcard`、", "| `serde`、");
         assert_ne!(documented_rules(&dropped), coded_rules());
 
-        let unlimited_removed = mutate(PLAN_MD, "外部 crate 不限", "外部 crate 只限 I/O");
+        let unlimited_removed = mutate(ARCHITECTURE_MD, "外部 crate 不限", "外部 crate 只限 I/O");
         assert_ne!(documented_rules(&unlimited_removed), coded_rules());
 
         let extra_row = mutate(
-            PLAN_MD,
+            ARCHITECTURE_MD,
             "| `web/`、",
             "| `qim-extra` | `qim-core` | — |\n| `web/`、",
         );
@@ -713,9 +723,9 @@ pub const BYTES: &[u8] = b"std::net";
     }
 
     #[test]
-    fn unrelated_edits_to_plan_table_are_not_flagged() {
+    fn unrelated_edits_to_architecture_table_are_not_flagged() {
         let edited = mutate(
-            PLAN_MD,
+            ARCHITECTURE_MD,
             "| crate | 可以依賴 | 不可以 |",
             "| Crate | 允許依賴 | 禁止 |",
         );
@@ -724,7 +734,7 @@ pub const BYTES: &[u8] = b"std::net";
         assert_eq!(documented_rules(&edited), coded_rules());
     }
 
-    /// plan〈依賴規則〉 表一列的「不可以」欄，讀成可以和 [`RULES`] 比對的樣子。
+    /// architecture〈依賴規則〉 表一列的「不可以」欄，讀成可以和 [`RULES`] 比對的樣子。
     #[derive(Debug, Default, Clone)]
     struct Forbidden {
         /// 反引號包住、`std::` 開頭的禁用路徑。
@@ -742,10 +752,10 @@ pub const BYTES: &[u8] = b"std::net";
     /// - `被 ... 依賴`，中間至少一個反引號包住的 `qim-*`：它們不可以依賴這列的 crate。
     /// - `任何 workspace crate`，後面只能接全形括號說明：不可以依賴任何 workspace crate。
     /// - 只有反引號包住的名字與說明：`std::` 開頭的是禁用路徑，`qim-` 開頭的是不可以依賴的 crate。
-    fn documented_forbidden(plan: &str) -> Result<Vec<(String, Forbidden)>, String> {
+    fn documented_forbidden(architecture: &str) -> Result<Vec<(String, Forbidden)>, String> {
         let mut previous = Forbidden::default();
         let mut rows = Vec::new();
-        for (crates, cells) in crate_rows(plan) {
+        for (crates, cells) in crate_rows(architecture) {
             let cell = cells.get(2).ok_or("「不可以」欄不見了")?;
             let mut forbidden = Forbidden::default();
             for clause in cell.split('；').map(str::trim) {
@@ -788,9 +798,9 @@ pub const BYTES: &[u8] = b"std::net";
         Ok(rows)
     }
 
-    /// plan〈依賴規則〉 表的「不可以」欄與 [`RULES`]、[`FORBIDDEN_PATHS`] 對不上的地方。
-    fn forbidden_mismatches(plan: &str) -> Vec<String> {
-        let rows = match documented_forbidden(plan) {
+    /// architecture〈依賴規則〉 表的「不可以」欄與 [`RULES`]、[`FORBIDDEN_PATHS`] 對不上的地方。
+    fn forbidden_mismatches(architecture: &str) -> Vec<String> {
+        let rows = match documented_forbidden(architecture) {
             Ok(rows) => rows,
             Err(error) => return vec![error],
         };
@@ -811,26 +821,30 @@ pub const BYTES: &[u8] = b"std::net";
             };
             if forbidden.io != expected_io {
                 mismatches.push(format!(
-                    "{krate} 的禁用路徑：plan {:?}，RULES / FORBIDDEN_PATHS {expected_io:?}",
+                    "{krate} 的禁用路徑：ARCHITECTURE.md {:?}，RULES / FORBIDDEN_PATHS {expected_io:?}",
                     forbidden.io
                 ));
             }
             for dep in &forbidden.deps {
                 if own.workspace.contains(&dep.as_str()) {
-                    mismatches.push(format!("plan 說 {krate} 不可以依賴 {dep}，RULES 卻允許"));
+                    mismatches.push(format!(
+                        "ARCHITECTURE.md 說 {krate} 不可以依賴 {dep}，RULES 卻允許"
+                    ));
                 }
             }
             if forbidden.any_workspace && !own.workspace.is_empty() {
                 mismatches.push(format!(
-                    "plan 說 {krate} 不可以依賴任何 workspace crate，RULES 卻允許 {:?}",
+                    "ARCHITECTURE.md 說 {krate} 不可以依賴任何 workspace crate，RULES 卻允許 {:?}",
                     own.workspace
                 ));
             }
             for dependent in &forbidden.dependents {
                 match rule(dependent) {
-                    Some(other) if other.workspace.contains(&krate.as_str()) => mismatches.push(
-                        format!("plan 說 {krate} 不可以被 {dependent} 依賴，RULES 卻允許"),
-                    ),
+                    Some(other) if other.workspace.contains(&krate.as_str()) => {
+                        mismatches.push(format!(
+                            "ARCHITECTURE.md 說 {krate} 不可以被 {dependent} 依賴，RULES 卻允許"
+                        ))
+                    }
                     Some(_) => {}
                     None => mismatches.push(format!("{dependent} 不在 RULES")),
                 }
@@ -840,8 +854,8 @@ pub const BYTES: &[u8] = b"std::net";
     }
 
     #[test]
-    fn plan_forbidden_column_matches_rules() {
-        assert_eq!(forbidden_mismatches(PLAN_MD), Vec::<String>::new());
+    fn architecture_forbidden_column_matches_rules() {
+        assert_eq!(forbidden_mismatches(ARCHITECTURE_MD), Vec::<String>::new());
     }
 
     #[test]
@@ -885,7 +899,7 @@ pub const BYTES: &[u8] = b"std::net";
             ),
         ];
         for (from, to) in cases {
-            let mutated = mutate(PLAN_MD, from, to);
+            let mutated = mutate(ARCHITECTURE_MD, from, to);
             assert_ne!(
                 forbidden_mismatches(&mutated),
                 Vec::<String>::new(),
@@ -897,8 +911,8 @@ pub const BYTES: &[u8] = b"std::net";
     #[test]
     fn unrelated_edits_to_forbidden_column_are_not_flagged() {
         let edited = mutate(
-            PLAN_MD,
-            "（時間由殼傳入：上屏次數與今天的日期，§2.4）",
+            ARCHITECTURE_MD,
+            "（時間由殼傳入：上屏次數與今天的日期）",
             "（時間改由殼傳入上屏次數與日期）",
         );
         let edited = mutate(

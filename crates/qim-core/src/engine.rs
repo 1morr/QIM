@@ -260,7 +260,7 @@ impl Engine {
         self.traditional_chars.get(&c).copied().unwrap_or(c)
     }
 
-    /// 由資料包的位元組建立；讀檔是呼叫端的事（plan〈依賴規則〉）。
+    /// 由資料包的位元組建立；讀檔是呼叫端的事（architecture〈依賴規則〉）。
     pub fn from_pack_bytes(
         scheme_pack: &[u8],
         lexicon: Option<&[u8]>,

@@ -2,7 +2,7 @@
 //! 觸控模擬的題打錯後重打、每鍵延遲都用它：使用者打的是自己想打的鍵，點擊帶著空間模型的機率（鄰鍵也有份），
 //! 鄰鍵讀法才有東西可換（`docs/research/tolerance.md`〈Gboard 式的鄰鍵讀法〉）。
 //!
-//! 錯誤模型的參數和 `qim_databuild::typo::TouchNoise::default()` 是同一組（plan〈依賴規則〉 不讓本 crate 依賴
+//! 錯誤模型的參數和 `qim_databuild::typo::TouchNoise::default()` 是同一組（architecture〈依賴規則〉 不讓本 crate 依賴
 //! `qim-databuild`，所以複製一份，`xtask/tests/shared_paths.rs` 比對）；抽法同 `qim_databuild::typo::touch_items`
 //! （往下偏、往中心拉、左右半邊反向旋轉、座標取一位小數），只是重抽的條件從「點到字母鍵」改成「點到要打的鍵」。
 //! 亂數是 ChaCha8，種子是字串的 SHA-256，所以同一題每次抽到同樣的點。

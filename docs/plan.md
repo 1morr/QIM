@@ -4,153 +4,27 @@
 
 ## 0. 工程慣例
 
-- Rust edition 2024，toolchain 用 stable（寫本檔時 1.99.1），`rust-toolchain.toml` 釘版本。
-- 核心的新功能與修 bug 走 `mattpocock-skills:tdd`；一個 session 一張票（`AGENTS.md`）。
-- 程式碼識別符用英文，對應 `GLOSSARY.md` 的詞：
-
-| 名詞 | 識別符 | 名詞 | 識別符 |
-| --- | --- | --- | --- |
-| 輸入方案 | `Scheme` | 候選 / 首選 | `Candidate` / `top` |
-| 輸入碼 | `input` | 組字 | `Composition` |
-| 速成碼 / 倉頡碼 | `QuickCode` / `CangjieCode` | 上屏 | `commit` |
-| 碼表 / 詞庫 | `CodeTable` / `Lexicon` | 字根提示 | `RadicalHint` |
-| 連打 | `continuous` | 英文候選 | `EnglishCandidate` |
-| 使用者詞 / 觸發詞 | `UserWord` / `Trigger` | 聯想 | `Association` |
-| 自動造詞 | `AutoPhrase` | 無痕模式 | `Incognito` |
-| 常用語 | `Phrase` | 詞表匯入 | `import_word_list`（`WordList…`） |
-| 個人 bigram / 學習（開關） | `Bigrams` / `Options::learning` | 英文使用者詞 | `EnglishUserWords`（`Options::english_user_words`） |
-| 核心 / 平台殼 | `core` / `Shell` | 佈局 / 資料包 | `Layout` / `…Pack`（方案資料包 `SchemePack`） |
-| 首選字基準 | `TopChoiceBench` | 修正次數 | `correction_count` |
-| 分段 | `Segment` | 佈局版本 | `LayoutVariant` |
-| 個人模型 | `UserModel` | 空間模型 | `SpatialModel` |
-| 重排 | `Rerank` | 譯詞 | `Gloss` |
-| 容錯 | 四種修正沒做、沒有識別符；速成的容錯是鄰鍵讀法（下面） | 萬用鍵 | `Wildcard` |
-| 退格撤銷 / 動作 | `Undo`（`Session::expire_undo`） / `Action` | 撤銷學習 | `forget`（`Session::forget`、`UserModel::forget`） |
-| 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
-| 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
-| 簡體模式 / 簡體字排後 | `Options::simplified` / `simplified_after_traditional` | 簡體字（碼表的標記） | `CodeEntry::simplified` |
-| emoji 候選 | `emoji_candidates`（對照表 `EmojiTable`） | manifest / 資料包種類 | `Manifest` / `PackKind` |
-| 使用中的資料包 | `active`（網頁 `activeIds`） | 更新索引 | `PackIndex`（一項 `IndexEntry`） |
-| 線上更新 | `update`（網頁 `updatePacks`） | 資料包的來源（內建、匯入、線上更新） | `PackOrigin`（`builtin`、`imported`、`downloaded`） |
-| 粵典詞庫 / 粵典的詞頭 | `quick-lexicon-words-hk`（`WORDS_HK_LEXICON_ID`）/ `headwords`（`words_hk.rs`） | 預設詞庫 | 方案 `[packs] lexicon` 指名的那份（`quick-lexicon`） |
-| 停鍵層模型（資料包） | `ModelPack`（種類 `model`，id `zh-hant-neural-rerank`） | 神經重排 | `qim_neural::Reranker` |
-| 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
-| 學習的時限 / 最後整串上屏的日期 | `EXPIRY_DAYS` / `last_commit_date` | 條目上限 | `Limits`（`UserModel::set_limits`） |
-| 停鍵結果快取 | `RerankCache`（`RERANK_CACHE_LIMIT`、`Inspection::rerank_cached`） | 重排識別（殼正在用的停鍵層模型） | `Session::set_reranker_id`（網頁 `rerankerId`） |
-| 按鍵機率 | `Weights`（觸控 `Key::Weighted`、實體鍵盤 `Key::Physical`、`Inspection::key_weights`、`qim_layout::Output::Weighted`） | 點擊位置 | `qim_layout::Touch` |
-| 鄰鍵讀法 | `Options::neighbor_readings`（網頁 `setNeighborReadings`）、模組 `neighbor`、`Engine::neighbor_edges_ending`、`InspectedCandidate::neighbor` | 原樣讀法 | `Reading::Literal`（鄰鍵讀法的 lattice 是 `Reading::Neighbor`） |
-| 鄰鍵先驗 | `qim_layout::PhysicalModel` | 實體鍵位 | `KeyboardEvent.code`（網頁綁定 `Session.pressCode`） |
-| 各台的次數 | `Tally`（一台一格 `Cell`） | 墓碑 / 墓碑表 | `Tombstone` / `graveyard`（匯出種類 `deleted`） |
-| 跨裝置合併 | `UserModel::merge`（結果 `Merged`，網頁 `mergeUserDict`） | 讀回自己的存檔 | `UserModel::replace_learning`（網頁 `loadUserDict`） |
-| 清空記號 | `Cleared`（`UserModel::clear`，網頁 `clearUserDict`） | 從備份還原 | `UserModel::restore`（網頁 `restoreUserDict`） |
-| 打錯碼的集合（含打錯碼 / 觸控模擬） | `typo` / `touch`（`qim_databuild::typo`、`qim_bench::parse_typo`、`parse_touch`） | 原樣正確卻被改錯 | `false_corrections`（`qim_bench::TypoStats`） |
+已搬到 `ARCHITECTURE.md`〈識別符〉與〈主要依賴〉。
 
 ## 1. 架構總覽
 
+已搬到 `ARCHITECTURE.md`。
+
 ### 1.1 執行形態
 
-核心是 Rust 函式庫，各平台殼把它連進自己的程序（ADR 0002）：網頁經 WebAssembly，Apple 與 Android 經 uniffi 產生的 Swift / Kotlin 綁定，Windows 與 Linux 經 C ABI。Windows 依成熟做法把核心放在獨立程序，TSF DLL 只轉傳（`docs/research/platform-frameworks.md` §6），到 M10 再定。
-
-```mermaid
-flowchart LR
-  subgraph Build["建置時（qim-databuild）"]
-    Src["第三方來源<br/>libcangjie、rime-essay、<br/>維基、口語語料、AOSP 英文詞表、OpenCC"] --> DB["qim-databuild"]
-    Own["data/<br/>方案檔、佈局、粵語詞表"] --> DB
-    DB --> Packs["資料包<br/>碼表、詞庫、bigram、<br/>英文、簡繁"]
-    DB --> Corpus["bench/corpus<br/>基準語料"]
-  end
-
-  subgraph Runtime["執行時"]
-    Core["qim-core<br/>Session、lattice、排序、學習"]
-    Layout["qim-layout<br/>佈局驗證與幾何"]
-    Wasm["qim-wasm"]
-    Ffi["qim-ffi（M2）"]
-    Web["web/ 網頁 prototype"]
-    Mac["platforms/macos（M7）"]
-    Others["iOS、Android、<br/>Windows、Linux"]
-  end
-
-  Packs --> Core
-  Core --> Wasm
-  Layout --> Wasm
-  Core --> Ffi
-  Layout --> Ffi
-  Wasm --> Web
-  Ffi --> Mac
-  Ffi --> Others
-  Corpus --> Bench["qim-bench"]
-  Core --> Bench
-```
+已搬到 `ARCHITECTURE.md`〈執行形態〉。
 
 ### 1.2 目錄結構
 
-| 路徑 | 內容 |
-| --- | --- |
-| `crates/qim-core/` | 純邏輯：方案、資料包讀取、lattice、排序、學習、`Session` |
-| `crates/qim-layout/` | 佈局模型、JSON Schema 驗證、點擊判定、按鍵幾何計算 |
-| `crates/qim-databuild/` | CLI：取得來源、建資料包、訓練 bigram、產生基準語料 |
-| `crates/qim-bench/` | 首選字基準 runner，量正確率與每鍵延遲 |
-| `crates/qim-wasm/`、`crates/qim-ffi/` | 綁定層，不放邏輯；`qim-ffi` 由 M2 票 07 建，Swift 綁定由 `cargo xtask ffi` 產生 |
-| `xtask/` | 閘門與開發指令（`cargo xtask check`、`data`、`pack-release`、`neural-import`、`web`、`ffi`、`bench`、`commit-msg`） |
-| `data/` | 自己維護的方案檔、佈局檔、粵語詞表、來源清單 `sources.toml`、進資料包的授權全文 `licenses/`，與停鍵層採用的模型 `neural-rerank/`（訓練不是決定性的，重訓分數會變，所以採用的那份進 git，§2.7）；不放其他第三方原始檔與建置產物 |
-| `bench/` | `fixed.tsv`、`corpus/`、`colloquial/`（都含授權與署名）、`baseline.json` |
-| `web/` | 網頁 prototype（Vite + TypeScript）、`web/editor/` 佈局編輯器、Playwright 測試 |
-| `platforms/` | 各平台殼，M7 起逐一建立 |
-
-建置產物不進 git：`target/`、`build/packs/`、`build/layouts/`、`build/ffi/`、`web/public/packs/`、`web/public/layouts/`。下載的來源放在 repo 外的使用者快取目錄（`QIM_CACHE_DIR` 可改），各 worktree 共用（`docs/development.md`〈資料建置〉）。
+已搬到 `ARCHITECTURE.md`〈模組地圖〉。
 
 ### 1.3 依賴規則【決定】
 
-| crate | 可以依賴 | 不可以 |
-| --- | --- | --- |
-| `qim-core` | `serde`、`postcard`、`serde_json`、`sha2`、`semver`（後三個給資料包 manifest，§4.6）；之後要加的依賴先改本表 | 任何 workspace crate（含綁定與平台 crate）；`std::fs`、`std::net`、`std::thread`、`std::time::SystemTime`（時間由殼傳入：上屏次數與今天的日期，§2.4） |
-| `qim-layout` | `serde`、`serde_json`、`jsonschema` | `qim-core`；同上的 I/O |
-| `qim-neural` | `candle-core`、`candle-nn`（停鍵層的神經重排，M3 票 11 採用；模型由殼以位元組傳入，執行緒由殼開） | 任何 workspace crate；同上的 I/O |
-| `qim-wasm` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `wasm-bindgen` | 被 `qim-core` 或 `qim-layout` 依賴 |
-| `qim-ffi` | `qim-core`、`qim-layout`、`qim-neural`、綁定工具 `uniffi` | 同上 |
-| `qim-databuild` | `qim-core`（資料包格式）、`qim-layout`（算出預設佈局）、`qim-neural`（匯入停鍵層模型時核對分數、量化，§2.7）；外部 crate 不限（I/O 套件） | 被 `qim-core` 或 `qim-layout` 依賴 |
-| `qim-bench` | `qim-core`（資料包格式）、`qim-layout`（照殼的做法把實體鍵與觸控點擊轉成按鍵機率，M4 票 08）；外部 crate 不限（I/O 套件） | 被 `qim-core` 依賴 |
-| `web/`、`platforms/*` | 只透過綁定呼叫核心與 `qim-layout` | 重寫排序、查碼或點擊判定邏輯 |
-
-強制：`cargo xtask check` 的 `deps` 步驟（M0 票 02 接上）。
-
-- 白名單在 `xtask/src/deps.rs` 的 `RULES`。改上表時兩邊同一 commit 改；`cargo test` 比對兩邊的「可以依賴」與「不可以」欄。「不可以」欄以「；」分子句，每句要是反引號包住的禁用路徑或 crate、`被 … 依賴`、`任何 workspace crate`、`同上`、`同上的 I/O` 之一，其他寫法測試會紅（`web/` 那類非 crate 的列不比）。
-- 讀 `cargo metadata`：一般與 build 依賴照「可以依賴」欄；dev 依賴不受白名單限制，但 workspace crate 不論哪種依賴都只能是欄內列的。
-- workspace 成員不在上表就紅，要先改表；`xtask` 是開發工具，例外。表上的 crate 還沒建立時跳過。
-- 掃 `qim-core`、`qim-layout`、`qim-neural` 的 `src/`（含 `#[cfg(test)]` 模組）找禁用路徑：斷詞後比對，註解與字串不算，`use` 的 `{..}` 與 `*` 會展開，`SystemTime` 這個名字出現就算。`build.rs`、`tests/`、`benches/`、`examples/` 不編進函式庫，不掃，整合測試可以讀檔。已知漏洞：把 `std` 本身改名（`use std as s`）後的路徑抓不到。
-- 測試做雙向變異：在暫存副本加入違規依賴或 `use std::fs` 會紅；改無關的格式或命名不紅。
-
-鍵盤擴充不做 Schema 驗證（M2 票 09）：佈局在主 App 與編輯器存檔時驗過，擴充只讀，驗一次 footprint 多約 3 MB、執行檔多 3.1 MB（Mac）。M8 iOS 殼要讀佈局、`qim-ffi` 加佈局介面時要做：`qim-layout` 的 `jsonschema` 改成預設開的 feature，關掉時只留型別與引用檢查的讀法；`qim-ffi` 給 iOS 鍵盤擴充的建置關掉它。上表不用改（關掉時 `jsonschema` 仍是可選依賴）。
+已搬到 `ARCHITECTURE.md`〈依賴規則〉；鍵盤擴充不做 Schema 驗證的打算搬到 roadmap〈平台里程碑（M7–M11）〉的 M8。
 
 ### 1.4 主要依賴
 
-版本為寫本檔時的 stable，開工時以 `cargo add` / `npm install` 取當時 stable 並更新本表。
-
-| 依賴 | 版本 | 用途 | 理由 |
-| --- | --- | --- | --- |
-| Rust | 1.99.1 | 核心與工具 | ADR 0002 |
-| `serde` / `postcard` | 1.0.229 / 1.1.3 | 資料包序列化 | `no_std` 友善、體積小；資料包格式是內部格式，可換 |
-| `toml` | 1.1.8 | 方案檔、`data/sources.toml` | Rust 生態標準格式，可寫註解 |
-| `ureq` / `sha2` | 3.5.1 / 0.11.1 | `qim-databuild` 下載來源並核對 sha256；`sha2` 另給 `qim-core` 核對資料包的 manifest（§4.6） | 同步 API、不必帶 async runtime |
-| `semver` | 1.0.28 | `qim-core` 比 manifest 的 `min_core_version` 與核心版本（§4.6） | dtolnay 維護、Cargo 用的同一套；不自己寫版本比較 |
-| `zip` | 9.3.0 | `qim-databuild` 讀 Unihan.zip、HKCanCor 的 zip | Unicode 只發 zip；只開 deflate 解壓 |
-| `dirs` | 7.0.0 | `qim-databuild` 找平台的使用者快取目錄，放下載的來源 | 各平台的快取目錄慣例（macOS `~/Library/Caches`、XDG、Windows `LocalAppData`）不必自己寫 |
-| `bzip2` / `quick-xml` | 0.6.1 / 0.42.0 | `qim-databuild` 讀維基 dump（`pages-articles.xml.bz2`） | `bzip2` 預設用純 Rust 的 libbz2-rs-sys；串流讀 XML，不必整份載入 |
-| `flate2` / `base64` | 1.1.11 / 0.23.1 | `qim-databuild` 讀 LatinIME 的 `en_US_wordlist.combined.gz`；googlesource 的 `?format=TEXT` 只給 base64（M4 票 22） | `zip` 已帶 `flate2`；兩者都是 rust-lang 生態的主流 crate，不自己寫 |
-| `serde_json` / `jsonschema` | 1.0.154 / 0.60.2 | 佈局檔與驗證、`qim-core` 讀寫資料包 manifest（§4.6）、`qim-databuild` 匯入停鍵層模型時讀 `reference.json`、`train.json`（§2.7）；`jsonschema` 關掉預設 features（不要網路與檔案的 `$ref` 解析）；iOS 鍵盤擴充不帶 `jsonschema`（M2 票 09，§1.3） | 佈局要給 TS、Swift、Kotlin 直接讀 |
-| `wasm-bindgen` / `wasm-bindgen-cli` | 0.2.130 | WebAssembly 綁定 | 直接用 CLI，不依賴 wasm-pack |
-| `uniffi` | 0.32.2 | Swift / Kotlin 綁定（M2 票 07 確認）；proc-macro 宣告介面，`uniffi-bindgen-swift` 從靜態函式庫產生綁定（library mode），它要的 `cli` feature 只在 `qim-ffi` 的 `bindgen` feature 開 | 一份介面產生兩種語言 |
-| `ferrous-opencc` | 0.4.0 | 只給 `qim-databuild` 前處理語料的 `s2hk`、`t2hk`（用它內建的字典） | 純 Rust、Apache-2.0。簡體模式不用它：編得進 WebAssembly，但只能用編進 crate 的字典、不能從資料包載入，改由簡繁資料包加 `qim-core` 的轉換（§4.4，M1 票 16） |
-| `rustc-hash` | 2.1.3 | `qim-databuild` 數詞級 trigram 的次數（兩千萬種 trigram 的雜湊表，§4.3） | rustc 自己用的雜湊，比標準庫的 SipHash 快得多；建置端不必防碰撞攻擊；票 08 的實驗也用它 |
-| `rand_chacha` | 0.10.0 | `qim-databuild` 產生打錯碼的基準集合（M4 票 08）：每題以那一行的 sha256 當種子的 ChaCha8；`qim-bench` 抽觸控點對鍵的點擊（M4 票 09c），種子同樣是字串的 sha256 | rust-random 維護，官方保證跨平台、跨版本輸出相同；常態分布自己寫，不用數值可能隨小版本變的 `rand_distr` |
-| `strsim` | 0.11.1 | `qim-bench` 算字正確率的編輯距離（以字計的 Levenshtein） | 維護中、無依賴；不自己寫 |
-| `candle-core` / `candle-nn` | 0.11.1 | `qim-neural` 的推論（q8 GGUF 權重、CPU；網頁經 `qim-wasm` 編成 WebAssembly、開 SIMD128，§3.1）與量化（`qim-databuild` 匯入模型時經 `qim-neural`） | M2 票 11 驗過能編進 iOS 鍵盤擴充、沒有完整取用也能跑；M3 票 09 的 1.4M 用它在 iPhone 量 p95 11 ms、+2 MB；Hugging Face 維護、純 Rust |
-| `proptest` | 1.12.0 | 核心與 `qim-layout` 點擊判定的性質測試（dev） | — |
-| Vite / TypeScript | 8.3.5 / 7.0.2 | 網頁 prototype | — |
-| Biome | 2.6.4 | TS lint 與 format | 一個工具包辦兩件事 |
-| `idb-keyval` | 6.3.0 | 網頁把匯入的資料包存進 IndexedDB（§4.6） | Jake Archibald 維護、無依賴，只包一層 Promise；不自己寫 IndexedDB 的樣板 |
-| `@playwright/test` | 1.64.1 | 網頁 e2e 與驗收 | 使用者指定 |
-| `@types/node` | 26.6.6 | `web/bench/` 的 Node 腳本（WebAssembly 每鍵延遲）、`web/test/` 單元測試（Node 內建的 `node:test`，不另加測試框架）與 Playwright 設定、e2e 的型別 | 跟 Node 26 同主版本；只給 `web/bench/tsconfig.json` 與 `web/tsconfig.node.json`，網頁的程式碼（`src/`）看不到 Node 的 API |
+已搬到 `ARCHITECTURE.md`〈主要依賴〉。
 
 ## 2. 核心
 
@@ -801,7 +675,7 @@ M0 票 01–04 交付（票 01：`docs/development.md`、`check`、pre-commit；
 | 小型神經模型放不進鍵盤擴充或太慢（M3 票 11 採用 1.4M、不採用 23M；M2 票 11：candle 在擴充裡能跑；1.4M 級幾乎不佔；23M 級 q8 約 +47 MB、f32 約 +95 MB，q8 上下文 200 字 p95 55 ms，以前綴快取為前提；票 09 確認上限 177 MB、核心加六份資料包 79 MB，23M q8 合計約 126 MB、f32 約 174 MB 太貼上限，M3 上限定為峰值增量 ≤ 60 MB（roadmap〈M3 的模型階梯實驗〉）；M3 票 09 實量 9 條 × 18 字：23M q8 +75 MB、p95 84 ms 超標，1.4M q8 +2 MB、11 ms；旗艦機，`docs/research/facts-platforms.md`） | M3 範圍、M8 | M2、roadmap〈M3 的模型階梯實驗〉 | 只在桌面與 Android 用，或不做，寫回 brief §1.5 |
 | 維基語料授權（CC BY-SA）對模型的要求 | 發佈 | 上架前 | brief §11 的待決項，由使用者判斷 |
 | iOS 鍵盤擴充放不下核心與資料包（M2 票 09：iPhone 18 Pro Max 放得下，79 MB／177 MB，格式不改；低階機沒量，§4） | M3 的模型大小、M8 | M2；低階機在 M8 | 資料包改 mmap 友善格式（例如 `fst`），改 §1.4、§4 |
-| `jsonschema` 讓程式碼變大（M1 票 19：網頁 WebAssembly 由 0.42 MB 變 4.6 MB，gzip 1.2 MB，多半是它帶的 regex 與大數） | iOS 鍵盤擴充的記憶體（brief §9） | M2 | 鍵盤擴充只讀存檔時驗過的佈局，Schema 驗證留在主 App 與編輯器（`qim-layout` 加 feature 關掉），改 §1.3、§1.4（M2 票 09 已決定、寫回 §1.3；實作在 M8） |
+| `jsonschema` 讓程式碼變大（M1 票 19：網頁 WebAssembly 由 0.42 MB 變 4.6 MB，gzip 1.2 MB，多半是它帶的 regex 與大數） | iOS 鍵盤擴充的記憶體（brief §9） | M2 | 鍵盤擴充只讀存檔時驗過的佈局，Schema 驗證留在主 App 與編輯器（`qim-layout` 加 feature 關掉），改 `ARCHITECTURE.md`〈依賴規則〉〈主要依賴〉（M2 票 09 已決定；做法寫在 roadmap〈平台里程碑（M7–M11）〉的 M8，實作在 M8） |
 | 免費佈建不能跑鍵盤擴充（M2 票 06：能跑，App Group 擴充只能讀；brief §11 已決） | M2、M8 | M2 開頭 | 請使用者決定提前申請帳號，或實驗改在模擬器做並註明限制 |
 | 延遲超過預算（M2：iPhone 18 Pro Max 鍵盤擴充每鍵 p95 64 µs、選開頭一段 0.79 ms，brief §9；低階機沒量） | 所有平台 | 每次 `bench` | 調 beam 或剪枝 bigram，記 baseline |
 | LLM 重排提升太小或太慢（M3 票 10、11：Foundation Models 口語前 2 名只 +1.3 點、停頓後第一個請求 14.6% 超過 2 s；雲端 flash +10.4 點但比 1.4M 只多 2.0 點，都不做；票 25 在新基線重量，flash 比基線 +7.9、比 1.4M +2.4，仍不做；brief §1.5 已寫回） | M3 範圍 | roadmap〈M3 的模型階梯實驗〉 的實驗 | 票 25 對新基線重量：flash 比 1.4M 只多 2.4 點（要 3.0），維持不做；重評條件見票 22 |
