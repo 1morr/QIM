@@ -226,4 +226,5 @@ M4 起 `cargo xtask bench --check` 擋每鍵延遲（原生，這台 Mac）；We
 | [28](issues/28-inline-english-experiment.md) | 22 | 句中英文混輸實驗；純中文集不退步才採用 |
 | [29](issues/29-translation-pack.md) | 20, 18b | ~~譯詞資料包~~ wontfix：譯詞移出 M4 |
 | [30](issues/30-association-boost.md) | 18, 18b, 18c | emoji 聯想、句首建議、量詞聯想：評估後做 |
-| [31](issues/31-m4-close.md) | 01–30（含 09b、09c、18b、18c） | 收尾：里程碑 code-review、乾淨 checkout 重驗、v3 定稿、使用者試用第二期、封存 |
+| [31b](issues/31b-lan-device-id.md) | — | 修復：區網 http 開網頁時裝置 id 產生失敗（`crypto.randomUUID`），收尾試用時插入 |
+| [31](issues/31-m4-close.md) | 01–30（含 09b、09c、18b、18c）、31b | 收尾：里程碑 code-review、乾淨 checkout 重驗、v3 定稿、使用者試用第二期、封存 |
