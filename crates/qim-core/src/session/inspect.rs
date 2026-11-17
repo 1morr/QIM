@@ -1,4 +1,4 @@
-//! 網頁 debug 面板的查詢（plan〈網頁 prototype〉，M4 票 01）：核心為什麼這樣排。只給網頁用、不進 [`Snapshot`]，
+//! 網頁 debug 面板的查詢（architecture〈平台殼〉，M4 票 01）：核心為什麼這樣排。只給網頁用、不進 [`Snapshot`]，
 //! 殼只在面板開著時呼叫，所以每鍵不多花時間；平台殼與 `qim-ffi` 不用。
 //!
 //! [`Snapshot`]: super::Snapshot
@@ -147,7 +147,7 @@ pub enum SegmentSource {
 }
 
 impl Session {
-    /// 給網頁 debug 面板看的排序原因（plan〈網頁 prototype〉）。不改組字；殼只在面板開著時呼叫。
+    /// 給網頁 debug 面板看的排序原因（architecture〈平台殼〉）。不改組字；殼只在面板開著時呼叫。
     pub fn inspect(&self, engine: &Engine, user: &UserModel) -> Inspection {
         let context = match (&self.context, self.private()) {
             (_, true) => ContextState::Incognito,

@@ -1,4 +1,4 @@
-// 使用者詞與學習資料（plan〈學習與排位〉〈網頁 prototype〉）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
+// 使用者詞與學習資料（plan〈學習與排位〉）：手動加詞、存 `localStorage`、匯出匯入 `# qim-userdict v3`（也讀得進 v1、v2）。
 // 匯入是合併（M4 票 17）：兩個瀏覽器設定檔的同步就是各自匯出、匯入對方的檔。
 
 import { newDeviceId } from "./device-id.ts";

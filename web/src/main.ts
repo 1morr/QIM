@@ -230,7 +230,7 @@ async function start(): Promise<void> {
 		}
 	};
 	const reportPanel = mountReportPanel(status, focusText);
-	// debug 面板（plan〈網頁 prototype〉）：開著時每次重畫後問核心為什麼這樣排，關著時不問。
+	// debug 面板：開著時每次重畫後問核心為什麼這樣排，關著時不問。
 	const debugPanel = mountDebugPanel(
 		element("#debug"),
 		element("#debug-toggle"),
@@ -419,7 +419,7 @@ async function start(): Promise<void> {
 		if (event.key === "Shift") {
 			return;
 		}
-		// 組字中 ↓ 打開展開面板、↑ 收起（plan〈網頁 prototype〉）；核心本來就吃下不動作，不必轉給它。
+		// 組字中 ↓ 打開展開面板、↑ 收起（事實 M18）；核心本來就吃下不動作，不必轉給它。
 		if (
 			plain &&
 			composingChinese() &&
