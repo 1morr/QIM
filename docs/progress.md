@@ -54,3 +54,4 @@
 | 2026-11-17 | M4 23 | 觸控加地球鍵（點一下切中英、長按切換鍵盤選單）與英文頁、英文符號頁，格式加 `keyboardMenu`、`asciiPage`，網頁照中英狀態換頁；設計稿使用者確認；見票 23 | 新 session 下 `/implement .scratch/m4/issues/24-english-mode.md` |
 | 2026-11-17 | M4 24 | 英文模式接上：地球鍵進英文模式、逐字上屏、英文建議列（學過的加分後和詞典頻率合比）、句首自動大寫；名詞表加四條；見票 24 | 新 session 下 `/implement .scratch/m4/issues/25-autocorrect.md` |
 | 2026-11-17 | M4 25 | 英文容錯（預設開）與自動修正（預設關）：打完詞時修、Enter 也修、3 秒內退格還原、學過的不修；門檻 4 倍；名詞表加三條；見票 25 | 新 session 下 `/implement .scratch/m4/issues/26-field-types.md` |
+| 2026-11-17 | M4 26 | 欄位類型：email、網址、密碼欄聚焦進英文直通、離開還原（使用者定），數字欄開數字頁，殼經 `Session::set_field` 告訴核心；見票 26 | 新 session 下 `/implement .scratch/m4/issues/27-smart-punctuation.md` |
