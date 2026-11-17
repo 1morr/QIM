@@ -12,7 +12,7 @@ use qim_core::{
     ShiftKey, Snapshot, UserModel,
 };
 
-const EMAIL: &str = "ivan.test@example.com";
+const EMAIL: &str = "jean.test@example.com";
 
 /// 每個字母都是一個字的碼（`a` 日、`b` 月…），所以任何字母串都有中文候選。
 fn engine() -> Engine {
@@ -221,16 +221,16 @@ fn only_strings_of_scheme_letters_show_as_the_whole_input() {
 fn prefix_completion_needs_three_times() {
     let mut ime = Ime::new();
     ime.type_in_english_times(EMAIL, 2);
-    assert!(!ime.offers("iva", EMAIL));
+    assert!(!ime.offers("jea", EMAIL));
 
     ime.type_in_english(EMAIL);
-    let shown = ime.inspected("iva");
+    let shown = ime.inspected("jea");
     assert_eq!(
         shown[1],
         (EMAIL.into(), CandidateKind::EnglishUserWord, Some(5)),
         "{shown:?}"
     );
-    ime.type_text("iva");
+    ime.type_text("jea");
     assert_eq!(ime.press(Key::Digit(2)).commit.as_deref(), Some(EMAIL));
 }
 
@@ -266,7 +266,7 @@ fn dictionary_words_do_not_crowd_the_email_out_of_completion() {
     for word in &dictionary {
         ime.type_in_english_times(word, 5);
     }
-    assert_eq!(ime.candidates("iva")[1], EMAIL);
+    assert_eq!(ime.candidates("jea")[1], EMAIL);
     assert!(!ime.offers("tha", "that"), "詞典詞不給前綴補完");
     assert_eq!(ime.candidates("that")[1], "that", "詞典詞照規則 4");
 }
@@ -291,13 +291,13 @@ fn dictionary_words_the_scheme_cannot_type_still_get_completion() {
 fn completion_needs_more_letters_than_one_character_code_and_matches_the_letters_only() {
     let mut ime = Ime::new();
     ime.type_in_english_times(EMAIL, 3);
-    for code in ["i", "iv"] {
+    for code in ["j", "je"] {
         assert!(!ime.offers(code, EMAIL), "{code}");
     }
-    for code in ["iva", "ivan", "ivantest", "ivantestex"] {
+    for code in ["jea", "jean", "jeantest", "jeantestex"] {
         assert_eq!(ime.candidates(code)[1], EMAIL, "{code}");
     }
-    for code in ["ivb", "ivanb"] {
+    for code in ["jeb", "jeanb"] {
         assert!(!ime.offers(code, EMAIL), "{code}");
     }
 }
@@ -307,22 +307,22 @@ fn completion_needs_more_letters_than_one_character_code_and_matches_the_letters
 fn several_completions_follow_the_first_candidate_most_recent_first() {
     let mut ime = Ime::new();
     let emails = [
-        "ivan.a@example.com",
-        "ivan.b@example.com",
-        "ivan.c@example.com",
-        "ivan.d@example.com",
+        "jean.a@example.com",
+        "jean.b@example.com",
+        "jean.c@example.com",
+        "jean.d@example.com",
     ];
     for email in emails {
         ime.type_in_english_times(email, 3);
     }
-    let shown = ime.candidates("ivan");
-    assert_eq!(shown[0], "戈女日弓");
+    let shown = ime.candidates("jean");
+    assert_eq!(shown[0], "十水日弓");
     assert_eq!(
         shown[1..=ENGLISH_COMPLETION_LIMIT],
         [
-            "ivan.d@example.com",
-            "ivan.c@example.com",
-            "ivan.b@example.com"
+            "jean.d@example.com",
+            "jean.c@example.com",
+            "jean.b@example.com"
         ]
     );
     assert!(!shown.contains(&emails[0].to_string()));
@@ -332,12 +332,12 @@ fn several_completions_follow_the_first_candidate_most_recent_first() {
 #[test]
 fn choosing_a_completion_counts_as_typing_it() {
     let mut ime = Ime::new();
-    ime.type_in_english_times("ivan.a@example.com", 3);
-    ime.type_in_english_times("ivan.b@example.com", 3);
-    ime.type_text("ivan");
+    ime.type_in_english_times("jean.a@example.com", 3);
+    ime.type_in_english_times("jean.b@example.com", 3);
+    ime.type_text("jean");
     ime.press(Key::Digit(3));
     ime.press(Key::Space);
-    assert_eq!(ime.candidates("ivan")[1], "ivan.a@example.com");
+    assert_eq!(ime.candidates("jean")[1], "jean.a@example.com");
 }
 
 /// 詞典有的詞不受門檻：打一次也照詞典排第 2（種類是英文），寫法照詞典；學習不讓它多出一個候選。
@@ -428,9 +428,9 @@ fn learning_off_does_not_learn_but_still_offers_what_was_learned() {
         learning: false,
         ..Options::default()
     });
-    ime.type_in_english("ivan@work.example.org");
+    ime.type_in_english("jean@work.example.org");
     assert_eq!(ime.learned(), [EMAIL]);
-    assert_eq!(ime.candidates("iva")[1], EMAIL);
+    assert_eq!(ime.candidates("jea")[1], EMAIL);
 }
 
 #[test]
@@ -442,9 +442,9 @@ fn the_option_off_neither_learns_nor_offers() {
         english_user_words: false,
         ..Options::default()
     });
-    ime.type_in_english("ivan@work.example.org");
+    ime.type_in_english("jean@work.example.org");
     assert_eq!(ime.learned(), [EMAIL, "rrrrrr"]);
-    assert!(!ime.offers("iva", EMAIL));
+    assert!(!ime.offers("jea", EMAIL));
     assert!(!ime.offers("rrrrrr", "rrrrrr"));
 }
 
@@ -484,7 +484,7 @@ fn an_english_user_word_can_be_forgotten() {
     assert!(ime.user.forget_english_user_word(EMAIL));
     assert!(!ime.user.forget_english_user_word(EMAIL));
     assert!(ime.learned().is_empty());
-    assert!(!ime.offers("iva", EMAIL));
+    assert!(!ime.offers("jea", EMAIL));
     // 匯出檔只剩墓碑（M4 票 17）：鍵的雜湊、各台打過的次數（刪除時都記成不算的）與刪除時的合計，不留原文。
     let exported = ime.user.export();
     assert!(!exported.contains(EMAIL), "{exported}");
@@ -501,7 +501,7 @@ fn forgetting_an_english_user_word_candidate_forgets_the_word() {
     let mut ime = Ime::new();
     ime.type_in_english_times("rrrrrr", 2);
     ime.type_in_english_times(EMAIL, 3);
-    for (code, text) in [("rrrrrr", "rrrrrr"), ("iva", EMAIL)] {
+    for (code, text) in [("rrrrrr", "rrrrrr"), ("jea", EMAIL)] {
         ime.type_text(code);
         let at = ime
             .session
@@ -534,7 +534,7 @@ const TWO_WORDS: &str = "\
 #@/english_tick\t3
 # kind\tscheme\tword\tcode\tcounts\tdeleted\tdeleted_on\tversion\tdecayed\tlast_tick\tlast_commit_tick\tlast_used\tsource\ttrigger\tword_version\tword_last_used
 # kind\tword\tcounts\tdeleted\tdeleted_on\tversion\tdecayed\tlast_tick\tlast_used
-english\tivan.test@example.com\t0:2:0:\t\t\t2\t1.990049833749168\t3\t
+english\tjean.test@example.com\t0:2:0:\t\t\t2\t1.990049833749168\t3\t
 english\trrrrrr\t0:1:0:\t\t\t1\t1\t2\t
 ";
 
@@ -560,22 +560,22 @@ const TWO_EMAILS_V2: &str = "\
 #@/tick\t3
 # scheme\tword\tcode\tcommits\tlast_commit_tick\tdecayed\tlast_tick\tsource\ttrigger
 # \t\tstring\tdecayed\tlast_tick
-\t\tivan.test@example.com\t1.990049833749168\t3
-\t\tivan@work.example.org\t1\t2
+\t\tjean.test@example.com\t1.990049833749168\t3
+\t\tjean@work.example.org\t1\t2
 ";
 
 #[test]
 fn remembered_strings_from_v2_import_as_english_user_words_past_the_threshold() {
     let user = UserModel::import(TWO_EMAILS_V2, None).unwrap().user;
     let mut ime = Ime { user, ..Ime::new() };
-    assert_eq!(ime.learned(), [EMAIL, "ivan@work.example.org"]);
+    assert_eq!(ime.learned(), [EMAIL, "jean@work.example.org"]);
     assert_eq!(
-        ime.candidates("ivan")[1..3],
-        [EMAIL, "ivan@work.example.org"]
+        ime.candidates("jean")[1..3],
+        [EMAIL, "jean@work.example.org"]
     );
     let exported = ime.user.export();
     assert!(
-        exported.contains("english\tivan@work.example.org\t0:3:0:\t\t\t3\t1\t2\t\n"),
+        exported.contains("english\tjean@work.example.org\t0:3:0:\t\t\t3\t1\t2\t\n"),
         "{exported}"
     );
     assert!(exported.contains("#@/english_tick\t3\n"), "{exported}");
@@ -611,7 +611,7 @@ fn a_row_that_is_not_an_english_user_word_is_an_error_with_its_line() {
         4,
         "不分大小寫重複"
     );
-    let row = "\t\tivan@localhost\t1\t1\n";
+    let row = "\t\tjean@localhost\t1\t1\n";
     assert!(
         UserModel::import(&format!("# qim-userdict v2\n{row}"), None).is_ok(),
         "v2 不再要求是 email"
@@ -672,7 +672,7 @@ fn enter_and_tab_end_the_string() {
 #[test]
 fn backspace_removes_the_last_character_typed() {
     let mut ime = Ime::new();
-    ime.type_in_english_without_ending("ivan.test@example.comm");
+    ime.type_in_english_without_ending("jean.test@example.comm");
     ime.press(Key::Backspace);
     ime.press(Key::Space);
     assert_eq!(ime.learned(), [EMAIL]);
@@ -698,7 +698,7 @@ fn a_context_that_does_not_end_with_the_typed_string_drops_it() {
 #[test]
 fn a_string_finished_in_temporary_english_is_learned() {
     let mut ime = Ime::new();
-    ime.type_text("iv");
+    ime.type_text("je");
     ime.press(Key::ToggleAscii(ShiftKey::Left));
     ime.type_text("an.test@example.com");
     let done = ime.press(Key::Enter);
@@ -713,7 +713,7 @@ fn a_string_finished_in_temporary_english_is_learned() {
 fn touch_text_keys_count_as_typed() {
     let mut ime = Ime::new();
     ime.press(Key::ToggleAscii(ShiftKey::Right));
-    for part in ["ivan", ".", "test", "@", "example", ".", "com"] {
+    for part in ["jean", ".", "test", "@", "example", ".", "com"] {
         if part.chars().all(|c| c.is_ascii_alphabetic()) {
             ime.type_text(part);
         } else {
@@ -729,7 +729,7 @@ fn touch_text_keys_count_as_typed() {
 fn a_string_started_before_what_the_user_typed_is_not_learned_in_part() {
     let mut ime = Ime::new();
     ime.press(Key::ToggleAscii(ShiftKey::Right));
-    ime.session.set_context("ivan.");
+    ime.session.set_context("jean.");
     ime.type_text("test@example.com");
     ime.press(Key::Space);
     assert!(ime.learned().is_empty());
@@ -745,7 +745,7 @@ fn backspacing_past_the_start_of_the_typed_string_stops_learning_it() {
     ime.press(Key::ToggleAscii(ShiftKey::Right));
     ime.type_text("x ");
     ime.press(Key::Backspace);
-    ime.type_text("ivan@example.com");
+    ime.type_text("jean@example.com");
     ime.press(Key::Space);
     assert!(ime.learned().is_empty());
 }
@@ -778,7 +778,7 @@ fn a_string_begun_while_not_learning_is_not_learned_after_turning_learning_back_
     ] {
         let mut ime = Ime::with_options(off);
         ime.press(Key::ToggleAscii(ShiftKey::Right));
-        ime.type_text("ivan.te");
+        ime.type_text("jean.te");
         ime.session.set_options(Options::default());
         ime.type_text("st@example.com");
         ime.press(Key::Space);

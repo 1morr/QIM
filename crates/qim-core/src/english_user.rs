@@ -127,7 +127,7 @@ pub(crate) fn to_learn(typed: &str) -> Option<&str> {
 
 /// 中文組字裡打得出的部分：字串的英文字母轉小寫後，方案字母表 `alphabet` 裡有的；其他字元去掉
 /// （組字裡打不出 `.`、`@`、數字與速成沒有的 `z`）。輸入碼是它的開頭時給這個字串（前綴補完）：
-/// `ivan.test@example.com` 打 `iva`、`ivant` 都有，`zz98765@example.org` 打 `exa` 起有。
+/// `jean.test@example.com` 打 `jea`、`jeant` 都有，`zz98765@example.org` 打 `exa` 起有。
 pub(crate) fn letters(text: &str, alphabet: &str) -> String {
     text.chars()
         .map(|c| c.to_ascii_lowercase())
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn strings_are_learned_without_surrounding_full_stops_and_quotes() {
         for (typed, learned) in [
-            ("ivan.test@example.com", "ivan.test@example.com"),
+            ("jean.test@example.com", "jean.test@example.com"),
             ("bc12345@example.edu.", "bc12345@example.edu"),
             ("'quoted'", "quoted"),
             ("don't", "don't"),
@@ -370,8 +370,8 @@ mod tests {
     fn letters_keep_only_the_letters_of_the_alphabet_in_lowercase() {
         let quick = "abcdefghijklmnopqrstuvwxy";
         assert_eq!(
-            letters("Ivan.Test@example.com", quick),
-            "ivantestexamplecom"
+            letters("Jean.Test@example.com", quick),
+            "jeantestexamplecom"
         );
         assert_eq!(letters("bc12345@example.edu", quick), "bcexampleedu");
         assert_eq!(letters("zeta.Z@example.net", quick), "etaexamplenet");

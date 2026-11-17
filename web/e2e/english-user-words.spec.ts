@@ -5,7 +5,7 @@ import { expect, type Page, test } from "@playwright/test";
 // 詞典有的詞不給）。設定區列出、可刪，重新整理後還在；無痕不學。v2 匯入的記住的字串是已過門檻的。
 // `iva` 剛好是英文詞典的「Iva」（人名），它在第 2 位，email 的補完排在它後面的第 3 位。
 
-const EMAIL = "ivan.test@example.com";
+const EMAIL = "jean.test@example.com";
 
 async function ready(page: Page) {
 	await page.goto("/");
@@ -95,16 +95,15 @@ test("v2 匯入的 email 在中文打開頭 3 碼就有，面板標英文使用�
 
 	const row = await openDebug(page);
 	await text.focus();
-	await page.keyboard.type("iva");
-	await expect(items.nth(1)).toHaveText("2Iva");
-	await expect(items.nth(2)).toHaveText(`3${EMAIL}`);
+	await page.keyboard.type("jea");
+	await expect(items.nth(1)).toHaveText(`2${EMAIL}`);
 	await expect(row(EMAIL)).toHaveAttribute("data-kind", "englishUserWord");
 	await expect(row(EMAIL)).toContainText("英文使用者詞");
 	await page.screenshot({
 		path: testInfo.outputPath("14-v2-email-completion.png"),
 		fullPage: true,
 	});
-	await page.keyboard.press("3");
+	await page.keyboard.press("2");
 	await expect(text).toHaveValue(EMAIL);
 });
 
@@ -113,8 +112,8 @@ test("打 3 次的 email 才有前綴補完；常打的詞典詞不把它擠掉"
 }) => {
 	const { items } = await ready(page);
 	await typeInEnglish(page, `${EMAIL} ${EMAIL} `);
-	await page.keyboard.type("iva");
-	await expect(items.nth(1)).toHaveText("2Iva");
+	await page.keyboard.type("jea");
+	await expect(items.nth(1)).toBeVisible();
 	await expect(items.filter({ hasText: EMAIL })).toHaveCount(0);
 	await page.keyboard.press("Escape");
 
@@ -122,8 +121,8 @@ test("打 3 次的 email 才有前綴補完；常打的詞典詞不把它擠掉"
 	for (let i = 0; i < 4; i++) {
 		await typeInEnglish(page, "that have with there about ");
 	}
-	await page.keyboard.type("iva");
-	await expect(items.nth(2)).toHaveText(`3${EMAIL}`);
+	await page.keyboard.type("jea");
+	await expect(items.nth(1)).toHaveText(`2${EMAIL}`);
 	await page.keyboard.press("Escape");
 	await page.keyboard.type("tha");
 	await expect(items.first()).toBeVisible();

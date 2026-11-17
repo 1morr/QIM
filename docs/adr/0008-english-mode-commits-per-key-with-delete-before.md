@@ -11,7 +11,7 @@
   - 會刪的都是 ASCII 字元與 BMP 的標點（英文串、空白、句點），一個 scalar 就是一個 UTF-16 碼元，也是一個字素。所以 iOS 呼叫 N 次 `deleteBackward()`（P25，單位文件沒寫）、Android 的 `deleteSurroundingText(N, 0)`（P26，LatinIME 還原修正也這樣刪）、網頁的 `setRangeText` 都刪得剛好。
   - 核心送出 `delete_before` 時，把前文與正在打的串的最後 N 字拿掉。這等於 N 次退格，差別是核心知道刪了什麼，前文不作廢。
   - Android 殼用 `beginBatchEdit`／`endBatchEdit` 包住刪與上屏。macOS 只能用 `insertText:replacementRange:`，宿主不支援時會被忽略（P27）。桌面沒有英文模式，只有智慧標點可能用到，桌面要不要用由票 27 定。
-- **英文的切詞**：正在打的串沿用英文使用者詞的串字元，也就是英文字母、數字與 `. _ % + - @ '`。email、網址整串是一個詞：建議列打到 `ivan.t` 還補得出 `ivan.test@example.com`，學與補完也是同一串。LatinIME 的分隔字元含 `. _ + /`，`@` 不算分隔（`donottranslate-config-spacing-and-punctuations.xml`），所以 email 會被 `.` 切開。詞頭詞尾的 `.` 與 `'` 不算進詞（同 `to_learn`），`teh.` 之後打空白，修的是 `teh`。自動修正只修去掉頭尾後全是字母、又不是全大寫的詞，中間可以有 `'` 與 `-`（LatinIME 的 word connectors）；含數字、`@`、全大寫的不修，同 Gboard（M47）。中間有 `.` 的也不修，這點和 Gboard 不同：Gboard 以 `.` 為詞界，切開的各段照修，而且在打 `.` 那一下就修（M47）。QIM 的修正發生在串打完時，也就是打了空白、逗號這類非串字元；`.` 不算，所以 `teh.com` 不會在打 `.` 那一下被修。細節照票 25。
+- **英文的切詞**：正在打的串沿用英文使用者詞的串字元，也就是英文字母、數字與 `. _ % + - @ '`。email、網址整串是一個詞：建議列打到 `jean.t` 還補得出 `jean.test@example.com`，學與補完也是同一串。LatinIME 的分隔字元含 `. _ + /`，`@` 不算分隔（`donottranslate-config-spacing-and-punctuations.xml`），所以 email 會被 `.` 切開。詞頭詞尾的 `.` 與 `'` 不算進詞（同 `to_learn`），`teh.` 之後打空白，修的是 `teh`。自動修正只修去掉頭尾後全是字母、又不是全大寫的詞，中間可以有 `'` 與 `-`（LatinIME 的 word connectors）；含數字、`@`、全大寫的不修，同 Gboard（M47）。中間有 `.` 的也不修，這點和 Gboard 不同：Gboard 以 `.` 為詞界，切開的各段照修，而且在打 `.` 那一下就修（M47）。QIM 的修正發生在串打完時，也就是打了空白、逗號這類非串字元；`.` 不算，所以 `teh.com` 不會在打 `.` 那一下被修。細節照票 25。
 - **預測不含下一個詞**：英文建議列只補完、修正正在打的串，空白之後不出下一個詞。Gboard 與 LatinIME 都有下一個詞（M47、LatinIME 的 bigram 詞典），但它要三樣東西：英文 bigram 資料包、學英文的個人 bigram、空白之後的建議列。這些和 M5 重做候選列一起做較省；M4 的建議列只是沿用候選列的最小版（spec〈範圍〉）。
 - **`Options` 的三個新欄位**（brief §7），都只在英文模式作用：
   - `autocorrect`：自動修正，預設關。
