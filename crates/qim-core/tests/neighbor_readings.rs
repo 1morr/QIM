@@ -211,6 +211,25 @@ fn turning_the_option_off_lists_the_literal_reading() {
     assert_eq!(texts(&tapped), texts(&literal));
 }
 
+/// 殼只換選項、沒呼叫 `refresh` 就選：關掉鄰鍵讀法後選的是原樣讀法的候選列，不是換選項前插了鄰鍵讀法的那列。
+#[test]
+fn selecting_after_turning_the_option_off_without_refresh_uses_the_literal_list() {
+    let engine = engine();
+    let off = Options {
+        neighbor_readings: false,
+        ..Options::default()
+    };
+    let (mut expected, mut expected_user, _) = type_keys(&engine, off, &snr_tapped());
+    let (mut session, mut user, tapped) = type_keys(&engine, Options::default(), &snr_tapped());
+    let at = texts(&tapped).iter().position(|t| t == "門口").unwrap();
+    session.set_options(off);
+    let shown = session.select(&engine, &mut user, at);
+    let expected = expected.select(&engine, &mut expected_user, at);
+    assert_ne!(shown.commit.as_deref(), Some("門口"));
+    assert_eq!(shown.commit, expected.commit);
+    assert_eq!(shown.composition, expected.composition);
+}
+
 #[test]
 fn the_option_is_on_by_default() {
     assert!(Options::default().neighbor_readings);
