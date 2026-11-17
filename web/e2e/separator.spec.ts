@@ -62,7 +62,8 @@ test.describe("實體鍵盤", () => {
 		await expect(composition).toHaveText("");
 	});
 
-	test("退格先刪分隔記號；沒有組字時 ' 照打", async ({ page }) => {
+	// 沒有組字時 ' 是引號，預設左右輪流（M4 票 27，`smart-punctuation.spec.ts`）。
+	test("退格先刪分隔記號；沒有組字時 ' 是引號", async ({ page }) => {
 		const { text, composition } = ui(page);
 		await page.keyboard.type("mi'r");
 		await expect(composition).toHaveText("一戈'口");
@@ -72,7 +73,7 @@ test.describe("實體鍵盤", () => {
 		await expect(composition).toHaveText("一戈");
 		await page.keyboard.press("Escape");
 		await page.keyboard.type("'");
-		await expect(text).toHaveValue("'");
+		await expect(text).toHaveValue("‘");
 		await expect(composition).toHaveText("");
 	});
 

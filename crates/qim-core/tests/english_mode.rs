@@ -375,6 +375,11 @@ fn picking_a_suggestion_replaces_the_typed_word_and_adds_a_space() {
 #[test]
 fn punctuation_right_after_a_picked_suggestion_takes_the_place_of_its_space() {
     let mut ime = Ime::new();
+    // 吃掉的那一下之後再按空白是連按兩下空白（`smart_punctuation.rs`），這裡只看補的空白。
+    ime.session.set_options(Options {
+        double_space_period: false,
+        ..ime.session.options()
+    });
     ime.globe();
     ime.type_text("hel");
     ime.select(0);

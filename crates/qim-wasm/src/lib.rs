@@ -224,6 +224,13 @@ impl WebSession {
         self.session.expire_undo(&mut self.user);
     }
 
+    /// 連按兩下空白輸出句點的時限到了（`Session::expire_double_space`）：每個鍵之後 1100 ms（照 LatinIME）網頁呼叫，
+    /// 之後的空白照打。
+    #[wasm_bindgen(js_name = expireDoubleSpace)]
+    pub fn expire_double_space(&mut self) {
+        self.session.expire_double_space();
+    }
+
     /// 手動加一個使用者詞；`trigger` 是空字串時不設觸發詞（brief〈學習與排位〉）。
     #[wasm_bindgen(js_name = addWord)]
     pub fn add_word(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {
@@ -465,6 +472,18 @@ impl WebSession {
     #[wasm_bindgen(js_name = setDigitSeparators)]
     pub fn set_digit_separators(&mut self, on: bool) {
         self.set_options(|options| options.digit_separators = on);
+    }
+
+    /// 英文模式連按兩下空白輸出句點（M4 票 27，brief〈英文模式與欄位類型〉），預設開。只影響下一個空白。
+    #[wasm_bindgen(js_name = setDoubleSpacePeriod)]
+    pub fn set_double_space_period(&mut self, on: bool) {
+        self.set_options(|options| options.double_space_period = on);
+    }
+
+    /// 中文狀態的 `"` `'` 左右輪流出 “” ‘’（M4 票 27，brief〈英文模式與欄位類型〉），預設開。只影響下一個引號。
+    #[wasm_bindgen(js_name = setPairedQuotes)]
+    pub fn set_paired_quotes(&mut self, on: bool) {
+        self.set_options(|options| options.paired_quotes = on);
     }
 
     /// 組字中單按 Shift 的處理（`qim_core::ShiftSwitch`）：`rime`（預設）、`commit-text`、
