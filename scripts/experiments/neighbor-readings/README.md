@@ -65,7 +65,7 @@ dev 觸控題的按鍵機率（`weights`，只看機率、不看結果）：每�
 ```sh
 git worktree add ../qim-neighbor 012b199   # repo 根目錄；另開一個 checkout，不動目前的工作區
 cd ../qim-neighbor
-git checkout 1morr/t09b -- scripts/experiments/neighbor-readings   # 合併後換成主分支
+git checkout 60d5bfb -- scripts/experiments/neighbor-readings     # 票 09b 合併進主分支的 commit
 cargo xtask data                           # 格式 v8 的資料包與 dev、test 題（或 `--root` 指回已建好資料的 checkout）
 cd scripts/experiments/neighbor-readings
 cargo run --release -- weights             # dev 觸控題的按鍵機率分布

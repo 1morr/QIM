@@ -326,7 +326,7 @@ proptest! {
     }
 
     /// 改選某一段後，沒選定的分段等於以選定的分段為前文、把剩下的輸入碼從頭打一次的分段
-    /// （plan〈介面〉 的重算、§2.3 接選定分段的最後一字）；各分段的碼接起來是整串輸入碼，
+    /// （plan〈介面〉 的重算、〈排序：同一把尺〉 接選定分段的最後一字）；各分段的碼接起來是整串輸入碼，
     /// 選定的都在沒選定的前面。
     #[test]
     fn unselected_segments_equal_those_of_typing_the_unselected_input_afresh(

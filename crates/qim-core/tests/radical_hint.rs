@@ -1,4 +1,4 @@
-//! 字根提示（plan〈輸入方案〉 `radical_hint`、§4.1 步驟 5）：字 → 倉頡三代 / 五代碼，只給提示，不進 lattice。
+//! 字根提示（plan〈輸入方案〉 `radical_hint`、〈速成碼表〉 步驟 5）：字 → 倉頡三代 / 五代碼，只給提示，不進 lattice。
 
 use std::collections::BTreeMap;
 

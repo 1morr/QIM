@@ -48,7 +48,9 @@ DECISIONS = "docs/decisions.md"
 BRIEF, ARCHITECTURE = "docs/design-brief.md", "ARCHITECTURE.md"
 BUDGETS = {"AGENTS.md": 8000, ARCHITECTURE: 15000, PROGRESS: 20000, BRIEF: 30000}
 TICKET_NUMBER = re.compile(r"票\s*\d")
-SECTION_REF = re.compile(r"(?:architecture|plan|brief)(?:\.md)?\s*§\s*\d", re.I)
+# 文件名到 `§<數字>` 之間可以隔反引號或節名（`plan〈資料流〉 的後處理、§4.4`），但不跨過別的 `.md` 或 ADR，
+# 研究筆記與 ADR 的節號可以引；只看 40 字內，免得同一行後面不相干的 § 被算進來。
+SECTION_REF = re.compile(r"(?:architecture|plan|brief)(?:\.md)?(?:(?!\.md|ADR)[^§\n]){0,40}§\s*\d", re.I)
 NOT_CODE = ("docs/", ".scratch/", "scripts/check_docs.py", "scripts/tests/test_check_docs.py")
 MAX_SCANNED_BYTES = 1_000_000
 INSTRUCTIONS = ("AGENTS.md", "CLAUDE.md")

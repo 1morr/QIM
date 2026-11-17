@@ -462,7 +462,7 @@ fn without_composition_full_width_punctuation_is_committed_and_other_keys_go_to_
     }
 }
 
-// 組字中修改（plan〈介面〉、brief〈桌面鍵盤操作〉 的 ← / →、§4.4 點組字的某一段）。
+// 組字中修改（plan〈介面〉、brief〈桌面鍵盤操作〉 的 ← / →、點組字的某一段）。
 
 /// `abcd`：「日朋水」勝過「日月林」；單打 `cd` 時「林」勝過「木水」。
 fn peng() -> Data<'static> {

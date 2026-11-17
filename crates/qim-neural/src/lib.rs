@@ -3,7 +3,7 @@
 //!
 //! 模型與字表由殼以位元組交進來（模型資料包，plan〈資料包 manifest〉），不碰檔案、不開執行緒；殼在背景執行緒或
 //! Web Worker 呼叫。實作從模型階梯的實驗（`scripts/experiments/model-ladder/src/neural.rs`）搬來，
-//! 只留採用的 LSTM。依賴規則見 `docs/plan.md` §1.3。
+//! 只留採用的 LSTM。依賴規則見 plan〈依賴規則〉。
 
 mod lstm;
 mod vocab;
