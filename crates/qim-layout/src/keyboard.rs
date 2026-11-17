@@ -163,6 +163,37 @@ impl Keyboard {
         self.shift != before
     }
 
+    /// 殼在輸入框聚焦時給它是不是數字欄（M4 票 26）：是就開版本的 `numberPage`；不是而目前在那頁時回到一開始的頁
+    /// （英文時是它的 `asciiPage`），使用者已自己切離的不動。佈局沒寫 `numberPage` 時不換頁。回傳目前頁有沒有變，
+    /// 殼依它重畫。
+    pub fn set_number_field(&mut self, on: bool) -> bool {
+        let Some(number) = self
+            .variant()
+            .number_page
+            .as_deref()
+            .and_then(|id| self.variant().page_index(id))
+        else {
+            return false;
+        };
+        let page = if on {
+            number
+        } else if self.page == number {
+            let initial = self
+                .variant()
+                .initial_page_index()
+                .expect("validate 保證 initialPage 存在、每個版本至少一頁");
+            self.variant()
+                .ascii_counterpart(initial, true)
+                .filter(|_| self.ascii)
+                .unwrap_or(initial)
+        } else {
+            self.page
+        };
+        let changed = page != self.page;
+        self.page = page;
+        changed
+    }
+
     pub fn variant(&self) -> &LayoutVariant {
         &self.layout.variants[self.variant]
     }

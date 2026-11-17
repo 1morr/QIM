@@ -47,10 +47,10 @@ pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex}
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{
-    CONTEXT_LIMIT, Candidate, CandidateKind, Composition, ContextState, InspectedCandidate,
-    InspectedNeighbor, InspectedSegment, Inspection, Key, KeyError, Options, PAGE_SIZE,
-    PrecedingChar, RERANK_CACHE_LIMIT, RERANK_CONTEXT, RERANK_PATHS, RerankRequest, Reranked,
-    ScoredPath, Segment, SegmentSource, Session, ShiftKey, ShiftSwitch, Snapshot, Swap,
+    CONTEXT_LIMIT, Candidate, CandidateKind, Composition, ContextState, FieldKind,
+    InspectedCandidate, InspectedNeighbor, InspectedSegment, Inspection, Key, KeyError, Options,
+    PAGE_SIZE, PrecedingChar, RERANK_CACHE_LIMIT, RERANK_CONTEXT, RERANK_PATHS, RerankRequest,
+    Reranked, ScoredPath, Segment, SegmentSource, Session, ShiftKey, ShiftSwitch, Snapshot, Swap,
 };
 pub use simplifier::{ConversionTable, Simplifier};
 pub use user::{

@@ -204,6 +204,10 @@ fn duplicate_ids_and_dangling_page_references_are_broken() {
     let mut ascii_page = layout(vec![letters(vec![])]);
     ascii_page["variants"][0]["pages"][0]["asciiPage"] = json!("english");
     assert_broken(&ascii_page, "asciiPage 指到不存在的頁 english");
+
+    let mut number_page = layout(vec![letters(vec![])]);
+    number_page["variants"][0]["numberPage"] = json!("numbers");
+    assert_broken(&number_page, "numberPage 指到不存在的頁 numbers");
 }
 
 #[test]

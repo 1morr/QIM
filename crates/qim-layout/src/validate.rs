@@ -307,6 +307,13 @@ fn references(layout: &Layout) -> Vec<LayoutError> {
                 "佈局版本 {index}：initialPage 指到不存在的頁 {initial}"
             )));
         }
+        if let Some(number) = &variant.number_page
+            && variant.page_index(number).is_none()
+        {
+            errors.push(LayoutError::Broken(format!(
+                "佈局版本 {index}：numberPage 指到不存在的頁 {number}"
+            )));
+        }
     }
     errors
 }

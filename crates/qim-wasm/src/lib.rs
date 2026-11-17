@@ -1,7 +1,7 @@
 //! 網頁用的 WebAssembly 綁定：只把 JS 的呼叫轉給 `qim-core`、`qim-layout` 與 `qim-neural`，不放邏輯（plan〈依賴規則〉）。
 
 use qim_core::{
-    CandidateKind, CangjieVersion, ContextState, Date, Engine, Imported, IndexEntry,
+    CandidateKind, CangjieVersion, ContextState, Date, Engine, FieldKind, Imported, IndexEntry,
     InspectedNeighbor, Inspection, Key, Manifest, ModelPack, Options, Pack, PackIndex,
     PrecedingChar, RadicalHintPack, RadicalHints, Scheme, SegmentSource, Session, Shortcuts,
     Snapshot, Swap, UserModel, Weights, WordListReport,
@@ -189,10 +189,21 @@ impl WebSession {
         self.set_options(|options| options.learning = on);
     }
 
-    /// 無痕模式開著：網頁這時不給前文（brief〈隱私與安全〉）。
+    /// 無痕模式開著或在密碼欄（`Session::private`）：網頁這時不給前文（brief〈隱私與安全〉）。
     #[wasm_bindgen(getter)]
-    pub fn incognito(&self) -> bool {
-        self.session.options().incognito
+    pub fn private(&self) -> bool {
+        self.session.private()
+    }
+
+    /// 換到一個新的輸入框（`Session::set_field`，M4 票 26）：`text`、`email`、`url`、`number`、`password`。網頁在
+    /// 換欄位類型時、給前文之前呼叫；回傳的快照帶新的中英。
+    #[wasm_bindgen(js_name = setField)]
+    pub fn set_field(&mut self, field: &str) -> Result<WebSnapshot, JsError> {
+        let field = field.parse::<FieldKind>().map_err(js_error)?;
+        Ok(self
+            .session
+            .set_field(&self.engine, &mut self.user, field)
+            .into())
     }
 
     /// 輸入框游標前的文字（`Session::set_context`）：網頁在聚焦、移動游標、輸入框改了之後給。
@@ -797,6 +808,9 @@ pub struct WebInspection {
     /// 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）；不修時沒有。
     #[wasm_bindgen(readonly)]
     pub autocorrection: Option<String>,
+    /// 目前輸入框的種類（M4 票 26）：`text`、`email`、`url`、`number`、`password`，同 `setField` 收的。
+    #[wasm_bindgen(readonly)]
+    pub field: String,
 }
 
 /// debug 面板的一個候選（`qim_core::InspectedCandidate`）。JS 端叫 `InspectedCandidate`。
@@ -885,6 +899,14 @@ impl From<Inspection> for WebInspection {
             weight_probabilities: weights.iter().map(|&(_, p)| p).collect(),
             rerank_cached: i.rerank_cached,
             autocorrection: i.autocorrection,
+            field: match i.field {
+                FieldKind::Text => "text",
+                FieldKind::Email => "email",
+                FieldKind::Url => "url",
+                FieldKind::Number => "number",
+                FieldKind::Password => "password",
+            }
+            .into(),
             context_state: context_state.into(),
             context,
             preceding_kind: preceding_kind.into(),
@@ -1228,6 +1250,12 @@ impl WebLayout {
     #[wasm_bindgen(js_name = setAutoShift)]
     pub fn set_auto_shift(&mut self, on: bool) -> bool {
         self.keyboard.set_auto_shift(on)
+    }
+
+    /// 輸入框是不是數字欄（[`Keyboard::set_number_field`]，M4 票 26）：網頁換欄位類型時給。回傳目前頁有沒有變。
+    #[wasm_bindgen(js_name = setNumberField)]
+    pub fn set_number_field(&mut self, on: bool) -> bool {
+        self.keyboard.set_number_field(on)
     }
 
     /// 目前頁的 id；切頁鍵按下後網頁比對它決定要不要重畫。

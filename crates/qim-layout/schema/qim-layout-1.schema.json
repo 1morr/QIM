@@ -55,6 +55,11 @@
           "type": "string",
           "minLength": 1
         },
+        "numberPage": {
+          "description": "數字欄聚焦時開的頁（同一個佈局版本的頁 id，Trime 的 number 鍵盤）；省略時數字欄不換頁。",
+          "type": "string",
+          "minLength": 1
+        },
         "pages": {
           "type": "array",
           "minItems": 1,

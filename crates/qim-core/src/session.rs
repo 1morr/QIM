@@ -169,6 +169,50 @@ impl ShiftSwitch {
     }
 }
 
+/// 輸入框的種類（M4 票 26，brief〈英文模式與欄位類型〉），殼在聚焦時依平台的欄位資訊給（[`Session::set_field`]）：
+/// Android 的 `EditorInfo.inputType`（類別與變體，事實 P24）、iOS 的 `keyboardType` 與 `isSecureTextEntry`、網頁
+/// `input` 的 `type` 與 `inputmode`。分法照 Android 的變體：密碼和 email、網址同是一種，殼不必另開無痕。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FieldKind {
+    /// 一般的文字欄。
+    #[default]
+    Text,
+    /// email：預設英文模式、不自動修正、不自動大寫。
+    Email,
+    /// 網址：同 email。
+    Url,
+    /// 數字（含電話）：殼開數字頁（佈局的 `numberPage`），核心的中英不動。
+    Number,
+    /// 密碼：同 email，另外不出建議，照無痕不學、不讀前文（brief〈隱私與安全〉）。
+    Password,
+}
+
+impl std::str::FromStr for FieldKind {
+    type Err = String;
+
+    /// 綁定用的名字：`text`、`email`、`url`、`number`、`password`。
+    fn from_str(name: &str) -> Result<Self, String> {
+        match name {
+            "text" => Ok(Self::Text),
+            "email" => Ok(Self::Email),
+            "url" => Ok(Self::Url),
+            "number" => Ok(Self::Number),
+            "password" => Ok(Self::Password),
+            _ => Err(format!(
+                "不認得的欄位類型：{name}（只有 text、email、url、number、password）"
+            )),
+        }
+    }
+}
+
+impl FieldKind {
+    /// 聚焦時預設英文模式（照 Trime 在 email、密碼欄設 `ascii_mode`，青簡對信箱、網址、密碼欄直通），也不自動
+    /// 修正、不自動大寫（AOSP LatinIME 的 `InputAttributes`：這三種欄位不給建議、不修）。
+    fn starts_in_english(self) -> bool {
+        matches!(self, Self::Email | Self::Url | Self::Password)
+    }
+}
+
 /// 單按的是哪一邊的 Shift；殼分辨（網頁用 `KeyboardEvent.code`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShiftKey {
@@ -489,6 +533,11 @@ pub struct Session {
     /// 英文模式（[`Key::ToggleEnglish`]，ADR 0008）：沒有組字，可見字元與空白核心吃下、逐字上屏，候選列是
     /// 正在打的串的建議（[`Session::list_suggestions`]）。和 `ascii` 不會同時為真。
     english: bool,
+    /// 目前輸入框的種類（[`Session::set_field`]）。
+    field: FieldKind,
+    /// 進預設英文的欄位（[`FieldKind::starts_in_english`]）之前的英文直通與英文模式（`ascii`, `english`）：離開到
+    /// 別種欄位時還原（Trime 離開欄位時還原 `ascii_mode`）。不在那種欄位時是 `None`。
+    mode_before_field: Option<(bool, bool)>,
     /// 前文（plan〈介面〉，名詞表），最多 [`CONTEXT_LIMIT`] 字：殼給的前文（[`Session::set_context`]）
     /// 接上之後核心送出去的字（上屏的、交還宿主打的可見字元與空白）。殼沒給過時只有核心送出去的，
     /// 同 librime 的 commit history。`None` 是不知道：沒給過也還沒送出過字、交還宿主的鍵改了游標前的
@@ -559,15 +608,58 @@ impl Session {
     /// `handle`、`select`、`focus_segment` 或 `text` 先依新選項重列候選再處理；重列前
     /// `all_candidates` 是空的，`rerank_request` 與 `apply_rerank` 回 `None`。
     pub fn set_options(&mut self, options: Options) {
-        // 無痕不讀上下文（brief〈隱私與安全〉）：打開時丟掉前文，無痕期間也不記（`Session::sent`）。
-        if options.incognito && !self.options.incognito {
+        let was_private = self.private();
+        self.options = options;
+        self.privacy_changed(was_private);
+    }
+
+    /// 無痕或密碼欄（[`FieldKind::Password`]）：不寫學習資料、不讀前文（brief〈隱私與安全〉）。殼給前文前可以先問。
+    pub fn private(&self) -> bool {
+        self.options.incognito || self.field == FieldKind::Password
+    }
+
+    /// 無痕開關或欄位類型換過之後：剛變成不讀上下文時丟掉前文，期間也不記（`Session::sent`）；期間的停鍵結果
+    /// 不留到之後，之前的也不帶進去。
+    fn privacy_changed(&mut self, was_private: bool) {
+        let private = self.private();
+        if private && !was_private {
             self.forget_context();
         }
-        // 無痕期間的結果不留到之後，之前的也不帶進去。
-        if options.incognito != self.options.incognito {
+        if private != was_private {
             self.rerank_cache.clear();
         }
-        self.options = options;
+    }
+
+    /// 換到一個新的輸入框（M4 票 26，brief〈英文模式與欄位類型〉）：殼在聚焦時、給前文之前呼叫，每次聚焦都給
+    /// （Android 的 `onStartInput`、iOS 的 `textDidChange` 讀 `keyboardType`）。上一個欄位的組字丟掉、正在打的串
+    /// 打完（同 [`Session::clear_context`]）；email、網址、密碼欄切到英文模式，離開到一般欄、數字欄時還原進去
+    /// 之前的中英（照 Trime 的 `ascii_mode`），在那種欄位裡切過的不留到下一個欄位。回傳的快照帶新的中英
+    /// （`ascii`），殼照它換頁；數字欄的數字頁由殼照佈局開。
+    pub fn set_field(
+        &mut self,
+        engine: &Engine,
+        user: &mut UserModel,
+        field: FieldKind,
+    ) -> Snapshot {
+        if self.composing() {
+            self.inline = None;
+            self.clear();
+        }
+        self.clear_context(user);
+        let was_private = self.private();
+        self.field = field;
+        if field.starts_in_english() {
+            self.mode_before_field
+                .get_or_insert((self.ascii, self.english));
+            self.ascii = false;
+            self.english = true;
+        } else if let Some((ascii, english)) = self.mode_before_field.take() {
+            self.ascii = ascii;
+            self.english = english;
+        }
+        self.drop_suggestions();
+        self.privacy_changed(was_private);
+        with_radicals(engine, self.snapshot(engine, true, None))
     }
 
     /// 輸入框游標前的文字（plan〈介面〉），取代核心記著的；只留最後 [`CONTEXT_LIMIT`] 字。組字開頭的
@@ -577,7 +669,7 @@ impl Session {
     /// 之後上屏的字與交還宿主打的字元接在後面，殼不給時也知道游標前是什麼（同 librime 的 commit
     /// history）。無痕模式殼不給，給了也不收（brief〈隱私與安全〉）。
     pub fn set_context(&mut self, before: &str) {
-        if self.options.incognito {
+        if self.private() {
             return;
         }
         self.after_digit = before.ends_with(|c: char| c.is_ascii_digit());
@@ -660,7 +752,10 @@ impl Session {
     /// 觸控鍵盤要不要自動開 Shift（[`Snapshot::auto_shift`]）。殼給了前文（[`Session::set_context`]）之後讀它：
     /// 聚焦空的欄位、移游標到句子開頭都沒有快照。
     pub fn auto_shift(&self) -> bool {
-        self.english && self.options.auto_capitalize && self.sentence == Sentence::Start
+        self.english
+            && self.options.auto_capitalize
+            && !self.field.starts_in_english()
+            && self.sentence == Sentence::Start
     }
 
     /// 目前的選項（[`Session::set_options`] 設的）；殼改一項時讀出來改，不必另存一份。
@@ -1097,7 +1192,7 @@ impl Session {
             let done = self.typed.push(c, recording);
             self.learn_english(user, done);
         }
-        if self.options.incognito {
+        if self.private() {
             return;
         }
         let context = self.context.get_or_insert_with(String::new);
@@ -1148,7 +1243,11 @@ impl Session {
     /// 英文模式的建議列（ADR 0008）：正在打的串的前綴補完（[`english_mode::suggestions`]）；建議變了才算候選
     /// 變動。
     fn list_suggestions(&mut self, engine: &Engine, user: &UserModel) {
-        let word = self.typed.word();
+        // 密碼欄沒有建議列（LatinIME 的 `InputAttributes`、Gboard，事實 M48）。
+        let word = self
+            .typed
+            .word()
+            .filter(|_| self.field != FieldKind::Password);
         self.autocorrection = word.and_then(|word| self.autocorrection(engine, user, word));
         let spans = word.map_or_else(Vec::new, |word| {
             let listing = english_mode::Sources {
@@ -1403,7 +1502,7 @@ impl Session {
         mut segments: Vec<String>,
     ) -> Snapshot {
         self.clear();
-        if self.options.association && !self.ascii && !self.english && !self.options.incognito {
+        if self.options.association && !self.ascii && !self.english && !self.private() {
             // 留到蓋住最後 ASSOCIATION_TAIL 字的段，最後一段一定留。
             let mut chars = 0;
             let keep = segments
@@ -1625,20 +1724,23 @@ impl Session {
         })
     }
 
-    /// 英文模式打完 `typed` 時會換成的字：自動修正與英文容錯都開著才有。
+    /// 英文模式打完 `typed` 時會換成的字：自動修正與英文容錯都開著才有；email、網址、密碼欄不修（[`FieldKind`]）。
     fn autocorrection(&self, engine: &Engine, user: &UserModel, typed: &str) -> Option<String> {
         let options = self.options;
-        (self.english && options.autocorrect && options.english_corrections)
-            .then(|| {
-                english_mode::autocorrection(
-                    engine,
-                    user,
-                    typed,
-                    options.english_user_words,
-                    &self.kept,
-                )
-            })
-            .flatten()
+        (self.english
+            && options.autocorrect
+            && options.english_corrections
+            && !self.field.starts_in_english())
+        .then(|| {
+            english_mode::autocorrection(
+                engine,
+                user,
+                typed,
+                options.english_user_words,
+                &self.kept,
+            )
+        })
+        .flatten()
     }
 
     /// 剛自動修正完緊接著退格（brief〈英文模式與欄位類型〉的「退格可還原」，時限同退格撤銷，[`Session::expire_undo`]）：
@@ -1891,7 +1993,7 @@ impl Session {
 
     /// 這次上屏要不要寫學習資料：無痕或學習關掉時不寫（plan〈學習與排位〉）。
     fn writes_learning(&self) -> bool {
-        self.options.learning && !self.options.incognito
+        self.options.learning && !self.private()
     }
 
     /// 學一次上屏（plan〈學習與排位〉）；無痕或學習關掉時不學。分段的碼去掉分隔記號：`mi'r` 選「歹口」記的是
@@ -1912,7 +2014,7 @@ impl Session {
     /// 記下上屏的組字的最後一段 `last`，給下一次組字接前文用（[`Session::context_word`]）；學習
     /// 關掉時也記，已學的照用。無痕不用前文，也不記。
     fn remember_last_word(&mut self, engine: &Engine, last: Option<&Segment>) {
-        self.last_word = last.filter(|_| !self.options.incognito).map(|s| LastWord {
+        self.last_word = last.filter(|_| !self.private()).map(|s| LastWord {
             original: s.text.clone(),
             shown: self.output(engine, &s.text),
         });
@@ -2080,7 +2182,7 @@ impl Session {
                 character: segment.text.chars().next_back(),
                 word: Some(segment.text.clone()),
             },
-            (None, Some(context)) if !self.options.incognito => Preceding {
+            (None, Some(context)) if !self.private() => Preceding {
                 character: engine.context_char(self.context_last_char(engine, context)),
                 word: self.context_word(engine),
             },
@@ -2093,7 +2195,7 @@ impl Session {
     /// 標點、空白之後沒有；簡體模式轉回繁體，個人 bigram 記的是原文）。不知道前文或無痕時沒有。
     /// 前文由 `Session` 接上上屏的字（[`Session::context`]），所以剛上屏的那段接在前文結尾。
     fn context_word(&self, engine: &Engine) -> Option<String> {
-        if self.options.incognito {
+        if self.private() {
             return None;
         }
         let context = self.context.as_deref()?;

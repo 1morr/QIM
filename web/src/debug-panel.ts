@@ -46,6 +46,15 @@ export interface InspectedCandidate {
 	neighborPenalty?: number;
 }
 
+/** debug 面板顯示的欄位類型名稱（`Inspection.field`）。 */
+const FIELD_NAMES: Record<string, string> = {
+	text: "一般",
+	email: "email（英文、不修正、不大寫）",
+	url: "網址（英文、不修正、不大寫）",
+	number: "數字（開數字頁）",
+	password: "密碼（英文、不出建議、不學、不讀前文）",
+};
+
 /** 綁定的 `Inspection` 讀成一般物件：綁定的 getter 每次都複製一份，讀一次、釋放完再畫。 */
 interface Inspection {
 	contextState: "known" | "unknown" | "incognito";
@@ -61,6 +70,8 @@ interface Inspection {
 	rerankCached: boolean;
 	/** 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）；不修時沒有。 */
 	autocorrection?: string;
+	/** 目前輸入框的種類（M4 票 26）。 */
+	field: string;
 }
 
 /** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
@@ -121,6 +132,7 @@ function read(inspection: WasmInspection): Inspection {
 		})),
 		rerankCached: i.rerankCached,
 		autocorrection: i.autocorrection,
+		field: i.field,
 	}));
 }
 
@@ -287,7 +299,7 @@ export function mountDebugPanel(
 			state === "known"
 				? `前文：「${inspection.context}」`
 				: state === "incognito"
-					? "無痕：不讀前文"
+					? "無痕或密碼欄：不讀前文"
 					: "不知道前文";
 		const preceding =
 			inspection.precedingKind === "clauseStart"
@@ -363,6 +375,13 @@ export function mountDebugPanel(
 		}`;
 		return line;
 	};
+
+	// 欄位類型（M4 票 26）：email、網址、密碼欄預設英文、不自動修正，密碼欄另不出建議、不學。
+	const fieldLine = (inspection: Inspection): HTMLElement =>
+		make("p", `欄位：${FIELD_NAMES[inspection.field] ?? inspection.field}`, {
+			"data-testid": "debug-field",
+			"data-field": inspection.field,
+		});
 
 	// 英文模式的自動修正（M4 票 25）：打完這個詞（空白、句讀、Enter）會換成什麼。
 	const autocorrectionLine = (inspection: Inspection): HTMLElement => {
@@ -493,6 +512,7 @@ export function mountDebugPanel(
 			segmentsLine(inspection),
 			weightsLine(inspection),
 			topLine(inspection),
+			fieldLine(inspection),
 			autocorrectionLine(inspection),
 			candidateTable(inspection),
 			rerankSection(inspection),
