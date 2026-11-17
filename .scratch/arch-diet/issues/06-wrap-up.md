@@ -17,3 +17,5 @@ Blocked by: 01, 02, 03, 04, 05
 - [ ] `cargo xtask check --fast` 綠燈。
 
 ## Comments
+
+等使用者：票 06 的工作在分支 `1morr/ad06`（worktree `<repo 旁的 workspaces>/QIM/ad06`），還沒合併：讀那裡的 `ARCHITECTURE.md`，並回答那份票 Comments 裡的十題清單（11 份 ADR 草稿要不要編號、識別符表要不要搬進 `GLOSSARY.md`、照程式碼現況改寫的地方等）；回答後協調者叫同一個 session 收尾再合併
