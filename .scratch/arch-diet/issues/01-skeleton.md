@@ -1,7 +1,7 @@
 # 01: 建 ARCHITECTURE.md 的骨架，搬 plan §0、§1
 
 Status: ready-for-agent
-Blocked by: `.scratch/flow-sync/issues/02-changelog.md`
+Blocked by: 無（原本等 flow-sync 的 CHANGELOG 票；2026-11-18 已做完）
 讀: `.scratch/arch-diet/spec.md`；plan §0、§1 全文
 
 ## What to build
