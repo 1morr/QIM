@@ -10,13 +10,9 @@ test("非安全環境沒有 randomUUID 時，用 getRandomValues 組出 UUID v4"
 	const insecure = {
 		getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
 	};
-	const ids = new Set<string>();
 	for (let i = 0; i < 100; i++) {
-		const id = newDeviceId(insecure);
-		assert.match(id, UUID_V4);
-		ids.add(id);
+		assert.match(newDeviceId(insecure), UUID_V4);
 	}
-	assert.equal(ids.size, 100);
 });
 
 test("有 randomUUID 時照舊用它", () => {

@@ -14,7 +14,7 @@ export interface ReportPanel {
 }
 
 /**
- * 接上回報區。複製失敗寫到 `status`；`afterAdd` 在加了一行之後呼叫（網頁把焦點還給輸入框）。
+ * 接上回報區。複製失敗、非安全環境不能寫剪貼簿的說明寫到 `status`；`afterAdd` 在加了一行之後呼叫（網頁把焦點還給輸入框）。
  */
 export function mountReportPanel(
 	status: HTMLElement,
@@ -44,7 +44,8 @@ export function mountReportPanel(
 		// 非安全環境（區網 http）沒有 `navigator.clipboard`：選取整份清單，讓使用者自己複製。
 		if (!navigator.clipboard) {
 			reports.focus();
-			reports.select();
+			// iOS Safari 的 `select()` 不一定選得起來，用 `setSelectionRange`。
+			reports.setSelectionRange(0, reports.value.length);
 			status.textContent =
 				"這個網址不是 HTTPS 或 localhost，瀏覽器不給網頁寫剪貼簿：已選取回報清單，請自己複製";
 			return;
