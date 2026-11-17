@@ -10,6 +10,7 @@ Blocked by: `.scratch/gates/issues/01-missing-gates.md`（它把 `docs/developme
 - progress.md〈寫法與封存〉、decisions.md〈寫法〉、`docs/development.md`〈全部檢查〉那句、`docs/agents/issue-tracker.md`〈Conventions〉、`docs/agents/milestone.md`〈驗收票〉照範本改；封存步驟用 `ticket_notes.py --archive` 與 `docs_moved_lines.py`。
 - 加 `scripts/ticket_notes.py`、`scripts/docs_moved_lines.py`、`scripts/tests/test_ticket_notes.py`、`scripts/tests/test_docs_moved_lines.py`；`scripts/check_docs.py` 與 `scripts/tests/test_check_docs.py` 換成範本的版本，QIM 自己的 `HookEnvironmentTest` 加回去。這張票先不建 `CHANGELOG.md`（票 02），所以 `變更：` 的檢查還不生效。
 - `docs/agents/issue-tracker.md`〈Conventions〉加範本的「等使用者：」那一條；`AGENTS.md` 的 session 結尾照範本改成：做票的 session 要等使用者時寫在票的 Comments、票不改 `done`，答案記成下一行 `決定：`。
+- 範本 2026-11-17 版的 `check_docs.py` 比開票時多幾條，換上去時一起過：`決定：` 行不超過 160 字元、四種紀錄行（`Session 紀錄：`、`決定：`、`變更：`、`等使用者：`）寫成清單或縮排也認、done 的票不留沒回答的「等使用者：」、roadmap 有票沒做完的列寫「排在 … 之後」、`CHANGELOG.md` 的格式（票 02 建檔後生效）、`docs/development.md`〈閘門〉八列。`AGENTS.md` 的 session 結尾第 3 步照範本改成「照 `next_step.py` 的結果告訴使用者」（2026-11-17 已換上新版 `next_step.py`）。`docs/agents/ui.md`、`docs/agents/visual.md` 的「收尾票」也改成「驗收票」。
 - 進行中的工作（例如 `.scratch/arch-diet/`）已經 done 的票，`Session 紀錄：` 沒有日期的補上：取 progress.md 那一列的日期，沒有就取票檔最後一次 commit 的。
 
 ## 驗收

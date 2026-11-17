@@ -15,3 +15,7 @@
 
 ## 紀錄
 
+- 2026-11-17 M5（使用者同意）：里程碑開工照範本加「對程式碼」一步，票上講到的現有程式碼逐條核對、對不上的給使用者接受或拒絕。`docs/agents/milestone.md`〈開工〉
+- 2026-11-17 M5（使用者同意）：〈UI〉的規則搬到 `docs/agents/ui.md`，`AGENTS.md` 只留實跑驗證與一句指向。
+- 2026-11-17 M5（使用者定）：用 `visual-explainer` 把架構草稿、開工計劃、對程式碼的問題、二選一做成一頁作答。`docs/agents/visual.md`
+- 2026-11-17 M5（使用者同意）：換範本新版 `next_step.py`、pre-commit 開頭清 `GIT_*`；範本新版 `check_docs.py` 的新規則點名進 flow-sync 票 01，不另開票。
