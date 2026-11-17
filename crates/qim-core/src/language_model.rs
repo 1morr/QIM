@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// 誤差最多半級（約 0.04），比 β、γ 的量級小得多。
 pub const LOG_PROB_STEP: f64 = 1.0 / 12.0;
 
-/// 句首記號（architecture〈資料包〉）：當前一字時，`P(c | 句首)` 是 c 當一句第一字的機率。
+/// 句首記號：當前一字時，`P(c | 句首)` 是 c 當一句第一字的機率。
 /// 訓練時每句的第一字接在它後面；它不是打得出的字，連打的路徑裡不會有它。
 pub const CLAUSE_START: char = '\u{2}';
 

@@ -398,7 +398,7 @@ fn the_wildcard_is_skipped_when_matching_a_completion() {
     assert_eq!(shown.get(1).map(String::as_str), Some(email), "{shown:?}");
 }
 
-/// 含萬用鍵的輸入碼在中文組字是比對模式，不出整串的英文使用者詞（同英文詞典的候選，architecture〈資料包〉）：
+/// 含萬用鍵的輸入碼在中文組字是比對模式，不出整串的英文使用者詞（同英文詞典的候選）：
 /// 打過兩次的 `lizzy` 打 `lizzy` 時不出，`z` 照萬用鍵比對中文。
 #[test]
 fn an_input_with_the_wildcard_is_not_an_english_user_word() {

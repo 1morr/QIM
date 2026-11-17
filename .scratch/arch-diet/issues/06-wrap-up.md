@@ -89,7 +89,7 @@ Blocked by: 01, 02, 03, 04, 05
 
 背景：plan 和程式碼對不上時，`ARCHITECTURE.md` 與 `docs/development.md` 照程式碼寫，plan 原句在 `git show 4832a21:docs/plan.md`。選項：接受，或指出要以 plan 為準的那幾條（改程式另開票）。建議：全部接受。
 
-- 模組地圖：沒有 `web/editor/` 與 `data/` 的佈局檔（預設佈局由 `qim-databuild` 算出），拿掉；補上 `qim-neural`。〈測試策略〉也不提不存在的 `data/layouts/`。ADR 0004 說 `web/editor/` 隨產品發佈：建議 M6 開工時照 ADR 做，不另寫。
+- 模組地圖：沒有 `web/editor/` 與 `data/` 的佈局檔（預設佈局由 `qim-databuild` 算出），拿掉；補上 `qim-neural`；`qim-layout` 的內容照它的 `lib.rs` 補上「觸控空間模型與實體鍵盤的鄰鍵先驗」；`platforms/` 寫成「還沒建立」。〈測試策略〉也不提不存在的 `data/layouts/`。ADR 0004 說 `web/editor/` 隨產品發佈：建議 M6 開工時照 ADR 做，不另寫。
 - 刪掉的過時句：核心「一直送 0 個 `delete_before`」（現在會送）、資料流圖（缺詞級 trigram 與聯想、去重的位置畫錯）、方案檔範例（β、γ 寫 0.0，實際 1.0）、中英鍵轉成 `ToggleAscii`（實際是 `ToggleEnglish`）。
 - `qim-ffi` 還沒有 `set_options`：〈核心對殼〉只寫核心的規則，綁定怎麼包留給加這個介面的票。
 - 「門口」的檢查直接查詞庫、不經 `Engine`（`verify.rs`）；建置的決定性檢查有 11 份資料包（含停鍵層模型），不是 10 份。
@@ -119,17 +119,23 @@ Blocked by: 01, 02, 03, 04, 05
 
 背景：spec 只准改指向文件的註解，下面幾處內容過時沒改：`Session::forget` 的註解讀起來像清掉所有前文後面的個人 bigram；`user/format.rs` 的 `HEADER` 還寫「M4 收尾前還沒定稿」；`word_trigram.rs` 的 `LARGE` 寫「常駐估計 35 MB」（iPhone 實測留下 +23.4 MB、峰值 +71.3 MB）；`verify.rs` 的 `CheckId::Decodes` 漏了詞級 trigram 的檢查；「舊核心讀到不認得的資料包種類拒絕載入」靠 serde、沒有測試。選項：開一張修復票，或放 roadmap〈不排里程碑〉。建議：開一張修復票，M5 開工前做。
 
-**九、要不要重量 `bench --check` 的時間**
+**九、只留在舊票上的量測數字**
+
+背景：幾個每鍵延遲的 µs 數字（詞級 trigram 的雜湊 31 → 64 → 45 µs、停鍵結果快取 154 → 161 µs）原本就是從票抄進 plan 的，沒搬進任何文件，只留在 `.scratch/m3/`、`.scratch/m4/` 的票上。選項：維持只在票上，或抄進 `docs/research/`。建議：維持，延遲的門檻與現值由 `bench/baseline.json` 與 `cargo xtask bench --check` 擋。
+
+**十、要不要重量 `bench --check` 的時間**
 
 背景：plan 寫 `bench --check` 約 1 分鐘，`docs/development.md` 寫整個 `cargo xtask bench` 約 3 分鐘（加了學過的學習資料之後）；只留了 3 分鐘。選項：重量一次再寫，或維持。建議：維持，下次有人跑時順手核對。
 
-code-review：Standards 指出的兩處斷掉的引用已修（`lexicon-and-model-tuning.md` 的 brief 節、`properties.rs` 三處）；其餘指錯節的判斷題（`session.rs` 聯想鍵、`english.rs` 等指〈資料包〉、brief〈來源〉表的 kGradeLevel 與 emoji 指向、`user.rs`「（初值）」、〈風險與回寫點〉與〈主要依賴〉的 1.4M 數字重複、〈平台殼〉沒寫上屏後給前文）未處理，留給下一個 session；Spec 軸審查在額度用完前沒回報。
+code-review（`git diff 1708e7c`）：
+- Standards：新引用的節名全都存在、沒有標點殘渣。指向不存在或沒寫那件事的已改：`lexicon-and-model-tuning.md` 的 brief 節改指 `facts-tables.md`；`properties.rs` 三處；`session.rs` 的聯想鍵、英文使用者詞、前文留到下一次組字拿掉引用；`english.rs`、英文測試、`language_model.rs` 的句首記號、`simplifier.rs` 指〈資料包〉的拿掉，`code_table.rs` 改指 `simplified.rs`；brief〈來源〉表的 kGradeLevel 改指 `quick.rs`、emoji 改指 `emoji-candidates.md`；`user.rs` 的「（初值）」拿掉；〈風險與回寫點〉的 1.4M 數字改指〈主要依賴〉。〈平台殼〉缺「上屏後給前文」：`web/src/context.ts` 在輸入框內容改了（含上屏）時給，是契約，〈平台殼〉改寫成「輸入框內容改了（含上屏）」。沒改：`ranking-parameters.md` 反引號寫法不一（照原草稿），〈風險與回寫點〉用 brief 節號（brief 沒有節名可引）。
+- Spec：§8 對照表 18 列都在、目的地內容核對過；驗收的 grep 剩下的命中不是引用（理由在上面〈引用〉）。已改：GLOSSARY〈停鍵層模型〉的 λ 指到 `data/neural-rerank/model.toml` 與 dev〈停鍵層的模型〉，〈詞級 trigram〉的退回規則指到 `word_trigram.rs`；`session.rs` 的無痕改指 brief〈隱私與安全〉與〈平台殼〉；清單補上票 01 的兩處改寫與票 02 的 µs 數字（第四、九題）；殼呼叫時機那行決定改正。
 Session 紀錄：2026-11-18 plan §8 歸位到 `ARCHITECTURE.md`〈風險與回寫點〉與 roadmap，約 580 處 plan 引用改指新位置，刪掉 `docs/plan.md`，ADR 草稿整理成 11 份待確認，使用者清單寫在本票
 決定：§8 只留會改到分工或格式、還沒排除的四條在 `ARCHITECTURE.md`，平台相關的進 roadmap 各里程碑，已解決的指到結果所在的檔（Agent 定）
-決定：〈核心對殼〉與〈平台殼〉重複的殼呼叫時機只留在〈平台殼〉，〈核心對殼〉只寫 API 的意思（Agent 定）
+決定：前文與欄位的呼叫時機只留在〈平台殼〉；停鍵層的背景執行緒與 `apply_rerank` 只留在〈核心對殼〉（Agent 定）
 決定：〈學習資料的格式〉補一句清空與還原都留清空記號、合併時傳到別台（票 03 留給本票看預算）（Agent 定）
 決定：`scripts/check_docs.py` 與它的測試裡的 `plan §` 是範本規則的測試資料，不改（Agent 定）
 決定：調參的兩份草稿改放 `docs/research/`、資料包兩份草稿合併，照協調者指示（Agent 定）
 決定：roadmap 已驗收里程碑那幾列「拆票前讀」裡的 plan 節號拿掉，不換成新位置（Agent 定）
 變更：無
-等使用者：讀 `ARCHITECTURE.md` 並回覆；確認上面清單的二到九題（11 份 ADR 草稿、識別符表、照現況寫的地方等）
+等使用者：讀 `ARCHITECTURE.md` 並回覆；確認上面清單的二到十題（11 份 ADR 草稿、識別符表、照現況寫的地方等）

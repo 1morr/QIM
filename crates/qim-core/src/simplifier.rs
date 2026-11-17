@@ -1,4 +1,4 @@
-//! 簡繁轉換（architecture〈資料包〉）：照 OpenCC 的轉換規則，把繁體轉成簡體。
+//! 簡繁轉換：照 OpenCC 的轉換規則，把繁體轉成簡體。
 //! 表由簡繁資料包給（OpenCC `hk2s` 用的字典），核心不內嵌字典。
 
 use std::collections::{BTreeMap, HashMap};

@@ -192,7 +192,7 @@ QIM（暫名）。
 | 資料 | 來源 | 授權 | 備註 |
 | --- | --- | --- | --- |
 | 倉頡碼表（三代、五代） | libcangjie `data/table.txt` | Public Domain（聲明的源頭未獨立查證，使用者接受） | 速成碼由此推導 |
-| 字序、碼表交叉驗證 | Unihan `kGradeLevel`、`kCangjie` | Unicode License v3 | `kGradeLevel` 排單字字序（有字頻前用，見 `docs/development.md`〈資料建置〉），進速成資料包；`kCangjie` 只用來抓錯碼，不打包 |
+| 字序、碼表交叉驗證 | Unihan `kGradeLevel`、`kCangjie` | Unicode License v3 | `kGradeLevel` 排單字字序（有字頻前用，見 `crates/qim-databuild/src/quick.rs`），進速成資料包；`kCangjie` 只用來抓錯碼，不打包 |
 | 詞頻 | rime-essay | LGPL-3.0 | 獨立的詞庫資料包；建置時設最低詞頻門檻；之後可換成自建詞頻。同一包另帶由口語與維基語料統計的字頻（`docs/research/lexicon-and-model-tuning.md`），所以也帶語料的授權（CC BY-SA 4.0、CC BY 4.0、CC0） |
 | 粵語口語小詞表 | 自行整理 | CC0 | 不從 rime-cantonese、粵典複製 |
 | 粵語口語詞（語料） | HKCanCor train 切分的已分詞詞（`docs/research/lexicon-and-model-tuning.md`） | CC BY 4.0 | 只補 rime-essay 與小詞表沒收、出現 ≥ 2 次的兩字以上詞，不收人名；rime-cantonese 不用（`docs/research/facts-tables.md`） |
@@ -201,7 +201,7 @@ QIM（暫名）。
 | 字級 bigram | 中文維基、粵語維基訓練（`docs/research/lexicon-and-model-tuning.md`） | 語料為 CC BY-SA 4.0 | 獨立資料包；模型是否須同授權散布見 §11 |
 | 英文詞表 | AOSP LatinIME 的 `en_US_wordlist.combined.gz`（逐詞頻率，`docs/research/facts-tables.md`） | Apache-2.0（repo 的 NOTICE；詞表沒有自己的授權檔） | 中文狀態的英文候選與英文模式共用；不用 aosp-dictionaries 的 experimental 詞典（來源混雜，協調者 2026-11-15 定） |
 | 簡繁轉換 | OpenCC | Apache-2.0 | — |
-| emoji 標註 | Unicode CLDR 的粵語、繁中標註（`common/annotations/yue.xml`、`zh_Hant.xml`）與 Unicode 的 `emoji-test.txt` | Unicode-3.0（`docs/research/facts-tables.md`） | emoji 候選用（`docs/research/lexicon-and-model-tuning.md`）；不用 Helium314 彙整的 emoji 字典（混有 AGPL 資料，`docs/research/data-sources.md` §10） |
+| emoji 標註 | Unicode CLDR 的粵語、繁中標註（`common/annotations/yue.xml`、`zh_Hant.xml`）與 Unicode 的 `emoji-test.txt` | Unicode-3.0（`docs/research/facts-tables.md`） | emoji 候選用（`docs/research/emoji-candidates.md`）；不用 Helium314 彙整的 emoji 字典（混有 AGPL 資料，`docs/research/data-sources.md` §10） |
 
 不用 Rime 的倉頡 / 速成碼表（授權標示矛盾，`docs/research/facts-tables.md`）。
 

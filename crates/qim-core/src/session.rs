@@ -68,7 +68,7 @@ struct LastWord {
     shown: String,
 }
 
-/// 聯想（architecture〈核心對殼〉，M3 票 13）在接什麼：候選列是聯想時才有。
+/// 聯想（M3 票 13）在接什麼：候選列是聯想時才有。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Association {
     /// 剛上屏的各段（繁體原文）：這次組字上屏的分段，接著選過的聯想，最多留到蓋住最後
@@ -84,7 +84,7 @@ pub struct Options {
     /// 簡體輸出：候選、組字與上屏轉成簡體，學習仍記繁體；
     /// 引擎要掛上簡繁資料包（[`Engine::with_simplifier`]）。
     pub simplified: bool,
-    /// 無痕模式：不寫任何學習資料、不用前文（architecture〈核心對殼〉、brief〈隱私與安全〉）。
+    /// 無痕模式：不寫任何學習資料、不用前文（brief〈隱私與安全〉；殼這時不給前文，architecture〈平台殼〉）。
     pub incognito: bool,
     /// 學習（brief〈學習與排位〉〈設定與同步〉）：關掉時不寫任何學習資料，已學的照用、前文照用（和無痕不同）。
     /// 預設開。
@@ -576,7 +576,7 @@ pub struct Session {
     /// （[`Session::context_word`]）。
     last_word: Option<LastWord>,
     /// 這次組字開頭時前文給的前一個字詞（[`Session::context_word`]）；學個人 bigram 用，和打分時
-    /// 接的相同：組字中再給的前文留到下一次組字（architecture〈核心對殼〉）。
+    /// 接的相同：組字中再給的前文留到下一次組字。
     composition_word: Option<String>,
     /// 游標前的字是半形數字：數字後的 `.` `:` 上屏半形（brief〈英文模式與欄位類型〉）。和前文同時更新，但只記
     /// 是不是數字、不記文字，所以無痕時也照記，無痕的欄位一樣打得出「3.5」。
@@ -592,7 +592,7 @@ pub struct Session {
     pressed_space: bool,
     /// 中文狀態的引號下一下出哪半邊（[`Options::paired_quotes`]）。
     quotes: Quotes,
-    /// 正在打的一串字（英文使用者詞，architecture〈核心對殼〉）：送出去的字的結尾連續的串字元。遇到其他字元、
+    /// 正在打的一串字（英文使用者詞）：送出去的字的結尾連續的串字元。遇到其他字元、
     /// 交還宿主的 Enter 這類鍵或離開欄位（[`Session::clear_context`]）就是打完了，學成英文使用者詞
     /// （[`Session::end_typed`]）；邊界的規則在 [`TypedRun`]。
     typed: TypedRun,
@@ -1483,10 +1483,10 @@ impl Session {
             .map(String::from)
     }
 
-    /// 聯想顯示中的鍵（architecture〈核心對殼〉），照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
+    /// 聯想顯示中的鍵，照 macOS 速成：數字鍵選這頁的聯想；Esc 只收起聯想、不交還宿主；
     /// 不送字元的修飾鍵不動它。其他鍵收起聯想後照沒有聯想時處理（回 `None`）：字母開始新的組字，
-    /// 退格、空白、Enter、方向鍵、沒有那個聯想的數字交還宿主，標點照常上屏。退格為什麼不像
-    /// librime-predict 只收起，見 architecture〈核心對殼〉。
+    /// 退格、空白、Enter、方向鍵、沒有那個聯想的數字交還宿主，標點照常上屏。退格不像
+    /// librime-predict 只收起，是使用者 2026-11-13 定的（`tests/backspace_undo.rs`）。
     fn handle_association(
         &mut self,
         engine: &Engine,
@@ -1536,7 +1536,7 @@ impl Session {
             return self.snapshot(engine, true, None);
         };
         let mut segments = self.association.take().expect("聯想顯示中").segments;
-        // emoji 和組字中選 emoji 一樣原樣上屏、不學；剛上屏的不是字詞了，不接下一輪（architecture〈核心對殼〉）。
+        // emoji 和組字中選 emoji 一樣原樣上屏、不學；剛上屏的不是字詞了，不接下一輪。
         if choice.span.kind.is_literal() {
             return self.commit(engine, Commit::plain(choice.text().to_string()));
         }

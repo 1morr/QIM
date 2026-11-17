@@ -139,7 +139,7 @@ _Avoid_: 上下文（泛指時可用，也包括游標後的文字）、surround
 _Avoid_: 句子開頭（句號之後才算時用）、BOS
 
 **詞級 trigram**：
-同步層的語言模型：一段（字或詞）接在前兩段後面的機率，段由建置端用現行打分切訓練句；查不到時退回詞級 bigram，再退回字級 bigram 加詞頻（`ARCHITECTURE.md`〈候選的排位順序〉〈資料包〉）。句首也算一段。資料包叫詞級 trigram 資料包（`WordTrigramPack`）：方案 `[packs]` 指名的預算版是預設，放寬版在設定區切換。說「語言模型資料包」時仍指字級 bigram 那份。
+同步層的語言模型：一段（字或詞）接在前兩段後面的機率，段由建置端用現行打分切訓練句；查不到時退回詞級 bigram，再退回字級 bigram 加詞頻（`crates/qim-core/src/word_trigram.rs`）。句首也算一段。資料包叫詞級 trigram 資料包（`WordTrigramPack`）：方案 `[packs]` 指名的預算版是預設，放寬版在設定區切換。說「語言模型資料包」時仍指字級 bigram 那份。
 _Avoid_: 詞語模型、word n-gram（實驗時比過的 bigram / trigram 都叫詞級 n-gram）
 
 **字根提示**：
@@ -335,7 +335,7 @@ _Avoid_: 除錯視窗、開發者面板
 核心記下停鍵層模型對同一份重排要求（前文與各路徑）給的名次，退格回到算過的那串碼時直接照它排，不等停鍵、不再跑模型；殼換了模型就清掉（`ARCHITECTURE.md`〈核心對殼〉，M4 票 03）。
 
 **停鍵層模型**：
-停鍵層做重排的字級神經模型（Gboard 級 1.4M CIFG-LSTM），給 lattice 的前幾條路徑打神經分，照 `路徑分 + λ·神經分` 排名次（ADR 0005）。推論在 `qim-neural`（`Reranker`）；它的資料包叫模型資料包（`ModelPack`，manifest 的種類 `model`），不交給 `Engine`。
+停鍵層做重排的字級神經模型（Gboard 級 1.4M CIFG-LSTM），給 lattice 的前幾條路徑打神經分，照 `路徑分 + λ·神經分` 排名次（ADR 0005；λ 在 `data/neural-rerank/model.toml`，`docs/development.md`〈停鍵層的模型〉）。推論在 `qim-neural`（`Reranker`）；它的資料包叫模型資料包（`ModelPack`，manifest 的種類 `model`），不交給 `Engine`。
 _Avoid_: 神經網路、AI 模型；「語言模型」指同步層的 n-gram（字級 bigram、詞級 trigram），不指它
 
 **首選字基準**：

@@ -461,7 +461,7 @@ fn the_expanded_list_is_empty_until_relisted_with_the_new_option() {
     assert!(!all.contains(&"the".to_string()), "{all:?}");
 }
 
-/// 萬用鍵在中文組字是比對模式、不當字母（architecture〈資料包〉）：輸入碼有它時不出英文候選，即使英文詞表
+/// 萬用鍵在中文組字是比對模式、不當字母：輸入碼有它時不出英文候選，即使英文詞表
 /// 有拼法相同的字（之後換成有 `z` 的英文詞典也一樣）。
 #[test]
 fn no_english_candidate_when_the_input_has_the_wildcard() {
