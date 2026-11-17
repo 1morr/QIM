@@ -16,3 +16,4 @@
 | --- | --- | --- | --- |
 | 2026-11-17 | M5 封存 M4 | 票 31：里程碑 code-review、乾淨 checkout 重驗 spec〈驗收〉、v3 定稿、使用者試用第二期通過；M4 封存到 `docs/archive/M4.md`；見票 31 | 新 session 下 `/1morr:project-init`，再 `/1morr:checkpoint M4` |
 | 2026-11-17 | M5 project-init 同步 | 開工加「對程式碼」一步、〈UI〉搬到 `docs/agents/ui.md`、加〈視覺化〉、換新版 `next_step.py`、pre-commit 清 `GIT_*`；新檢查點名進 flow-sync 票 01 | `/1morr:checkpoint M4` |
+| 2026-11-17 | M5 checkpoint M4 | 回顧 M4：驗收逐條有證據、6 個機制對程式碼一致；使用者照建議定 7 題（先跑 gates、flow-sync、arch-diet 再拆 M5，M5 分兩期） | `/implement .scratch/gates/issues/01-missing-gates.md` |

@@ -19,3 +19,5 @@
 - 2026-11-17 M5（使用者同意）：〈UI〉的規則搬到 `docs/agents/ui.md`，`AGENTS.md` 只留實跑驗證與一句指向。
 - 2026-11-17 M5（使用者定）：用 `visual-explainer` 把架構草稿、開工計劃、對程式碼的問題、二選一做成一頁作答。`docs/agents/visual.md`
 - 2026-11-17 M5（使用者同意）：換範本新版 `next_step.py`、pre-commit 開頭清 `GIT_*`；範本新版 `check_docs.py` 的新規則點名進 flow-sync 票 01，不另開票。
+- 2026-11-17 M5（使用者同意）：先跑 gates、flow-sync、arch-diet 三批流程票，再拆 M5；gates 進行中，M5 排在 arch-diet 之後。M4 回顧，`docs/roadmap.md`
+- 2026-11-17 M5（使用者同意）：M5 分兩期，第一期盤點、設計稿、候選列與工具列、設定頁；期界在盤點勾完後定。M4 回顧，roadmap〈M5 觸控鍵盤與設定〉

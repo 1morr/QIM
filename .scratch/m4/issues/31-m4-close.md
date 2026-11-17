@@ -57,6 +57,8 @@ Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 09b, 09c, 11, 12, 13, 14, 15, 16
 
 - 2026-11-17 封存後的 `cargo xtask check`：e2e `325 passed (1.1m)`、`2 skipped`、`check 通過`。
 
+- 2026-11-17 `/1morr:checkpoint M4` 回顧後使用者照建議定：gates 與 M5 的順序是先跑 gates、flow-sync、arch-diet 再拆 M5；範例 email 的 git 歷史不改寫；本票漏列的 7 條掛到 roadmap 的 M5 與〈平台里程碑〉（`docs/archive/M4.md`〈決定〉）。
+
 Session 紀錄：里程碑 code-review（修鄰鍵讀法沒 refresh 的重列、章節號檢查）、乾淨 checkout 重驗、v3 定稿（metadata 限檔頭）、發現逐條歸位、使用者試用第二期通過，M4 封存、M5 進行中。
 決定：規則 4 不加頻率門檻（使用者同意）
 決定：v3 的 metadata 行只能寫在檔頭（使用者同意）
