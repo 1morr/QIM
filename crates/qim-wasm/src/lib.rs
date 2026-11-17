@@ -428,6 +428,22 @@ impl WebSession {
         self.session.refresh(&self.engine, &self.user).into()
     }
 
+    /// 英文模式的自動修正（M4 票 25，brief〈設定與同步〉），預設關：串打完那一下換掉拼錯的詞，緊接著退格還原。
+    /// 打開時建議列第一個換成會修正成的字，所以重列。
+    #[wasm_bindgen(js_name = setAutocorrect)]
+    pub fn set_autocorrect(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.autocorrect = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
+    /// 英文容錯（M4 票 25，brief〈設定與同步〉），預設開：英文模式的建議列也列一處拼錯的修正；關掉時自動修正也沒有
+    /// 對象。
+    #[wasm_bindgen(js_name = setEnglishCorrections)]
+    pub fn set_english_corrections(&mut self, on: bool) -> WebSnapshot {
+        self.set_options(|options| options.english_corrections = on);
+        self.session.refresh(&self.engine, &self.user).into()
+    }
+
     /// 觸控鍵盤要不要自動開 Shift（`Session::auto_shift`）：給前文之後讀，聚焦空的欄位時沒有快照。
     #[wasm_bindgen(getter, js_name = autoShift)]
     pub fn auto_shift(&self) -> bool {
@@ -778,6 +794,9 @@ pub struct WebInspection {
     /// 候選列的停鍵重排來自快取（M4 票 03）：沒等停鍵、沒跑模型。
     #[wasm_bindgen(readonly, js_name = rerankCached)]
     pub rerank_cached: bool,
+    /// 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）；不修時沒有。
+    #[wasm_bindgen(readonly)]
+    pub autocorrection: Option<String>,
 }
 
 /// debug 面板的一個候選（`qim_core::InspectedCandidate`）。JS 端叫 `InspectedCandidate`。
@@ -865,6 +884,7 @@ impl From<Inspection> for WebInspection {
             weight_letters: weights.iter().map(|&(c, _)| String::from(c)).collect(),
             weight_probabilities: weights.iter().map(|&(_, p)| p).collect(),
             rerank_cached: i.rerank_cached,
+            autocorrection: i.autocorrection,
             context_state: context_state.into(),
             context,
             preceding_kind: preceding_kind.into(),
@@ -881,6 +901,7 @@ impl From<Inspection> for WebInspection {
                         CandidateKind::English => "english",
                         CandidateKind::Emoji => "emoji",
                         CandidateKind::EnglishUserWord => "englishUserWord",
+                        CandidateKind::EnglishCorrection => "englishCorrection",
                         CandidateKind::Association => "association",
                     }
                     .into(),

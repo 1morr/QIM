@@ -116,6 +116,22 @@ const ROWS: readonly Row[] = [
 		apply: (session, on) => session.setAutoCapitalize(on),
 	},
 	{
+		// 英文模式打完一個詞（空白、句讀、Enter）時換掉拼錯的詞，緊接著退格還原；預設關（brief〈設定與同步〉，M4 票 25）。
+		kind: "checkbox",
+		id: "autocorrect",
+		label: "英文自動修正",
+		checked: false,
+		apply: (session, on) => session.setAutocorrect(on),
+	},
+	{
+		// 英文模式的建議列也列一處拼錯的修正（同 LatinIME「Show correction suggestions」）；預設開（M4 票 25）。
+		kind: "checkbox",
+		id: "english-corrections",
+		label: "英文容錯",
+		checked: true,
+		apply: (session, on) => session.setEnglishCorrections(on),
+	},
+	{
 		// 容錯：觸控點一下的鄰鍵字母換進輸入碼，換出來的讀法從候選列第 2 格起插、不搶首選；實體鍵盤不換（M4 票 09c）。
 		kind: "checkbox",
 		id: "neighbor-readings",

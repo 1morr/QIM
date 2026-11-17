@@ -16,6 +16,7 @@ export type CandidateKind =
 	| "english"
 	| "emoji"
 	| "englishUserWord"
+	| "englishCorrection"
 	| "association";
 
 /** 候選的一段（綁定的 `InspectedSegment` 讀成一般物件）。 */
@@ -58,6 +59,8 @@ interface Inspection {
 	weights: { letter: string; probability: number }[];
 	/** 候選列的停鍵重排來自核心的快取（M4 票 03）：沒等停鍵、沒跑模型。 */
 	rerankCached: boolean;
+	/** 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）；不修時沒有。 */
+	autocorrection?: string;
 }
 
 /** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
@@ -117,6 +120,7 @@ function read(inspection: WasmInspection): Inspection {
 			probability: i.weightProbabilities[k],
 		})),
 		rerankCached: i.rerankCached,
+		autocorrection: i.autocorrection,
 	}));
 }
 
@@ -158,6 +162,7 @@ const KIND_LABELS: Record<Exclude<CandidateKind, "word">, string> = {
 	english: "英文",
 	emoji: "emoji",
 	englishUserWord: "英文使用者詞",
+	englishCorrection: "英文修正",
 	association: "聯想",
 };
 
@@ -359,6 +364,19 @@ export function mountDebugPanel(
 		return line;
 	};
 
+	// 英文模式的自動修正（M4 票 25）：打完這個詞（空白、句讀、Enter）會換成什麼。
+	const autocorrectionLine = (inspection: Inspection): HTMLElement => {
+		const corrected = inspection.autocorrection;
+		return make(
+			"p",
+			`自動修正：${corrected === undefined ? "不修" : `打完會換成「${corrected}」`}`,
+			{
+				"data-testid": "debug-autocorrection",
+				"data-autocorrection": corrected ?? "",
+			},
+		);
+	};
+
 	const candidateTable = (inspection: Inspection): HTMLElement => {
 		const { table: list, body } = table("候選來源", [
 			"#",
@@ -475,6 +493,7 @@ export function mountDebugPanel(
 			segmentsLine(inspection),
 			weightsLine(inspection),
 			topLine(inspection),
+			autocorrectionLine(inspection),
 			candidateTable(inspection),
 			rerankSection(inspection),
 		);

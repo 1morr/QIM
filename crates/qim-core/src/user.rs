@@ -600,6 +600,11 @@ impl UserModel {
         self.english.starting_with(prefix, self.today)
     }
 
+    /// 鍵是 `key`（小寫）、一年內打過的英文使用者詞（[`EnglishUserWords::used`]）。
+    pub(crate) fn english_used(&self, key: &str) -> Option<english_user::UsedWord<'_>> {
+        self.english.used(key, self.today)
+    }
+
     /// 殼交給核心今天的日期（使用者當地的日曆日）；之後學到或改到的條目記成最後使用的日期。核心不讀
     /// 系統時間（plan〈依賴規則〉）。殼的契約（plan〈學習與排位〉）：在第一次學習前、之後每次使用者操作前給，換日後
     /// 才不會記成前一天。沒給過時學到的條目沒有日期（不寫假日期），一年的時限跳過它們。

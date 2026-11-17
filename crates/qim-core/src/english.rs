@@ -51,6 +51,11 @@ impl EnglishWords {
         self.find(code).map(|&(_, f)| f)
     }
 
+    /// 鍵剛好是 `code` 的拼法與頻率（同 [`Self::lookup`] 的比對）。
+    pub(crate) fn entry(&self, code: &str) -> Option<(&str, u8)> {
+        self.find(code).map(|(w, f)| (w.as_str(), *f))
+    }
+
     /// 鍵以 `prefix`（小寫）開頭的詞與頻率，依鍵排序（英文模式的建議列，M4 票 24）。
     pub(crate) fn starting_with<'a>(
         &'a self,
