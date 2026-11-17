@@ -1,7 +1,7 @@
 # 01: 做票的紀錄只留在票上
 
 Status: ready-for-agent
-Blocked by: `.scratch/gates/issues/01-missing-gates.md`（它把 `docs/development.md`〈閘門〉的「待定」換掉，範本的檢查才過）
+Blocked by: 無（原本等 gates 的票把 `docs/development.md`〈閘門〉的「待定」換掉，範本的檢查才過；2026-11-17 已做完）
 讀: `.scratch/flow-sync/spec.md`；範本的 `templates/instructions.md`〈文件〉〈使用者確認〉〈每個 session 的流程〉、`templates/progress.md`、`templates/decisions.md`、`templates/milestone.md`、`templates/issue-tracker.md`
 
 ## What to build
