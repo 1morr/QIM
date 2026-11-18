@@ -11,14 +11,14 @@
 | M2 平台可行性實驗 | 只量數字不做產品：iOS 記憶體上限、Foundation Models、上下文長度、小型神經模型開銷 | brief §9、§11、`docs/research/facts-platforms.md`；ADR 0002、0005；`.scratch/m1/issues/24-m1-close.md` 的 Comments（留給 M2 起各里程碑的發現）；`.scratch/m2/spec.md` | 已驗收，[已封存](archive/M2.md) |
 | M3 智慧候選 | 模型階梯實驗（雲端 LLM 量過不做）；上下文、詞級 trigram、停鍵層神經重排、個人 bigram、聯想、記住常打字串、詞庫擴充、資料包 manifest 與線上更新 | brief §1.5、§7、§8、`docs/research/facts-platforms.md`；〈M3 的模型階梯實驗〉；ADR 0005；`docs/research/ios-feasibility.md`；`.scratch/m1/issues/24-m1-close.md` 與 `.scratch/m2/issues/12-m2-close.md` 的 Comments（標 M3 的各條） | 已驗收，[已封存](archive/M3.md) |
 | M4 輸入增強 | 空間模型與容錯、英文預測與自動修正、句中英文混輸實驗、欄位類型、智慧標點、同步的合併規則 | brief §4.7、§4.8、§7、`docs/research/facts-products.md`；〈M5 觸控鍵盤與設定〉；`docs/research/ranking-techniques.md` §5；`.scratch/m3/issues/23-m3-close.md` 的 Comments（標 M4 的各條；M1、M2 收尾票標 M4 的也讀） | 已驗收，[已封存](archive/M4.md) |
-| M5 觸控鍵盤與設定 | 網頁觸控鍵盤做到平台樣板：Gboard 觸控功能盤點、候選列與工具列接在鍵盤頂端、鍵盤內設定頁、emoji 與文字編輯等面板、滑動輸入與空白鍵移游標（〈M5 觸控鍵盤與設定〉） | 開工時定 | 未開工，排在 arch-diet 之後（M4 回顧 2026-11-17 定）；拆票前讀 `.scratch/m4/issues/31-m4-close.md` 的 Comments |
+| M5 觸控鍵盤與設定 | 網頁觸控鍵盤做到平台樣板：Gboard 觸控功能盤點、候選列與工具列接在鍵盤頂端、鍵盤內設定頁、emoji 與文字編輯等面板、滑動輸入與空白鍵移游標（〈M5 觸控鍵盤與設定〉） | 開工時定 | 未開工，下一個拆票（M4 回顧 2026-11-17 定）；拆票前讀 `.scratch/m4/issues/31-m4-close.md` 的 Comments |
 | M6 佈局編輯器 | 畫布式視覺編輯器、單手佈局；使用者驗收關卡 | 開工時定 | 未開工 |
 | M7 macOS | 第一個平台殼，一次接上全部已完成的功能 | 開工時定 | 未開工 |
 | M8 iOS | 鍵盤擴充與主 App；多端檔案傳輸評估 | 開工時定 | 未開工 |
 | M9 Android | InputMethodService | 開工時定 | 未開工 |
 | M10 Windows | TSF | 開工時定 | 未開工 |
 | M11 Linux | Fcitx5 或 IBus | 開工時定 | 未開工 |
-| arch-diet 架構文檔瘦身 | 實作計劃縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 進行中（2026-11-18 起），已拆 6 張票；之後拆 M5 |
+| arch-diet 架構文檔瘦身 | 實作計劃縮成根目錄的 `ARCHITECTURE.md`（上限 15,000 字元） | `.scratch/arch-diet/spec.md` | 已驗收（2026-11-18），6 張票做完，使用者讀過 `ARCHITECTURE.md` |
 | flow-sync 做票紀錄對齊 | 做票的紀錄只留在票上、不再抄進 progress.md 與 decisions.md；加 `CHANGELOG.md`；收尾票改叫驗收票 | `.scratch/flow-sync/spec.md` | 已驗收（2026-11-18），票 01、02 與修復票 02b、02c 做完 |
 | gates 補齊閘門 | 補密鑰掃描、依賴漏洞、依賴更新三道閘門，接進 `cargo xtask check` 與 CI | `.scratch/gates/spec.md` | 已驗收（2026-11-17），票 01 做完 |
 
