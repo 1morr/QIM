@@ -31,7 +31,7 @@ use crate::{
 const QUICK_SCHEME: &str = "data/schemes/quick.toml";
 /// 建出的資料包目錄，相對於 repo 根目錄；每份資料包一個 `<id>/`。
 pub const PACKS_DIR: &str = "build/packs";
-/// 由排列算出的預設佈局，網頁載入（plan〈佈局：畫布模型〉）。
+/// 由排列算出的預設佈局，網頁載入（architecture〈佈局格式〉）。
 const LAYOUTS: &str = "build/layouts";
 pub(crate) const LIBCANGJIE: &str = "libcangjie";
 const TABLE: &str = "data/table.txt";
@@ -45,7 +45,7 @@ const SIMPLIFIER_ID: &str = "opencc-hk2s";
 pub(crate) const LATINIME: &str = "latinime";
 /// 英文資料包的 id：AOSP 的美式英文詞表，各方案共用，不由方案指名。
 const ENGLISH_ID: &str = "aosp-en-us";
-/// 可選的粵典詞庫資料包的 id：方案指名的詞庫加粵典的詞頭（plan〈詞庫〉，M3 票 24）。
+/// 可選的粵典詞庫資料包的 id：方案指名的詞庫加粵典的詞頭（M3 票 24）。
 pub const WORDS_HK_LEXICON_ID: &str = "quick-lexicon-words-hk";
 /// 粵典的來源對不上而略過粵典詞庫時，怎麼修。
 const WORDS_HK_FIX: &str = "粵典的網址沒有版本，多半是詞典更新了：照 data/sources.toml \
@@ -132,7 +132,7 @@ struct QuickBuild {
 /// 建出的一份資料包，與寫出時旁邊放的授權與 manifest。
 struct LicensedPack {
     pack: BuiltPack,
-    /// manifest 的 `version`（semver）。資料包的內容改了就要加（plan〈資料包 manifest〉）。
+    /// manifest 的 `version`（semver）。資料包的內容改了就要加（architecture〈資料包〉）。
     version: &'static str,
     /// 寫進 `LICENSE`、`NOTICE` 的來源。
     sources: Vec<packing::PackSource>,
@@ -273,7 +273,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         |path: PathBuf, contents: &[u8]| std::fs::write(&path, contents).map_err(Error::io(path));
 
     let transcoder = Transcoder::new(&quick.rows);
-    // 語料轉成香港繁體後換回常見寫法（brief〈字集與字形〉、plan〈字級 bigram 與詞級 trigram〉）。
+    // 語料轉成香港繁體後換回常見寫法（brief〈字集與字形〉）。
     let forms = CommonForms::from_opencc(&quick.pack.code_table)?;
     let mut corpora = Vec::new();
     let mut corpus_checks = Vec::new();
@@ -505,7 +505,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             };
             Ok((pack, summary))
         };
-    // 詞級 trigram（plan〈字級 bigram 與詞級 trigram〉）：用預設詞庫與字級 bigram 的現行打分切各語料的 train 切分，數一次，
+    // 詞級 trigram：用預設詞庫與字級 bigram 的現行打分切各語料的 train 切分，數一次，
     // 依兩種門檻各建一份；方案指名的那份在前（`built::find` 與網頁都取同種的第一份當預設）。
     let build_word_trigrams = |quick: &QuickBuild,
                                lexicon: &LexiconPack,
@@ -582,7 +582,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
         }
         Ok(Ok(words_hk::headwords(&texts[0], &texts[1])?))
     };
-    // 加一種資料包只在這裡加一項：建法、授權來源與 NOTICE 的說明（plan〈碼表與資料管線〉）。
+    // 加一種資料包只在這裡加一項：建法、授權來源與 NOTICE 的說明。
     // 每次從快取重讀來源，`--verify` 的第二次才是真的重建。
     let build_packs = |quick: &QuickBuild,
                        chars: &[(String, u64)],
@@ -618,7 +618,7 @@ pub fn run(root: &Path, cache: &Path, fetch: &dyn Fetch, verify: bool) -> Result
             id: SIMPLIFIER_ID.into(),
             simplifier: opencc::hk2s(|file| load_text(OPENCC, file))?,
         };
-        // 英文模式也用，`z`、撇號都收；中文組字的比對才濾掉打不出的（plan〈英文、簡繁與 emoji〉）。
+        // 英文模式也用，`z`、撇號都收；中文組字的比對才濾掉打不出的。
         let (words, english_counts) = english::words(&load(LATINIME, english::WORDLIST)?)?;
         let english = EnglishPack {
             id: ENGLISH_ID.into(),
@@ -965,7 +965,7 @@ fn lexicon_about(id: &str, scheme: &str) -> String {
     )
 }
 
-/// 粵典詞庫資料包 NOTICE 最後一段：預設詞庫的說明，再加粵典的詞怎麼收與它的條款（plan〈詞庫〉）。
+/// 粵典詞庫資料包 NOTICE 最後一段：預設詞庫的說明，再加粵典的詞怎麼收與它的條款。
 fn words_hk_about(id: &str, default: &str, scheme: &str) -> String {
     format!(
         "{id} is {default} with the headwords of words.hk added. It is optional:\n\
@@ -1047,7 +1047,7 @@ fn word_trigram_about(summary: &word_trigram::Summary, lexicon: &str, bigram: &s
     )
 }
 
-/// 各語料的權重（plan〈字級 bigram 與詞級 trigram〉），寫進 NOTICE：`yue-wiki 1, zh-wiki 1, …`。
+/// 各語料的權重（`docs/research/lexicon-and-model-tuning.md`），寫進 NOTICE：`yue-wiki 1, zh-wiki 1, …`。
 fn corpus_weights() -> String {
     CORPORA
         .iter()

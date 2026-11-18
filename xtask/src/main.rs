@@ -105,7 +105,7 @@ fn bench(args: &[&str]) -> ExitCode {
     release_run("qim-bench", args)
 }
 
-/// 在 repo 根目錄用 release 跑 workspace 的 `package`：資料建置（plan〈碼表與資料管線〉）在 `qim-databuild`、
+/// 在 repo 根目錄用 release 跑 workspace 的 `package`：資料建置（`docs/development.md`〈資料建置〉）在 `qim-databuild`、
 /// 首選字基準（`docs/development.md`〈首選字基準〉）在 `qim-bench`，這裡只轉交。
 fn release_run(package: &str, args: &[&str]) -> ExitCode {
     let status = std::process::Command::new(cargo())

@@ -1,6 +1,6 @@
 # CLDR 關鍵字的門檻
 
-回答的問題（M3 票 16）：CLDR 的標註是給 emoji 選單搜尋用的，關鍵字收得很寬（粵語標註裡 😄 的關鍵字有「嘴」「眼」「打開」「臉」）。全收時打常用詞會在後面塞不相關的笑臉。要收到多泛？規則用資料定，不手寫排除清單：短名（`type="tts"`）一律收；關鍵字只在它對到的 emoji 數（兩份標註合計、不重複）不超過門檻時收。結論寫在 `docs/research/emoji-candidates.md`，摘進 plan §2.4、§4.4 與 brief §12.1，門檻是 `crates/qim-databuild/src/emoji.rs` 的 `MAX_KEYWORD_EMOJI`。
+回答的問題（M3 票 16）：CLDR 的標註是給 emoji 選單搜尋用的，關鍵字收得很寬（粵語標註裡 😄 的關鍵字有「嘴」「眼」「打開」「臉」）。全收時打常用詞會在後面塞不相關的笑臉。要收到多泛？規則用資料定，不手寫排除清單：短名（`type="tts"`）一律收；關鍵字只在它對到的 emoji 數（兩份標註合計、不重複）不超過門檻時收。結論寫在 `docs/research/emoji-candidates.md`，摘進 `docs/research/lexicon-and-model-tuning.md`，門檻是 `crates/qim-databuild/src/emoji.rs` 的 `MAX_KEYWORD_EMOJI`。
 
 ## 跑法
 

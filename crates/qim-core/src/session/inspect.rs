@@ -10,9 +10,9 @@ use crate::{CLAUSE_START, Engine, Segment, UserModel, Weights};
 /// [`Session::inspect`] 的結果。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inspection {
-    /// 核心記著的前文（plan〈介面〉〈上下文〉）。
+    /// 核心記著的前文（architecture〈核心對殼〉）。
     pub context: ContextState,
-    /// 沒選定的輸入碼開頭的字接的前一字（字級 bigram，plan〈排序：同一把尺〉）。
+    /// 沒選定的輸入碼開頭的字接的前一字（字級 bigram，architecture〈候選的排位順序〉）。
     pub preceding_char: PrecedingChar,
     /// 開頭的一段接的前一個字詞（個人 bigram）；沒有是 `None`。
     pub preceding_word: Option<String>,
@@ -23,7 +23,7 @@ pub struct Inspection {
     /// 最近一個鍵是 [`crate::Key::Weighted`]（觸控）或 [`crate::Key::Physical`]（實體鍵盤）時，它的各字母機率（M4 票 06、07）；
     /// 其他鍵是 `None`。
     pub key_weights: Option<Weights>,
-    /// 候選列的停鍵重排來自快取（plan〈模型分層〉，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
+    /// 候選列的停鍵重排來自快取（ADR 0005，M4 票 03）：這串碼算過，沒等停鍵、沒跑模型。
     pub rerank_cached: bool,
     /// 英文模式打完正在打的詞時會自動修正成的字（M4 票 25）：建議列的第一個；不修時是 `None`。
     pub autocorrection: Option<String>,
@@ -50,11 +50,11 @@ pub struct InspectedCandidate {
     pub kind: CandidateKind,
     /// 字詞的各段（碼、字詞、來源）；英文、emoji、英文使用者詞與聯想沒有。
     pub segments: Vec<InspectedSegment>,
-    /// 路徑分（plan〈排序：同一把尺〉）：各段接前一段的分數總和，含學習加分；不在 lattice 裡的候選是 `None`。
+    /// 路徑分（docs/research/ranking-parameters.md）：各段接前一段的分數總和，含學習加分；不在 lattice 裡的候選是 `None`。
     pub score: Option<f64>,
     /// 路徑分裡學到的加分（各段 `personal` 的和）；沒有路徑分時是 `None`。
     pub learning: Option<f64>,
-    /// 排定它位置的排位規則（1–5，plan〈學習與排位〉）。
+    /// 排定它位置的排位規則（1–5，architecture〈候選的排位順序〉）。
     pub rule: Option<u8>,
     /// 停鍵重排放到這裡的。
     pub rerank: Option<Reranked>,

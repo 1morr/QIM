@@ -206,7 +206,7 @@ ul.plain li, .changes li { margin: 2px 0; }
 	<li><b>長按</b>：新增不帶資料的動作 <code>"keyboardMenu"</code>（開切換鍵盤的選單）。地球鍵寫 <code>"longPress": ["keyboardMenu"]</code>；長按清單只有它一個時，殼按住到時直接開選單，不畫一般的長按清單。選單列哪些項由殼決定（QIM 的速成、英文，加平台的系統鍵盤），不寫進佈局。和現有的 <code>"nextKeyboard"</code>（直接換下一個系統鍵盤，iOS <code>advanceToNextInputMode</code>）分開。</li>
 	<li><b>換頁</b>：頁面加一個可省略的欄位，寫「切到英文時換成哪一頁」：速成字母頁寫英文頁、符號頁寫英文符號頁。切中英時（地球鍵、選單、實體鍵盤）鍵盤照這個欄位換頁；在英文時按「返回」這類切到速成字母頁的鍵，也落到英文頁。這是 Trime 的做法（中英鍵 <code>Mode_switch</code> 切 <code>ascii_mode</code>，鍵盤的 <code>ascii_keyboard</code> 是「切到英文時自動跳到的鍵盤」）。自訂佈局不寫這個欄位，就和現在一樣只切中英、不換頁。</li>
 	<li><b>標籤</b>：地球鍵的 <code>label</code> 寫 <code>🌐</code>、<code>a11yLabel</code> 寫「切換鍵盤」；殼把這個標籤畫成單色線條圖示（同網頁現在把 Shift 的狀態換成圖示），不畫彩色 emoji。</li>
-	<li>欄位名稱與 Schema 在實作時定，加的東西都有 Schema 與雙向測試（plan 佈局測試一節）。</li>
+	<li>欄位名稱與 Schema 在實作時定，加的東西都有 Schema 與雙向測試（<code>ARCHITECTURE.md</code>〈測試策略〉）。</li>
 </ul>
 </main>
 <script>
@@ -254,7 +254,7 @@ function quickLetters({ toggle = true, shiftGlyph } = {}) {
 }
 function englishLetters({ caps = false, digits = true, shiftGlyph } = {}) {
 	const key = (c, hint) => cell(c, caps ? c.toUpperCase() : c, { size: caps ? SIZE.upper : SIZE.lower, hint });
-	// Shift 開著時字母鍵不顯示角標（plan 佈局一節的 "shift"）。
+	// Shift 開著時字母鍵不顯示角標（<code>ARCHITECTURE.md</code>〈佈局格式〉的 "shift"）。
 	const top = [..."qwertyuiop"].map((c, i) => key(c, digits && !caps ? String((i + 1) % 10) : undefined));
 	const k = (s) => [...s].map((c) => key(c));
 	const bottom = [

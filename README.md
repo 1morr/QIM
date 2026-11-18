@@ -4,7 +4,7 @@
 
 ## 現況
 
-開發中，還不能當日常輸入法用。目前有一個網頁 prototype，可以試打速成連打、學習與觸控鍵盤；macOS、iOS、Android 的平台殼還沒開始。路線圖見 [`docs/plan.md`](docs/plan.md)〈里程碑任務〉，進度見 [`docs/progress.md`](docs/progress.md)。
+開發中，還不能當日常輸入法用。目前有一個網頁 prototype，可以試打速成連打、學習與觸控鍵盤；macOS、iOS、Android 的平台殼還沒開始。路線圖見 [`docs/roadmap.md`](docs/roadmap.md)，進度見 [`docs/progress.md`](docs/progress.md)。
 
 ## 試跑網頁 prototype
 
@@ -21,7 +21,7 @@ npm run --prefix web dev
 ## 文件
 
 - [`docs/design-brief.md`](docs/design-brief.md)：需求與決定
-- [`docs/plan.md`](docs/plan.md)：架構與里程碑
+- [`ARCHITECTURE.md`](ARCHITECTURE.md)：架構
 - [`docs/development.md`](docs/development.md)：開發指令
 - [`GLOSSARY.md`](GLOSSARY.md)、[`docs/adr/`](docs/adr/)：名詞表與架構決定
 

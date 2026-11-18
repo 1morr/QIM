@@ -1,4 +1,4 @@
-//! 重排（plan〈介面〉〈模型分層〉、ADR 0005，M3 票 11c）：殼取 `rerank_request`（前文與 lattice 的前 9 條
+//! 重排（architecture〈核心對殼〉、ADR 0005，M3 票 11c）：殼取 `rerank_request`（前文與 lattice 的前 9 條
 //! 整句路徑），背景模型回傳路徑的名次，`apply_rerank` 只接受目前的 `generation`，把第一條和首選
 //! 不同的路徑放到第 2 位：候選列有它就移上來，沒有就插入；首選不動。
 
@@ -252,7 +252,7 @@ fn a_result_that_changes_the_order_makes_the_request_stale() {
     );
 }
 
-/// 選插入的候選：照那條路徑的分段上屏與學習，同選一條多段的整句（plan〈學習與排位〉）：整串上屏一次，
+/// 選插入的候選：照那條路徑的分段上屏與學習，同選一條多段的整句：整串上屏一次，
 /// 各段只加衰減值，不造詞。
 #[test]
 fn an_inserted_path_commits_and_learns_like_a_sentence() {
@@ -330,7 +330,7 @@ fn a_waiting_result_is_dropped_when_the_candidates_change() {
 }
 
 /// 選了開頭一段後，路徑只蓋剩下的碼；選插入的路徑時接在選定的分段後面上屏，整串分兩次選定，
-/// 照樣自動造詞（plan〈學習與排位〉）。
+/// 照樣自動造詞。
 #[test]
 fn an_inserted_path_after_a_selected_beginning_commits_with_it() {
     let mut ime = Ime::new();
@@ -535,7 +535,7 @@ fn simplified_mode_compares_the_shown_text() {
     );
 }
 
-/// 停鍵結果快取（plan〈模型分層〉，M4 票 03）：殼說了用哪個模型（`set_reranker_id`）時，同一份要求的結果
+/// 停鍵結果快取（architecture〈核心對殼〉，M4 票 03）：殼說了用哪個模型（`set_reranker_id`）時，同一份要求的結果
 /// 留著。退格回到已經算過的那串碼，按鍵的快照就排好了，不再給要求（殼不必再等停鍵、跑模型），
 /// debug 面板看得到用的是快取。
 #[test]

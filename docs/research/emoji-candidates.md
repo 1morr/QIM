@@ -1,6 +1,6 @@
 # emoji 候選：成熟做法與 CLDR 標註
 
-M3 票 16，2026-11-11。回答兩個問題：emoji 排在候選列哪裡；CLDR 的粵語與繁中標註能不能直接當「字詞 → emoji」的表。結論摘進 brief §12.1、§12.4，規則寫在 plan §2.4、§4.4。
+M3 票 16，2026-11-11。回答兩個問題：emoji 排在候選列哪裡；CLDR 的粵語與繁中標註能不能直接當「字詞 → emoji」的表。結論摘進 brief §12.1、§12.4，規則寫在 `ARCHITECTURE.md`〈候選的排位順序〉、`docs/research/lexicon-and-model-tuning.md`。
 
 ## 1. 成熟做法
 

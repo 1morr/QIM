@@ -43,7 +43,7 @@ import init, {
 } from "./wasm/qim_wasm.js";
 import { mountWordList } from "./word-list.ts";
 
-/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（plan〈佈局：畫布模型〉）。 */
+/** 由 `cargo xtask data` 算出的預設 Gboard 速成佈局（architecture〈佈局格式〉）。 */
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 /** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief〈手機觸控鍵盤〉）。 */
 const NUMBER_ROW_LAYOUT_URL = "/layouts/gboard-quick-number-row.json";
@@ -80,7 +80,7 @@ function composingChinese(): boolean {
 	return shown.composing && !shown.inlineAscii;
 }
 
-/** 撤銷學習的鍵：Delete 加上 Shift 或 Ctrl 其中一個，沒有別的修飾鍵（plan〈學習與排位〉）。 */
+/** 撤銷學習的鍵：Delete 加上 Shift 或 Ctrl 其中一個，沒有別的修飾鍵。 */
 function isForgetKey(event: KeyboardEvent): boolean {
 	return (
 		event.key === "Delete" &&
@@ -152,7 +152,7 @@ async function start(): Promise<void> {
 		},
 	});
 	neural.load(library.modelPack());
-	// 告訴核心正在用哪個停鍵層模型（plan〈模型分層〉）：換模式或模型資料包後都要給，舊模型排的快取才不會套用。
+	// 告訴核心正在用哪個停鍵層模型（architecture〈核心對殼〉）：換模式或模型資料包後都要給，舊模型排的快取才不會套用。
 	const syncReranker = (): void =>
 		session.setRerankerId(rerankerId(settings.rerank(), neural.manifest));
 	syncReranker();
@@ -169,7 +169,7 @@ async function start(): Promise<void> {
 	let phrases: Phrases | undefined;
 	/** 英文使用者詞的清單；同上比 `userDict` 晚掛上。 */
 	let englishUserWords: EnglishUserWords | undefined;
-	// 殼的日期契約（plan〈學習與排位〉）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
+	// 殼的日期契約（architecture〈核心對殼〉）：核心不讀系統時間，第一次學習（含匯入存檔）前、之後每次使用者操作前給
 	// 今天，過了午夜才不會記成前一天。按鍵、點擊、觸控都從 keydown 或 pointerdown 開始；失焦時核心
 	// 會把正在打的串學成英文使用者詞，失焦可能沒有前導的按鍵或點擊（Alt+Tab、切分頁）。都在 window 的捕獲階段
 	// 給（blur 不冒泡，但捕獲階段照樣經過 window），比任何處理器早。
@@ -184,7 +184,7 @@ async function start(): Promise<void> {
 		englishUserWords?.refresh();
 		focusText();
 	});
-	// 退格撤銷的時限（plan〈學習與排位〉）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
+	// 退格撤銷的時限（architecture〈核心對殼〉）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
 	const undoTimer = undoWindow(() => session.expireUndo());
 	// 連按兩下空白輸出句點的時限（M4 票 27）：核心不讀時間，每個按鍵、點擊（觸控鍵也是）之前重新計時，照 LatinIME 的
 	// 1100 ms（`config_double_space_period_timeout`）到了叫核心丟掉「剛按了空白」。單按修飾鍵不送字元、核心不算夾在

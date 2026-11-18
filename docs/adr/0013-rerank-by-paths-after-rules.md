@@ -1,6 +1,6 @@
 # 停鍵重排排 lattice 的路徑，排在排位規則排定的候選後面
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈介面〉〈重排〉與〈學習與排位〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。行為由 `crates/qim-core/tests/rerank.rs`、`neighbor_readings.rs` 與 `web/e2e/neighbor-readings.spec.ts` 說明；分層見 ADR 0005。
+行為由 `crates/qim-core/tests/rerank.rs`、`neighbor_readings.rs` 與 `web/e2e/neighbor-readings.spec.ts` 說明；分層見 ADR 0005。
 
 - **以路徑為單位**：重排要求帶 lattice 蓋滿整串的前 9 條路徑（文字、分段、路徑分），不帶候選列。候選列只放 `ranking.sentences` 條多段路徑，答案常在 lattice 裡卻不在候選列（口語 dev：候選列 57%、前 9 條路徑 68%）；只在第一頁內排時 1.4M 的增益從 8.5 點剩 2.3～6.3 點（`docs/research/model-ladder.md`）。排出的路徑候選列沒有就插入，選了照它的分段上屏與學習。
 - **規則 3、4、5 優先**（使用者定）：規則排在第 2 位起的候選（用過的使用者詞、英文候選、英文前綴補完）不讓位，重排的路徑排在它們後面最前的位置。使用者記得「英文在第 2 位」，停鍵後換掉會按錯；代價是有英文與前綴補完時重排的路徑最遠到第 5 位。

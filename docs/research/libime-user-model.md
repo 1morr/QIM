@@ -70,12 +70,12 @@ pr = min(pr, 1); pr == 0 ? unknown_ : log10(pr)
 
 ## 6. 對 QIM 的取用
 
-M1 票 13 採用的做法（plan §2.3、§2.4）：以（方案, 輸入碼, 字詞）為鍵，記上屏次數 c、衰減值 d（librime `formula_d`：`d ← 1 + d·e^(−Δtick/200)`）、最後 tick t；個人機率代入 `max(static, ln((1−w)·P_static + w·P_personal))`，w = 0.2。
+M1 票 13 採用的做法（`docs/research/ranking-parameters.md`）：以（方案, 輸入碼, 字詞）為鍵，記上屏次數 c、衰減值 d（librime `formula_d`：`d ← 1 + d·e^(−Δtick/200)`）、最後 tick t；個人機率代入 `max(static, ln((1−w)·P_static + w·P_personal))`，w = 0.2。
 
 - **混合 + `max`**：照 libime，歷史只加分不扣分，沒學過的段不受影響。libime 用 log10，QIM 用自然對數；公式裡只有比例，底數不影響結果。
 - **個人機率的分母取常數**：`P_personal = d_now / D_max`，`D_max = 1/(1−e^(−1/200)) ≈ 200.5` 是衰減值的上限。對應 libime 除以「滿載歷史的總質量」（§2），不是除以已學的總數，所以剛開始用、只學過幾次時不會把學過的段捧得太高。`P_personal` 天然在 (0, 1]，不必另外截頂或加 ε。
   - 試過分母改成「實際上屏的段數的衰減總和」（較貼近使用者自己的 unigram）：`bench --learning` 的四個公開集合修正次數都比常數分母多（數字在 M1 票 13 Comments），沒採用。
-- **鍵含輸入碼**：等於 libime 的 `WordWithCode` 變體（§2），同一個字在不同碼下分開記。libime 的 unigram 0.2 + bigram 0.8 兩項只取前者；個人 bigram 留到 M3（plan §2.3）。
+- **鍵含輸入碼**：等於 libime 的 `WordWithCode` 變體（§2），同一個字在不同碼下分開記。libime 的 unigram 0.2 + bigram 0.8 兩項只取前者；個人 bigram 留到 M3（`docs/research/ranking-parameters.md`）。
 - **衰減**：libime 靠句序與三個池（§4），QIM 用 librime 的連續版，不必保存句子佇列；算分時先把 d 衰減到現在的 tick。
 - **學什麼**：同 libime table 引擎，上屏時才學，選定的每一段各寫一筆；另外整串也寫一筆，給排位規則 2 比對整串輸入碼。無痕模式（libime 沒有，在 fcitx5 上層）由 `Options.incognito` 關掉。
-- 不取：整句 `recent_` 佇列、zstd 序列化、以整句為單位的 `forget`（QIM 之後的刪除以鍵為單位）、table 引擎只記「最後使用序」的 index（QIM 另記次數，plan §2.4 的規則 2 要用）。
+- 不取：整句 `recent_` 佇列、zstd 序列化、以整句為單位的 `forget`（QIM 之後的刪除以鍵為單位）、table 引擎只記「最後使用序」的 index（QIM 另記次數，`ARCHITECTURE.md`〈候選的排位順序〉的規則 2 要用）。

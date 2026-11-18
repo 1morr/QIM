@@ -1,4 +1,4 @@
-//! 個人 bigram 與學習總開關（plan〈排序：同一把尺〉〈學習與排位〉，M3 票 12）：上屏時記「前一個字詞 → 這一段」，
+//! 個人 bigram 與學習總開關（architecture〈候選的排位順序〉，M3 票 12）：上屏時記「前一個字詞 → 這一段」，
 //! 之後同樣的前一個字詞後面這一段加分。前一個字詞是同一次組字的前一段，或前文：前文以上一次
 //! 上屏的字詞結尾時是那個字詞，否則是前文的最後一字。只看文字、跨方案共用。
 
@@ -192,7 +192,7 @@ fn context_ending_with_the_last_committed_word_uses_that_word() {
     );
 }
 
-/// 個人 bigram 只看文字：在一個方案學到的，另一個方案同樣的字也用得到（plan〈學習與排位〉）。
+/// 個人 bigram 只看文字：在一個方案學到的，另一個方案同樣的字也用得到。
 #[test]
 fn a_bigram_learned_in_one_scheme_applies_in_another() {
     let quick = engine("quick");
@@ -328,7 +328,7 @@ fn learning_is_on_by_default() {
     assert!(Options::default().learning);
 }
 
-/// 組字中給的前文由下一次組字用（plan〈介面〉）：學到的前一個字詞是組字開頭時的前文，和打分時
+/// 組字中給的前文由下一次組字用（architecture〈核心對殼〉）：學到的前一個字詞是組字開頭時的前文，和打分時
 /// 用的一樣。
 #[test]
 fn context_set_while_composing_does_not_change_what_this_composition_learns() {

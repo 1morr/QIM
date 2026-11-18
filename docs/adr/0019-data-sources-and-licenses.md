@@ -1,6 +1,6 @@
 # 碼表、詞庫與語料的取材：授權鏈不清的不用，非商業的只進可選資料包
 
-> ADR 草稿，還沒編號：arch-diet 票 04 從 plan §4.2〈詞庫〉、§4.3〈字級 bigram 與詞級 trigram〉、§4.4〈英文、簡繁與 emoji〉搬來，票 06 給使用者看過才編號寫進 `docs/adr/`。來源怎麼釘、各自取了什麼寫在 `data/sources.toml` 的註解，處理規則在 `crates/qim-databuild/src/`。
+來源怎麼釘、各自取了什麼寫在 `data/sources.toml` 的註解，處理規則在 `crates/qim-databuild/src/`。
 
 預設資料包只用授權鏈清楚、可以再散布的來源；每份資料包的 `LICENSE`、`NOTICE` 只寫它用到的來源（`ARCHITECTURE.md`〈資料包〉）。
 

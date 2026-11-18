@@ -1,6 +1,6 @@
 # 詞庫與語言模型的取捨與調參
 
-> ADR 草稿，還沒編號：arch-diet 票 04 從 plan §4.1–§4.4 搬來，票 06 給使用者看過才編號寫進 `docs/adr/`。規則本身由 `crates/qim-databuild/src/` 的程式與測試說明（`common_forms.rs`、`lexicon.rs`、`corpora.rs`、`bigram.rs`、`word_trigram.rs`、`emoji.rs`、`simplified.rs`）；這裡只留程式碼裡沒有的理由、量到的數字與被否決的做法。實驗與完整數字在各票的 Comments 與 `scripts/experiments/`。
+> 詞庫、字級 bigram、詞級 trigram、emoji 的取捨與調參。規則本身由 `crates/qim-databuild/src/` 的程式與測試說明（`common_forms.rs`、`lexicon.rs`、`corpora.rs`、`bigram.rs`、`word_trigram.rs`、`emoji.rs`、`simplified.rs`）；這裡只留程式碼裡沒有的理由、量到的數字與被否決的做法。實驗與完整數字在各票的 Comments 與 `scripts/experiments/`。
 
 ## 寫法：常見寫法、並存寫法照抄在建置端
 
@@ -16,7 +16,7 @@
 已知限制，使用者 2026-11-05 決定不修：
 
 - 另一種寫法生出的詞和同碼的詞搶詞頻（詞頻共用）。例如「到底幾時」打成「到底綫時」：「底綫」共用「底線」的詞頻 6616，壓過「到底｜幾時」；靠學習分。改成照字頻比例打折時，打少見寫法的碼反而出不了詞（「開啓」→「開船」），沒採用。
-- 簡體模式打單向生出的寫法（`nbta`「隨著」）出「随著」，不是「随着」。簡繁轉換照 OpenCC `hk2s`，沒有「著→着」；OpenCC 的 `tw2s` 有，但它的保護詞只 17 個，「土著」「原著」會變成「土着」（brief〈查證過的事實〉）。要修得讓簡繁資料包帶一份 essay 的詞表（多 LGPL、依賴詞庫），不做；打「隨着」的碼出「随着」。
+- 簡體模式打單向生出的寫法（`nbta`「隨著」）出「随著」，不是「随着」。簡繁轉換照 OpenCC `hk2s`，沒有「著→着」；OpenCC 的 `tw2s` 有，但它的保護詞只 17 個，「土著」「原著」會變成「土着」（`docs/research/facts-tables.md`）。要修得讓簡繁資料包帶一份 essay 的詞表（多 LGPL、依賴詞庫），不做；打「隨着」的碼出「随着」。
 
 ## 詞庫補詞的詞頻
 
@@ -41,5 +41,5 @@
 
 ## Consequences
 
-- 要改用放寬版當預設，得先把解開改成就地轉換、再在 iPhone 量一次（〈資料包整份解開進記憶體〉草稿）。
+- 要改用放寬版當預設，得先把解開改成就地轉換、再在 iPhone 量一次（ADR 0018）。
 - 換 rime-essay、OpenCC 或語料版本時，上面的數字會變；照 `docs/development.md`〈語料〉重看轉換與詞庫的差異。

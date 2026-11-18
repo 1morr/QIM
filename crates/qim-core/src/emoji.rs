@@ -1,4 +1,4 @@
-//! emoji 候選用的對照表（plan〈學習與排位〉〈英文、簡繁與 emoji〉）：字詞（繁體原文）→ 它的 emoji，好的在前。
+//! emoji 候選用的對照表（architecture〈資料包〉）：字詞（繁體原文）→ 它的 emoji，好的在前。
 
 use serde::{Deserialize, Serialize};
 

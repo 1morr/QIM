@@ -19,7 +19,7 @@ fn warnings(imported: &Imported) -> Vec<String> {
     imported.warnings.iter().map(ToString::to_string).collect()
 }
 
-/// 一份資料包：`manifest.json` 的內容與資料包檔的位元組（plan〈資料包 manifest〉），網頁 fetch 或從檔案、
+/// 一份資料包：`manifest.json` 的內容與資料包檔的位元組（architecture〈資料包〉），網頁 fetch 或從檔案、
 /// IndexedDB 讀來。建立時只讀 manifest；核對大小、sha256 與解開在 [`WebPack::verify`] 或交給
 /// `Session` 時（核心的 [`Pack::open`]）。JS 端叫 `Pack`。
 #[wasm_bindgen(js_name = Pack)]
@@ -83,7 +83,7 @@ impl WebPack {
     }
 }
 
-/// 更新索引裡要下載的一項（plan〈線上更新〉）：新版的 manifest 與資料包檔的位置。
+/// 更新索引裡要下載的一項（architecture〈資料包〉）：新版的 manifest 與資料包檔的位置。
 #[wasm_bindgen]
 pub struct PackUpdate(IndexEntry);
 
@@ -169,7 +169,7 @@ impl WebSession {
         })
     }
 
-    /// 換資料包（設定頁的切換、匯入、刪除，plan〈資料包 manifest〉）：參數同建構子。學習資料、選項與組字留著，
+    /// 換資料包（設定頁的切換、匯入、刪除，architecture〈資料包〉）：參數同建構子。學習資料、選項與組字留著，
     /// 組字照新的資料包重列候選；任一份核對不過時整組不換、原本的照用。
     #[wasm_bindgen(js_name = setPacks)]
     pub fn set_packs(&mut self, packs: Vec<WebPack>) -> Result<WebSnapshot, JsError> {
@@ -177,7 +177,7 @@ impl WebSession {
         Ok(self.session.refresh(&self.engine, &self.user).into())
     }
 
-    /// 無痕模式：開著時不學習（plan〈學習與排位〉）、不用前文（brief〈隱私與安全〉）。
+    /// 無痕模式：開著時不學習、不用前文（brief〈隱私與安全〉）。
     #[wasm_bindgen(js_name = setIncognito)]
     pub fn set_incognito(&mut self, on: bool) {
         self.set_options(|options| options.incognito = on);
@@ -240,7 +240,7 @@ impl WebSession {
             .map_err(js_error)
     }
 
-    /// 存一條常用語；`trigger` 是空字串時沒有觸發詞，只能從清單選（plan〈學習與排位〉）。同樣的文字再存
+    /// 存一條常用語；`trigger` 是空字串時沒有觸發詞，只能從清單選。同樣的文字再存
     /// 一次換上新的觸發詞。
     #[wasm_bindgen(js_name = addPhrase)]
     pub fn add_phrase(&mut self, text: &str, trigger: &str) -> Result<(), JsError> {
@@ -287,7 +287,7 @@ impl WebSession {
     }
 
     /// 今天的日期 `YYYY-MM-DD`（使用者當地的日曆日）：網頁在第一次學習前、之後每次使用者操作前給
-    /// （plan〈學習與排位〉 殼的日期契約），學到的條目記成最後使用的日期；核心不讀系統時間（architecture〈依賴規則〉）。
+    /// （殼的日期契約，architecture〈核心對殼〉），學到的條目記成最後使用的日期；核心不讀系統時間（architecture〈依賴規則〉）。
     #[wasm_bindgen(js_name = setToday)]
     pub fn set_today(&mut self, today: &str) -> Result<(), JsError> {
         self.user
@@ -295,13 +295,13 @@ impl WebSession {
         Ok(())
     }
 
-    /// 這台裝置的 id（網頁產生一次、存 `localStorage`），匯出時寫進檔頭（plan〈學習與排位〉）。
+    /// 這台裝置的 id（網頁產生一次、存 `localStorage`），匯出時寫進檔頭。
     #[wasm_bindgen(js_name = setDevice)]
     pub fn set_device(&mut self, id: &str) -> Result<(), JsError> {
         self.user.set_device(id).map_err(js_error)
     }
 
-    /// 使用者詞與學習計數匯出成 `# qim-userdict v3` 的 TSV（plan〈學習與排位〉），網頁存 `localStorage`、
+    /// 使用者詞與學習計數匯出成 `# qim-userdict v3` 的 TSV（architecture〈學習資料的格式〉），網頁存 `localStorage`、
     /// 下載成檔。
     #[wasm_bindgen(js_name = exportUserDict)]
     pub fn export_user_dict(&self) -> String {
@@ -325,14 +325,14 @@ impl WebSession {
         merge_text(&mut self.user.clone(), text)
     }
 
-    /// 匯入學習資料檔 `text`：合併進目前的（M4 票 17，plan〈學習與排位〉〈跨裝置合併〉），不合格式時整份不收、原本的
+    /// 匯入學習資料檔 `text`：合併進目前的（M4 票 17，ADR 0007），不合格式時整份不收、原本的
     /// 不動。兩個瀏覽器設定檔的同步就是各自匯出、匯入對方的檔。
     #[wasm_bindgen(js_name = mergeUserDict)]
     pub fn merge_user_dict(&mut self, text: &str) -> Result<WebMerged, JsError> {
         merge_text(&mut self.user, text)
     }
 
-    /// 從備份還原（plan〈學習與排位〉〈跨裝置合併〉，和合併的匯入分開）：取代目前的學習資料、留新的清空記號，備份的條目
+    /// 從備份還原（ADR 0007，和合併的匯入分開）：取代目前的學習資料、留新的清空記號，備份的條目
     /// 當成之後學到的；不合格式時整份不收、原本的不動。回傳略過的列（不認得的種類）。
     #[wasm_bindgen(js_name = restoreUserDict)]
     pub fn restore_user_dict(&mut self, text: &str) -> Result<Vec<String>, JsError> {
@@ -359,7 +359,7 @@ impl WebSession {
         Ok(report.into())
     }
 
-    /// 把詞表 `text` 的詞加進使用者詞（plan〈學習與排位〉）：Rime `.dict.yaml`、Gboard 個人字典、一行一詞。
+    /// 把詞表 `text` 的詞加進使用者詞：Rime `.dict.yaml`、Gboard 個人字典、一行一詞。
     /// 是加進去，不取代學習資料；整份讀不了時丟例外、什麼都不加。`shortcuts_as_triggers` 為真時
     /// Gboard 的快捷鍵設成觸發詞（預設不設，網頁的勾選框）。
     #[wasm_bindgen(js_name = importWordList)]
@@ -375,8 +375,7 @@ impl WebSession {
         Ok(report.into())
     }
 
-    /// 清空全部學習資料（使用者詞與學習計數），留清空記號：跨裝置合併時把清空傳到別台（plan〈學習與排位〉〈跨裝置
-    /// 合併〉）。今天與這台裝置的 id 留著。
+    /// 清空全部學習資料（使用者詞與學習計數），留清空記號：跨裝置合併時把清空傳到別台（ADR 0007）。今天與這台裝置的 id 留著。
     #[wasm_bindgen(js_name = clearUserDict)]
     pub fn clear_user_dict(&mut self) {
         self.user.clear();
@@ -531,7 +530,7 @@ impl WebSession {
             .collect()
     }
 
-    /// 給背景模型的重排要求（plan〈介面〉〈模型分層〉）；沒有組字、移到某一段改字時是 `undefined`。
+    /// 給背景模型的重排要求（architecture〈核心對殼〉）；沒有組字、移到某一段改字時是 `undefined`。
     #[wasm_bindgen(js_name = rerankRequest)]
     pub fn rerank_request(&mut self) -> Option<WebRerankRequest> {
         self.session
@@ -553,7 +552,7 @@ impl WebSession {
             .map(Into::into)
     }
 
-    /// 正在用的停鍵層模型的識別（`Session::set_reranker_id`，plan〈模型分層〉）：模式加上模型資料包；關掉重排或
+    /// 正在用的停鍵層模型的識別（`Session::set_reranker_id`，architecture〈核心對殼〉）：模式加上模型資料包；關掉重排或
     /// 沒有模型時是 `undefined`。換了就清掉停鍵結果快取、給舊模型的要求作廢，`undefined` 時不留快取。
     #[wasm_bindgen(js_name = setRerankerId)]
     pub fn set_reranker_id(&mut self, reranker_id: Option<String>) {
@@ -709,7 +708,7 @@ pub struct WebSnapshot {
     /// 英文（英文直通、英文模式或臨時英文）；候選列旁顯示目前狀態。
     #[wasm_bindgen(readonly)]
     pub ascii: bool,
-    /// 每次候選變動加一；和上次要求重排時不同，才再要求（plan〈模型分層〉）。
+    /// 每次候選變動加一；和上次要求重排時不同，才再要求（architecture〈核心對殼〉）。
     #[wasm_bindgen(readonly)]
     pub generation: u64,
     /// 觸控鍵盤要自動開 Shift（句首自動大寫，核心的 `auto_shift`，M4 票 24）；交給 [`WebLayout::set_auto_shift`]。
@@ -734,7 +733,7 @@ pub struct WebRerankRequest {
     pub scores: Vec<f64>,
 }
 
-/// 停鍵層的神經重排（`qim_neural::Reranker`，plan〈模型分層〉）：網頁在 Web Worker 裡建一個，主執行緒的
+/// 停鍵層的神經重排（`qim_neural::Reranker`，ADR 0005）：網頁在 Web Worker 裡建一個，主執行緒的
 /// `Session` 不碰它。JS 端叫 `Reranker`。
 #[wasm_bindgen(js_name = Reranker)]
 pub struct WebReranker(qim_neural::Reranker);
@@ -1042,7 +1041,7 @@ impl From<qim_core::Segment> for WebSegment {
     }
 }
 
-/// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根（plan〈輸入方案〉）。JS 端叫 `RadicalHints`。
+/// 字根提示：方案指名的字根提示資料包，查候選每個字的倉頡碼與字根。JS 端叫 `RadicalHints`。
 #[wasm_bindgen(js_name = RadicalHints)]
 pub struct WebRadicalHints {
     hints: RadicalHints,
@@ -1052,7 +1051,7 @@ pub struct WebRadicalHints {
 
 #[wasm_bindgen(js_class = RadicalHints)]
 impl WebRadicalHints {
-    /// 由字根提示資料包建立；`session` 的方案要指名字根提示（可以是另一份，plan〈資料包 manifest〉）。
+    /// 由字根提示資料包建立；`session` 的方案要指名字根提示（可以是另一份，architecture〈資料包〉）。
     #[wasm_bindgen(constructor)]
     pub fn new(pack: &WebPack, session: &WebSession) -> Result<WebRadicalHints, JsError> {
         let scheme = session.engine.scheme().clone();
@@ -1207,7 +1206,7 @@ fn when(device: &str, orientation: &str) -> Result<When, JsError> {
 
 #[wasm_bindgen(js_class = Layout)]
 impl WebLayout {
-    /// 讀佈局檔並依裝置與方向選版本；有錯誤（plan〈佈局：畫布模型〉）時失敗。
+    /// 讀佈局檔並依裝置與方向選版本；有錯誤（architecture〈佈局格式〉）時失敗。
     #[wasm_bindgen(constructor)]
     pub fn new(json: &str, device: &str, orientation: &str) -> Result<WebLayout, JsError> {
         let when = when(device, orientation)?;

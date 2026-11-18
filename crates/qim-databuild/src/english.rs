@@ -1,4 +1,4 @@
-//! AOSP LatinIME 的英文詞表 → 英文資料包的詞表（plan〈英文、簡繁與 emoji〉）。
+//! AOSP LatinIME 的英文詞表 → 英文資料包的詞表。
 //!
 //! 取 `dictionaries/en_US_wordlist.combined.gz`：LatinIME 建 `main_en_us.dict` 用的文字檔，
 //! 第一行是檔頭（`dictionary=main:en_us,…`），之後每個詞一行 ` word=<詞>,f=<0–255>,…`，

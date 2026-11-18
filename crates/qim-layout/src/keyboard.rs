@@ -1,5 +1,5 @@
 //! 殼的觸控鍵盤狀態：選到的佈局版本、目前頁、觸控 Shift，與點按之後要交給核心的輸入。
-//! 各平台殼共用，綁定只轉型別（architecture〈模組地圖〉、plan〈佈局：畫布模型〉，M2 票 03）。
+//! 各平台殼共用，綁定只轉型別（architecture〈模組地圖〉〈佈局格式〉，M2 票 03）。
 
 use crate::model::{Action, Key, KeyState, Layout, LayoutVariant, Page, Shift, When};
 use crate::spatial::{SpatialModel, Touch};

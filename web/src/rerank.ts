@@ -1,5 +1,5 @@
 /**
- * 停鍵層的重排（plan〈模型分層〉、ADR 0005、architecture〈平台殼〉）：停鍵 `STOP_MS` 後把核心的 `rerankRequest` 交給模型，
+ * 停鍵層的重排（ADR 0005、architecture〈平台殼〉）：停鍵 `STOP_MS` 後把核心的 `rerankRequest` 交給模型，
  * 回來的路徑名次經 `applyRerank` 套用；過期的由核心丟掉，打字不等它。模型是 Web Worker 裡的神經模型
  * （`neural-rerank.ts`，M3 票 11e），或測試用的假實作：延遲一段時間後回傳固定的名次。
  *
@@ -34,7 +34,7 @@ export function rerankMode(value: string): RerankMode {
 }
 
 /**
- * 告訴核心的停鍵層模型識別（`Session.setRerankerId`，plan〈模型分層〉）：模式，神經模型再加上模型資料包的
+ * 告訴核心的停鍵層模型識別（`Session.setRerankerId`，architecture〈核心對殼〉）：模式，神經模型再加上模型資料包的
  * manifest。核心在識別變了時清掉停鍵結果快取、給舊模型的要求作廢，`undefined`（關掉、沒有模型）時不留快取。
  */
 export function rerankerId(

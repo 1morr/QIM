@@ -1,4 +1,4 @@
-//! 語料清單（plan〈字級 bigram 與詞級 trigram〉）：每份語料用哪個來源的哪些檔、怎麼讀出文字、基準放哪個目錄、怎麼署名。
+//! 語料清單：每份語料用哪個來源的哪些檔、怎麼讀出文字、基準放哪個目錄、怎麼署名。
 //! 來源的版本、網址與 sha256 在 `data/sources.toml`。
 
 use std::fs::File;
@@ -73,7 +73,7 @@ impl Group {
     }
 }
 
-/// 前處理的字形轉換（plan〈字級 bigram 與詞級 trigram〉）：都轉成香港繁體，轉完再照 [`CommonForms`] 換回常見寫法。
+/// 前處理的字形轉換：都轉成香港繁體，轉完再照 [`CommonForms`] 換回常見寫法。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Conversion {
     /// 原文混有簡體（中文維基）：OpenCC `s2hk`。
@@ -145,7 +145,7 @@ pub struct Corpus {
     /// `sources.toml` 的 `[source.<id>]`。
     pub source_id: &'static str,
     pub group: Group,
-    /// bigram 與詞庫字頻的次數乘上的權重（plan〈字級 bigram 與詞級 trigram〉）。口語語料只有維基的約 1/127 句，
+    /// bigram 與詞庫字頻的次數乘上的權重（`docs/research/lexicon-and-model-tuning.md`）。口語語料只有維基的約 1/127 句，
     /// M1 票 12 在 dev 切分上掃 1–256 定為 64：口語集修正次數少約三成，維基集答錯多約 2%；
     /// 再往上口語只再好一點、維基退得更多（票 12 Comments）。
     pub weight: u64,
@@ -265,7 +265,7 @@ impl Corpus {
     }
 
     /// 已分詞的語料（HKCanCor）train 切分裡兩字以上的詞與次數（[`hkcancor::TrainWords`]）；
-    /// 沒分詞的語料是空的。詞庫用它補詞（plan〈詞庫〉）。
+    /// 沒分詞的語料是空的。詞庫用它補詞。
     pub fn train_words(
         &self,
         paths: &[PathBuf],

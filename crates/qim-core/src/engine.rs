@@ -43,7 +43,7 @@ pub struct Engine {
     /// 連打字集的字（碼表裡不是擴展區的字）：聯想只給連打打得出的字。
     continuous_chars: HashSet<char>,
     /// 詞級 trigram（[`Engine::with_word_trigram`]）：有掛上時 lattice 的靜態機率改用它，沒有統計的
-    /// 地方退回字級 bigram；`None` 只用字級 bigram（plan〈排序：同一把尺〉）。
+    /// 地方退回字級 bigram；`None` 只用字級 bigram（architecture〈候選的排位順序〉）。
     word_trigram: Option<WordTrigram>,
 }
 
@@ -57,11 +57,11 @@ pub(crate) struct Edge {
     pub text: String,
     /// 第一個字；它的分數看前一段的最後一個字，見 [`Engine::edge_score`]。
     first: char,
-    /// 不看前一段的部分（plan〈排序：同一把尺〉）：字是 −γ；詞是 β − γ 加上詞頻換算的詞內機率。
+    /// 不看前一段的部分（docs/research/ranking-parameters.md）：字是 −γ；詞是 β − γ 加上詞頻換算的詞內機率。
     inner: f64,
     /// 第一個字之後的 ln 機率：詞是詞頻換算的詞內機率，字是 0；`personal` 要的靜態機率用。
     rest: f64,
-    /// 個人機率（plan〈排序：同一把尺〉 的 `personal`）；沒學過是 0。
+    /// 個人機率（`personal`，docs/research/ranking-parameters.md）；沒學過是 0。
     personal: f64,
     /// 碼表標成簡體字的字（[`CodeEntry::simplified`]）；詞不是。
     simplified: bool,
@@ -88,7 +88,7 @@ pub(crate) struct ScoredSegment {
     pub source: SegmentSource,
     /// 這一段接在前一段後面的分數（[`Engine::edge_score`]），含學習加分。
     pub score: f64,
-    /// 其中 `personal` 的部分（plan〈排序：同一把尺〉）：學到的加分。
+    /// 其中 `personal` 的部分（docs/research/ranking-parameters.md）：學到的加分。
     pub learning: f64,
     /// 有這一段的學習計數。
     pub learned: bool,
@@ -108,7 +108,7 @@ pub(crate) struct Spanned {
 
 impl Engine {
     /// 方案 [`crate::Packs`] 指名詞庫、語言模型時要給，沒指名時要是 `None`。方案指名的是預設的那份，
-    /// 殼可以換成同種的另一份（設定頁的切換，plan〈資料包 manifest〉），所以不核對 id。
+    /// 殼可以換成同種的另一份（設定頁的切換，architecture〈資料包〉），所以不核對 id。
     pub fn new(
         scheme_pack: SchemePack,
         lexicon: Option<LexiconPack>,
@@ -176,7 +176,7 @@ impl Engine {
         })
     }
 
-    /// 掛上詞級 trigram 資料包（plan〈排序：同一把尺〉〈字級 bigram 與詞級 trigram〉）：lattice 的邊與整串的字詞的靜態機率改用它，
+    /// 掛上詞級 trigram 資料包（architecture〈資料包〉）：lattice 的邊與整串的字詞的靜態機率改用它，
     /// β、γ、`personal` 照舊；聯想仍用字級 bigram。方案指名詞級 trigram 時 [`Engine::open`] 一定要給。
     #[must_use]
     pub fn with_word_trigram(mut self, pack: WordTrigramPack) -> Self {
@@ -219,10 +219,10 @@ impl Engine {
         self.emoji.lookup(word)
     }
 
-    /// 整串輸入碼 `input` 的英文候選（排位規則 4，plan〈學習與排位〉）：剛好是詞表裡的完整單字、又長過
+    /// 整串輸入碼 `input` 的英文候選（排位規則 4，architecture〈候選的排位順序〉）：剛好是詞表裡的完整單字、又長過
     /// 方案一個字的最長碼時才有。不容錯、不補全；1–2 碼的英文字（`an`、`it`）和單字的碼撞得太常，
     /// macOS 速成也是第 3 碼起才出英文（黑箱 T7）。
-    /// 輸入碼有萬用鍵時沒有：萬用鍵在中文組字是比對模式，不當字母（plan〈英文、簡繁與 emoji〉）。
+    /// 輸入碼有萬用鍵時沒有：萬用鍵在中文組字是比對模式，不當字母（architecture〈資料包〉）。
     pub(crate) fn english_candidate(&self, input: &str) -> Option<&str> {
         (input.len() > usize::from(self.scheme.max_code_length) && !self.scheme.has_wildcard(input))
             .then(|| self.english.lookup(input))
@@ -230,8 +230,8 @@ impl Engine {
     }
 
     /// `text`（不分大小寫）是英文詞典裡、中文組字給得出的詞：整個詞都是方案的字母，排位規則 4 才比對得到。
-    /// 這樣的英文使用者詞由規則 4 出，不進中文組字的前綴補完（排位規則 5，plan〈學習與排位〉）；詞典裡含 `z`、
-    /// 撇號、連字號的詞（留給英文模式，plan〈英文、簡繁與 emoji〉）規則 4 給不出，學過的照樣補完。
+    /// 這樣的英文使用者詞由規則 4 出，不進中文組字的前綴補完（排位規則 5，architecture〈候選的排位順序〉）；詞典裡含 `z`、
+    /// 撇號、連字號的詞（留給英文模式，architecture〈資料包〉）規則 4 給不出，學過的照樣補完。
     pub(crate) fn in_english_dictionary(&self, text: &str) -> bool {
         let key = text.to_lowercase();
         self.scheme.spells(&key) && self.english.lookup(&key).is_some()
@@ -277,7 +277,7 @@ impl Engine {
         )
     }
 
-    /// 殼載入資料包的入口（plan〈資料包 manifest〉）：每份照它的 manifest 經 [`Pack::open`] 核對，依種類放到該放
+    /// 殼載入資料包的入口（architecture〈資料包〉）：每份照它的 manifest 經 [`Pack::open`] 核對，依種類放到該放
     /// 的位置，順序不拘。方案資料包一定要有，詞庫、語言模型照方案要不要（[`Engine::new`]），詞級
     /// trigram 也照方案要不要（只核對有沒有、不核對 id），簡繁、英文、emoji 可有可無；同一種兩份、
     /// 或給了字根提示、停鍵層的模型時拒絕。
@@ -367,7 +367,7 @@ impl Engine {
         }
     }
 
-    /// 一個詞的邊（plan〈排序：同一把尺〉）：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，
+    /// 一個詞的邊（architecture〈候選的排位順序〉）：`P(詞 | 前一字) ≈ P(第一字 | 前一字) × P_詞頻(詞) ÷ P(第一字)`，
     /// 第一個字之後由詞頻換算，所以詞頻仍分得出同碼的詞；再加 β − γ。
     fn word_edge(&self, user: SchemeUser<'_>, code: &str, start: usize, word: &Word) -> Edge {
         let ranking = &self.scheme.ranking;
@@ -388,7 +388,7 @@ impl Engine {
         }
     }
 
-    /// 一個使用者詞的邊（plan〈學習與排位〉）：沒有詞頻，詞內由字級 bigram 一字接一字估，不加 β；
+    /// 一個使用者詞的邊：沒有詞頻，詞內由字級 bigram 一字接一字估，不加 β；
     /// 只算一段，所以比拆成單字的路徑少扣 γ。
     fn user_word_edge(&self, user: SchemeUser<'_>, code: &str, start: usize, text: &str) -> Edge {
         let mut chars = text.chars();
@@ -439,7 +439,7 @@ impl Engine {
 
     /// 邊接在最後一個字是 `prev` 的部分路徑後面的分數；組字開頭接前文最後一字或句首（`CLAUSE_START`），
     /// `prev` 是 `None` 表示沒有統計可接、用 unigram（同 `Preceding::character`）。
-    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（plan〈排序：同一把尺〉）；`bigram` 是這條邊接在
+    /// 靜態機率接上前一字後才知道，`personal` 也在這裡算（docs/research/ranking-parameters.md）；`bigram` 是這條邊接在
     /// 前一個字詞後面的個人 bigram（[`crate::user::Following::probability`]），沒有是 0。
     /// 掛上詞級 trigram 時，靜態機率改用它（退回現行打分），`before` 是前面兩段的編號。
     pub(crate) fn edge_score(
@@ -539,7 +539,7 @@ impl Engine {
         }
     }
 
-    /// 組字接在前文後面時，開頭的字要接的前一字（plan〈排序：同一把尺〉）；`last` 是前文的最後一字（繁體，
+    /// 組字接在前文後面時，開頭的字要接的前一字（architecture〈候選的排位順序〉）；`last` 是前文的最後一字（繁體，
     /// 簡體模式由呼叫端轉回），空的前文是 `None`。bigram 只在句內訓練（句子以不是字母也不是數字
     /// 的字元分開），所以照切句的規則：前文以字結尾時是那個字；以標點、空白或符號結尾，或是空的
     /// （輸入框的開頭）時是句首 [`CLAUSE_START`]。語言模型裡沒有它的統計（英文、數字、罕用字，
@@ -549,7 +549,7 @@ impl Engine {
         self.language_model.has_statistics(last).then_some(last)
     }
 
-    /// 詞庫裡以 `prefix` 開頭、比它長的詞與它的 ln unigram，依文字排序（聯想用，plan〈排序：同一把尺〉）。
+    /// 詞庫裡以 `prefix` 開頭、比它長的詞與它的 ln unigram，依文字排序（聯想用，architecture〈候選的排位順序〉）。
     pub(crate) fn words_starting_with<'a>(
         &'a self,
         prefix: &'a str,
@@ -643,7 +643,7 @@ impl Engine {
     }
 
     /// 有萬用鍵的碼 `pattern`（已去掉分隔記號，`cuts` 是分隔記號的位置，見 [`Engine::exact`]）的
-    /// 字、詞與使用者詞（brief〈功能分級〉、plan〈輸入方案〉）：每個萬用鍵剛好代方案的一個鍵，對得上的實際的碼
+    /// 字、詞與使用者詞（brief〈功能分級〉）：每個萬用鍵剛好代方案的一個鍵，對得上的實際的碼
     /// 由 [`Engine::matching_codes`] 列出。字跨各個碼依字頻取最高的 `limit` 個（同 [`by_frequency`]）
     /// 與學過的；同一個字詞對到幾個碼時只留第一個。學習計數與個人機率照實際的碼查。
     ///
@@ -745,7 +745,7 @@ impl Engine {
         codes
     }
 
-    /// 學習記的碼（plan〈學習與排位〉）：輸入碼 `code`（已去掉分隔記號）有萬用鍵時換成 `text` 實際的碼
+    /// 學習記的碼：輸入碼 `code`（已去掉分隔記號）有萬用鍵時換成 `text` 實際的碼
     /// （[`Engine::matched_code`]），都對不上時是 `None`；沒有萬用鍵時照原樣。
     pub(crate) fn learned_code(&self, user: &UserModel, code: &str, text: &str) -> Option<String> {
         if !self.scheme.has_wildcard(code) {
@@ -799,7 +799,7 @@ impl Engine {
     }
 
     /// 結束在 `input` 結尾的 lattice 邊：每個起點的碼表字取字頻最高的 beam 個與學過的，
-    /// 加上詞庫的詞與使用者詞。擴展區的字不進 lattice（plan〈排序：同一把尺〉）。邊不從分隔記號開始；
+    /// 加上詞庫的詞與使用者詞。擴展區的字不進 lattice（architecture〈候選的排位順序〉）。邊不從分隔記號開始；
     /// 往回找的上限算的是字母數，分隔記號不算。
     pub(crate) fn edges_ending(&self, user: &UserModel, input: &str) -> Vec<Edge> {
         let user = user.for_scheme(&self.scheme.id);
@@ -950,7 +950,7 @@ fn separator_cuts(input: &str) -> Vec<usize> {
 }
 
 /// 字序：字頻高的在前；字頻相同（含都沒有字頻）時照碼表原本的順序，也就是建置端排好的
-/// 年級 → Big5（plan〈速成碼表〉）。擴展區的字仍在連打字集之後。
+/// 年級 → Big5（architecture〈資料包〉）。擴展區的字仍在連打字集之後。
 fn by_frequency(code_table: &CodeTable, lexicon: &Lexicon) -> CodeTable {
     CodeTable::from_entries(code_table.iter().map(|(code, entries)| {
         let mut entries = entries.to_vec();

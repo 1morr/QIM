@@ -1,6 +1,6 @@
 # 聯想由詞庫、字級 bigram 與個人 bigram 現算，數字鍵選、空白不選
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈介面〉〈聯想〉與〈排序：同一把尺〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。行為由 `crates/qim-core/tests/association.rs`、`backspace_undo.rs` 說明，打分寫在 `crates/qim-core/src/association.rs`。
+行為由 `crates/qim-core/tests/association.rs`、`backspace_undo.rs` 說明，打分寫在 `crates/qim-core/src/association.rs`。
 
 上屏組字之後，候選列換成接下來可能要打的字詞（最多一頁），分數是接上那個聯想的路徑比不接時多出多少，用同一把尺。
 

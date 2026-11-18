@@ -53,10 +53,10 @@ pub use taps::{
 /// 基準用的資料包，由 `cargo xtask data` 產生；方案指名的詞庫在 [`PACKS`] 下的 `<id>/<id>.pack`。
 pub const QUICK_PACK: &str = "build/packs/quick/quick.pack";
 pub const PACKS: &str = "build/packs";
-/// 英文資料包：不由方案指名、各方案共用（plan〈英文、簡繁與 emoji〉）；預設選項開著英文候選，基準照網頁掛上。
+/// 英文資料包：不由方案指名、各方案共用（architecture〈資料包〉）；預設選項開著英文候選，基準照網頁掛上。
 /// WebAssembly 的延遲腳本依檔頭魔數分辨各資料包，不靠參數的位置。
 pub const ENGLISH_PACK: &str = "build/packs/aosp-en-us/aosp-en-us.pack";
-/// emoji 資料包：不由方案指名、各方案共用（plan〈英文、簡繁與 emoji〉）；預設選項開著 emoji 候選，基準照網頁掛上，
+/// emoji 資料包：不由方案指名、各方案共用（architecture〈資料包〉）；預設選項開著 emoji 候選，基準照網頁掛上，
 /// 量得到 emoji 把正解擠到下一頁的修正次數。
 pub const EMOJI_PACK: &str = "build/packs/cldr-emoji-yue-hant/cldr-emoji-yue-hant.pack";
 pub const FIXED: &str = "bench/fixed.tsv";
@@ -400,7 +400,7 @@ fn score_typo_set(engine: &Engine, name: &str, items: &[Item]) -> SetResult {
     }
 }
 
-/// dev 模式的結果：調參用（plan〈排序：同一把尺〉〈首選字基準〉），只報、不比 baseline，不跑個人集與每鍵延遲。
+/// dev 模式的結果：調參用（`docs/research/ranking-parameters.md`、`docs/development.md`〈dev 切分調參〉），只報、不比 baseline，不跑個人集與每鍵延遲。
 #[derive(Debug)]
 pub struct DevOutcome {
     pub packs: Vec<LoadedPack>,

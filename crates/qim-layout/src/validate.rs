@@ -1,4 +1,4 @@
-//! 佈局檔的兩級驗證（plan〈佈局：畫布模型〉、brief〈佈局與編輯器〉）：錯誤不能存檔，警告可以；
+//! 佈局檔的兩級驗證（architecture〈佈局格式〉、brief〈佈局與編輯器〉）：錯誤不能存檔，警告可以；
 //! 內建佈局另加嚴格檢查（architecture〈測試策略〉）。
 
 use std::collections::{HashMap, HashSet};

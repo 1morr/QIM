@@ -289,7 +289,7 @@ textarea {
 	transform: translateX(-50%);
 	/* 寬度以畫面寬為上限，高度不超過畫面高的 45%（--aspect 是佈局版本畫布的寬高比，touch.ts 設）。 */
 	width: min(100%, calc(45vh * var(--aspect, 1.8)));
-	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（plan〈佈局：畫布模型〉）；照 Gboard 實測（M1 票 27）。 */
+	/* 鍵盤底色不在佈局格式裡，由殼依淺色或深色決定（architecture〈佈局格式〉）；照 Gboard 實測（M1 票 27）。 */
 	background: light-dark(#ededf6, #17191f);
 	touch-action: none;
 	user-select: none;
@@ -474,7 +474,7 @@ body:has(#keyboard:not([hidden])) {
 	font-size: 0.875rem;
 }
 
-/* 匯入前的確認（plan〈學習與排位〉：匯入取代整份），用頁面上的區塊，不用瀏覽器原生對話框。 */
+/* 匯入前的確認（architecture〈學習資料的格式〉：匯入取代整份），用頁面上的區塊，不用瀏覽器原生對話框。 */
 #confirm-import {
 	margin: 0;
 	padding: 0.5rem;

@@ -1,8 +1,8 @@
-//! 字級 bigram 的訓練（plan〈字級 bigram 與詞級 trigram〉）：各語料 train 切分的句子 → interpolated Kneser-Ney →
+//! 字級 bigram 的訓練：各語料 train 切分的句子 → interpolated Kneser-Ney →
 //! 依次數剪枝 → [`LanguageModel`]。
 //!
 //! - 一行一句，bigram 只數句內相鄰的兩字，不跨句、不加句尾記號。句首另算一列：每句的第一字
-//!   接在 [`CLAUSE_START`] 後面，前文以標點結尾時組字開頭的字用它（plan〈排序：同一把尺〉）；它的次數不算進
+//!   接在 [`CLAUSE_START`] 後面，前文以標點結尾時組字開頭的字用它（architecture〈候選的排位順序〉）；它的次數不算進
 //!   字次數、`N1+(•w)` 與 `D`，所以其他字的機率和沒有它時相同。不知道前文時組字開頭的字用
 //!   unigram（[`CharModel::start`]）：使用者的組字多半不在句首。
 //! - `P(w | v) = max(c(v,w) − D, 0) ÷ c(v) + D × N1+(v•) ÷ c(v) × P_cont(w)`，
@@ -23,10 +23,10 @@ use qim_core::{CLAUSE_START, CharModel, LanguageModel};
 
 use crate::common_forms::BothForms;
 
-/// 剪枝門檻：bigram 出現至少這麼多次才留下（plan〈字級 bigram 與詞級 trigram〉：資料包 ≤ [`MAX_BYTES`]）。
+/// 剪枝門檻：bigram 出現至少這麼多次才留下（資料包 ≤ [`MAX_BYTES`]）。
 pub const MIN_COUNT: u64 = 2;
 
-/// 資料包大小上限（plan〈字級 bigram 與詞級 trigram〉，Gboard 文獻的 5–10 MB 預算）；`--verify` 檢查。
+/// 資料包大小上限（Gboard 文獻的 5–10 MB 預算）；`--verify` 檢查。
 pub const MAX_BYTES: usize = 8_000_000;
 
 /// 各語料的字與相鄰字的次數，已乘上語料權重。

@@ -75,7 +75,7 @@ GPL-3.0-or-later，QIM 只取做法、不抄程式碼（ADR 0006）。
   - Windows：TSF DLL 只轉發按鍵、寫入文件；引擎在 `qingjian-server.exe`，走命名管道，訊息是長度前綴 JSON（`apps/windows/README.md:12-39`）。管道放行 Everyone、AppContainer 與 Low 完整性（`apps/windows/server/src/ipc/pipe.rs:37`）。
   - Linux：Rust Server 加 Unix socket（0700 目錄、0600 socket、`SO_PEERCRED` 核對使用者）；前端 Fcitx5、Fcitx4 是 C++，IBus（0.3.2 新增）是 Rust（`apps/linux/server/src/ipc/mod.rs:38,69`）。
   - Android：Kotlin `InputMethodService` 加 JNI，自繪鍵盤，標為預覽版（`docs/user/platforms/android.md:4`）。
-  - iOS、網頁：沒有，iOS 仍在路線圖未勾選項（`docs/plan/roadmap.md:176`）。
+  - iOS、網頁：沒有，iOS 仍在路線圖未勾選項（`docs/` 下的 `plan/roadmap.md:176`）。
 - 候選窗由 `qingjian-render`（主題格式、場景樹）加 `bamboo-slip`（tiny-skia、cosmic-text、taffy、resvg 的自繪引擎）畫成位圖，各平台只貼圖（`crates/qingjian-render/src/lib.rs:1-8`）。Linux 的候選面板仍由 Fcitx 畫。
 - 新增 crate（相對 `3d5fd2d`）：`qingjian-clipboard`、`qingjian-clipboard-sync`、`qingjian-code`、`bamboo-slip-i18n`（設定程式七種介面語言）。
 
@@ -102,7 +102,7 @@ GPL-3.0-or-later，QIM 只取做法、不抄程式碼（ADR 0006）。
 - 兩個模型都在停鍵後非同步跑：防抖 macOS 80 ms（`apps/macos/src/host/model/rescore_monitor.rs:11`）、Windows 30 ms，輪詢 20 ms，模型交結果時另有 wake 回調不等輪詢。作者推算 Windows 停鍵到首選換好，中位數由 154 ms 降到 84 ms，120 ms 內換好的比例由 3% 升到 93%（`crate-notes.md:252-256`）。
 - 知意要過兩輪後台：先出字分佈（中位約 15 ms），再選詞打分（約 23 ms）。總分 = 模型 log softmax + 語言模型分 + 位置先驗，後兩項各乘 0.5（掃過 0.25–1，0.5 最好）。位置先驗取自 1.26 萬次上屏位置的分佈，第 1 位 −0.07、第 2 位 −3.44（`engine/choice/mod.rs:57-62`、`crate-notes.md:326-329`）。
 - 防止干擾只做了兩件事：使用者翻過頁或動過高亮就不換（`apps/macos/src/host/model/mod.rs:202-205`）；每個請求帶序號，只認最新的（`docs/notes/neural-rescoring.md:82-85`）。
-- 沒處理「首選剛換掉就按空白」：作者在 FreeBSD 端到端測 `firefoxliulanqi`，修好「只認最新」後 9 遍仍有 1 遍按空白時整句還沒換上來，上屏成「勠」（`docs/plan/todo.md:44-45`）。
+- 沒處理「首選剛換掉就按空白」：作者在 FreeBSD 端到端測 `firefoxliulanqi`，修好「只認最新」後 9 遍仍有 1 遍按空白時整句還沒換上來，上屏成「勠」（`docs/` 下的 `plan/todo.md:44-45`）。
 - 知意不參與的候選：英文候選另外比；糾錯產生的備選不進重排，否則 `suran` 的糾錯備選「虽然」會被頂到使用者打對的「肃然」前面（`engine/choice/mod.rs:117-125`）。
 
 ### 4.3 詞圖與學習
@@ -197,7 +197,7 @@ GPL-3.0-or-later，QIM 只取做法、不抄程式碼（ADR 0006）。
 
 ### 10.2 可取的做法
 
-- 神經分只決定名次，不寫回分數（已在 plan §2.7）。
+- 神經分只決定名次，不寫回分數（已在 ADR 0005）。
 - 請求帶序號、只認最新；模型交結果用 wake 回調通知殼，不靠輪詢。
 - 糾錯「預設相信使用者」：原樣每段都讀得通就不糾，糾正只當備選；鄰鍵替換與非鄰鍵分開，後者交給模糊規則。
 - 學習加分取對數並封頂；同碼選過的優先於語言模型分。
@@ -220,7 +220,7 @@ GPL-3.0-or-later，QIM 只取做法、不抄程式碼（ADR 0006）。
 - 「P2C 自由生成未進產品」：已是通变，生成為主，6 音節以上排首選。
 - 沒提知意：它是目前推薦的模型，作用在首選。
 - 「停鍵 80 ms」：只剩 macOS，Windows 30 ms。
-- 「56 MB fp16、Metal 首次編譯 12 秒」：12 秒是早期數字，2026-09-12 裝機實測 102 ms（`docs/plan/todo.md:79`）；模型改為可選下載、預設關閉，知微已下線。
+- 「56 MB fp16、Metal 首次編譯 12 秒」：12 秒是早期數字，2026-09-12 裝機實測 102 ms（`docs/` 下的 `plan/todo.md:79`）；模型改為可選下載、預設關閉，知微已下線。
 - `bamboo-slip` 雙授權：已查清，見 §9。
 
 ## 12. 未查證

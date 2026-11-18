@@ -102,7 +102,7 @@ fn learning() -> ExitCode {
     }
 }
 
-/// dev 模式：`--set <鍵>=<值>` 可重複，暫時蓋掉方案檔 `[ranking]` 的值（調參用，plan〈排序：同一把尺〉）。
+/// dev 模式：`--set <鍵>=<值>` 可重複，暫時蓋掉方案檔 `[ranking]` 的值（調參用，`docs/research/ranking-parameters.md`）。
 fn dev(args: &[String], lexicon: Option<&str>) -> ExitCode {
     let mut overrides = Vec::new();
     let mut rest = args.iter();

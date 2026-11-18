@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 
 /**
- * 資料包線上更新的來源（plan〈線上更新〉）：GitHub 上 tag `packs` 那個 release 的檔案（不用 `latest`：App 的
+ * 資料包線上更新的來源（`docs/development.md`〈線上更新的 release〉）：GitHub 上 tag `packs` 那個 release 的檔案（不用 `latest`：App 的
  * release 也會發在同一個 repo）。環境變數 `QIM_PACK_UPDATE_URL` 可換（e2e 換成本機的靜態伺服器），
  * 結尾要有 `/`。
  */

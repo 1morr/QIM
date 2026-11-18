@@ -1,6 +1,6 @@
 # 學習一年沒用就停用、不刪；日期由殼給，不知道就留空
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈學習與排位〉〈今天的日期〉〈學習的時限〉〈條目上限〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。行為由 `crates/qim-core/tests/date.rs`、`learning.rs` 說明；殼的日期契約在 `ARCHITECTURE.md`〈核心對殼〉。
+行為由 `crates/qim-core/tests/date.rs`、`learning.rs` 說明；殼的日期契約在 `ARCHITECTURE.md`〈核心對殼〉。
 
 學到的每個條目記最後使用的日期。一年（365 天）沒用的條目停用：不給個人分、不算排位規則 2、3，自動造詞不進 lattice，個人 bigram 與英文使用者詞當作沒學過；手動加詞與常用語一直有效。日期是殼用 `UserModel::set_today` 給的使用者當地日曆日；殼沒給過時學到的條目沒有日期（`None`），時限跳過它們。實體刪除只在條目到上限時淘汰，最舊的（多半就是停用的）先刪。
 
