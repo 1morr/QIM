@@ -1,6 +1,6 @@
 # 資料包：整份解開進記憶體、manifest 放在檔外、經 GitHub Releases 的固定 tag 線上更新
 
-> ADR 草稿，還沒編號：arch-diet 票 04 從 plan 的〈碼表與資料管線〉開頭、〈資料包 manifest〉〈線上更新〉搬來，票 06 把原本兩份（格式與 manifest、線上更新）併成這一份，使用者確認後才編號寫進 `docs/adr/`。契約本身在 `ARCHITECTURE.md`〈資料包〉，發佈步驟在 `docs/development.md`〈線上更新的 release〉。
+契約本身在 `ARCHITECTURE.md`〈資料包〉，發佈步驟在 `docs/development.md`〈線上更新的 release〉。
 
 ## 格式與 manifest
 

@@ -1,6 +1,6 @@
 # 欄位類型由殼聚焦時給；email、網址、密碼欄預設英文直通
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈介面〉〈欄位類型〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。行為由 `crates/qim-core/tests/field_kind.rs`、`crates/qim-layout/tests/number_page.rs`、`web/test/field.test.ts` 說明。
+行為由 `crates/qim-core/tests/field_kind.rs`、`crates/qim-layout/tests/number_page.rs`、`web/test/field.test.ts` 說明。
 
 殼每次聚焦輸入框時呼叫 `Session::set_field(FieldKind)`。它是每個欄位的資訊、不是使用者的設定，所以不放在 `Options`：殼改設定時讀出 `options()` 改一項，放進去就分不出「換了欄位」。分法照 Android `EditorInfo.inputType` 的類別與變體（事實 P24）：`Text`、`Email`、`Url`、`Number`、`Password`；iOS 對應 `keyboardType`（`.emailAddress`、`.URL`、數字類）與 `isSecureTextEntry`；網頁照 Chrome 轉給 Android 的規則從 `input` 的 `type` 與 `inputmode` 讀。
 

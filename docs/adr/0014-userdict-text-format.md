@@ -1,6 +1,6 @@
 # 學習資料匯出成帶版本的 TSV，每列有種類欄、未知種類略過
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈學習與排位〉〈匯出格式〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。欄位與解析規則寫在 `crates/qim-core/src/user/format.rs`，`crates/qim-core/tests/user_dict.rs` 逐條測；版本與相容規則在 `ARCHITECTURE.md`〈學習資料的格式〉。這裡記的是格式為什麼長這樣。
+欄位與解析規則寫在 `crates/qim-core/src/user/format.rs`，`crates/qim-core/tests/user_dict.rs` 逐條測；版本與相容規則在 `ARCHITECTURE.md`〈學習資料的格式〉。這裡記的是格式為什麼長這樣。
 
 學習資料（`UserModel::export`）是對外格式：換機、備份、同步都靠它（brief〈版本與更新〉），寫成純文字：UTF-8、Tab 分隔、`\n` 換行，第一行 `# qim-userdict v<版本>`，接著檔頭的 metadata 行 `#@/key<Tab>value`，再來每列第一欄是種類（`entry`、`bigram`、`english`、`deleted`）。
 

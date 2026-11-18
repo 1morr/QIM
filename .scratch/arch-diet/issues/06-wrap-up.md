@@ -1,6 +1,6 @@
 # 06: §8 歸位、改引用、刪掉 plan
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01, 02, 03, 04, 05
 讀: `.scratch/arch-diet/spec.md`；plan 剩下的全部；`AGENTS.md`；`docs/agents/`；roadmap；brief；M4 還沒做的票
 
@@ -12,7 +12,7 @@ Blocked by: 01, 02, 03, 04, 05
 
 - [x] `docs/plan.md` 已刪；`ARCHITECTURE.md` 不超過 15,000 字（`python3 scripts/check_docs.py` 會擋）。
 - [x] 除了已封存的里程碑，`grep -rn "plan §\|docs/plan.md\|plan〈"` 沒有結果。
-- [ ] 使用者讀過 `ARCHITECTURE.md` 並回覆可以（回覆記在 Comments）。
+- [x] 使用者讀過 `ARCHITECTURE.md` 並回覆可以（回覆記在 Comments）。
 - [x] Comments 有對照表：這張票負責的 plan 每一段 → 新位置或刪掉的理由。
 - [x] `cargo xtask check --fast` 綠燈。
 
@@ -152,3 +152,7 @@ Session 紀錄：2026-11-18 plan §8 歸位到 `ARCHITECTURE.md`〈風險與回�
 決定：十、`bench --check` 的時間不重量，維持「約 3 分鐘」（使用者同意）
 等使用者：票 06 的工作在分支 `1morr/ad06`（worktree `<repo 旁的 workspaces>/QIM/ad06`），還沒合併：讀那裡的 `ARCHITECTURE.md`，並回答那份票 Comments 裡的十題清單（11 份 ADR 草稿要不要編號、識別符表要不要搬進 `GLOSSARY.md`、照程式碼現況改寫的地方等）；回答後協調者叫同一個 session 收尾再合併
 決定：同上一則，使用者回覆「都可以，按你建議」：`ARCHITECTURE.md` 可以，十題照建議（使用者同意）
+Session 紀錄：2026-11-18 照使用者同意收尾：11 份草稿編成 ADR 0009–0019、刪掉 `adr-drafts/`，〈識別符〉表併進 `GLOSSARY.md` 各詞條，兩張小票排進 roadmap M5 開工
+決定：ADR 草稿的檔頭只留「行為由哪些測試說明」這類指向，拿掉草稿出處；`ARCHITECTURE.md` 的〈核心對殼〉〈學習資料的格式〉〈資料包〉連到新 ADR（Agent 定）
+決定：表裡在 `GLOSSARY.md` 沒有詞條的名詞（重排識別、原樣讀法、實體鍵位、讀回自己的存檔等）併進最相關的詞條，不新開詞條（Agent 定）
+決定：第七、八題同意開的兩張票寫進 roadmap〈M5 觸控鍵盤與設定〉，M5 開工時拆，不在 arch-diet 開新票（Agent 定）

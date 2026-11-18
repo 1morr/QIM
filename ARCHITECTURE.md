@@ -59,44 +59,7 @@ flowchart LR
 
 ### 識別符
 
-程式碼識別符用英文，對應 `GLOSSARY.md` 的詞：
-
-| 名詞 | 識別符 | 名詞 | 識別符 |
-| --- | --- | --- | --- |
-| 輸入方案 | `Scheme` | 候選 / 首選 | `Candidate` / `top` |
-| 輸入碼 | `input` | 組字 | `Composition` |
-| 速成碼 / 倉頡碼 | `QuickCode` / `CangjieCode` | 上屏 | `commit` |
-| 碼表 / 詞庫 | `CodeTable` / `Lexicon` | 字根提示 | `RadicalHint` |
-| 連打 | `continuous` | 英文候選 | `EnglishCandidate` |
-| 使用者詞 / 觸發詞 | `UserWord` / `Trigger` | 聯想 | `Association` |
-| 自動造詞 | `AutoPhrase` | 無痕模式 | `Incognito` |
-| 常用語 | `Phrase` | 詞表匯入 | `import_word_list`（`WordList…`） |
-| 個人 bigram / 學習（開關） | `Bigrams` / `Options::learning` | 英文使用者詞 | `EnglishUserWords`（`Options::english_user_words`） |
-| 核心 / 平台殼 | `core` / `Shell` | 佈局 / 資料包 | `Layout` / `…Pack`（方案資料包 `SchemePack`） |
-| 首選字基準 | `TopChoiceBench` | 修正次數 | `correction_count` |
-| 分段 | `Segment` | 佈局版本 | `LayoutVariant` |
-| 個人模型 | `UserModel` | 空間模型 | `SpatialModel` |
-| 重排 | `Rerank` | 譯詞 | `Gloss` |
-| 容錯 | 四種修正沒做、沒有識別符；速成的容錯是鄰鍵讀法（下面） | 萬用鍵 | `Wildcard` |
-| 退格撤銷 / 動作 | `Undo`（`Session::expire_undo`） / `Action` | 撤銷學習 | `forget`（`Session::forget`、`UserModel::forget`） |
-| 連打字集 / 擴展區 | `continuous` / `extension` | 目前分段 | `focus` |
-| 英文直通 / 臨時英文 | `ascii` / `inline` | 分隔記號 | `SEPARATOR` |
-| 簡體模式 / 簡體字排後 | `Options::simplified` / `simplified_after_traditional` | 簡體字（碼表的標記） | `CodeEntry::simplified` |
-| emoji 候選 | `emoji_candidates`（對照表 `EmojiTable`） | manifest / 資料包種類 | `Manifest` / `PackKind` |
-| 使用中的資料包 | `active`（網頁 `activeIds`） | 更新索引 | `PackIndex`（一項 `IndexEntry`） |
-| 線上更新 | `update`（網頁 `updatePacks`） | 資料包的來源（內建、匯入、線上更新） | `PackOrigin`（`builtin`、`imported`、`downloaded`） |
-| 粵典詞庫 / 粵典的詞頭 | `quick-lexicon-words-hk`（`WORDS_HK_LEXICON_ID`）/ `headwords`（`words_hk.rs`） | 預設詞庫 | 方案 `[packs] lexicon` 指名的那份（`quick-lexicon`） |
-| 停鍵層模型（資料包） | `ModelPack`（種類 `model`，id `zh-hant-neural-rerank`） | 神經重排 | `qim_neural::Reranker` |
-| 最後使用的日期 / 今天的日期 | `last_used` / `UserModel::set_today`（型別 `Date`） | 裝置 id | `device`（`UserModel::set_device`） |
-| 學習的時限 / 最後整串上屏的日期 | `EXPIRY_DAYS` / `last_commit_date` | 條目上限 | `Limits`（`UserModel::set_limits`） |
-| 停鍵結果快取 | `RerankCache`（`RERANK_CACHE_LIMIT`、`Inspection::rerank_cached`） | 重排識別（殼正在用的停鍵層模型） | `Session::set_reranker_id`（網頁 `rerankerId`） |
-| 按鍵機率 | `Weights`（觸控 `Key::Weighted`、實體鍵盤 `Key::Physical`、`Inspection::key_weights`、`qim_layout::Output::Weighted`） | 點擊位置 | `qim_layout::Touch` |
-| 鄰鍵讀法 | `Options::neighbor_readings`（網頁 `setNeighborReadings`）、模組 `neighbor`、`Engine::neighbor_edges_ending`、`InspectedCandidate::neighbor` | 原樣讀法 | `Reading::Literal`（鄰鍵讀法的 lattice 是 `Reading::Neighbor`） |
-| 鄰鍵先驗 | `qim_layout::PhysicalModel` | 實體鍵位 | `KeyboardEvent.code`（網頁綁定 `Session.pressCode`） |
-| 各台的次數 | `Tally`（一台一格 `Cell`） | 墓碑 / 墓碑表 | `Tombstone` / `graveyard`（匯出種類 `deleted`） |
-| 跨裝置合併 | `UserModel::merge`（結果 `Merged`，網頁 `mergeUserDict`） | 讀回自己的存檔 | `UserModel::replace_learning`（網頁 `loadUserDict`） |
-| 清空記號 | `Cleared`（`UserModel::clear`，網頁 `clearUserDict`） | 從備份還原 | `UserModel::restore`（網頁 `restoreUserDict`） |
-| 打錯碼的集合（含打錯碼 / 觸控模擬） | `typo` / `touch`（`qim_databuild::typo`、`qim_bench::parse_typo`、`parse_touch`） | 原樣正確卻被改錯 | `false_corrections`（`qim_bench::TypoStats`） |
+程式碼識別符用英文，名詞與識別符的對照寫在 `GLOSSARY.md` 各詞條的「程式碼裡叫 …」。
 
 ## 依賴規則
 
@@ -127,11 +90,11 @@ flowchart LR
 殼把事件交給 `Session`、拿回一份完整的 `Snapshot`，只負責畫（同 librime 的 `RimeApi`、fcitx5 的 InputContext）。
 
 - `Engine` 是方案加資料包、不可變，殼建一個給各輸入框的 `Session` 共用；`UserModel` 是學習資料，存檔歸殼；`Session` 是一個輸入框的組字狀態。
-- 殼把鍵碼轉成 `Key`；綁定收不了帶資料的列舉時用 `Key::parse` 收「種類 + 值」。觸控與實體鍵盤的按鍵機率由 `qim-layout` 算、殼轉交，`qim-core` 不知道佈局。只改殼畫面、不動組字的鍵由殼攔下。
+- 殼把鍵碼轉成 `Key`；綁定收不了帶資料的列舉時用 `Key::parse` 收「種類 + 值」。觸控與實體鍵盤的按鍵機率由 `qim-layout` 算、殼轉交（ADR 0011），`qim-core` 不知道佈局。只改殼畫面、不動組字的鍵由殼攔下。
 - `Snapshot.handled` 為假時殼把鍵交還宿主，有 `delete_before`、`commit` 時先照做：先刪游標前 `delete_before` 個 Unicode scalar，再上屏 `commit`（ADR 0008）。
-- 殼給的狀態：欄位類型用 `set_field`（不在 `Options` 裡），游標前的文字用 `set_context`、給不出時 `clear_context`，何時給見〈平台殼〉；改設定是讀 `options()` 改一項再 `set_options`，組字中接著 `refresh`；裝置 id 用 `UserModel::set_device`，一次安裝一個。
+- 殼給的狀態：欄位類型用 `set_field`（不在 `Options` 裡），游標前的文字用 `set_context`、給不出時 `clear_context`，何時給見〈平台殼〉（ADR 0009、0010）；改設定是讀 `options()` 改一項再 `set_options`，組字中接著 `refresh`；裝置 id 用 `UserModel::set_device`，一次安裝一個。
 - 核心不讀時鐘，時間由殼給：每次使用者操作前 `UserModel::set_today`（當地日曆日，第一次學習前一定要給）；可能學到東西的動作後從頭計 3 秒，到了呼叫 `expire_undo`；每個按鍵、點擊之前（不送字元的修飾鍵除外）從頭計 1100 ms，到了呼叫 `expire_double_space`；使用者點輸入框時兩個都呼叫。
-- 停鍵重排：殼在事件後取 `rerank_request`，在背景執行緒或 Web Worker 交給 `qim-neural`，再經 `apply_rerank` 送回；核心只收目前 `generation` 的結果，重排的候選最高到第 2 位、首選不動（ADR 0005）。殼沒給 `set_reranker_id` 時不快取停鍵結果。
+- 停鍵重排：殼在事件後取 `rerank_request`，在背景執行緒或 Web Worker 交給 `qim-neural`，再經 `apply_rerank` 送回；核心只收目前 `generation` 的結果，重排的候選最高到第 2 位、首選不動（ADR 0005、0013）。殼沒給 `set_reranker_id` 時不快取停鍵結果。
 
 ### 候選的排位順序
 
@@ -145,7 +108,7 @@ flowchart LR
 
 ### 學習資料的格式
 
-`UserModel::export` 寫 `# qim-userdict v3`：UTF-8、Tab 分隔的純文字，是對外格式（brief〈版本與更新〉）。
+`UserModel::export` 寫 `# qim-userdict v3`：UTF-8、Tab 分隔的純文字，是對外格式（brief〈版本與更新〉，ADR 0014）。
 
 - 加列的種類或改欄位就升 v4；匯入一直收 v1、v2 與依欄數認的 v3 草稿。
 - metadata 行 `#@/key<Tab>value` 只能在檔頭。每列第一欄是種類：不認得的略過並警告，已知種類有一列不合就整份不收、錯誤帶行號。
@@ -159,7 +122,7 @@ flowchart LR
 
 ### 資料包
 
-`qim-databuild` 建、核心讀的單位，一份一個目錄 `<id>/`：`<id>.pack`（postcard，整份解開進記憶體；格式在 `crates/qim-core/src/pack.rs`）、`manifest.json`、`LICENSE`、`NOTICE`。授權檔不跨資料包共用，各寫它用到的來源；manifest 的 `license` 是那些來源的 SPDX 以 ` AND ` 接起。
+`qim-databuild` 建、核心讀的單位（格式與線上更新的取捨見 ADR 0018，取材與授權見 ADR 0019），一份一個目錄 `<id>/`：`<id>.pack`（postcard，整份解開進記憶體；格式在 `crates/qim-core/src/pack.rs`）、`manifest.json`、`LICENSE`、`NOTICE`。授權檔不跨資料包共用，各寫它用到的來源；manifest 的 `license` 是那些來源的 SPDX 以 ` AND ` 接起。
 
 - manifest 是對外格式（`crates/qim-core/src/manifest.rs`）：一種 `kind` 對一個 `Pack` 型別；不認得的欄位略過，欄位的意思改了才加 `manifest_version`；`version` 是 semver、內容改了就加；`min_core_version` 是讀得了它的最舊 `qim-core`。
 - 殼只做 I/O 與儲存，交 manifest 加位元組給核心；核心核對格式、核心版本、種類、大小、sha256，解開後再核對 id（`Pack::open`）。一組交給 `Engine::open` 時，同種兩份、給了字根提示或模型、沒有方案資料包都拒絕。

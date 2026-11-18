@@ -1,6 +1,6 @@
 # 按鍵機率分觸控與實體鍵盤兩種，由殼選；實體鍵盤用鍵位先驗
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈介面〉〈按鍵機率〉與〈佈局：畫布模型〉〈鄰鍵先驗〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。行為由 `crates/qim-core/tests/key.rs`、`neighbor_readings.rs`、`crates/qim-layout/tests/spatial.rs`、`physical.rs`、`web/test/keys.test.ts` 說明；初值與來源在 `SpatialModel::default`、`PhysicalModel::default`。
+行為由 `crates/qim-core/tests/key.rs`、`neighbor_readings.rs`、`crates/qim-layout/tests/spatial.rs`、`physical.rs`、`web/test/keys.test.ts` 說明；初值與來源在 `SpatialModel::default`、`PhysicalModel::default`。
 
 - **兩種變體，由殼選**：觸控送 `Key::Weighted`、實體鍵盤送 `Key::Physical`，`Weights` 本身只是機率。鄰鍵讀法只收觸控，核心要分得出來；同 LatinIME 只對有座標的觸控事件用鄰鍵資訊，而殼最清楚按鍵從哪裡來。
 - **實體鍵盤的中文模式整個當美式鍵盤**（使用者定）：網頁照實體鍵位（`KeyboardEvent.code`）換成美式鍵盤上的字元，換 Dvorak、AZERTY 時中文模式的手感跟美式一樣；英文直通與臨時英文照配列打。

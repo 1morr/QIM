@@ -1,6 +1,6 @@
 # 新增輸入方案：模型共用，碼表、參數與基準各方案一份
 
-> 草稿（arch-diet 票 02 從 plan〈核心〉〈輸入方案〉搬來），使用者確認後由票 06 編號寫進 `docs/adr/`。目前只有速成一個方案，這裡記的是加第二個方案時照什麼分工；方案檔的欄位在 `crates/qim-core/src/scheme.rs` 與 `data/schemes/quick.toml`，欄位命名參考 Rime `schema.yaml`。
+目前只有速成一個方案，這裡記的是加第二個方案時照什麼分工；方案檔的欄位在 `crates/qim-core/src/scheme.rs` 與 `data/schemes/quick.toml`，欄位命名參考 Rime `schema.yaml`。
 
 核心只認方案檔與資料包，方案之間怎麼切換由殼負責，每個方案一個 `Engine`。方案檔由 `qim-databuild` 和它的碼表一起編進方案自己的資料包（`<方案 id>.pack`，ADR 0003），`qim-core` 不讀 TOML；可選的資料包由主 App 下載或從檔案匯入，校驗後放進鍵盤讀得到的位置（iOS 是 App Group，沒有完整取用時鍵盤唯讀即可，`docs/research/facts-platforms.md`），擴充不做編譯（Hamster 的分工）。
 
