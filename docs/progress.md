@@ -21,3 +21,4 @@
 | 2026-11-17 | M5 gates 01 | 補三道閘門：gitleaks 密鑰掃描（pre-commit 與 CI 全歷史）、osv-scanner 依賴漏洞、Dependabot；掃出 2 條已不維護公告不修；見票 01 | `/implement .scratch/flow-sync/issues/01-ticket-notes.md` |
 | 2026-11-18 | M5 flow-sync 驗收 | 協調者跑完票 01、02 與修復票 02b（e2e 轉發收尾）、02c（picomatch 公告忽略到 2027-02-18）；spec〈驗收〉逐條過，flow-sync 已驗收；見各票 | `/implement .scratch/arch-diet/issues/01-skeleton.md` |
 | 2026-11-18 | M5 arch-diet 驗收 | 協調者跑完 6 張票（02–05 平行）；plan 刪除、`ARCHITECTURE.md` 10,792 字、ADR 0009–0019、識別符表進 `GLOSSARY.md`；使用者回覆「都可以，按你建議」；見票 06 | `/to-tickets docs/roadmap.md 拆 M5 的票` |
+| 2026-11-18 | M5 開工 | spec、26 張票（第一期 01–12、第二期 13–25、26 驗收）；計劃頁 4 題與對程式碼 14 條使用者照建議同意；見 spec〈票序〉 | `/implement .scratch/m5/issues/01-stale-comments.md` |
