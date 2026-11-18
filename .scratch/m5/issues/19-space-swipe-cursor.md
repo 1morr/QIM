@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 12, 20
-讀: 票 20 的 ADR；brief §4.4；`docs/research/spatial-correction-swipe.md`；`docs/research/facts-products.md`；票 04 的盤點
+讀: 票 20 的 ADR；brief §4.4；`docs/research/spatial-correction-swipe.md`；`docs/research/facts-products.md`；盤點清單（票 04d 彙整的 `docs/research/touch-inventory.md`）
 
 ## What to build
 

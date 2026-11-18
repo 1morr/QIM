@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 12
-讀: brief §4.4；`docs/agents/ui.md`；票 04 的盤點；`docs/design/05-keyboard-top.html`
+讀: brief §4.4；`docs/agents/ui.md`；盤點清單（票 04d 彙整的 `docs/research/touch-inventory.md`）；`docs/design/05-keyboard-top.html`
 
 ## What to build
 

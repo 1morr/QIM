@@ -23,7 +23,7 @@
 
 第一期：
 
-- 盤點（第一張會擋人的票）：`orca emulator-android` 在 Gboard 實測觸控鍵盤的全部功能（工具列、各面板、長按、手勢、設定頁的分類與項目、鍵盤高度分幾段），另在 iOS 模擬器對照內建鍵盤，只記 Gboard 沒有的（使用者 2026-11-18 同意）；Gboard 速成的 `z` 鍵行為（M4 票 11，定要不要把「重」改標「＊」）；瀏覽器讀剪貼簿的限制。寫到 `docs/research/`，列成清單請使用者逐項勾要不要，勾完才出設計稿；期界也在這時定。
+- 盤點，拆成四張（使用者 2026-11-18 定：完整對照 Gboard 的功能、操作、設定與佈局，所有功能都盤，包括平台才做得到的）：04 工具列、面板與候選列（含剪貼簿建議、瀏覽器剪貼簿的限制）；04b 按鍵、手勢與佈局（含 `z` 鍵在速成的行為，M4 票 11）；04c 設定頁的全部項目（含鍵盤高度的段數）；三張用 `orca emulator-android` 實測、可以平行。04d 在 iOS 模擬器對照內建鍵盤、只記 Gboard 沒有的，把四份彙整成 `docs/research/touch-inventory.md` 並做成一頁，請使用者逐項選照 Gboard、照 Gboard 再加、不做或平台才做；選完寫回 spec 與 brief，期界也在這時定。
 - 設計稿兩張（`docs/agents/ui.md`，一個畫面一張）：候選列與工具列；鍵盤內設定頁與鍵盤高度。規格照 brief §4.4：直向 390 寬與橫向 844 寬、淺色與深色、照 Gboard 實測的現有鍵盤樣式。
 - 候選列接在觸控鍵盤頂端（現在在輸入框下方，和鍵盤隔著工具列與設定區）；沒有組字時同一格換成工具列（Gboard 做法），放設定、emoji、剪貼簿、文字編輯、常用語等入口，入口照盤點勾的。第一期面板還沒做的入口照設計稿處理（隱藏或停用）。
 - 鍵盤內設定頁：分類照之後平台 App 的設定（盤點的 Gboard 分類），搬進去的是設定表的 17 列加工具列的數字列、深色、字根提示；觸控鍵盤、debug、欄位選單是測試頁的工具，留在頁面工具列（使用者 2026-11-18 同意）。設定現在不存檔，一重新整理就回預設：開關、外觀與鍵盤高度改成存進 `localStorage`（使用者 2026-11-18 同意）。只搬開關與外觀；常用語、英文使用者詞、詞庫匯入、資料包、學習資料匯入匯出留在頁面上，當作平台的主 App（使用者 2026-11-18 同意）。桌面模式（沒有觸控鍵盤）由頁面工具列上一顆設定鈕打開同一個設定頁（使用者 2026-11-18 同意）。
@@ -35,7 +35,7 @@
 
 第二期（現在粗拆，期中票增刪改；使用者 2026-11-18 同意）：
 
-- 面板設計稿三張（emoji、文字編輯、剪貼簿），各自的實作票：emoji 面板（分類、最近用過、搜尋）；文字編輯面板（方向鍵、選取、全選、複製、貼上）；剪貼簿（瀏覽器讀不到系統剪貼簿歷史，範圍照盤點查到的限制）。
+- 面板設計稿三張（emoji、文字編輯、剪貼簿），各自的實作票：emoji 面板（分類、最近用過、搜尋）；文字編輯面板（方向鍵、選取、全選、複製、貼上）；剪貼簿面板與候選列上的剪貼簿建議（點了貼上、網址等拆成另一個候選；在 Gboard 之上加只貼連著的數字、貼全部數字、編輯已複製的文字，使用者 2026-11-18 定；瀏覽器讀不到系統剪貼簿歷史，範圍照盤點查到的限制）。
 - 空白鍵左右滑動移游標。
 - 滑動輸入：先讀 FlorisBoard v0.5.2 與 AnySoftKeyboard（`docs/research/facts-products.md`），寫 ADR 定滑動和佈局按鍵自己的 flick 怎麼分（研究建議照青簡的方向扇形，`docs/research/spatial-correction-swipe.md` §5）；英文滑動輸入的解碼用 `qim-layout` 的按鍵幾何，不寫死 QWERTY；形碼的滑行沒有先例，先用模擬軌跡量首選率，再決定做不做畫面，結論寫回 brief。
 - 撤銷學習的觸控手勢：能指定任一個候選（`Session::forget` 收任何位置；桌面只清得到首選，釘在第 2 位的自動造詞要靠它，M4 票 16）；長按候選維持字根提示（brief §4.4），手勢另定。簡體模式兩個原文轉成同一個簡體字時候選去重只留第一個、撤銷學習只清得到它（M4 票 16）；簡體去重時聯想的 emoji 從第 3 位變第 2 位（M4 票 30），一起定。
@@ -79,28 +79,31 @@
 
 ## 票序
 
-第一期 01–12（12 是期中票），第二期 13–25（期中票增刪改），26 驗收。
+第一期 01–12（含盤點 04、04b、04c、04d；12 是期中票），第二期 13–25（期中票增刪改），26 驗收。
 
 | 票 | 被誰擋 | 交付 |
 | --- | --- | --- |
 | [01](issues/01-stale-comments.md) | — | 修復：過時的程式註解；不認得的資料包種類單一 manifest 拒絕、索引略過那一項 |
 | [02](issues/02-docs-field-ranking.md) | — | 文件：`field.ts` 為什麼用 textarea；票慣例加新排序原因的 debug 欄 |
 | [03](issues/03-web-prefactor.md) | — | e2e 共用 helper、`free()` 收成一種、`undoWindow` 改名 |
-| [04](issues/04-touch-inventory.md) | — | Gboard 與 iOS 鍵盤盤點、`z` 鍵、剪貼簿限制；使用者勾清單、定期界 |
-| [05](issues/05-design-keyboard-top.md) | 04 | 設計稿：候選列與工具列 |
-| [06](issues/06-design-settings.md) | 04 | 設計稿：鍵盤內設定頁與鍵盤高度 |
+| [04](issues/04-touch-inventory.md) | — | 盤點一：Gboard 的工具列、面板與候選列；瀏覽器剪貼簿的限制 |
+| [04b](issues/04b-touch-inventory-keys.md) | — | 盤點二：Gboard 的按鍵、手勢與佈局；`z` 鍵 |
+| [04c](issues/04c-touch-inventory-settings.md) | — | 盤點三：Gboard 設定頁的全部項目；鍵盤高度的段數 |
+| [04d](issues/04d-touch-inventory-checklist.md) | 04, 04b, 04c | 盤點四：iOS 對照、彙整清單、使用者逐項選；寫回 spec、brief，定期界 |
+| [05](issues/05-design-keyboard-top.md) | 04d | 設計稿：候選列與工具列 |
+| [06](issues/06-design-settings.md) | 04d | 設計稿：鍵盤內設定頁與鍵盤高度 |
 | [07](issues/07-keyboard-top-bar.md) | 03, 05 | 候選列接觸控鍵盤頂端、沒組字時換工具列 |
 | [08](issues/08-keyboard-settings.md) | 06, 07 | 鍵盤內設定頁取代勾選框、設定存檔、桌面設定鈕；「無痕」第一次點沒反應 |
 | [09](issues/09-keyboard-height.md) | 08 | 調整鍵盤高度 |
-| [10](issues/10-touch-leftovers.md) | 03, 04 | 觸控殘項：地球鍵圖示與中英狀態、選單點外面收起、刪除鍵退格撤銷、`z` 鍵標示 |
+| [10](issues/10-touch-leftovers.md) | 03, 04d | 觸控殘項：地球鍵圖示與中英狀態、選單點外面收起、刪除鍵退格撤銷、`z` 鍵標示 |
 | [11](issues/11-english-leftovers.md) | 03 | 英文殘項：觸控按鍵機率接英文修正、重量 4 倍門檻；無痕剛聚焦與換行後的句首大寫 |
-| [12](issues/12-midpoint-check.md) | 01–11 | 期中：全部檢查、手機試用第一期、改第二期的票 |
+| [12](issues/12-midpoint-check.md) | 01–11（含 04b–04d） | 期中：全部檢查、手機試用第一期、改第二期的票 |
 | [13](issues/13-design-emoji-panel.md) | 12 | 設計稿：emoji 面板 |
 | [14](issues/14-design-edit-panel.md) | 12 | 設計稿：文字編輯面板 |
-| [15](issues/15-design-clipboard-panel.md) | 12 | 設計稿：剪貼簿面板 |
+| [15](issues/15-design-clipboard-panel.md) | 12 | 設計稿：剪貼簿面板與剪貼簿建議 |
 | [16](issues/16-emoji-panel.md) | 13 | emoji 面板：分類、最近用過、搜尋 |
 | [17](issues/17-edit-panel.md) | 14 | 文字編輯面板：方向鍵、選取、全選、複製、貼上 |
-| [18](issues/18-clipboard-panel.md) | 15 | 剪貼簿面板（瀏覽器做得到的範圍） |
+| [18](issues/18-clipboard-panel.md) | 15 | 剪貼簿面板與剪貼簿建議：網址拆出、只貼數字、編輯（瀏覽器做得到的範圍） |
 | [19](issues/19-space-swipe-cursor.md) | 12, 20 | 空白鍵滑動移游標 |
 | [20](issues/20-swipe-adr.md) | 12 | 滑動輸入研究與 ADR：和 flick 怎麼分 |
 | [21](issues/21-english-swipe.md) | 20 | 英文滑動輸入 |
@@ -108,4 +111,4 @@
 | [23](issues/23-forget-gesture.md) | 12 | 撤銷學習的觸控手勢、簡體去重 |
 | [24](issues/24-sentence-start-eval.md) | 12 | 評估句首建議與量詞聯想 |
 | [25](issues/25-english-next-word-eval.md) | 12 | 評估英文下一個詞 |
-| [26](issues/26-m5-acceptance.md) | 01–25 | M5 驗收 |
+| [26](issues/26-m5-acceptance.md) | 01–25（含 04b–04d） | M5 驗收 |

@@ -22,3 +22,4 @@
 | 2026-11-18 | M5 flow-sync 驗收 | 協調者跑完票 01、02 與修復票 02b（e2e 轉發收尾）、02c（picomatch 公告忽略到 2027-02-18）；spec〈驗收〉逐條過，flow-sync 已驗收；見各票 | `/implement .scratch/arch-diet/issues/01-skeleton.md` |
 | 2026-11-18 | M5 arch-diet 驗收 | 協調者跑完 6 張票（02–05 平行）；plan 刪除、`ARCHITECTURE.md` 10,792 字、ADR 0009–0019、識別符表進 `GLOSSARY.md`；使用者回覆「都可以，按你建議」；見票 06 | `/to-tickets docs/roadmap.md 拆 M5 的票` |
 | 2026-11-18 | M5 開工 | spec、26 張票（第一期 01–12、第二期 13–25、26 驗收）；計劃頁 4 題與對程式碼 14 條使用者照建議同意；見 spec〈票序〉 | `/implement .scratch/m5/issues/01-stale-comments.md` |
+| 2026-11-18 | M5 盤點拆票 | 使用者定完整對照 Gboard：盤點拆成 04、04b、04c、04d，剪貼簿建議加只貼數字、編輯；見 spec〈範圍〉 | `/implement .scratch/m5/issues/01-stale-comments.md` |

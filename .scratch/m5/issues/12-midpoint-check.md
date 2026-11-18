@@ -1,15 +1,15 @@
 # 12: 期中：手機試用第一期、改第二期的票
 
 Status: ready-for-agent
-Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11
-讀: spec 全文；票 04 的勾選結果；`docs/agents/milestone.md`〈驗收票〉（試用的寫法）
+Blocked by: 01, 02, 03, 04, 04b, 04c, 04d, 05, 06, 07, 08, 09, 10, 11
+讀: spec 全文；盤點清單（票 04d 彙整的 `docs/research/touch-inventory.md`）；`docs/agents/milestone.md`〈驗收票〉（試用的寫法）
 
 ## What to build
 
 第一期全部做完後的檢查，前一步成立才做下一步：
 
 1. 跑全部檢查與 `cargo xtask bench --check`。
-2. 依票 04 勾的結果增刪改第二期的票（13–25）：使用者勾了而沒有票的開新票，不要的改 wontfix；改了就同步 spec〈票序〉。
+2. 依盤點清單的選擇與票 04d 的 Comments增刪改第二期的票（13–25）：使用者勾了而沒有票的開新票，不要的改 wontfix；改了就同步 spec〈票序〉。
 3. 請使用者在手機瀏覽器試用第一期（spec〈使用者試〉），在 Comments 加 `等使用者：試用 M5 第一期`。不滿意的項目各開一張修復票（`12b-<slug>`），修完再試。
 
 ## 驗收
