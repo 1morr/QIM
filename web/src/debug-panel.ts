@@ -5,6 +5,7 @@
  * 記的，核心只給候選是第幾條路徑放上來的。
  */
 
+import { freeAfter } from "./free.ts";
 import type { Outcome, Ranked, RerankJob } from "./rerank.ts";
 import type { Session, Inspection as WasmInspection } from "./wasm/qim_wasm.js";
 
@@ -74,37 +75,28 @@ interface Inspection {
 	field: string;
 }
 
-/** 用完 `item` 就釋放（綁定的物件不會自己回收）。 */
-function using<T extends { free(): void }, R>(item: T, use: (item: T) => R): R {
-	try {
-		return use(item);
-	} finally {
-		item.free();
-	}
-}
-
 // 綁定的這些欄位是字串，值只有核心列舉的那幾種（`qim-wasm` 的 `From<Inspection>`）；這裡照型別收下。
 /** 讀出 `inspection` 的內容，釋放它與裡面每個綁定的物件。 */
 function read(inspection: WasmInspection): Inspection {
-	return using(inspection, (i) => ({
+	return freeAfter(inspection, (i) => ({
 		contextState: i.contextState as Inspection["contextState"],
 		context: i.context,
 		precedingKind: i.precedingKind as Inspection["precedingKind"],
 		precedingChar: i.precedingChar,
 		precedingWord: i.precedingWord,
 		segments: i.segments.map((segment) =>
-			using(segment, (s) => ({
+			freeAfter(segment, (s) => ({
 				code: s.code,
 				text: s.text,
 				selected: s.selected,
 			})),
 		),
 		candidates: i.candidates.map((candidate) =>
-			using(candidate, (c) => ({
+			freeAfter(candidate, (c) => ({
 				text: c.text,
 				kind: c.kind as CandidateKind,
 				segments: c.segments.map((segment) =>
-					using(segment, (s) => ({
+					freeAfter(segment, (s) => ({
 						code: s.code,
 						text: s.text,
 						source: s.source as SegmentSource,

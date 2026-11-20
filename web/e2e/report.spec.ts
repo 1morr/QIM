@@ -1,16 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { ready, waitReady } from "./page.ts";
 
 // 「回報」（M1 票 12）：剛才那次組字的輸入碼與上屏的字，加成回報清單的一行
 // （`bench/fixed.tsv` 的格式：輸入碼<TAB>期望首選<TAB>來源），重新整理後還在。
 test("選第 2 個候選上屏後按「回報」，清單多一行 fixed.tsv 格式的題", async ({
 	page,
 }, testInfo) => {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
+	const { text, items } = await ready(page);
 	const report = page.getByRole("button", { name: "回報", exact: true });
 	const reports = page.getByRole("textbox", { name: /回報的固定題/ });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await expect(report).toBeDisabled();
 
 	await text.focus();
@@ -40,7 +38,7 @@ test("選第 2 個候選上屏後按「回報」，清單多一行 fixed.tsv 格
 	await expect(report).toBeDisabled();
 
 	await page.reload();
-	await expect(text).toHaveAttribute("data-ready", "true");
+	await waitReady(page);
 	await expect(reports).toHaveValue(
 		`mir\t${second}\t網頁回報（首選 一台）\nanr\t門口\t網頁回報（首選 門口）`,
 	);
@@ -48,10 +46,8 @@ test("選第 2 個候選上屏後按「回報」，清單多一行 fixed.tsv 格
 
 // 臨時英文（組字中單按左 Shift，M1 票 25、25b）中的空白與數字是字元：上屏的是英文，不是選出來的字。
 test("臨時英文打了空白與數字再按 Enter 上屏，不能回報", async ({ page }) => {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
+	const { text } = await ready(page);
 	const report = page.getByRole("button", { name: "回報", exact: true });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await text.focus();
 	await page.keyboard.type("anr");
 	await page.keyboard.press("ShiftLeft");

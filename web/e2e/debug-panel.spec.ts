@@ -1,4 +1,10 @@
 import { expect, type Page, test } from "@playwright/test";
+import {
+	place as basePlace,
+	ui as baseUi,
+	readyCleared,
+	shown,
+} from "./page.ts";
 
 // debug 面板（M4 票 01）：預設關；開著時讀得到殼給的前文（有前文、不知道前文、無痕不讀）、
 // 輸入碼的切段、首選的路徑分與學習加分、每個候選的來源，與停鍵重排的要求和結果。關著時網頁不問核心
@@ -10,8 +16,7 @@ function ui(page: Page) {
 	// 關著時是 hidden，用角色找不到；`data-inspect-count` 要在關著時也讀得到。
 	const debug = page.locator("#debug");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...baseUi(page),
 		toggle: page.getByRole("button", { name: "debug" }),
 		debug,
 		context: debug.getByTestId("debug-context"),
@@ -31,12 +36,8 @@ function ui(page: Page) {
 let errors: Error[] = [];
 
 async function ready(page: Page, url = "/") {
-	await page.goto(url);
-	await page.evaluate(() => localStorage.clear());
-	await page.reload();
-	const parts = ui(page);
-	await expect(parts.text).toHaveAttribute("data-ready", "true");
-	return parts;
+	await readyCleared(page, url);
+	return ui(page);
 }
 
 /** 打開面板、焦點回輸入框。 */
@@ -47,14 +48,10 @@ async function openPanel(page: Page) {
 	await text.focus();
 }
 
-/** 換掉輸入框的內容、游標放在結尾，像使用者貼上後點到那裡。 */
+/** 換掉輸入框的內容、游標放在結尾，像使用者貼上後點到那裡，焦點回輸入框。 */
 async function place(page: Page, value: string) {
-	await ui(page).text.evaluate((element: HTMLTextAreaElement, value) => {
-		element.value = value;
-		element.dispatchEvent(new Event("input", { bubbles: true }));
-		element.setSelectionRange(value.length, value.length);
-		element.focus();
-	}, value);
+	await basePlace(page, value);
+	await ui(page).text.focus();
 }
 
 /** 面板候選表裡文字是 `text` 的那列。 */
@@ -62,13 +59,6 @@ function row(page: Page, text: string) {
 	return ui(page).rows.filter({
 		has: page.locator(`td:nth-child(2)`, { hasText: new RegExp(`^${text}$`) }),
 	});
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
 }
 
 /** 按數字鍵選這頁文字是 `word` 的候選。 */

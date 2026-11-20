@@ -1,6 +1,7 @@
 // 停鍵層的 Web Worker（ADR 0005，M3 票 11e）：載入模型資料包建 `Reranker`，收重排要求、回路徑的
 // 名次與算了多久。和主執行緒用同一份 WebAssembly 綁定，各自一個實例；主執行緒的 `Session` 不在這裡。
 
+import { freeAfter } from "./free.ts";
 import type { WorkerReply, WorkerRequest } from "./neural-rerank.ts";
 import init, { Pack, Reranker } from "./wasm/qim_wasm.js";
 
@@ -20,19 +21,21 @@ function message(error: unknown): string {
 function handle(request: WorkerRequest): WorkerReply {
 	switch (request.type) {
 		case "load": {
-			reranker?.free();
-			reranker = undefined;
-			if (!request.pack) {
+			if (reranker) {
+				freeAfter(reranker, () => {
+					reranker = undefined;
+				});
+			}
+			const source = request.pack;
+			if (!source) {
 				return { id: request.id, type: "loaded" };
 			}
-			const pack = new Pack(request.pack.manifest, request.pack.bytes);
+			const pack = new Pack(source.manifest, source.bytes);
 			try {
-				reranker = new Reranker(pack);
+				reranker = freeAfter(pack, (pack) => new Reranker(pack));
 				return { id: request.id, type: "loaded" };
 			} catch (error) {
 				return { id: request.id, type: "failed", message: message(error) };
-			} finally {
-				pack.free();
 			}
 		}
 		case "rank": {
@@ -46,16 +49,11 @@ function handle(request: WorkerRequest): WorkerReply {
 				request.job.scores,
 			);
 			const ms = performance.now() - start;
-			try {
-				const { order, totals } = ranking;
-				return {
-					id: request.id,
-					type: "ranked",
-					ranked: { order, ms, totals },
-				};
-			} finally {
-				ranking.free();
-			}
+			return freeAfter(ranking, ({ order, totals }) => ({
+				id: request.id,
+				type: "ranked",
+				ranked: { order, ms, totals },
+			}));
 		}
 	}
 }

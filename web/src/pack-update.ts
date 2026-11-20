@@ -5,6 +5,7 @@
 // `/pack-updates/` 要，由 Vite 開發伺服器轉發（`vite.config.ts`）。
 
 import { message } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import type { PackLibrary } from "./packs.ts";
 import { storage } from "./storage.ts";
 import { packUpdates } from "./wasm/qim_wasm.js";
@@ -87,17 +88,25 @@ export async function updatePacks(
 		await fetchWithin(indexUrl, INDEX_TIMEOUT_MS),
 	);
 	const result: UpdateResult = { updated: [], rejected: [] };
-	const checked = packUpdates(index, library.installedManifests());
-	// 索引裡不認得的種類（之後的核心加的）核心略過了，其他照讀。
-	for (const warning of checked.warnings) {
-		console.warn(warning);
-	}
-	const updates = checked.updates;
-	checked.free();
-	for (const update of updates) {
-		const { id, version, manifest } = update;
-		const url = new URL(update.url, indexUrl);
-		update.free();
+	// 下面跨 `await`，綁定的物件先讀成一般的值再釋放。
+	const updates = freeAfter(
+		packUpdates(index, library.installedManifests()),
+		(checked) => {
+			// 索引裡不認得的種類（之後的核心加的）核心略過了，其他照讀。
+			for (const warning of checked.warnings) {
+				console.warn(warning);
+			}
+			return freeAfter(checked.updates, (updates) =>
+				updates.map(({ id, version, manifest, url }) => ({
+					id,
+					version,
+					manifest,
+					url: new URL(url, indexUrl),
+				})),
+			);
+		},
+	);
+	for (const { id, version, manifest, url } of updates) {
 		// 核心只回裝著的資料包的新版，所以一定找得到。
 		const from = library.list().find((p) => p.id === id)?.version ?? "";
 		try {

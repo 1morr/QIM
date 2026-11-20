@@ -1,13 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
+import { readyCleared, shown } from "./page.ts";
 
 // 學習的時限（M4 票 13）：「選兩次成首選」的兩次要在一年內；最近一次整串上屏過了
 // 365 天就不再是首選；一年沒用的條目停用（不刪）。用 `page.clock` 換日（網頁在 keydown 前把今天交給核心）。
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	return (await items.allTextContents()).map((t) => t.replace(/^\d/, ""));
-}
 
 /** 打 `code`，按數字鍵選文字是 `word` 的候選。 */
 async function choose(page: Page, code: string, word: string) {
@@ -37,11 +32,7 @@ test("選過兩次的候選，最近一次過了 365 天就不再是首選", asy
 	page,
 }, testInfo) => {
 	await page.clock.setFixedTime(new Date(2026, 0, 1, 12, 0));
-	await page.goto("/");
-	await page.evaluate(() => localStorage.clear());
-	await page.reload();
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await readyCleared(page);
 	await text.focus();
 	const first = page
 		.getByRole("list", { name: "候選" })

@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready, shown } from "./page.ts";
 
 // 觸控鄰鍵讀法（M4 票 09c，brief〈容錯〉）：觸控點一下的鄰鍵字母換進輸入碼，換出來的讀法從候選列第 2 格起插、
 // 不搶首選；實體鍵盤與設定關掉時沒有。debug 面板標「鄰鍵」與換了哪一碼。
@@ -11,9 +12,7 @@ let errors: Error[] = [];
 function ui(page: Page) {
 	const debug = page.locator("#debug");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
-		composition: page.getByTestId("composition"),
+		...baseUi(page),
 		settings: page.getByRole("region", { name: "設定" }),
 		rows: debug.getByRole("table", { name: "候選來源" }).locator("tbody tr"),
 	};
@@ -22,8 +21,7 @@ function ui(page: Page) {
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+	await ready(page);
 	// 停鍵重排也會往第 2 格插路徑，關掉才看得出鄰鍵讀法的位置。
 	await ui(page)
 		.settings.getByRole("combobox", { name: "重排" })
@@ -43,13 +41,6 @@ async function tapAt(page: Page, letter: string, fx = 0.5) {
 		throw new Error(`${letter} 鍵沒畫出來`);
 	}
 	await page.touchscreen.tap(box.x + box.width * fx, box.y + box.height / 2);
-}
-
-/** 候選列（第一頁）的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
 }
 
 /**

@@ -1,25 +1,17 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady, place, shown } from "./page.ts";
 
 // 學習（M1 票 13）：同一個碼選同一個非首選兩次，它就成首選；無痕模式下不學。
 // 學習開關（M3 票 12）：關掉時不學，已學的照用。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	await text.focus();
+	const parts = await baseReady(page);
+	await parts.text.focus();
 	return {
-		text,
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...parts,
 		incognito: page.getByRole("checkbox", { name: "無痕" }),
 		learning: page.getByRole("checkbox", { name: "學習" }),
 	};
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	return (await items.allTextContents()).map((t) => t.replace(/^\d/, ""));
 }
 
 /** 打 `code`，按數字鍵選文字是 `word` 的候選。 */
@@ -96,20 +88,9 @@ test("學過的在關掉學習後照用", async ({ page }) => {
 	await expect(items.first()).toHaveText(`1${second}`);
 });
 
-/** 把輸入框換成 `before`、游標放在結尾（像貼上後點到那裡）。 */
-async function placeBefore(page: Page, before: string) {
-	await page
-		.getByRole("textbox", { name: "輸入框" })
-		.evaluate((element: HTMLTextAreaElement, value: string) => {
-			element.value = value;
-			element.dispatchEvent(new Event("input", { bubbles: true }));
-			element.setSelectionRange(value.length, value.length);
-		}, before);
-}
-
 /** 前文 `before` 後打 `of`，回傳「你」在候選的位置；再取消組字。 */
 async function rankOfNiAfter(page: Page, before: string): Promise<number> {
-	await placeBefore(page, before);
+	await place(page, before);
 	await page.keyboard.type("of");
 	const at = (await shown(page)).indexOf("你");
 	expect(at, `前文「${before}」的候選`).not.toBe(-1);
@@ -127,7 +108,7 @@ test("在「我」後面選「你」一次，「我」後面的 of 比在「他�
 	/** 新頁面在前文 `before` 後打 of 選「你」一次，回傳之後前文「我」時「你」的位置。 */
 	const learnAfter = async (target: Page, before: string): Promise<number> => {
 		const { text } = await ready(target);
-		await placeBefore(target, before);
+		await place(target, before);
 		await choose(target, "of", "你");
 		await expect(text).toHaveValue(`${before}你`);
 		return rankOfNiAfter(target, "我");
@@ -144,7 +125,7 @@ test("在「我」後面選「你」一次，「我」後面的 of 比在「他�
 	expect(afterMe).toBeLessThan(afterHe);
 	expect(afterHe).toBeLessThanOrEqual(beforeLearning);
 
-	await placeBefore(page, "我");
+	await place(page, "我");
 	await page.keyboard.type("of");
 	await expect(
 		page.getByRole("list", { name: "候選" }).getByRole("listitem").nth(afterMe),

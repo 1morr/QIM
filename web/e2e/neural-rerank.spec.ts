@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready, shown } from "./page.ts";
 
 // 停鍵層的神經模型（ADR 0005，M3 票 11e）：停鍵後 Web Worker 裡的 1.4M 模型給 lattice 的前 9 條
 // 路徑排名次，核心把排出的路徑放到第 2 位，候選列沒有就插入；首選不動。
@@ -17,9 +18,8 @@ const MODEL_DIR = new URL(`../public/packs/${MODEL_ID}/`, import.meta.url);
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
+		...baseUi(page),
 		list: page.getByRole("list", { name: "候選" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		all: page.getByRole("list", { name: "全部候選" }).getByRole("listitem"),
 		rerank: page.getByRole("combobox", { name: "重排" }),
 		rows: page.getByRole("table", { name: "資料包清單" }).locator("tbody tr"),
@@ -39,14 +39,8 @@ test.afterEach(() => {
 });
 
 async function open(page: Page, url = "/") {
-	await page.goto(url);
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
-	await ui(page).text.focus();
-}
-
-/** 候選列目前的字（去掉序號）。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) => t.slice(1));
+	const { text } = await ready(page, url);
+	await text.focus();
 }
 
 /** 重排關著時打 `CODE` 的全部候選（展開面板讀），讀完清掉。 */

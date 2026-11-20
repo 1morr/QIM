@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready as baseReady } from "./page.ts";
 
 // 智慧標點（M4 票 27，brief〈英文模式與欄位類型〉）：英文模式字後連按兩下空白輸出「. 」（照 Gboard、LatinIME，
 // 1100 ms 內），中文狀態實體鍵盤的 " ' 左右輪流出 “” ‘’（使用者定，照 Rime）。兩個各有開關、預設開。
@@ -10,9 +11,7 @@ let errors: Error[] = [];
 async function ready(page: Page) {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await baseReady(page);
 	const settings = page.getByRole("region", { name: "設定" });
 	return {
 		text,

@@ -1,15 +1,12 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 觸控叫出字根提示（M1 票 22，brief〈手機觸控鍵盤〉）：行動裝置 viewport 下長按候選。
 const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 test.use(pixel);
 
 test.beforeEach(async ({ page }) => {
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 	for (const id of ["o", "j"]) {
 		await page.getByTestId(`key-${id}`).tap();
 	}

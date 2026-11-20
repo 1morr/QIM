@@ -1,18 +1,15 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready } from "./page.ts";
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...baseUi(page),
 		rerank: page.getByRole("combobox", { name: "重排" }),
 	};
 }
 
 test.beforeEach(async ({ page }) => {
-	await page.goto("/");
-	const { text } = ui(page);
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await ready(page);
 	await text.focus();
 });
 

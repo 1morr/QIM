@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { readyCleared } from "./page.ts";
 
 // 殼的日期契約（architecture〈核心對殼〉，M4 票 12）：網頁在第一次學習前、之後每次使用者操作前把今天交給核心，
 // 學到的條目記成最後使用的日期。除了實體鍵盤打字加選候選（`user-dict.spec.ts`），觸控鍵盤與
@@ -22,20 +23,11 @@ async function storedRow(
 		.find((columns) => columns[0] === kind && columns.includes(key));
 }
 
-async function ready(page: Page) {
-	await page.goto("/");
-	await page.evaluate(() => localStorage.clear());
-	await page.reload();
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	return text;
-}
-
 test("打 email 打到午夜後直接失焦（沒有按鍵或點擊），學到的那天是失焦當天", async ({
 	page,
 }) => {
 	await page.clock.setFixedTime(new Date(2026, 10, 12, 23, 58));
-	const text = await ready(page);
+	const { text } = await readyCleared(page);
 	await text.focus();
 	await page.keyboard.press("Shift");
 	await page.keyboard.type(EMAIL);
@@ -55,7 +47,7 @@ test.describe("觸控", () => {
 
 	test("點鍵上屏學到的條目記成點的那天，換日後再點跟著變", async ({ page }) => {
 		await page.clock.setFixedTime(new Date(2026, 10, 12, 12, 0));
-		const text = await ready(page);
+		const { text } = await readyCleared(page);
 		const commit = async () => {
 			for (const id of ["a", "n", "r"]) {
 				await page.getByTestId(`key-${id}`).tap();

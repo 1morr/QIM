@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready, ui } from "./page.ts";
 
 // 欄位類型（M4 票 26，brief〈英文模式與欄位類型〉）：工具列的「欄位」選單模擬宿主輸入框的 `type` / `inputmode`。
 // email、網址、密碼欄一聚焦就是英文直通（照 Trime、青簡），沒有建議、自動修正開著也不修；密碼欄另不讀前文；
@@ -14,11 +15,7 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test.afterEach(() => {
@@ -27,9 +24,8 @@ test.afterEach(() => {
 
 function parts(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
+		...ui(page),
 		mode: page.getByTestId("mode"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		field: page.getByTestId("debug-field"),
 	};
 }

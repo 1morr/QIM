@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready, readyCleared, shown } from "./page.ts";
 
 // 停鍵結果快取（architecture〈核心對殼〉，M4 票 03）：同一串碼的重排結果留在核心，退格回到算過的那串碼時按鍵的快照
 // 就排好了，不等停鍵、不再跑模型；debug 面板讀得到用的是快取。關掉重排、換模型後舊結果不再套用。
@@ -6,9 +7,8 @@ import { expect, type Page, test } from "@playwright/test";
 function ui(page: Page) {
 	const debug = page.locator("#debug");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
+		...baseUi(page),
 		list: page.getByRole("list", { name: "候選" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		rerank: page.getByRole("combobox", { name: "重排" }),
 		toggle: page.getByRole("button", { name: "debug" }),
 		debug,
@@ -23,11 +23,8 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await page.evaluate(() => localStorage.clear());
-	await page.reload();
+	await readyCleared(page);
 	const { text, toggle, debug } = ui(page);
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await toggle.click();
 	await expect(debug).toBeVisible();
 	await text.focus();
@@ -36,11 +33,6 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(() => {
 	expect(errors.map(String)).toEqual([]);
 });
-
-/** 候選列目前的字（去掉序號）。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) => t.slice(1));
-}
 
 /** 交給模型的要求有幾次（debug 面板記的）。 */
 async function requests(page: Page): Promise<number> {
@@ -170,8 +162,7 @@ test("重排在途時換模式：舊結果作廢，退格回同一串碼不套�
 }) => {
 	const first = await unranked(page, "anr");
 	const { text, toggle, debug, rerank, result } = ui(page);
-	await page.goto("/?rerank-delay=1000");
-	await expect(text).toHaveAttribute("data-ready", "true");
+	await ready(page, "/?rerank-delay=1000");
 	await toggle.click();
 	await expect(debug).toBeVisible();
 	await rerank.selectOption("raise-last");

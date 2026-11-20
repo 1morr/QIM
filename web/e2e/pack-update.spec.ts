@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
+import { waitReady } from "./page.ts";
 
 // 資料包線上更新（M3 票 21，architecture〈資料包〉）：Playwright 起的本機靜態伺服器扮演 GitHub release，放
 // `e2e/fixtures/pack-release/`（`index.json` 列出 `e2e-update-lexicon` 1.1.0，`anr` 是「新版詞庫」）。
@@ -10,15 +11,9 @@ const UPDATES = "**/pack-updates/**";
 const ID = "e2e-update-lexicon";
 const OLD = new URL(`fixtures/${ID}/`, import.meta.url);
 
-async function ready(page: Page) {
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	return text;
-}
-
 /** 清空輸入框、打 `code`，回傳候選列的第一個（去掉序號），再清掉組字。 */
 async function firstOf(page: Page, code: string): Promise<string> {
-	const text = await ready(page);
+	const { text } = await waitReady(page);
 	await text.focus();
 	await page.keyboard.press("Escape");
 	await text.fill("");
@@ -66,7 +61,7 @@ async function reloadAndAwaitCheck(page: Page) {
 	const index = page.waitForResponse("**/pack-updates/index.json");
 	await page.reload();
 	expect((await index).status()).toBe(200);
-	await ready(page);
+	await waitReady(page);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -211,7 +206,7 @@ test("關掉線上更新後不連線，重新整理後也還關著", async ({ pa
 		await route.abort();
 	});
 	await page.reload();
-	await ready(page);
+	await waitReady(page);
 	await expect(updateSwitch(page)).not.toBeChecked();
 	await expect(checkButton(page)).toBeDisabled();
 	expect(await firstOf(page, "anr")).toBe("舊版詞庫");
@@ -231,7 +226,7 @@ test("斷網時打字照常，說明檢查失敗", async ({ page }) => {
 	await importOld(page);
 	await page.route(UPDATES, (route) => route.abort("internetdisconnected"));
 	await page.reload();
-	await ready(page);
+	await waitReady(page);
 	await expect(status(page)).toContainText("檢查更新失敗，照用現有的資料包");
 	expect(await firstOf(page, "anr")).toBe("舊版詞庫");
 	expect(await firstOf(page, "mir")).not.toBe("");
@@ -245,7 +240,7 @@ test("更新來源一直不回應時，網頁照樣載入、打字；15 秒後�
 	await page.clock.install();
 	await page.route(UPDATES, () => {});
 	await page.reload();
-	await ready(page);
+	await waitReady(page);
 	expect(await firstOf(page, "anr")).toBe("門口");
 	await expect(checkButton(page)).toBeDisabled();
 
@@ -275,7 +270,7 @@ test("下載中刪掉那份資料包，下載完不會裝回來", async ({ page 
 	await expect(row(page, ID)).toHaveCount(0);
 	expect(await firstOf(page, "anr")).toBe("門口");
 	await page.reload();
-	await ready(page);
+	await waitReady(page);
 	await expect(row(page, ID)).toHaveCount(0);
 });
 

@@ -3,6 +3,7 @@
 
 import { newDeviceId } from "./device-id.ts";
 import { element, message } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import { storage } from "./storage.ts";
 import type { Merged, Session } from "./wasm/qim_wasm.js";
 
@@ -151,12 +152,12 @@ export function mountUserDict(
 				return;
 			}
 			pending = { name: chosen.name, text, mode };
-			const lines = `${rows(text)} 列${skipped(preview.warnings)}`;
-			confirmText.textContent =
-				mode === "merge"
+			confirmText.textContent = freeAfter(preview, (preview) => {
+				const lines = `${rows(text)} 列${skipped(preview.warnings)}`;
+				return mode === "merge"
 					? `匯入 ${chosen.name}（${lines}）會合併進目前的學習資料：${changes(preview)}，其餘不變。確定匯入？`
 					: `從 ${chosen.name}（${lines}）還原會取代目前的 ${rows(session.exportUserDict())} 列學習資料，並留清空記號：同步後別台原本的也換成這份備份。確定還原？`;
-			preview.free();
+			});
 			okButton.textContent = mode === "merge" ? "確定匯入" : "確定還原";
 			status.textContent = "";
 			confirm.hidden = false;
@@ -171,9 +172,11 @@ export function mountUserDict(
 		closeConfirm();
 		try {
 			if (mode === "merge") {
-				const merged = session.mergeUserDict(text);
-				status.textContent = `已合併 ${name}：${changes(merged)}${skipped(merged.warnings)}`;
-				merged.free();
+				status.textContent = freeAfter(
+					session.mergeUserDict(text),
+					(merged) =>
+						`已合併 ${name}：${changes(merged)}${skipped(merged.warnings)}`,
+				);
 			} else {
 				const warnings = session.restoreUserDict(text);
 				status.textContent = `已從 ${name} 還原${skipped(warnings)}`;

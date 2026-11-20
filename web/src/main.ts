@@ -8,6 +8,7 @@ import { mountDebugPanel } from "./debug-panel.ts";
 import { mountTheme, mountTouch } from "./display.ts";
 import { element, message } from "./dom.ts";
 import { mountFieldType } from "./field.ts";
+import { freeAfter } from "./free.ts";
 import { commitBeforeHost, hostDefault, insert } from "./host.ts";
 import {
 	LoneShift,
@@ -23,6 +24,7 @@ import { mountPanel } from "./panel.ts";
 import { mountPhrases, type Phrases } from "./phrases.ts";
 import { mountReportPanel } from "./report-panel.ts";
 import { fakeRank, rerankerId, rerankScheduler } from "./rerank.ts";
+import { restartTimer } from "./restart-timer.ts";
 import { mountSettings } from "./settings.ts";
 import "./style.css";
 import {
@@ -32,7 +34,6 @@ import {
 import { storage } from "./storage.ts";
 import { localToday } from "./today.ts";
 import type { Keyboard } from "./touch.ts";
-import { undoWindow } from "./undo-window.ts";
 import { mountUserDict } from "./user-dict.ts";
 import init, {
 	contextLimit,
@@ -47,6 +48,11 @@ import { mountWordList } from "./word-list.ts";
 const LAYOUT_URL = "/layouts/gboard-quick.json";
 /** 同上，字母頁上方多一排數字；設定的「數字列」打開時用（brief〈手機觸控鍵盤〉）。 */
 const NUMBER_ROW_LAYOUT_URL = "/layouts/gboard-quick-number-row.json";
+/**
+ * 學到東西之後多久還能用退格撤銷（毫秒）：照 librime 的 3 秒（`UserDictionary::RevertRecentTransaction`，
+ * 事實 R20）。上屏、交還瀏覽器的空白與標點讓英文串打完這些核心可能學到東西的時候重新計時。
+ */
+const UNDO_WINDOW_MS = 3000;
 /** 連按兩下空白輸出句點的時限（毫秒）：照 LatinIME 的 `config_double_space_period_timeout`（事實 M52）。 */
 const DOUBLE_SPACE_WINDOW_MS = 1100;
 
@@ -158,12 +164,10 @@ async function start(): Promise<void> {
 	syncReranker();
 	/** 正在用的字根提示資料包，查完提示就釋放。 */
 	const radicalHints = (): RadicalHints => {
-		const pack = library.radicalHintPack();
-		try {
-			return new RadicalHints(pack, session);
-		} finally {
-			pack.free();
-		}
+		return freeAfter(
+			library.radicalHintPack(),
+			(pack) => new RadicalHints(pack, session),
+		);
 	};
 	/** 常用語；要用 `userDict.save`，所以比它晚掛上。 */
 	let phrases: Phrases | undefined;
@@ -185,11 +189,11 @@ async function start(): Promise<void> {
 		focusText();
 	});
 	// 退格撤銷的時限（architecture〈核心對殼〉）：核心不讀時間，學到東西 3 秒後由網頁叫核心讓撤銷紀錄失效。
-	const undoTimer = undoWindow(() => session.expireUndo());
+	const undoTimer = restartTimer(() => session.expireUndo(), UNDO_WINDOW_MS);
 	// 連按兩下空白輸出句點的時限（M4 票 27）：核心不讀時間，每個按鍵、點擊（觸控鍵也是）之前重新計時，照 LatinIME 的
 	// 1100 ms（`config_double_space_period_timeout`）到了叫核心丟掉「剛按了空白」。單按修飾鍵不送字元、核心不算夾在
 	// 中間，也不重新計時，兩下之間按了 Shift 照樣是 1.1 秒內。
-	const doubleSpaceTimer = undoWindow(
+	const doubleSpaceTimer = restartTimer(
 		() => session.expireDoubleSpace(),
 		DOUBLE_SPACE_WINDOW_MS,
 	);
@@ -299,20 +303,9 @@ async function start(): Promise<void> {
 		touchKeyboard?.refresh();
 		requestRerank(snapshot.generation);
 	};
-	/** 交給 `use` 之後釋放 `snapshot`（`use` 丟錯也釋放）；網頁自己向核心要的快照都經這裡。 */
-	const withSnapshot = (
-		snapshot: Snapshot,
-		use: (snapshot: Snapshot) => void,
-	) => {
-		try {
-			use(snapshot);
-		} finally {
-			snapshot.free();
-		}
-	};
 	/** 點分段、點候選的結果：核心吃下才畫，用完釋放。`chosen` 同 `apply`。 */
 	const applyHandled = (snapshot: Snapshot, chosen: boolean): void =>
-		withSnapshot(snapshot, () => {
+		freeAfter(snapshot, () => {
 			if (snapshot.handled) {
 				apply(snapshot, chosen);
 			}
@@ -398,7 +391,7 @@ async function start(): Promise<void> {
 			changeModel?.();
 			syncReranker();
 			candidateBar.setRadicalHints(radicalHints());
-			withSnapshot(snapshot, render);
+			freeAfter(snapshot, render);
 		},
 		focusText,
 	);
@@ -410,7 +403,7 @@ async function start(): Promise<void> {
 	text.addEventListener("keyup", (event) => {
 		const side = loneShift.up(event.code, event.timeStamp);
 		if (side && !event.isComposing) {
-			withSnapshot(session.press("toggleAscii", side), (s) => apply(s, false));
+			freeAfter(session.press("toggleAscii", side), (s) => apply(s, false));
 		}
 	});
 	text.addEventListener("keydown", (event) => {
@@ -434,7 +427,7 @@ async function start(): Promise<void> {
 		// 第一個；這裡沒有高亮，照它的預設。沒有組字時照常交還瀏覽器。
 		if (shown.composing && isForgetKey(event)) {
 			event.preventDefault();
-			withSnapshot(session.forget(shown.page * pageSize()), (snapshot) => {
+			freeAfter(session.forget(shown.page * pageSize()), (snapshot) => {
 				saveLearning();
 				apply(snapshot, false);
 			});
@@ -448,7 +441,7 @@ async function start(): Promise<void> {
 			// 無痕時（不給前文）數字後半形才不會看錯（brief〈英文模式與欄位類型〉）。沒有組字時核心不吃、不動作，但也收起
 			// 了聯想。
 			if (!shown.composing) {
-				withSnapshot(session.press("other"), render);
+				freeAfter(session.press("other"), render);
 			}
 			return;
 		}
@@ -470,7 +463,7 @@ async function start(): Promise<void> {
 		const pressed = code
 			? session.pressCode(code)
 			: session.press(key.kind, key.value);
-		withSnapshot(pressed, (snapshot) => {
+		freeAfter(pressed, (snapshot) => {
 			if (!snapshot.handled) {
 				// 英文模式 Enter 的自動修正：先換掉詞，瀏覽器接著照做 Enter 的預設動作。
 				commitBeforeHost(text, snapshot);

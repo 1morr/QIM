@@ -1,14 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready } from "./page.ts";
 
 // brief〈桌面鍵盤操作〉 的鍵位表，每一列一項，實打網頁讀回輸入框、組字與候選（M1 票 23）。
 // 細節的變化（翻頁找字、連打分段）另見 keys、composition-keys、edit-segments 各檔。
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
+		...baseUi(page),
 		segments: page.getByTestId("composition").locator(".segment"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		mode: page.getByTestId("mode"),
 		rerank: page.getByRole("combobox", { name: "重排" }),
 	};
@@ -20,8 +19,7 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+	await ready(page);
 	await ui(page).text.focus();
 });
 

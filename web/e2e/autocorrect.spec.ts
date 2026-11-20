@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready, ui } from "./page.ts";
 
 // 英文自動修正（M4 票 25，brief〈英文模式與欄位類型〉）：預設關；設定打開後，英文模式打完一個詞（空白、句讀、
 // Enter）時換掉拼錯的詞，緊接著退格還原、之後不再修它。英文容錯（預設開）讓建議列也列拼錯的修正，debug
@@ -12,23 +13,12 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test.afterEach(() => {
 	expect(errors.map(String)).toEqual([]);
 });
-
-function parts(page: Page) {
-	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
-	};
-}
 
 /** 逐字點觸控鍵盤：字母是 `key-<字母>`，空白是 `key-space`。 */
 async function tapText(page: Page, typed: string): Promise<void> {
@@ -46,7 +36,7 @@ async function turnOnAutocorrect(page: Page): Promise<void> {
 }
 
 test("預設不修正 teh；建議列照樣列出修正 the", async ({ page }) => {
-	const { text, items } = parts(page);
+	const { text, items } = ui(page);
 	await page.getByTestId("key-globe").tap();
 	await tapText(page, "teh");
 	await expect(items.first()).toHaveText("1the");
@@ -57,7 +47,7 @@ test("預設不修正 teh；建議列照樣列出修正 the", async ({ page }) =
 test("打開自動修正後英文模式打 teh 修正成 the，退格還原，之後不再修", async ({
 	page,
 }, testInfo) => {
-	const { text, items } = parts(page);
+	const { text, items } = ui(page);
 	await page.getByRole("button", { name: "debug" }).click();
 	await page.getByTestId("key-globe").tap();
 	await turnOnAutocorrect(page);
@@ -93,7 +83,7 @@ test("打開自動修正後英文模式打 teh 修正成 the，退格還原，�
 });
 
 test("Enter 也觸發：換掉詞之後照樣換行", async ({ page }) => {
-	const { text } = parts(page);
+	const { text } = ui(page);
 	await page.getByTestId("key-globe").tap();
 	await turnOnAutocorrect(page);
 	await tapText(page, "recieve");
@@ -102,7 +92,7 @@ test("Enter 也觸發：換掉詞之後照樣換行", async ({ page }) => {
 });
 
 test("實體鍵盤的 Enter 在英文模式也先換掉詞再換行", async ({ page }) => {
-	const { text } = parts(page);
+	const { text } = ui(page);
 	await page.getByTestId("key-globe").tap();
 	await turnOnAutocorrect(page);
 	await tapText(page, "recieve");

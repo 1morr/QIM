@@ -1,4 +1,5 @@
 import { devices, expect, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 觸控模式（M1 票 18）：行動裝置 viewport 下顯示由佈局資料畫出的 Gboard 速成直向鍵盤，
 // 點擊位置交給 qim-layout 判定。
@@ -7,11 +8,7 @@ const { defaultBrowserType: _, ...pixel } = devices["Pixel 7"];
 test.use(pixel);
 
 test.beforeEach(async ({ page }) => {
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test("依序點 a、n、r，首選「門口」；點空白上屏「門口」", async ({

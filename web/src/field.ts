@@ -3,6 +3,7 @@
 // 輸入框，工具列的「欄位」選單模擬宿主的欄位：每個選項的 `data-type`、`data-inputmode` 是它模擬的 `input` 屬性。
 // 輸入框本身不換 `type`，為什麼見 `host.ts` 的 `Editable`。
 
+import { freeAfter } from "./free.ts";
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
 
 /** 核心收的欄位類型（`Session.setField`）。 */
@@ -61,12 +62,7 @@ export function mountFieldType(
 			option?.dataset.type ?? null,
 			option?.dataset.inputmode ?? null,
 		);
-		const snapshot = session.setField(field);
-		try {
-			changed(snapshot, field);
-		} finally {
-			snapshot.free();
-		}
+		freeAfter(session.setField(field), (snapshot) => changed(snapshot, field));
 		refocus();
 	});
 }

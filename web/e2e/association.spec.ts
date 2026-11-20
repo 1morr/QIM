@@ -1,22 +1,9 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready, shown, ui } from "./page.ts";
 
 // 聯想（M3 票 13）：上屏之後候選列給接下來可能要打的字詞，數字鍵或點選選了就上屏、接著出下一輪；
 // 空白不選、Esc 只收起、退格刪字並收起（M4 票 18c）、打字母照常組字，設定區的「聯想」關掉時沒有
 // （architecture〈核心對殼〉）。剛上屏的字詞的 emoji 排在前兩個聯想後面，選了上屏、不接下一輪（M4 票 30）。
-
-function ui(page: Page) {
-	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
-	};
-}
-
-/** 候選列各項的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	const labels = await ui(page).items.allTextContents();
-	return labels.map((label) => label.replace(/^\d/, ""));
-}
 
 /** 打 `hk`、按「笑」的序號上屏它（`hk` 的首選不是「笑」）。 */
 async function commitLaugh(page: Page) {
@@ -25,11 +12,6 @@ async function commitLaugh(page: Page) {
 	expect(laugh).not.toBe(-1);
 	await page.keyboard.press(String(laugh + 1));
 	await expect(ui(page).text).toHaveValue("笑");
-}
-
-async function ready(page: Page) {
-	await page.goto("/");
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
 }
 
 test.describe("實體鍵盤", () => {

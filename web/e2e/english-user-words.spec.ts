@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady, waitReady } from "./page.ts";
 
 // 英文使用者詞（M4 票 14，取代 M3 的記住的字串）：英文直通打過的串（4 字元起）都學。英文詞典沒有的打過
 // 2 次，中文組字打整串時排第 2（規則 4）；打過 3 次又是最常用的 20 條之一，打開頭 3 碼就有（規則 5，
@@ -8,13 +9,10 @@ import { expect, type Page, test } from "@playwright/test";
 const EMAIL = "jean.test@example.com";
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	await text.focus();
+	const parts = await baseReady(page);
+	await parts.text.focus();
 	return {
-		text,
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...parts,
 		list: page.getByRole("list", { name: "英文使用者詞清單" }),
 	};
 }
@@ -140,7 +138,7 @@ test("打完直接失焦也學，重新整理後還在；刪除後不再出", as
 	await expect(list.getByRole("listitem")).toHaveText(["rrrrrr刪除"]);
 
 	await page.reload();
-	await expect(text).toHaveAttribute("data-ready", "true");
+	await waitReady(page);
 	await expect(list.getByRole("listitem")).toHaveText(["rrrrrr刪除"]);
 	await text.focus();
 	await page.keyboard.type("rrrrrr");

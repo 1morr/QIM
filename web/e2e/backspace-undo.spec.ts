@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready, readyCleared, shown, waitReady } from "./page.ts";
 
 // 上屏後緊接著退格撤銷這次的學習（M4 票 15）：上屏後第一個交還宿主的鍵是退格時，
 // 退格照常刪字，這次上屏學到的都撤銷；有聯想時也一樣（退格刪字、聯想收起，M4 票 18c），其他鍵（含 Esc
@@ -8,8 +9,7 @@ import { expect, type Page, test } from "@playwright/test";
 function ui(page: Page) {
 	const debug = page.locator("#debug");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...baseUi(page),
 		association: page.getByRole("checkbox", { name: "聯想" }),
 		toggle: page.getByRole("button", { name: "debug" }),
 		debug,
@@ -24,11 +24,8 @@ let errors: Error[] = [];
 async function open(page: Page) {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await page.evaluate(() => localStorage.clear());
-	await page.reload();
+	await readyCleared(page);
 	const { text, toggle, debug } = ui(page);
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await toggle.click();
 	await expect(debug).toBeVisible();
 	await text.focus();
@@ -37,13 +34,6 @@ async function open(page: Page) {
 test.afterEach(() => {
 	expect(errors).toEqual([]);
 });
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
-}
 
 /** debug 面板候選表裡文字是 `text` 的那列。 */
 function row(page: Page, text: string) {
@@ -99,7 +89,7 @@ test.describe("緊接著的退格", () => {
 		// 撤銷後也存了檔：重新整理後照樣只選過一次。
 		await page.keyboard.press("Escape");
 		await page.reload();
-		await expect(text).toHaveAttribute("data-ready", "true");
+		await waitReady(page);
 		await text.focus();
 		await page.keyboard.type("a");
 		await expect(items.first()).toHaveText(`1${top}`);
@@ -299,9 +289,8 @@ test("localStorage 打不開（學習資料只在記憶體）：上屏後緊接�
 			},
 		});
 	});
-	await page.goto("/");
+	await ready(page);
 	const { text, items, association } = ui(page);
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await association.uncheck();
 	await text.focus();
 	const [top, second] = await topTwo(page);

@@ -1,21 +1,17 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready } from "./page.ts";
 
 // 組字中的字根與字根提示（M1 票 22，brief〈桌面鍵盤操作〉〈手機觸控鍵盤〉）。
 function ui(page: Page) {
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
-		items,
+		...baseUi(page),
 		hint: page.getByTestId("hint-1"),
 		version: page.getByRole("combobox", { name: "字根提示" }),
 	};
 }
 
 test.beforeEach(async ({ page }) => {
-	await page.goto("/");
-	const { text } = ui(page);
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await ready(page);
 	await text.focus();
 });
 

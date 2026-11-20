@@ -1,11 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready, shown } from "./page.ts";
 
 /** 打 `code`，讀回組字的字根；交出輸入框與候選。 */
 async function typeCode(page: Page, code: string, radicals: string) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text, items } = await ready(page);
 
 	await text.focus();
 	await page.keyboard.type(code);
@@ -58,7 +56,7 @@ for (const { code, radicals, word } of [
 async function firstPage(page: Page, code: string, radicals: string) {
 	const { items } = await typeCode(page, code, radicals);
 	await expect(items.first()).toBeVisible();
-	return (await items.allTextContents()).map((t) => t.replace(/^\d/, ""));
+	return shown(page);
 }
 
 // 票 17d：t2hk 換掉 essay 的「鉤」→「鈎」補成雙向，打「鉤」的碼出得了「鉤子」；「臺」「菸」單向，

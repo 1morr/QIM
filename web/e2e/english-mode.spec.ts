@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready, ui } from "./page.ts";
 
 // 英文模式（ADR 0008，M4 票 24）：觸控的地球鍵切到英文頁時，字母逐個上屏，候選列是正在打的串的建議
 // （英文詞典加英文使用者詞，照使用頻率排；詞典沒有的打過 2 次才出）。點建議換掉打的詞並補一個空白。
@@ -14,23 +15,12 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test.afterEach(() => {
 	expect(errors.map(String)).toEqual([]);
 });
-
-function parts(page: Page) {
-	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
-	};
-}
 
 /** 逐字點觸控鍵盤：字母是 `key-<字母>`，空白是 `key-space`。 */
 async function tapText(page: Page, typed: string): Promise<void> {
@@ -56,7 +46,7 @@ async function openDebug(page: Page) {
 test("地球鍵切到英文頁打 rrrrrr 一次後，打 rrr 建議列沒有它；打第二次後有，面板標英文使用者詞", async ({
 	page,
 }, testInfo) => {
-	const { text, items } = parts(page);
+	const { text, items } = ui(page);
 	const row = await openDebug(page);
 	await page.getByTestId("key-globe").tap();
 
@@ -92,7 +82,7 @@ const V2_WITH_EMAIL = [
 test("v2 匯入的 email 打開頭的字母，英文建議列就有它；點了換掉打的字", async ({
 	page,
 }, testInfo) => {
-	const { text, items } = parts(page);
+	const { text, items } = ui(page);
 	await page.getByLabel("匯入學習資料（合併進目前的）").setInputFiles({
 		name: "v2.tsv",
 		mimeType: "text/plain",
@@ -121,7 +111,7 @@ test("v2 匯入的 email 打開頭的字母，英文建議列就有它；點了�
 test("建議照詞典頻率排；點建議刪掉打的字、補空白，緊接著的逗號換掉那個空白", async ({
 	page,
 }) => {
-	const { text, items } = parts(page);
+	const { text, items } = ui(page);
 	const row = await openDebug(page);
 	await page.getByTestId("key-globe").tap();
 	await tapText(page, "thi");
@@ -136,7 +126,7 @@ test("建議照詞典頻率排；點建議刪掉打的字、補空白，緊接�
 test("句首自動大寫打開後，英文模式在空的欄位與句號加空白之後自動開 Shift", async ({
 	page,
 }, testInfo) => {
-	const { text } = parts(page);
+	const { text } = ui(page);
 	const shift = page.getByTestId("key-shift");
 	await page.getByTestId("key-globe").tap();
 	await expect(shift).toHaveAttribute("data-shift", "off");
@@ -166,7 +156,7 @@ test("句首自動大寫打開後，英文模式在空的欄位與句號加空�
 test("實體鍵盤單按 Shift 照舊是英文直通：字母交還瀏覽器、沒有建議", async ({
 	page,
 }) => {
-	const { text, items } = parts(page);
+	const { text, items } = ui(page);
 	await text.focus();
 	await page.keyboard.press("Shift");
 	await page.keyboard.type("hel-lo");
@@ -177,7 +167,7 @@ test("實體鍵盤單按 Shift 照舊是英文直通：字母交還瀏覽器、�
 test("用真的英文資料包：打過一次的 helmet 打 hel 時在前 3 格；打過一次的 tumors 不擠進 t 的前 3 格", async ({
 	page,
 }) => {
-	const { items } = parts(page);
+	const { items } = ui(page);
 	await page.getByTestId("key-globe").tap();
 	await tapText(page, "hel");
 	await expect(items.first()).toBeVisible();

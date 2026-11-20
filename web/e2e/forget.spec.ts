@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, readyCleared, shown, waitReady } from "./page.ts";
 
 // 撤銷學習（M4 票 16）：組字中 Shift+Delete 或 Ctrl+Delete（librime 的綁定）清掉首選學到的，候選回到不學習時
 // 的位置，debug 面板的學習加分歸零；再選兩次又成首選。沒有組字時 Shift+Delete 照常交還瀏覽器。
@@ -6,8 +7,7 @@ import { expect, type Page, test } from "@playwright/test";
 function ui(page: Page) {
 	const debug = page.locator("#debug");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...baseUi(page),
 		debug,
 		rows: debug.getByRole("table", { name: "候選來源" }).locator("tbody tr"),
 		top: debug.getByTestId("debug-top"),
@@ -28,23 +28,13 @@ test.afterEach(() => {
 
 /** 從空白的學習資料開始，關掉重排（候選位置只看學習），打開 debug 面板。 */
 async function ready(page: Page) {
-	await page.goto("/");
-	await page.evaluate(() => localStorage.clear());
-	await page.reload();
+	await readyCleared(page);
 	const parts = ui(page);
-	await expect(parts.text).toHaveAttribute("data-ready", "true");
 	await page.getByRole("combobox", { name: "重排" }).selectOption("off");
 	await page.getByRole("button", { name: "debug" }).click();
 	await expect(parts.debug).toBeVisible();
 	await parts.text.focus();
 	return parts;
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
 }
 
 /** 打 `code`，按數字鍵選文字是 `word` 的候選。 */
@@ -90,7 +80,7 @@ test("Shift+Delete 清掉學成首選的字：回到原位、學習加分歸零�
 
 	// 存進學習資料：重新整理後一樣。
 	await page.reload();
-	await expect(text).toHaveAttribute("data-ready", "true");
+	await waitReady(page);
 	await page.getByRole("combobox", { name: "重排" }).selectOption("off");
 	await text.focus();
 	await page.keyboard.press("End");

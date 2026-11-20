@@ -1,13 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 字級 bigram（M1 票 11）：網頁載入方案指名的語言模型資料包，連打依前後字排序。
 test("打 mir 首選是「一台」，按空白上屏「一台」", async ({
 	page,
 }, testInfo) => {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text, items } = await ready(page);
 
 	await text.focus();
 	await page.keyboard.type("mir");

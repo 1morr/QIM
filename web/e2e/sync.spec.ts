@@ -6,6 +6,7 @@ import {
 	type Page,
 	test,
 } from "@playwright/test";
+import { ui as baseUi, ready, shown, waitReady } from "./page.ts";
 
 // 跨裝置同步（M4 票 17，ADR 0007）：網頁沒有傳輸層，兩個瀏覽器設定檔（各自的 localStorage 與
 // 裝置 id）的同步就是各自匯出、匯入對方的檔（匯入是合併）。次數各台分開記、合計時相加；刪除留墓碑傳到別台。
@@ -33,9 +34,7 @@ async function profile(browser: Browser): Promise<Profile> {
 	const page = await context.newPage();
 	page.on("pageerror", (error) => errors.push(error));
 	await page.clock.setFixedTime(new Date(2026, 10, 13, 12, 0));
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await ready(page);
 	await page.getByRole("combobox", { name: "重排" }).selectOption("off");
 	await page.getByRole("button", { name: "debug" }).click();
 	await expect(page.locator("#debug")).toBeVisible();
@@ -46,19 +45,11 @@ async function profile(browser: Browser): Promise<Profile> {
 function ui(page: Page) {
 	const debug = page.locator("#debug");
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...baseUi(page),
 		top: debug.getByTestId("debug-top"),
 		rows: debug.getByRole("table", { name: "候選來源" }).locator("tbody tr"),
 		status: page.getByRole("status", { name: "學習資料狀態" }),
 	};
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	return (await ui(page).items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
 }
 
 /** 打 `code`，按數字鍵選文字是 `word` 的候選，清掉聯想。 */
@@ -153,7 +144,7 @@ test("兩個瀏覽器設定檔各選一次同一個候選，互相匯出匯入�
 
 	// 重新整理後（讀回 localStorage 存的檔）照樣是首選。
 	await b.page.reload();
-	await expect(ui(b.page).text).toHaveAttribute("data-ready", "true");
+	await waitReady(b.page);
 	await b.page.getByRole("combobox", { name: "重排" }).selectOption("off");
 	await ui(b.page).text.focus();
 	expect(await topOf(b.page, "a")).toBe(second);

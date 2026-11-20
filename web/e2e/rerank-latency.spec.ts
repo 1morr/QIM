@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 停鍵層模型在瀏覽器裡重排一次的延遲（M3 票 11e）：只報不擋，平常略過，設 `QIM_RERANK_LATENCY=1` 才跑
 // （`docs/development.md`〈網頁〉）。兩種量法：
@@ -26,11 +27,7 @@ function report(name: string, values: number[], extra = ""): void {
 
 test.beforeEach(async ({ page }) => {
 	test.setTimeout(300_000);
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test("合成：9 條 × 18 字、前文 50 字", async ({ page }) => {

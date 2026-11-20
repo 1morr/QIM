@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { ready, waitReady } from "./page.ts";
 
 // 區網 http 開網頁（M4 票 31b）：手機用 `http://192.168.x.x:5174/` 開，不是安全環境（HTTPS 或 localhost），
 // 瀏覽器不給 `crypto.randomUUID`、`navigator.clipboard`。這裡讓頁面的網址是不存在的主機名，請求攔下來轉給
@@ -29,8 +30,7 @@ test("非安全環境開網頁：產生裝置 id、照常載入能打字", async
 }, testInfo) => {
 	await page.goto(`${LAN}/`);
 	expect(await page.evaluate(() => window.isSecureContext)).toBe(false);
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await waitReady(page);
 	await expect(page.getByText("載入失敗")).toHaveCount(0);
 	const device = await page.evaluate(() => localStorage.getItem("qim.device"));
 	expect(device).toMatch(
@@ -46,10 +46,8 @@ test("非安全環境開網頁：產生裝置 id、照常載入能打字", async
 test("非安全環境按「複製全部」：選取回報清單、說明要自己複製", async ({
 	page,
 }) => {
-	await page.goto(`${LAN}/`);
-	const text = page.getByRole("textbox", { name: "輸入框" });
+	await ready(page, `${LAN}/`);
 	const reports = page.getByRole("textbox", { name: /回報的固定題/ });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	await reports.fill("mir\t一台\t網頁回報");
 
 	await page.getByRole("button", { name: "複製全部" }).click();

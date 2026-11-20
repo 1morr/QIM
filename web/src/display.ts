@@ -1,6 +1,7 @@
 // 畫面開關：觸控鍵盤（開關、數字列、隨裝置與方向選佈局版本）與深色。
 
 import { element } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import { type Keyboard, mountKeyboard } from "./touch.ts";
 import { Layout, type Session, type Snapshot } from "./wasm/qim_wasm.js";
 
@@ -87,11 +88,12 @@ export function mountTouch(
 			mounted.relayout();
 		});
 	numberRow.addEventListener("change", () => {
-		const old = layout;
-		layout = readLayout();
-		layout.keepStateOf(old);
-		mounted.setLayout(layout);
-		old.free();
+		const next = readLayout();
+		next.keepStateOf(layout);
+		mounted.setLayout(next);
+		freeAfter(layout, () => {
+			layout = next;
+		});
 		text.focus();
 	});
 	// 頁面底部留出鍵盤實際的高度，鍵盤才不會蓋住輸入框；高度隨佈局版本的畫布比例與寬度變。
