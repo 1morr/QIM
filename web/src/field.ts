@@ -1,6 +1,7 @@
 // 欄位類型（M4 票 26，architecture〈核心對殼〉）：網頁從輸入框的 `type` 與 `inputmode` 讀出核心的欄位類型
 // （`Session.setField`），換欄位類型時切中英（email、網址、密碼欄是英文直通）與數字頁。這個原型只有一個
 // 輸入框，工具列的「欄位」選單模擬宿主的欄位：每個選項的 `data-type`、`data-inputmode` 是它模擬的 `input` 屬性。
+// 輸入框本身不換 `type`，為什麼見 `host.ts` 的 `Editable`。
 
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
 
