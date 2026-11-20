@@ -16,7 +16,12 @@ export function deleteStart(
 	return cursor - removed.join("").length;
 }
 
-/** 上屏要動到的輸入框：`HTMLTextAreaElement` 用到的部分（單元測試給假的）。 */
+/**
+ * 上屏要動到的輸入框：`HTMLTextAreaElement` 用到的部分（單元測試給假的）。輸入框一律是 `textarea`，換欄位類型
+ * 也不換成對應 `type` 的 `input`：HTML 規範裡 `type=email`、`number` 的 `input` 不支援選取 API，`selectionStart`
+ * 讀到 `null`、`setRangeText` 丟 `InvalidStateError`，上屏與讀前文都靠它們。欄位類型改由「欄位」選單模擬
+ * （`field.ts`）。
+ */
 export type Editable = Pick<
 	HTMLTextAreaElement,
 	"value" | "selectionStart" | "selectionEnd" | "setRangeText" | "dispatchEvent"
