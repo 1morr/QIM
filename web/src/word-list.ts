@@ -2,6 +2,7 @@
 // 使用者確認後加進使用者詞。同匯入學習資料的流程，不用瀏覽器原生的對話框；格式與規則在核心。
 
 import { element, message } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import type { Session, WordListReport } from "./wasm/qim_wasm.js";
 
 /** 每張清單最多列幾列，其餘只寫列數。 */
@@ -61,11 +62,11 @@ export function mountWordList(
 		confirm.hidden = true;
 	};
 	/** 列出略過的列與不能當觸發詞的快捷鍵，用完釋放 `report`。 */
-	const showReport = (report: WordListReport): void => {
-		showLines(skippedList, report.skipped);
-		showLines(unusedList, report.unusedShortcuts);
-		report.free();
-	};
+	const showReport = (report: WordListReport): void =>
+		freeAfter(report, (report) => {
+			showLines(skippedList, report.skipped);
+			showLines(unusedList, report.unusedShortcuts);
+		});
 	const clearLines = (): void => {
 		skippedList.replaceChildren();
 		unusedList.replaceChildren();

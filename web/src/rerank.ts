@@ -6,6 +6,7 @@
  * 重排會改候選位置，所以有開關（brief〈設定與同步〉 的停鍵重排，預設開）。
  */
 
+import { freeAfter } from "./free.ts";
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
 
 /**
@@ -140,7 +141,7 @@ export function rerankScheduler(
 		if (!result) {
 			return "stale";
 		}
-		try {
+		return freeAfter(result, (result) => {
 			// `generation` 沒變是名次沒變，不必重畫。
 			if (result.generation === asked) {
 				return "unchanged";
@@ -148,9 +149,7 @@ export function rerankScheduler(
 			rerankedAt = result.generation;
 			options.show(result);
 			return "applied";
-		} finally {
-			result.free();
-		}
+		});
 	};
 
 	const ask = (): void => {
@@ -167,12 +166,11 @@ export function rerankScheduler(
 			return;
 		}
 		const asked = request.generation;
-		const job: RerankJob = {
+		const job: RerankJob = freeAfter(request, (request) => ({
 			context: request.context,
 			paths: request.paths,
 			scores: Float64Array.from(request.scores),
-		};
-		request.free();
+		}));
 		if (asked === rerankedAt) {
 			return;
 		}

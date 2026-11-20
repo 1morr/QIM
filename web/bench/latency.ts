@@ -10,6 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { freeAfter } from "../src/free.ts";
 import { initSync, Pack, Session } from "../src/wasm/qim_wasm.js";
 
 const USAGE =
@@ -49,14 +50,15 @@ const inputs = readFileSync(0, "utf8")
 
 /** 讀出網頁畫組字與候選要的欄位（計時的一部分），回傳分段數。 */
 function read(snapshot: ReturnType<Session["select"]>): number {
-	const segments = snapshot.segments;
-	for (const segment of segments) {
-		void segment.radicals;
-		segment.free();
-	}
+	const count = freeAfter(snapshot.segments, (segments) => {
+		for (const segment of segments) {
+			void segment.radicals;
+		}
+		return segments.length;
+	});
 	void snapshot.focus;
 	void snapshot.candidates;
-	return segments.length;
+	return count;
 }
 
 const lines = [`Node ${process.version} | ${loadMs}`];
@@ -66,22 +68,25 @@ for (const input of inputs) {
 	for (const c of input) {
 		const start = performance.now();
 		// 分隔記號送標點鍵（`Key::for_input`），同 `qim-bench` 的原生計時。
-		const snapshot = session.inputChar(c);
-		segments = read(snapshot);
-		times.push(String(performance.now() - start));
-		snapshot.free();
+		// 計時到讀完為止，釋放快照不計。
+		freeAfter(session.inputChar(c), (snapshot) => {
+			segments = read(snapshot);
+			times.push(String(performance.now() - start));
+		});
 	}
 	let line = times.join(" ");
 	if (segments >= 2) {
-		for (let i = 0; i < segments; i++) session.press("left").free();
+		for (let i = 0; i < segments; i++) {
+			freeAfter(session.press("left"), () => undefined);
+		}
 		const start = performance.now();
-		const snapshot = session.select(0);
-		read(snapshot);
-		line += ` | ${performance.now() - start}`;
-		snapshot.free();
+		freeAfter(session.select(0), (snapshot) => {
+			read(snapshot);
+			line += ` | ${performance.now() - start}`;
+		});
 	}
 	lines.push(line);
 	// 下一個輸入從空的組字打起；Esc 不計時。
-	session.press("escape").free();
+	freeAfter(session.press("escape"), () => undefined);
 }
 process.stdout.write(`${lines.join("\n")}\n`);

@@ -2,6 +2,7 @@
 // 叫出清單點了就上屏（Gboard 工具列的剪貼簿、微信輸入法的常用語面板）。觸發詞的部分在核心。
 
 import { element, message } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
 
 /** 清單裡的一條常用語：換行畫成 ⏎，整條才看得出是一則。 */
@@ -42,11 +43,9 @@ export function mountPhrases(
 
 	/** 核心的清單，依文字排；用完釋放。 */
 	const phrases = (): { text: string; trigger: string }[] =>
-		session.phrases().map((phrase) => {
-			const plain = { text: phrase.text, trigger: phrase.trigger };
-			phrase.free();
-			return plain;
-		});
+		freeAfter(session.phrases(), (phrases) =>
+			phrases.map(({ text, trigger }) => ({ text, trigger })),
+		);
 
 	const setPickerOpen = (next: boolean): void => {
 		pickerOpen = next;

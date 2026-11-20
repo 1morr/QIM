@@ -1,6 +1,7 @@
 // 候選列：左邊中英狀態、目前頁的候選與字根提示；點候選選字，長按叫出字根提示。
 
 import { element } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import type { RadicalHints } from "./wasm/qim_wasm.js";
 
 /** 長按候選多久叫出字根提示（毫秒）；和 Android 的長按門檻同級。 */
@@ -15,13 +16,11 @@ function hintText(
 	version: string,
 	candidate: string,
 ): string {
-	const hints = radicalHints.hint(candidate, version);
-	const parts = hints.map((hint) =>
-		hint.codes.map((code, i) => `${hint.radicals[i]}(${code})`).join("／"),
+	const parts = freeAfter(radicalHints.hint(candidate, version), (hints) =>
+		hints.map((hint) =>
+			hint.codes.map((code, i) => `${hint.radicals[i]}(${code})`).join("／"),
+		),
 	);
-	for (const hint of hints) {
-		hint.free();
-	}
 	return parts.every((part) => part === "")
 		? ""
 		: parts.map((part) => part || "—").join(" ");
@@ -138,8 +137,9 @@ export function mountCandidateBar(
 		},
 		toggleHints,
 		setRadicalHints(next) {
-			radicalHints.free();
-			radicalHints = next;
+			freeAfter(radicalHints, () => {
+				radicalHints = next;
+			});
 			render();
 		},
 	};

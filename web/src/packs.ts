@@ -3,6 +3,7 @@
 
 import { createStore, del, entries, set, type UseStore } from "idb-keyval";
 import { message } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import type { PackSource } from "./neural-rerank.ts";
 import {
 	activeIds,
@@ -104,12 +105,9 @@ function readChosen(): Record<string, string> {
 
 /** 核心與 `qim-neural` 收不收這份停鍵層模型資料包：不收時丟錯（訊息說明原因）。 */
 export function checkModelPack(source: PackSource): void {
-	const pack = new Pack(source.manifest, source.bytes);
-	try {
-		new Reranker(pack).free();
-	} finally {
-		pack.free();
-	}
+	freeAfter(new Pack(source.manifest, source.bytes), (pack) =>
+		freeAfter(new Reranker(pack), () => undefined),
+	);
 }
 
 /** 一份要給使用者看的資料包：列表的欄位加上它是不是正在用。 */
@@ -321,12 +319,7 @@ export class PackLibrary {
 		if (conflict) {
 			throw new Error(conflict);
 		}
-		const pack = new Pack(manifest, bytes);
-		try {
-			pack.verify();
-		} finally {
-			pack.free();
-		}
+		freeAfter(new Pack(manifest, bytes), (pack) => pack.verify());
 		const origin = entry.origin;
 		await this.change(
 			() => {

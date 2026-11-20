@@ -1,6 +1,7 @@
 // 組字區：一段一個 `<span>`，點一段就移到那段（brief〈手機觸控鍵盤〉）。
 
 import { element } from "./dom.ts";
+import { freeAfter } from "./free.ts";
 import type { Snapshot } from "./wasm/qim_wasm.js";
 
 export interface Composition {
@@ -26,24 +27,22 @@ export function mountComposition(focus: (index: number) => void): Composition {
 		 * `aria-current`。
 		 */
 		show(snapshot) {
-			const segments = snapshot.segments;
-			composition.replaceChildren(
-				...segments.map((segment, i) => {
-					const span = document.createElement("span");
-					span.className = "segment";
-					span.dataset.index = String(i);
-					span.textContent =
-						segment.selected || segment.raw ? segment.text : segment.radicals;
-					if (i === snapshot.focus) {
-						span.setAttribute("aria-current", "true");
-					}
-					return span;
-				}),
-			);
-			for (const segment of segments) {
-				segment.free();
-			}
-			return segments.length > 0;
+			return freeAfter(snapshot.segments, (segments) => {
+				composition.replaceChildren(
+					...segments.map((segment, i) => {
+						const span = document.createElement("span");
+						span.className = "segment";
+						span.dataset.index = String(i);
+						span.textContent =
+							segment.selected || segment.raw ? segment.text : segment.radicals;
+						if (i === snapshot.focus) {
+							span.setAttribute("aria-current", "true");
+						}
+						return span;
+					}),
+				);
+				return segments.length > 0;
+			});
 		},
 	};
 }

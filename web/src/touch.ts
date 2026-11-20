@@ -1,3 +1,4 @@
+import { freeAfter } from "./free.ts";
 import { createKeyboardMenu } from "./keyboard-menu.ts";
 import type { Layout, LayoutKey, Session, Snapshot } from "./wasm/qim_wasm.js";
 
@@ -134,10 +135,10 @@ export function mountKeyboard(
 	/** 依目前的佈局版本與頁面畫全部按鍵。 */
 	function render(): void {
 		cancel();
-		for (const key of keys) {
-			key.free();
-		}
-		keys = layout.keys(session);
+		const next = layout.keys(session);
+		freeAfter(keys, () => {
+			keys = next;
+		});
 		shownPage = layout.pageId;
 		shownShift = layout.shift;
 		const width = layout.canvasWidth;
@@ -330,11 +331,10 @@ export function mountKeyboard(
 
 	/** 重取按鍵、重畫標籤（同一頁，組字或 Shift 狀態變了）。 */
 	function repaint(): void {
-		const old = keys;
-		keys = layout.keys(session);
-		for (const key of old) {
-			key.free();
-		}
+		const next = layout.keys(session);
+		freeAfter(keys, () => {
+			keys = next;
+		});
 		shownShift = layout.shift;
 		keys.forEach((key, i) => {
 			paint(elements[i], key);
@@ -345,13 +345,10 @@ export function mountKeyboard(
 	function finish(snapshot: Snapshot) {
 		const openMenu = snapshot.action === "keyboardMenu";
 		try {
-			if (snapshot.handled) {
-				onSnapshot(snapshot);
-			} else {
-				onUnhandled(snapshot);
-			}
+			freeAfter(snapshot, (snapshot) =>
+				snapshot.handled ? onSnapshot(snapshot) : onUnhandled(snapshot),
+			);
 		} finally {
-			snapshot.free();
 			followPage();
 		}
 		if (openMenu) {

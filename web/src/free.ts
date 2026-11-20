@@ -8,7 +8,8 @@ export interface Freeable {
 
 /**
  * 把 `item` 交給 `use`，之後釋放它（陣列則每一個）；`use` 丟錯也釋放。`use` 回傳時就釋放了，所以不能是
- * async：要跨 `await` 用的，先在 `use` 裡讀成一般的值。換掉手上留著的物件時，`use` 換上新的、舊的跟著釋放。
+ * async：要跨 `await` 用的，先在 `use` 裡讀成一般的值。換掉手上留著的物件時，先建好新的，`use` 裡只換上它，
+ * 舊的跟著釋放（建新的丟錯時舊的還留著能用）。
  */
 export function freeAfter<T extends Freeable | readonly Freeable[], R>(
 	item: T,

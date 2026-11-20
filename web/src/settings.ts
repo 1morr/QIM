@@ -1,6 +1,7 @@
 // 設定區：改候選與組字行為的開關（核心選項與重排）。新開關在 `ROWS` 加一列，畫面與套用都由這裡做；
 // 之後的設定（常用語、詞庫匯入、資料包）在 `index.html` 的設定區各加一段。
 
+import { freeAfter } from "./free.ts";
 import { shiftSwitch } from "./keys.ts";
 import { type RerankMode, rerankMode } from "./rerank.ts";
 import type { Session, Snapshot } from "./wasm/qim_wasm.js";
@@ -266,11 +267,7 @@ export function mountSettings(container: HTMLElement): Settings {
 				const applyNow = (): void => {
 					const snapshot = applyTo(session);
 					if (snapshot) {
-						try {
-							show(snapshot);
-						} finally {
-							snapshot.free();
-						}
+						freeAfter(snapshot, show);
 					}
 				};
 				applyNow();
