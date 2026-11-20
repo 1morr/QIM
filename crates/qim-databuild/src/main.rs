@@ -122,7 +122,12 @@ fn pack_release(previous: Option<&Path>) -> ExitCode {
             .and_then(|json| PackIndex::from_json(&json).map_err(|e| e.to_string()))
     }) {
         None => None,
-        Some(Ok(index)) => Some(index),
+        Some(Ok(parsed)) => {
+            for warning in &parsed.warnings {
+                eprintln!("警告：上一版索引：{warning}");
+            }
+            Some(parsed.index)
+        }
         Some(Err(e)) => {
             eprintln!("上一版索引：{e}");
             return ExitCode::FAILURE;

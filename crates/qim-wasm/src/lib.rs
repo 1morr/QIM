@@ -85,6 +85,7 @@ impl WebPack {
 
 /// 更新索引裡要下載的一項（architecture〈資料包〉）：新版的 manifest 與資料包檔的位置。
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct PackUpdate(IndexEntry);
 
 #[wasm_bindgen]
@@ -120,21 +121,35 @@ pub fn manifest_is_newer(manifest: &str, than: &str) -> Result<bool, JsError> {
     Ok(manifest.is_newer_than(&than))
 }
 
+/// [`pack_updates`] 的結果：要下載的與讀索引時略過的項。
+#[wasm_bindgen(getter_with_clone)]
+pub struct PackUpdates {
+    #[wasm_bindgen(readonly)]
+    pub updates: Vec<PackUpdate>,
+    /// 略過的項（不認得的種類，核心的 [`PackIndex::from_json`]），給網頁印在 console。
+    #[wasm_bindgen(readonly)]
+    pub warnings: Vec<String>,
+}
+
 /// 更新索引 `index`（`index.json` 的內容）裡，`installed`（裝著的資料包的 `manifest.json`）有新版的
 /// 那些（核心的 [`PackIndex::updates`]）。
 #[wasm_bindgen(js_name = packUpdates)]
-pub fn pack_updates(index: &str, installed: Vec<String>) -> Result<Vec<PackUpdate>, JsError> {
-    let index = PackIndex::from_json(index).map_err(js_error)?;
+pub fn pack_updates(index: &str, installed: Vec<String>) -> Result<PackUpdates, JsError> {
+    let parsed = PackIndex::from_json(index).map_err(js_error)?;
     let installed = installed
         .iter()
         .map(|json| Manifest::from_json(json))
         .collect::<Result<Vec<_>, _>>()
         .map_err(js_error)?;
-    Ok(index
-        .updates(&installed)
-        .into_iter()
-        .map(|entry| PackUpdate(entry.clone()))
-        .collect())
+    Ok(PackUpdates {
+        updates: parsed
+            .index
+            .updates(&installed)
+            .into_iter()
+            .map(|entry| PackUpdate(entry.clone()))
+            .collect(),
+        warnings: parsed.warnings.iter().map(ToString::to_string).collect(),
+    })
 }
 
 /// 由一組資料包建 `Engine`（核心的 [`Engine::open`]）。

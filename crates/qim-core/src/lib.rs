@@ -43,7 +43,9 @@ pub use pack::{
     EmojiPack, EnglishPack, FORMAT_VERSION, LanguageModelPack, LexiconPack, ModelPack, Pack,
     PackError, RadicalHintPack, SchemePack, SimplifierPack, WordTrigramPack,
 };
-pub use pack_index::{IndexEntry, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex};
+pub use pack_index::{
+    IndexEntry, IndexWarning, PACK_INDEX_FILE, PACK_INDEX_VERSION, PackIndex, ParsedIndex,
+};
 pub use radical_hint::{CangjieCodes, CangjieVersion, RadicalHint, RadicalHints};
 pub use scheme::{Packs, Ranking, RankingError, SEPARATOR, Scheme};
 pub use session::{

@@ -14,11 +14,11 @@ use crate::Date;
 use crate::english_user::{self, ENGLISH_COMPLETION_AFTER, EnglishUserWord, EnglishUserWords};
 
 /// 匯出檔的第一行（architecture〈學習資料的格式〉）；格式改了要升版本（brief〈版本與更新〉）。v3 每列開頭是種類、帶各台的次數、墓碑與
-/// 最後使用的日期，檔頭有裝置 id；M4 收尾前還沒定稿，M4 的票可以往裡加種類與欄位（M4 spec〈共同規則〉）。
+/// 最後使用的日期，檔頭有裝置 id；M4 驗收時定稿，加種類或改欄位就升 v4。
 const HEADER: &str = "# qim-userdict v3";
 /// M3 定稿的第一行：沒有種類欄，列的種類由空的欄分辨；詞欄有跳脫、可以有常用語，沒有日期。
 const HEADER_V2: &str = "# qim-userdict v2";
-/// M1 定稿的第一行：詞欄照字面讀、沒有常用語與個人 bigram。v1、v2 匯入一直要收（M4 spec〈共同規則〉）。
+/// M1 定稿的第一行：詞欄照字面讀、沒有常用語與個人 bigram。v1、v2 匯入一直要收（architecture〈學習資料的格式〉）。
 const HEADER_V1: &str = "# qim-userdict v1";
 
 /// 匯入的檔是哪一版，由第一行決定。

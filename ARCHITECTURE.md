@@ -129,7 +129,7 @@ flowchart LR
 - 方案 `[packs]` 指名的是預設；同一種可以裝好幾份，殼選一份交給核心，核心只核對方案要不要那種、不核對 id；建出的預設是不是指名的那份由 `cargo xtask data --verify` 擋。
 - 字頻在詞庫資料包：速成資料包不帶語料衍生的資料，`Engine` 載入兩份時才依字頻排字序。字頻與字級 bigram 用同一組語料權重，屬於共用的語言模型、不寫在方案檔。
 - 詞級 trigram 的段是用預設詞庫、字級 bigram 與方案的 β、γ 切的：改了其中一樣，詞級 trigram 要一起重建、一起發佈；對不上不會打錯，只是首選的進步變小。
-- 線上更新讀 GitHub release（固定 tag `packs`）上的 `index.json`（`crates/qim-core/src/pack_index.rs`）：每項是一份 manifest 加相對於索引的 `url`；只換裝著的、同 id 同種類、版本較大、核心讀得了的那份，下載後一樣經 `Pack::open` 核對。
+- 線上更新讀 GitHub release（固定 tag `packs`）上的 `index.json`（`crates/qim-core/src/pack_index.rs`）：每項是一份 manifest 加相對於索引的 `url`，種類不認得的項略過並警告、其他照讀（單一 manifest 的不認得種類拒絕載入）；只換裝著的、同 id 同種類、版本較大、核心讀得了的那份，下載後一樣經 `Pack::open` 核對。
 - 同 id 的內建版與下載版取版本較高的，同版用內建的；從檔案匯入的一律取代內建的。
 
 ## 平台殼

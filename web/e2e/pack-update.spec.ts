@@ -169,6 +169,37 @@ test("下載的檔案 sha256 不符時拒絕，保留舊版", async ({ page }, t
 	expect(await firstOf(page, "anr")).toBe("新版詞庫");
 });
 
+test("索引多一項不認得的種類時照樣換上其他新版，console 有警告", async ({
+	page,
+}) => {
+	await importOld(page);
+	// 照樣從本機伺服器取，交給網頁前在最前面插一項之後的核心才有的種類。
+	await page.route("**/pack-updates/index.json", async (route) => {
+		const response = await route.fetch();
+		const index = await response.json();
+		index.packs.unshift({
+			...index.packs[0],
+			id: "handwriting-zh",
+			kind: "handwriting",
+			url: "handwriting-zh.pack",
+		});
+		await route.fulfill({ response, json: index });
+	});
+	const warnings: string[] = [];
+	page.on("console", (message) => {
+		if (message.type() === "warning") {
+			warnings.push(message.text());
+		}
+	});
+
+	await checkButton(page).click();
+	await expect(status(page)).toContainText(`已更新 ${ID} 1.0.0 → 1.1.0`);
+	expect(await firstOf(page, "anr")).toBe("新版詞庫");
+	expect(warnings).toContainEqual(
+		expect.stringMatching(/handwriting-zh.*「handwriting」/),
+	);
+});
+
 test("關掉線上更新後不連線，重新整理後也還關著", async ({ page }) => {
 	await importOld(page);
 	await updateSwitch(page).uncheck();

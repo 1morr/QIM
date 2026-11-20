@@ -1,5 +1,5 @@
 //! 使用者詞庫的匯出格式 `# qim-userdict v3`（architecture〈學習資料的格式〉）：對外的檔案格式，改了要升版本
-//! （brief〈版本與更新〉）；v1、v2 的檔一直要收。v3 在 M4 收尾前還沒定稿（M4 spec〈共同規則〉）。
+//! （brief〈版本與更新〉）；v1、v2 的檔一直要收。v3 在 M4 驗收時定稿，加種類或改欄位就升 v4。
 
 use std::collections::BTreeMap;
 
@@ -187,7 +187,7 @@ fn windows_line_endings_comments_and_blank_lines_are_accepted() {
     );
 }
 
-/// 不認得的種類（之後的版本加的）略過並回警告、帶行號，其他列照收（M4 spec〈共同規則〉）。
+/// 不認得的種類（之後的版本加的）略過並回警告、帶行號，其他列照收（architecture〈學習資料的格式〉）。
 #[test]
 fn rows_of_an_unknown_kind_are_skipped_with_a_warning_and_the_rest_are_kept() {
     let text = ONE_AUTO_PHRASE_AND_ONE_MANUAL_WORD.replace(

@@ -89,7 +89,9 @@ fn release_has_renamed_assets_and_an_index() {
     ]);
     assert_eq!(index, expected);
     assert_eq!(
-        PackIndex::from_json(&read(&out.join(PACK_INDEX_FILE))).unwrap(),
+        PackIndex::from_json(&read(&out.join(PACK_INDEX_FILE)))
+            .unwrap()
+            .index,
         expected
     );
     let mut names: Vec<String> = std::fs::read_dir(&out)
@@ -151,7 +153,9 @@ fn changed_pack_without_a_new_version_fails_against_the_previous_index() {
     let error = release::write(&packs, &out, Some(&previous)).unwrap_err();
     assert!(error.contains("test-lexicon"), "{error}");
     assert_eq!(
-        PackIndex::from_json(&read(&out.join(PACK_INDEX_FILE))).unwrap(),
+        PackIndex::from_json(&read(&out.join(PACK_INDEX_FILE)))
+            .unwrap()
+            .index,
         previous
     );
 

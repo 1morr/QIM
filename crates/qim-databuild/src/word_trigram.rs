@@ -38,7 +38,8 @@ pub const BUDGET: Pruning = Pruning {
     min_trigram: 8,
 };
 
-/// 放寬版（票 08 的 `word3:2:4`）：常駐估計 35 MB，iOS 鍵盤擴充的峰值增量要 ≤ 60 MB。
+/// 放寬版（票 08 的 `word3:2:4`）：iPhone 實測載入後留下 +23.4 MB、峰值 +71.3 MB，超過 iOS 鍵盤擴充
+/// 峰值增量的 60 MB 所以不採用，預設用預算版（`docs/research/ios-feasibility.md`〈詞級 trigram 的記憶體〉）。
 pub const LARGE: Pruning = Pruning {
     min_bigram: 2,
     min_trigram: 4,
