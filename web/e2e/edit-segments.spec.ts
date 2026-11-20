@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready, shown } from "./page.ts";
 
 // 組字中修改（M1 票 21）：移到中間的分段改選，其餘沒選定的分段重算（architecture〈核心對殼〉）。
 // 組字裡選定的分段顯示字詞，沒選定的顯示字根。
@@ -16,22 +17,14 @@ const RADICALS: Record<string, string> = {
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
+		...baseUi(page),
 		segments: page.getByTestId("composition").locator(".segment"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 	};
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function candidateTexts(page: Page): Promise<string[]> {
-	const texts = await ui(page).items.allTextContents();
-	return texts.map((t) => t.replace(/^\d/, ""));
 }
 
 /** 改選後重算的最後一段的首選：候選列的第一個；確認它接了改選的字、不是單打 `of` 的首選。 */
 async function recomputedTop(page: Page, single: string): Promise<string> {
-	const [top] = await candidateTexts(page);
+	const [top] = await shown(page);
 	expect(top).not.toBe(single);
 	return top;
 }
@@ -67,7 +60,7 @@ async function candidatesOf(page: Page, code: string): Promise<string[]> {
 	return withoutContext(page, async () => {
 		await page.keyboard.type(code);
 		await expect(ui(page).composition).toHaveText(RADICALS[code]);
-		const texts = await candidateTexts(page);
+		const texts = await shown(page);
 		await page.keyboard.press("Escape");
 		await expect(ui(page).composition).toHaveText("");
 		return withoutEmoji(texts);
@@ -76,8 +69,7 @@ async function candidatesOf(page: Page, code: string): Promise<string[]> {
 
 test.describe("實體鍵盤", () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+		await ready(page);
 		await ui(page).text.focus();
 	});
 
@@ -98,7 +90,7 @@ test.describe("實體鍵盤", () => {
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
 		// 候選改列中間一段 `kb` 的字詞，和不知道前文時單打 `kb` 的字詞同序；單打的第一頁有 emoji 時
 		// 佔了幾格，分段的第一頁多出後面幾個字。
-		expect((await candidateTexts(page)).slice(0, kb.length)).toEqual(kb);
+		expect((await shown(page)).slice(0, kb.length)).toEqual(kb);
 		await page.screenshot({ path: testInfo.outputPath("focus-middle.png") });
 
 		const other = kb[1];
@@ -142,13 +134,13 @@ test.describe("實體鍵盤", () => {
 	test("→ 走過最後一段回到整串，候選回到整串的", async ({ page }) => {
 		const { segments, items } = ui(page);
 		await page.keyboard.type(INPUT);
-		const whole = await candidateTexts(page);
+		const whole = await shown(page);
 		await page.keyboard.press("ArrowLeft");
 		await expect(segments.nth(2)).toHaveAttribute("aria-current", "true");
 		await page.keyboard.press("ArrowRight");
 		await expect(segments.locator("[aria-current]")).toHaveCount(0);
 		await expect(items.first()).toHaveText(`1${whole[0]}`);
-		expect(await candidateTexts(page)).toEqual(whole);
+		expect(await shown(page)).toEqual(whole);
 	});
 });
 
@@ -158,8 +150,7 @@ test.describe("觸控", () => {
 	test.use(pixel);
 
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+		await ready(page);
 	});
 
 	test("點組字裡的一段，候選改列該段；點候選改選後上屏", async ({
@@ -176,7 +167,7 @@ test.describe("觸控", () => {
 			withoutContext(page, async () => {
 				await tapKeys(code);
 				await expect(composition).toHaveText(RADICALS[code]);
-				const texts = await candidateTexts(page);
+				const texts = await shown(page);
 				for (const _ of code) {
 					await page.getByTestId("key-backspace").tap();
 				}
@@ -190,7 +181,7 @@ test.describe("觸控", () => {
 		await expect(segments).toHaveText(["日弓口", "大月", "人火"]);
 		await segments.nth(1).tap();
 		await expect(segments.nth(1)).toHaveAttribute("aria-current", "true");
-		expect((await candidateTexts(page)).slice(0, kb.length)).toEqual(kb);
+		expect((await shown(page)).slice(0, kb.length)).toEqual(kb);
 		await page.screenshot({ path: testInfo.outputPath("touch-focus.png") });
 
 		const other = kb[1];

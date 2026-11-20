@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 觸控的地球鍵與英文鍵盤（M4 票 23，設計稿 docs/design/23-touch-english-keyboard.html）：點一下地球鍵在速成與
 // 英文頁之間切換，長按開切換鍵盤的選單；英文頁接英文直通，字母直接上屏。
@@ -11,11 +12,7 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test.afterEach(() => {

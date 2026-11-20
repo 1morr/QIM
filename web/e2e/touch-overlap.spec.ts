@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { devices, expect, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 兩鍵重疊的測試佈局（M1 票 19）：上層的 n 排在陣列前面、z 較大，蓋住下層 a 的右半邊。
 // 同一份檔案也給 `qim-layout` 的 Rust 測試用（`crates/qim-layout/tests/overlap.rs`）。
@@ -19,11 +20,7 @@ test.beforeEach(async ({ page }) => {
 	await page.route("**/layouts/gboard-quick.json", (route) =>
 		route.fulfill({ contentType: "application/json", body: OVERLAP }),
 	);
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test("點兩鍵重疊處，輸出上層的鍵", async ({ page }, testInfo) => {

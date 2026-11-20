@@ -1,24 +1,15 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady, shown } from "./page.ts";
 
 // emoji 候選（M3 票 16）：整串的候選是 CLDR 標註裡的詞時，它的 emoji 接在它後面（rime-emoji 的
 // 做法），整列最多 3 個；按數字鍵上屏 emoji；開關預設開。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	return {
-		text,
+		...(await baseReady(page)),
 		emoji: page.getByRole("checkbox", { name: "emoji 候選" }),
 		simplified: page.getByRole("checkbox", { name: "簡體" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 	};
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	return (await items.allTextContents()).map((t) => t.replace(/^\d/, ""));
 }
 
 test("打「笑」（hk），「笑」後面接著 😆，按它的序號上屏 😆", async ({

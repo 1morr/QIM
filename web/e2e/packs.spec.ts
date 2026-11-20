@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
+import { shown, waitReady } from "./page.ts";
 
 // 資料包管理（M3 票 20，architecture〈資料包〉）：設定區列出資料包，從檔案匯入、切換、刪除，每步讀回候選。
 // 匯入的是 `e2e/fixtures/e2e-lexicon/`：`anr` 只有「測試詞庫」一個詞（由
@@ -16,15 +17,9 @@ async function fixture(): Promise<{ manifest: string; pack: Buffer }> {
 	};
 }
 
-async function ready(page: Page) {
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	return text;
-}
-
 /** 清空輸入框、打 `code`，回傳候選列的第一個（去掉序號），再清掉組字。 */
 async function firstOf(page: Page, code: string): Promise<string> {
-	const text = await ready(page);
+	const { text } = await waitReady(page);
 	await text.focus();
 	await page.keyboard.press("Escape");
 	await text.fill("");
@@ -72,7 +67,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("列出內建的資料包：名稱、版本、大小、授權", async ({ page }) => {
-	await ready(page);
+	await waitReady(page);
 	await expect(rows(page)).toHaveCount(BUILTIN_ROWS);
 	const lexicon = rows(page).and(page.locator(`[data-id="quick-lexicon"]`));
 	await expect(lexicon).toContainText("詞庫");
@@ -111,7 +106,7 @@ test("列出內建的資料包：名稱、版本、大小、授權", async ({ pa
 
 test("手機寬度下資料包清單自己橫向捲動，頁面不變寬", async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	await ready(page);
+	await waitReady(page);
 	const overflow = await page.evaluate(
 		() =>
 			document.documentElement.scrollWidth -
@@ -176,7 +171,7 @@ test("匯入、切換、刪除，每步候選都換", async ({ page }, testInfo)
 });
 
 test("組字中切換、刪除，候選列立刻換", async ({ page }) => {
-	const text = await ready(page);
+	const { text } = await waitReady(page);
 	const { manifest, pack } = await fixture();
 	await importPack(page, manifest, pack);
 	await expect(status(page)).toContainText("已匯入");
@@ -200,10 +195,7 @@ test("組字中切換、刪除，候選列立刻換", async ({ page }) => {
 async function candidatesOf(page: Page, code: string): Promise<string[]> {
 	await firstOf(page, code);
 	await page.keyboard.type(code);
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	const texts = (await items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
+	const texts = await shown(page);
 	await page.keyboard.press("Escape");
 	return texts;
 }
@@ -212,7 +204,7 @@ test("粵典詞庫：切過去打得出只在粵典詞頭表的詞，切回預�
 	page,
 }, testInfo) => {
 	// 「暗寸」（aadi）只在粵典的詞頭表：預設詞庫沒有，逐字拼也拼不出（M3 票 24；票 11b 起詞級 trigram 拼得出原本用的「襟食」，換成它）。
-	await ready(page);
+	await waitReady(page);
 	expect(await candidatesOf(page, "aadi")).not.toContain("暗寸");
 
 	await page.getByLabel("使用 quick-lexicon-words-hk").check();
@@ -253,7 +245,7 @@ for (const [served, missing] of [
 	test(`建置略過了粵典詞庫（${served}）時，網頁照樣載入，選過它的改用預設詞庫`, async ({
 		page,
 	}) => {
-		await ready(page);
+		await waitReady(page);
 		await page.getByLabel("使用 quick-lexicon-words-hk").check();
 		expect(await firstOf(page, "aadi")).toBe("暗寸");
 		await page.route("**/packs/quick-lexicon-words-hk/**", (route) =>
@@ -270,7 +262,7 @@ for (const [served, missing] of [
 }
 
 test("學習資料與開關在換資料包後還在", async ({ page }) => {
-	await ready(page);
+	await waitReady(page);
 	// 手動加的使用者詞：「雲口」不在任何詞庫。
 	await page.getByLabel("詞", { exact: true }).fill("雲口");
 	await page.getByRole("button", { name: "加詞" }).click();
@@ -293,7 +285,7 @@ test("改過 sha256 的資料包匯入被拒，候選不變", async ({ page }, t
 		`"sha256": "${"0".repeat(64)}"`,
 	);
 	expect(tampered).not.toBe(manifest);
-	await ready(page);
+	await waitReady(page);
 	await importPack(page, tampered, pack);
 	await expect(status(page)).toContainText("匯入失敗");
 	await expect(status(page)).toContainText("sha256");
@@ -319,7 +311,7 @@ test("要求更新核心的資料包匯入被拒", async ({ page }) => {
 		'"min_core_version": "999.0.0"',
 	);
 	expect(newer).not.toBe(manifest);
-	await ready(page);
+	await waitReady(page);
 	await importPack(page, newer, pack);
 	await expect(status(page)).toContainText("匯入失敗");
 	await expect(status(page)).toContainText("999.0.0");
@@ -329,7 +321,7 @@ test("要求更新核心的資料包匯入被拒", async ({ page }) => {
 
 test("只選資料包檔、沒選 manifest 時說明要一起選", async ({ page }) => {
 	const { pack } = await fixture();
-	await ready(page);
+	await waitReady(page);
 	await page.getByLabel("從檔案匯入資料包").setInputFiles([
 		{
 			name: "e2e-lexicon.pack",
@@ -344,7 +336,7 @@ test("只選資料包檔、沒選 manifest 時說明要一起選", async ({ page
 test("和內建同 id 但種類不同的資料包匯入被拒", async ({ page }) => {
 	const { manifest, pack } = await fixture();
 	// 一份 id 叫 quick（內建的方案）的詞庫：會取代內建的方案，種類卻不同。
-	await ready(page);
+	await waitReady(page);
 	await page.getByLabel("從檔案匯入資料包").setInputFiles([
 		{
 			name: "manifest.json",
@@ -364,7 +356,7 @@ test("和內建同 id 但種類不同的資料包匯入被拒", async ({ page })
 
 test("存著的資料包壞了時，重新整理後這次只用內建的並說明", async ({ page }) => {
 	const { manifest, pack } = await fixture();
-	await ready(page);
+	await waitReady(page);
 	await importPack(page, manifest, pack);
 	await expect(status(page)).toContainText("已匯入");
 	// 把 IndexedDB 裡那份的最後一個位元組改掉。
@@ -390,7 +382,7 @@ test("存著的資料包壞了時，重新整理後這次只用內建的並說�
 			}),
 	);
 	await page.reload();
-	await ready(page);
+	await waitReady(page);
 	await expect(page.locator("#status")).toContainText("這次只用內建的");
 	await expect(page.locator("#status")).toContainText("sha256");
 	expect(await firstOf(page, "anr")).toBe("門口");

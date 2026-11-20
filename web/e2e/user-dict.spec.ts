@@ -1,24 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
+import { shown, waitReady } from "./page.ts";
 
 // 使用者詞與學習資料（M1 票 14）：分段選字上屏後自動造詞、存 localStorage、匯出匯入、手動加詞。匯入是合併
 // （M4 票 17）；兩個瀏覽器設定檔互相同步在 `sync.spec.ts`。
 
 async function ready(page: Page) {
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	await text.focus();
+	const parts = await waitReady(page);
+	await parts.text.focus();
 	return {
-		text,
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...parts,
 		status: page.getByRole("status", { name: "學習資料狀態" }),
 	};
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function shown(page: Page): Promise<string[]> {
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	return (await items.allTextContents()).map((t) => t.replace(/^\d/, ""));
 }
 
 /** 按數字鍵選這頁文字是 `word` 的候選。 */

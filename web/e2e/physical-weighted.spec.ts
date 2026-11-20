@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { keyProbabilities, ready } from "./page.ts";
 
 // 實體鍵盤的鄰鍵先驗（M4 票 07）：中文模式的字母鍵送 `KeyboardEvent.code`，`qim-layout` 照實體鍵位
 // 轉成各字母的機率（`Key::Weighted`）；核心只用按下的字母，打字行為不變。debug 面板讀得到
@@ -10,9 +11,7 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await ready(page);
 	await page.getByRole("button", { name: "debug" }).click();
 	await expect(page.locator("#debug")).toBeVisible();
 	await text.focus();
@@ -21,19 +20,6 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(() => {
 	expect(errors).toEqual([]);
 });
-
-/** 面板上最近一個鍵的各字母與機率，由高到低。 */
-async function keyProbabilities(page: Page) {
-	return page
-		.getByTestId("debug-weights")
-		.locator("code")
-		.evaluateAll((codes) =>
-			codes.map((code) => ({
-				letter: code.getAttribute("data-letter") ?? "",
-				probability: Number(code.getAttribute("data-probability")),
-			})),
-		);
-}
 
 test("按 f：打出火，面板讀到 f 與六個實體鄰鍵的機率", async ({
 	page,

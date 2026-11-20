@@ -1,18 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
+import { waitReady } from "./page.ts";
 
 // 常用語（M3 票 14）：設定區新增、編輯、刪除；打觸發詞是首選，沒有觸發詞的從候選列的清單選。
 
 const ADDRESS = "九龍彌敦道 1 號\n3 樓 A 室";
 
 async function ready(page: Page) {
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	await text.focus();
+	const parts = await waitReady(page);
+	await parts.text.focus();
 	const section = page.getByRole("region", { name: "常用語" });
 	return {
-		text,
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...parts,
 		section,
 		list: section
 			.getByRole("list", { name: "常用語清單" })

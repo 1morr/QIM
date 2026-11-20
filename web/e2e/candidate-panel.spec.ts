@@ -1,13 +1,12 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready as baseReady, ui as baseUi } from "./page.ts";
 
 // 候選展開面板（brief〈手機觸控鍵盤〉，M1 票 23）：候選列右側的展開鍵一次列全部候選，點了照常選字上屏。
 // 桌面組字中按 ↓ 打開、↑ 收起。`ar` 有好幾頁候選。
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...baseUi(page),
 		panel: page.getByRole("list", { name: "全部候選" }),
 		all: page.getByRole("list", { name: "全部候選" }).getByRole("listitem"),
 		expand: page.getByRole("button", { name: "展開候選" }),
@@ -21,8 +20,7 @@ let errors: Error[] = [];
 async function ready(page: Page): Promise<void> {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+	await baseReady(page);
 }
 
 test.afterEach(() => {

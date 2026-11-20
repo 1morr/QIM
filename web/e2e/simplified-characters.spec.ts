@@ -1,15 +1,14 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady } from "./page.ts";
 
 // 繁體模式的簡體字（M3 票 19，brief〈字集與字形〉）：HKSCS 收的「门」「农」「阳」「头」排在同碼的繁體字
 // 之後，不過濾、選兩次照常成首選；簡體模式不受影響。黑箱 T17 的 QIM 欄就是這裡量的位置。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	await text.focus();
+	const parts = await baseReady(page);
+	await parts.text.focus();
 	return {
-		text,
+		...parts,
 		simplified: page.getByRole("checkbox", { name: "簡體" }),
 		all: page.getByRole("list", { name: "全部候選" }).getByRole("listitem"),
 	};

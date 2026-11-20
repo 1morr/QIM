@@ -1,4 +1,5 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready, shown } from "./page.ts";
 
 // 手動分隔鍵（brief〈桌面鍵盤操作〉〈手機觸控鍵盤〉，M1 票 28、28b）：組字中按 `'`（觸控是組字中的「'詞」）插入分隔
 // 記號，這裡一定要斷字：單字的碼不跨過它，詞只在它落在兩字的碼之間時跨過它（照 Rime 速成）。
@@ -7,23 +8,14 @@ import { devices, expect, type Page, test } from "@playwright/test";
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
+		...baseUi(page),
 		segments: page.getByTestId("composition").locator(".segment"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 	};
-}
-
-/** 候選列的文字，去掉前面的序號。 */
-async function candidateTexts(page: Page): Promise<string[]> {
-	const texts = await ui(page).items.allTextContents();
-	return texts.map((t) => t.replace(/^\d/, ""));
 }
 
 test.describe("實體鍵盤", () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+		await ready(page);
 		await ui(page).text.focus();
 	});
 
@@ -36,17 +28,17 @@ test.describe("實體鍵盤", () => {
 		await page.keyboard.press("Escape");
 		await page.keyboard.type("mi");
 		await expect(composition).toHaveText("一戈");
-		const mi = await candidateTexts(page);
+		const mi = await shown(page);
 		await page.keyboard.press("Escape");
 		await page.keyboard.type("r");
 		await expect(composition).toHaveText("口");
-		const r = await candidateTexts(page);
+		const r = await shown(page);
 		await page.keyboard.press("Escape");
 
 		await page.keyboard.type("mi'r");
 		await expect(segments).toHaveText(["一戈'", "口"]);
 		await expect(text).toHaveValue("");
-		const separated = await candidateTexts(page);
+		const separated = await shown(page);
 		expect(separated).not.toContain("一台");
 		const top = separated[0];
 		expect(
@@ -105,8 +97,7 @@ test.describe("觸控", () => {
 	test.use(pixel);
 
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+		await ready(page);
 	});
 
 	async function tapKeys(page: Page, ids: string[]): Promise<void> {
@@ -133,7 +124,7 @@ test.describe("觸控", () => {
 		await expect(shift).toHaveAttribute("data-shift", "off");
 		await tapKeys(page, ["r"]);
 		await expect(segments).toHaveText(["一戈'", "口"]);
-		const [top] = await candidateTexts(page);
+		const [top] = await shown(page);
 		expect(top).not.toBe("一台");
 		await page.screenshot({ path: testInfo.outputPath("touch-separated.png") });
 

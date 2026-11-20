@@ -1,12 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { ready } from "./page.ts";
 
 // 詞庫資料包（M1 票 06）：整串輸入碼查得到詞，按空白上屏首選。
 test("打 anr 候選有「門口」，按空白上屏首選", async ({ page }, testInfo) => {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	const composition = page.getByTestId("composition");
-	const items = page.getByRole("list", { name: "候選" }).getByRole("listitem");
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text, composition, items } = await ready(page);
 
 	await text.focus();
 	await page.keyboard.type("anr");

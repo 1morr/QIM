@@ -283,7 +283,7 @@ e2e 的小詞庫在 `web/e2e/fixtures/` 並進 git，Biome 不碰它們：`e2e-l
 
 在手機上試手感：`npm run --prefix web dev -- --host`，手機連同一個區網，開 Vite 印出的 Network 網址。這仍只是測試頁，不能在其他 App 打字，和真正的鍵盤有差距；區網的 `http://` 不是安全環境，瀏覽器不給 `crypto.randomUUID`、`navigator.clipboard`（`web/e2e/insecure-context.spec.ts`）。
 
-Playwright 的測試在 `web/e2e/`，截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
+Playwright 的測試在 `web/e2e/`，多數 spec 共用的定位器與步驟（等網頁就緒、讀候選、換輸入框內容、讀按鍵機率）在 `web/e2e/page.ts`，各 spec 特有的用展開加上去；截圖存在 `web/test-results/`（每次覆寫、不進 git）。在 Node 跑的檔（Playwright 設定、`e2e/`、單元測試 `test/`）由 `web/tsconfig.node.json` 型別檢查，網頁的 `src/` 看不到 Node 的 API（Vite 範本的 `tsconfig.node.json` 慣例）。`web/bench/` 是用 Node 跑的基準腳本（〈首選字基準〉的〈每鍵延遲〉），有自己的 `tsconfig.json`（多了 Node 的型別），不進網頁。
 
 ## Swift 綁定
 

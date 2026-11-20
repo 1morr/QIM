@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { waitReady } from "./page.ts";
 
 // 詞表匯入（M3 票 17）：設定區「匯入詞庫」先列出會加幾個、略過哪些列，確認後加進使用者詞，
 // 不動原本的學習資料。
@@ -8,13 +9,11 @@ const GBOARD =
 	"# Gboard Dictionary version:1\nkk\t雲口\tzh-HK\n\t口\tzh-HK\nbroken\nOMW\t口雲口\tzh-HK\n";
 
 async function ready(page: Page) {
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	await text.focus();
+	const parts = await waitReady(page);
+	await parts.text.focus();
 	const section = page.getByRole("region", { name: "匯入詞庫" });
 	return {
-		text,
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
+		...parts,
 		section,
 		confirm: section.getByRole("group", { name: "確認匯入詞庫" }),
 		skipped: section

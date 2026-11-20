@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready, waitReady } from "./page.ts";
 
 // 觸控鍵盤功能（M1 票 20）：長按、符號頁、自訂頁面、放大預覽、深色、橫向。
 // 長按與按住用 CDP 的觸控事件，跟手指一樣先 touchStart、停住、再 touchEnd。
@@ -12,11 +13,7 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(page.getByRole("textbox", { name: "輸入框" })).toHaveAttribute(
-		"data-ready",
-		"true",
-	);
+	await ready(page);
 });
 
 test.afterEach(() => {
@@ -546,8 +543,7 @@ test("核心沒吃下長按選的動作時，網頁照那個動作做，不是�
 		}),
 	);
 	await page.reload();
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await waitReady(page);
 	await tapKeys(page, ["bang", "bang"]);
 	await expect(text).toHaveValue("！！");
 	const hand = await finger(page);

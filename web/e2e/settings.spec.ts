@@ -1,12 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady } from "./page.ts";
 
 // 設定區（M3 票 01）：改核心選項的開關都在「設定」這一區，新開關加在 `settings.ts` 的 `ROWS`。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	return { text, settings: page.getByRole("region", { name: "設定" }) };
+	return {
+		...(await baseReady(page)),
+		settings: page.getByRole("region", { name: "設定" }),
+	};
 }
 
 test("設定區列出改核心選項的開關，預設值照 brief〈設定與同步〉", async ({

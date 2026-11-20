@@ -1,13 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ui as baseUi, ready } from "./page.ts";
 
 // 重排的假實作（ADR 0005，M1 票 23、M3 票 11c）：延遲後回傳 lattice 路徑的名次，核心
 // 把排出的路徑放到第 2 位，候選列沒有就插入。過期的結果丟掉由核心測試驗（`crates/qim-core/tests/rerank.rs`）。
 
 function ui(page: Page) {
 	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
+		...baseUi(page),
 		list: page.getByRole("list", { name: "候選" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 		all: page.getByRole("list", { name: "全部候選" }).getByRole("listitem"),
 		rerank: page.getByRole("combobox", { name: "重排" }),
 	};
@@ -19,8 +19,7 @@ let errors: Error[] = [];
 test.beforeEach(async ({ page }) => {
 	errors = [];
 	page.on("pageerror", (error) => errors.push(error));
-	await page.goto("/");
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+	await ready(page);
 });
 
 test.afterEach(() => {
@@ -82,8 +81,7 @@ test("把最後一條路徑排最前：候選列沒有它，插到第 2 位，�
 test("翻頁中途重排回來：那頁不變，回到第一頁才插入", async ({
 	page,
 }, testInfo) => {
-	await page.goto("/?rerank-delay=1000");
-	await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+	await ready(page, "/?rerank-delay=1000");
 	const { text, list, items, rerank } = ui(page);
 	const { first } = await unranked(page);
 	await rerank.selectOption("raise-last");

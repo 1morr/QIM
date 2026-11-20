@@ -1,16 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady } from "./page.ts";
 
 // 中文狀態的英文候選（M1 票 15）：整串輸入碼剛好是完整英文單字時排第 2 位，按 2 上屏；
 // 不容錯、不補全、不搶首選；開關預設開。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	return {
-		text,
+		...(await baseReady(page)),
 		english: page.getByRole("checkbox", { name: "英文候選" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 	};
 }
 

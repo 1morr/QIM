@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
+import { waitReady } from "./page.ts";
 
 // 儲存打不開時照樣能打字（M4 票 02）：IndexedDB（匯入、下載的資料包）或 `localStorage`
 // （學習資料、設定、每種資料包用哪份）打不開，網頁只用內建的資料包、存不了的留在記憶體，狀態列說明。
@@ -8,8 +9,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 /** 打 `a`、按空白，上屏「日」（同 `type-a.spec.ts`）。 */
 async function typeA(page: Page) {
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await waitReady(page);
 	await text.focus();
 	await page.keyboard.type("a ");
 	await expect(text).toHaveValue("日");
@@ -68,7 +68,7 @@ test("IndexedDB 打不開時匯入資料包：這次用得到，重新整理後�
 	await expect(first).toHaveText("1測試詞庫");
 
 	await page.reload();
-	await expect(text).toHaveAttribute("data-ready", "true");
+	await waitReady(page);
 	await text.focus();
 	await page.keyboard.type("anr");
 	await expect(first).toHaveText("1門口");

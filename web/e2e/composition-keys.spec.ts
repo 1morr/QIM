@@ -1,19 +1,10 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { ready, shown, ui } from "./page.ts";
 
 // 組字中按任何鍵都不漏字元進輸入框、組字也不殘留（brief〈桌面鍵盤操作〉，M1 票 10）。
 
-function ui(page: Page) {
-	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
-	};
-}
-
 test.beforeEach(async ({ page }) => {
-	await page.goto("/");
-	const { text } = ui(page);
-	await expect(text).toHaveAttribute("data-ready", "true");
+	const { text } = await ready(page);
 	await text.focus();
 });
 
@@ -28,12 +19,10 @@ test("組字中按 Enter，輸入碼原樣上屏", async ({ page }, testInfo) =>
 });
 
 test("選了開頭一段再按 Enter，上屏選定的字與其餘的輸入碼", async ({ page }) => {
-	const { text, composition, items } = ui(page);
+	const { text, composition } = ui(page);
 	// 門口有人：門 an、口 r、有 kb、人 o。
 	await page.keyboard.type("anrkbo");
-	const texts = (await items.allTextContents()).map((t) =>
-		t.replace(/^\d/, ""),
-	);
+	const texts = await shown(page);
 	const at = texts.indexOf("門口");
 	expect(at, `候選：${texts.join(" ")}`).not.toBe(-1);
 	await page.keyboard.press(String(at + 1));

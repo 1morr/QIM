@@ -1,21 +1,13 @@
-import { devices, expect, type Page, test } from "@playwright/test";
+import { devices, expect, test } from "@playwright/test";
+import { ready, ui } from "./page.ts";
 
 // 萬用鍵（brief〈功能分級〉，M4 票 11）：速成的方案檔設 `z` 為萬用鍵，組字裡顯示「＊」，
 // 每個 `z` 代任一個碼，放在字的碼的任一位置都行。「的人」是 `hi` + `o`，`hiz`、`hzo` 的首選
 // 照樣是的人（`zio` 不是：一碼字的位置對得上的字太多，首選是「一次」）。
 
-function ui(page: Page) {
-	return {
-		text: page.getByRole("textbox", { name: "輸入框" }),
-		composition: page.getByTestId("composition"),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
-	};
-}
-
 test.describe("實體鍵盤", () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+		await ready(page);
 		await ui(page).text.focus();
 	});
 
@@ -79,8 +71,7 @@ test.describe("觸控", () => {
 	test.use(pixel);
 
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await expect(ui(page).text).toHaveAttribute("data-ready", "true");
+		await ready(page);
 	});
 
 	test("點「重」鍵（z）當萬用鍵：h、z、o 首選的人", async ({ page }) => {

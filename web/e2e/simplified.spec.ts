@@ -1,15 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady, place } from "./page.ts";
 
 // 簡體模式（M1 票 16）：候選、組字與上屏轉成簡體（OpenCC hk2s），學習仍記繁體。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	return {
-		text,
+		...(await baseReady(page)),
 		simplified: page.getByRole("checkbox", { name: "簡體" }),
-		items: page.getByRole("list", { name: "候選" }).getByRole("listitem"),
 	};
 }
 
@@ -90,17 +87,6 @@ test("簡體模式按 Tab，字根提示對應繁體「門口」", async ({ page
 	// 「門」的五代是 an，不是「门」的 lis。
 	await expect(page.getByTestId("hint-1")).toHaveText("日弓(an) 口(r)");
 });
-
-/** 換掉輸入框的內容、游標放在結尾，像使用者貼上後點到那裡（同 `context.spec.ts`）。 */
-async function place(page: Page, value: string) {
-	await page
-		.getByRole("textbox", { name: "輸入框" })
-		.evaluate((element: HTMLTextAreaElement, value) => {
-			element.value = value;
-			element.dispatchEvent(new Event("input", { bubbles: true }));
-			element.setSelectionRange(value.length, value.length);
-		}, value);
-}
 
 // 同步層的前文（M4 票 04）：簡體模式下輸入框裡是簡體字，最後一字轉回繁體再接 bigram。
 // 「点」接「點」的統計，`nq` 首選「解」（點解）；轉之前「点」沒有統計，和前文以英文結尾一樣照

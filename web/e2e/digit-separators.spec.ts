@@ -1,16 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ready as baseReady } from "./page.ts";
 
 // 數字後的句點、冒號用半形（M1 票 26，brief〈英文模式與欄位類型〉）：前一個上屏的字是半形數字時直接上屏半形，
 // 不待定、不出候選；逗號照舊全形（使用者決定）。開關預設開。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
 	return {
-		text,
+		...(await baseReady(page)),
 		toggle: page.getByRole("checkbox", { name: "數字後半形" }),
-		composition: page.getByTestId("composition"),
 	};
 }
 

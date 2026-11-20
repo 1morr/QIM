@@ -1,31 +1,12 @@
 import { devices, expect, type Page, test } from "@playwright/test";
+import { ready as baseReady, place } from "./page.ts";
 
 // 上下文（M3 票 05，architecture〈核心對殼〉）：網頁把輸入框游標前的文字交給核心，候選照前文排；數字後半形看
 // 前文；無痕時不給（brief〈隱私與安全〉）。輸入框是空的或游標在開頭時前文是空字串，接句首。
 
 async function ready(page: Page) {
-	await page.goto("/");
-	const text = page.getByRole("textbox", { name: "輸入框" });
-	await expect(text).toHaveAttribute("data-ready", "true");
-	return {
-		text,
-		first: page
-			.getByRole("list", { name: "候選" })
-			.getByRole("listitem")
-			.first(),
-	};
-}
-
-/** 換掉輸入框的內容、游標放在第 `cursor` 個 UTF-16 碼元，像使用者貼上後點到那裡。 */
-async function place(page: Page, value: string, cursor = value.length) {
-	await page.getByRole("textbox", { name: "輸入框" }).evaluate(
-		(element: HTMLTextAreaElement, [value, cursor]) => {
-			element.value = value as string;
-			element.dispatchEvent(new Event("input", { bubbles: true }));
-			element.setSelectionRange(cursor as number, cursor as number);
-		},
-		[value, cursor] as const,
-	);
+	const parts = await baseReady(page);
+	return { ...parts, first: parts.items.first() };
 }
 
 test.describe("實體鍵盤", () => {
