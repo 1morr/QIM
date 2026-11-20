@@ -1,6 +1,6 @@
 # 01: 修復過時的程式註解，補資料包種類的測試
 
-Status: ready-for-agent
+Status: done
 Blocked by: None
 讀: `ARCHITECTURE.md`〈資料包〉〈學習資料的格式〉；`docs/research/ios-feasibility.md`〈詞級 trigram 的記憶體〉；`.scratch/arch-diet/issues/06-wrap-up.md` 第八題
 
@@ -16,9 +16,24 @@ arch-diet 只准改指向文件的註解，下面幾處內容過時沒改（arch
 
 ## 驗收
 
-- [ ] 上面四處註解都改了；`CheckId::Decodes` 要不要解開放寬版有一行 `決定：`，加了的話有會紅過的測試。
-- [ ] 單一 manifest 的不認得種類被拒絕，錯誤讀得出是哪一種（測試）。
-- [ ] 索引裡多一項不認得的種類時，其他資料包照讀、有警告（測試先紅後綠）；`ARCHITECTURE.md`〈資料包〉寫了這條。
-- [ ] 全部檢查綠燈（`docs/development.md`〈全部檢查〉）。
+- [x] 上面四處註解都改了；`CheckId::Decodes` 要不要解開放寬版有一行 `決定：`，加了的話有會紅過的測試。
+- [x] 單一 manifest 的不認得種類被拒絕，錯誤讀得出是哪一種（測試）。
+- [x] 索引裡多一項不認得的種類時，其他資料包照讀、有警告（測試先紅後綠）；`ARCHITECTURE.md`〈資料包〉寫了這條。
+- [x] 全部檢查綠燈（`docs/development.md`〈全部檢查〉）。
 
 ## Comments
+
+略過的項：`PackIndex::from_json` 回傳 `ParsedIndex { index, warnings }`，`IndexWarning` 是第幾項、id、種類，同 `ImportWarning` 的形狀；wasm `packUpdates` 改回傳 `{ updates, warnings }`。
+
+code-review 未處理：
+- `word_trigram.rs` 的 `BUDGET`、`LARGE` 仍寫「票 08」（M3 的票，不是 ADR、事實編號或節標題）；舊寫法，這張票只改 `LARGE` 的記憶體數字。
+- `qim-databuild` 的 `pack-release --previous` 把略過的項印到 stderr，沒有測試；行為由 `PackIndex::from_json` 的測試鎖住。
+- `crates/qim-core/src/date.rs` 開頭還指向「M4 spec〈細節〉」，不在這張票的清單裡。
+- `Session::forget` 的註解沒寫自動造詞裡前後相接的組也一起清，連到 `UserModel::forget` 看。
+
+Session 紀錄：2026-11-20 改四處過時註解；`Decodes` 解開每一份詞級 trigram；更新索引略過不認得種類的項並警告（核心、wasm、網頁 console、pack-release），單一 manifest 的不認得種類補測試
+決定：`CheckId::Decodes` 也解開放寬版 `zh-hant-word-trigram-large`（同魔數的每一份），會紅過的測試是 `undecodable_word_trigram_other_than_the_named_one_fails_decoding`（Agent 定）
+決定：更新索引的警告由核心回傳（`ParsedIndex` 的 `IndexWarning`），網頁印在 console、`pack-release` 印到 stderr（Agent 定）
+決定：只有 `kind` 是字串而核心不認得的項才略過；其他不合格式（少欄位、sha256、id 重複）照舊整份不收（Agent 定）
+變更：Changed｜線上更新｜更新來源多了這個版本還不認得的資料包種類時，其他資料包照樣更新（以前整次檢查失敗）
+Heads up（不修）：Claude Code 提醒「索引略過不認得的種類只保護這版之後的核心，已發出去的舊版遇到新種類照樣整份讀不了」。查證：repo 沒有任何 release、網頁沒有 service worker（每次載入都拿最新的 wasm），目前沒有在使用者手上的舊版核心，不修；平台殼發版後往索引加新種類前要先確認舊版已換掉。

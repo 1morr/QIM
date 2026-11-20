@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use qim_core::{
     CangjieVersion, CodeTable, EmojiPack, EmojiTable, Engine, EnglishPack, EnglishWords, Key,
-    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, ModelPack, Options,
+    LanguageModel, LanguageModelPack, Lexicon, LexiconPack, Manifest, ModelPack, Options, Pack,
     RadicalHintPack, RadicalHints, SchemePack, Session, SimplifierPack, UserModel, WordTrigramPack,
 };
 
@@ -21,8 +21,8 @@ use crate::{bigram, emoji, english, lexicon, word_trigram};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckId {
-    /// `qim-core` 解得開建出的速成、詞庫、語言模型、字根提示、簡繁與英文資料包，詞庫、語言模型與
-    /// 字根提示是方案指名的那份。
+    /// `qim-core` 解得開建出的速成、詞庫、語言模型、詞級 trigram、字根提示、簡繁、英文與 emoji 資料包；
+    /// 詞庫、語言模型、詞級 trigram 與字根提示是方案指名的那份，詞級 trigram 另一份（放寬版）也要解得開。
     Decodes,
     /// 連打字集與擴展區的字數都等於來源中有倉頡碼的漢字數。
     NoMissingCharacters,
@@ -499,6 +499,15 @@ fn decode(packs: &[BuiltPack]) -> Result<Decoded, String> {
             ));
         }
     }
+    // `built::decode` 取的是第一份（方案指名的預算版）；其他的（放寬版）不交給 `Engine`，也要解得開：
+    // 設定頁可以切過去。
+    for other in packs
+        .iter()
+        .filter(|p| p.magic == WordTrigramPack::MAGIC)
+        .skip(1)
+    {
+        other.decode::<WordTrigramPack>()?;
+    }
     let hints = RadicalHints::for_scheme(radical_hint, &pack.scheme).map_err(|e| e.to_string())?;
     let simplifier = built::decode::<SimplifierPack>(packs)?;
     let english = built::decode::<EnglishPack>(packs)?;
@@ -572,7 +581,7 @@ fn pack_checks(report: &mut Report, rows: &[Row], decoded: &Decoded) {
             id: CheckId::Decodes,
             passed: true,
             detail: format!(
-                "格式版本 {}，速成、詞庫、bigram、詞級 trigram、字根提示、簡繁、英文與 emoji",
+                "格式版本 {}，速成、詞庫、bigram、詞級 trigram（每一份）、字根提示、簡繁、英文與 emoji",
                 qim_core::FORMAT_VERSION
             ),
         },

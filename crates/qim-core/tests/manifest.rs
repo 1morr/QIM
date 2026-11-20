@@ -191,6 +191,18 @@ fn unknown_fields_are_ignored_and_missing_ones_rejected() {
     ));
 }
 
+/// 不認得的種類（之後的核心加的）拒絕載入，錯誤寫出是哪一種；更新索引裡的則略過那一項（tests/pack_index.rs）。
+#[test]
+fn unknown_kind_is_rejected_naming_the_kind() {
+    let bytes = lexicon_pack().to_bytes().unwrap();
+    let json = manifest_of(&bytes)
+        .to_json()
+        .replace(r#""kind": "lexicon""#, r#""kind": "handwriting""#);
+    let error = Manifest::from_json(&json).unwrap_err();
+    assert!(matches!(error, PackError::InvalidManifest(_)), "{error:?}");
+    assert!(error.to_string().contains("handwriting"), "{error}");
+}
+
 /// manifest 本身的欄位不合格式時拒絕，不去讀資料包。
 #[test]
 fn malformed_fields_are_rejected() {

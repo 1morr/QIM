@@ -823,6 +823,29 @@ fn word_trigram_other_than_the_named_one_fails_decoding() {
     assert!(detail.contains("詞級 trigram"), "{detail}");
 }
 
+/// 方案沒指名的詞級 trigram（放寬版）也要解得開：設定頁可以切過去。
+#[test]
+fn undecodable_word_trigram_other_than_the_named_one_fails_decoding() {
+    let mut packs = all_packs();
+    let named = packs
+        .iter()
+        .position(|p| p.magic == WordTrigramPack::MAGIC)
+        .unwrap();
+    let large = word_trigram::VARIANTS[1];
+    packs.insert(
+        named + 1,
+        BuiltPack {
+            name: large.name,
+            id: large.id.into(),
+            ..word_trigram_built(b"broken")
+        },
+    );
+    let report = verify::run(&rows(), &packs, &packs);
+    assert_eq!(failed(&report), [CheckId::Decodes]);
+    let detail = &report.checks[0].detail;
+    assert!(detail.contains(large.name), "{detail}");
+}
+
 #[test]
 fn hint_without_a_character_of_the_code_table_fails_the_coverage_check() {
     let hint = edited_hint(|chars| {

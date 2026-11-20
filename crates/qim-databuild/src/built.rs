@@ -31,10 +31,15 @@ impl BuiltPack {
     pub fn sha256(&self) -> String {
         sha256_hex(&self.bytes)
     }
+
+    /// 當 `P` 解開；錯誤帶這份的種類名。
+    pub fn decode<P: Pack>(&self) -> Result<P, String> {
+        P::from_bytes(&self.bytes).map_err(|e| format!("{}資料包：{e}", self.name))
+    }
 }
 
-/// 清單裡 `P` 那種資料包的第一份。詞庫有兩份（預設的在前、粵典的在後），其餘每種一份；要後面那份
-/// 用 [`find_id`]。
+/// 清單裡 `P` 那種資料包的第一份。詞庫有兩份（預設的在前、粵典的在後）、詞級 trigram 有兩份（預算版在前、
+/// 放寬版在後），其餘每種一份；要後面那份用 [`find_id`]。
 pub fn find<P: Pack>(packs: &[BuiltPack]) -> Result<&BuiltPack, String> {
     packs
         .iter()
@@ -52,6 +57,5 @@ pub fn find_id<'a>(packs: &'a [BuiltPack], id: &str) -> Result<&'a BuiltPack, St
 
 /// 取出清單裡 `P` 那種資料包並解開。
 pub fn decode<P: Pack>(packs: &[BuiltPack]) -> Result<P, String> {
-    let pack = find::<P>(packs)?;
-    P::from_bytes(&pack.bytes).map_err(|e| format!("{}資料包：{e}", pack.name))
+    find::<P>(packs)?.decode()
 }

@@ -1,7 +1,7 @@
 //! 更新索引（architecture〈資料包〉）：release 上的 `index.json` 列出各資料包的 manifest 與下載位置；殼拿它和
 //! 裝著的比出要下載的，建置端拿上一版比出內容改了卻沒加版本的資料包。
 
-use qim_core::{IndexEntry, Manifest, PackError, PackIndex, PackKind};
+use qim_core::{IndexEntry, IndexWarning, Manifest, PackError, PackIndex, PackKind, ParsedIndex};
 
 fn manifest(kind: PackKind, id: &str, version: &str, content: &[u8]) -> Manifest {
     Manifest::new(kind, id, content, version, "CC0-1.0")
@@ -24,7 +24,13 @@ fn index_entries_are_manifests_with_a_url() {
     let lexicon = manifest(PackKind::Lexicon, "quick-lexicon", "1.1.0", b"new");
     let index = PackIndex::new(vec![entry(lexicon.clone())]);
     let json = index.to_json();
-    assert_eq!(PackIndex::from_json(&json).unwrap(), index);
+    assert_eq!(
+        PackIndex::from_json(&json).unwrap(),
+        ParsedIndex {
+            index: index.clone(),
+            warnings: vec![]
+        }
+    );
 
     // 每項就是 manifest 的欄位加 `url`：殼可以把一項原樣當 manifest 交給核心（不認得的欄位略過）。
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -87,6 +93,30 @@ fn older_other_kind_or_too_new_for_this_core_is_not_an_update() {
         entry(too_new),
     ]);
     assert!(index.updates(&installed).is_empty());
+}
+
+/// 有一項是不認得的種類（之後的核心加的）：略過那一項並警告，其他照讀；否則舊核心的線上更新整個停掉。
+/// 單一 manifest 的不認得種類仍拒絕（tests/manifest.rs）。
+#[test]
+fn entries_of_an_unknown_kind_are_skipped_with_a_warning() {
+    let lexicon = manifest(PackKind::Lexicon, "quick-lexicon", "1.1.0", b"new");
+    let future = manifest(PackKind::Emoji, "handwriting-zh", "1.0.0", b"hw");
+    let mut value: serde_json::Value = serde_json::from_str(
+        &PackIndex::new(vec![entry(future), entry(lexicon.clone())]).to_json(),
+    )
+    .unwrap();
+    value["packs"][0]["kind"] = "handwriting".into();
+
+    let ParsedIndex { index, warnings } = PackIndex::from_json(&value.to_string()).unwrap();
+    assert_eq!(index, PackIndex::new(vec![entry(lexicon)]));
+    assert_eq!(
+        warnings,
+        [IndexWarning {
+            position: 1,
+            id: "handwriting-zh".into(),
+            kind: "handwriting".into(),
+        }]
+    );
 }
 
 #[test]

@@ -87,7 +87,14 @@ export async function updatePacks(
 		await fetchWithin(indexUrl, INDEX_TIMEOUT_MS),
 	);
 	const result: UpdateResult = { updated: [], rejected: [] };
-	for (const update of packUpdates(index, library.installedManifests())) {
+	const checked = packUpdates(index, library.installedManifests());
+	// 索引裡不認得的種類（之後的核心加的）核心略過了，其他照讀。
+	for (const warning of checked.warnings) {
+		console.warn(warning);
+	}
+	const updates = checked.updates;
+	checked.free();
+	for (const update of updates) {
 		const { id, version, manifest } = update;
 		const url = new URL(update.url, indexUrl);
 		update.free();
