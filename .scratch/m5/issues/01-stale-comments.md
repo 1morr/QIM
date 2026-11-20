@@ -36,3 +36,4 @@ Session 紀錄：2026-11-20 改四處過時註解；`Decodes` 解開每一份詞
 決定：更新索引的警告由核心回傳（`ParsedIndex` 的 `IndexWarning`），網頁印在 console、`pack-release` 印到 stderr（Agent 定）
 決定：只有 `kind` 是字串而核心不認得的項才略過；其他不合格式（少欄位、sha256、id 重複）照舊整份不收（Agent 定）
 變更：Changed｜線上更新｜更新來源多了這個版本還不認得的資料包種類時，其他資料包照樣更新（以前整次檢查失敗）
+Heads up（不修）：Claude Code 提醒「索引略過不認得的種類只保護這版之後的核心，已發出去的舊版遇到新種類照樣整份讀不了」。查證：repo 沒有任何 release、網頁沒有 service worker（每次載入都拿最新的 wasm），目前沒有在使用者手上的舊版核心，不修；平台殼發版後往索引加新種類前要先確認舊版已換掉。
